@@ -770,40 +770,25 @@ async function _scQuote(from, supplierId, biz, saveBiz) {
 
   // ── Hospitality instructions prompt ──────────────────────────────────────
   if (isHospitality) {
-    const ex1 = allItems[0];
-    const ex2 = allItems[1];
-    const ex3 = allItems[2];
-    const ex1Name = ex1?.service || "Double Room";
-    const ex2Name = ex2?.service || null;
-    const ex3Name = ex3?.service || null;
+    const ex1Name = allItems[0]?.service || "Double Room";
+    const ex2Name = allItems[1]?.service || null;
+    const ex3Name = allItems[2]?.service || null;
 
-    // Build realistic examples using actual item names from THIS seller's catalogue
-    const roomItems    = allItems.filter(i => i._isRoom);
-    const activityItems = allItems.filter(i => !i._isRoom && !i._isExtra);
-    const extraItems   = allItems.filter(i => i._isExtra);
-
-    // Figure out what "qty" means contextually
-    const _qtyHint = roomItems.length > 0 ? "nights or rooms" : "people or sessions";
-
-    const exLines = [
-      `*1* → ${ex1Name} (1 unit)`,
-      `*1×3* → ${ex1Name}, qty 3 (e.g. 3 ${_qtyHint})`,
-      ex2Name ? `*2* → ${ex2Name}` : null,
-      ex2Name ? `*1, 2* → both ${ex1Name} and ${ex2Name}` : null,
-      ex2Name ? `*1×2, 2×3* → 2× ${ex1Name} and 3× ${ex2Name}` : null,
-    ].filter(Boolean);
+    // Build context-aware examples
+    const exParts = [`_1_ → select item 1`];
+    if (ex2Name) exParts.push(`_2_ → ${ex2Name}`);
+    exParts.push(`_1×3_ → item 1, qty 3 (e.g. 3 nights)`);
+    if (ex2Name) exParts.push(`_1×2, 2×1_ → mix`);
 
     return sendButtons(from, {
       text:
-        `🏨 *Select rooms, activities or services:*\n\n` +
-        `Type the *item numbers* from the list above.\n` +
-        `Use *×qty* for multiple nights, rooms, or people.\n\n` +
-        `*Examples:*\n` + exLines.map(e => `  ${e}`).join("\n") +
-        `\n\n` +
-        `💡 *Tips:*\n` +
-        `  Type *note: your details* to add info (dates, group size, special requests)\n` +
-        `  Type *edit: 1: new name* to rename/correct an item\n` +
-        `  Type *done* when finished  ·  *cancel* to go back`,
+        `🏨 *Select what you need:*\n\n` +
+        `Type the *item number* from the list.\n` +
+        `Add *×qty* for multiple nights, rooms, or people.\n\n` +
+        exParts.join("   ") + `\n\n` +
+        `Then type *done* to send your request.\n` +
+        `Or type *note: your message* to add details (e.g. _note: sunset cruise, 8 people, Saturday 18:00_).\n\n` +
+        `Type *cancel* to go back.`,
       buttons: [{ id: `sc_enquiry_${supplierId}`, title: "💬 Send an enquiry instead" }]
     });
   }
@@ -1061,7 +1046,7 @@ async function _scProcessItemList(from, supplierId, raw, biz, saveBiz) {
       : `• ${it.qty}× ${it.name}`;
   }).join("\n");
 
-  const termAdd  = isHospitality ? "room or activity" : (isService ? "service" : "item");
+  const termAdd  = isHospitality ? "room/activity" : (isService ? "service" : "item");
   const termDone = isRFQ && !isHospitality
     ? "📤 Send Request"
     : (isHospitality ? "✅ Get Service Quote" : (isService ? "✅ Get Service Quote" : "✅ Get Quote"));
@@ -1228,8 +1213,7 @@ The seller will review and price your request.
   try {
     const UserSession = (await import("../models/userSession.js")).default;
     const _draftPayload = JSON.stringify({
-      refNum, supplierId, buyerPhone, buyerName, lineItems, total, expiry, isService,
-      supplierPhone: _normPhone(seller.phone)  // FIX: lets chatbotEngine verify ownership
+      refNum, supplierId, buyerPhone, buyerName, lineItems, total, expiry, isService
     });
     const _primaryPhone = _normPhone(seller.phone);
     await UserSession.findOneAndUpdate(

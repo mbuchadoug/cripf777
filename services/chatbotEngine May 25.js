@@ -2694,22 +2694,17 @@ export async function notifySuppliersOfBuyerRequest(request) {
       // when the supplier sends a message back to us, not when we send to them.
       // Instead, the FIRST message the supplier sends (even "hi") will show
       // them the full item list + View & Quote button. See awaiting_offer_intro handler.
-      // Append to queue (not overwrite) so multiple pending requests are tracked
-      const _mainExistingSess = await UserSession.findOne({ phone: _normalizedSupplierPhone }).lean();
-      const _mainQueue = (() => { try { return JSON.parse(_mainExistingSess?.tempData?.sellerPendingQueue || "[]"); } catch { return []; } })();
-      if (!_mainQueue.includes(String(request._id))) _mainQueue.push(String(request._id));
       await UserSession.findOneAndUpdate(
         { phone: _normalizedSupplierPhone },
         {
           $set: {
             "tempData.sellerRequestReplyState": "awaiting_offer_intro",
-            "tempData.sellerRequestId":         String(request._id),
-            "tempData.sellerPendingQueue":       JSON.stringify(_mainQueue)
+            "tempData.sellerRequestId":         String(request._id)
           }
         },
         { upsert: true }
       );
-      console.log(`[BUYER REQ] Session set to awaiting_offer_intro for ${_normalizedSupplierPhone} queue=${_mainQueue.length}`);
+      console.log(`[BUYER REQ] Session set to awaiting_offer_intro for ${_normalizedSupplierPhone}`);
 
       // ── Also set awaiting_offer_intro for all notification contacts ────────────
       // They receive the template too (fan-out in notifySupplierNewRequestTemplate)
@@ -2720,21 +2715,17 @@ export async function notifySuppliersOfBuyerRequest(request) {
           const _ncNorm = String(nc).replace(/\D+/g, "");
           const _ncPhone = _ncNorm.startsWith("0") && _ncNorm.length === 10
             ? "263" + _ncNorm.slice(1) : _ncNorm;
-          const _ncExistingSess = await UserSession.findOne({ phone: _ncPhone }).lean();
-          const _ncQueue = (() => { try { return JSON.parse(_ncExistingSess?.tempData?.sellerPendingQueue || "[]"); } catch { return []; } })();
-          if (!_ncQueue.includes(String(request._id))) _ncQueue.push(String(request._id));
           await UserSession.findOneAndUpdate(
             { phone: _ncPhone },
             {
               $set: {
                 "tempData.sellerRequestReplyState": "awaiting_offer_intro",
-                "tempData.sellerRequestId":         String(request._id),
-                "tempData.sellerPendingQueue":       JSON.stringify(_ncQueue)
+                "tempData.sellerRequestId":         String(request._id)
               }
             },
             { upsert: true }
           );
-          console.log(`[BUYER REQ] Session set to awaiting_offer_intro for notif contact ${_ncPhone} queue=${_ncQueue.length}`);
+          console.log(`[BUYER REQ] Session set to awaiting_offer_intro for notif contact ${_ncPhone}`);
         }));
       }
       notifiedIds.push(supplier._id);
@@ -3956,30 +3947,9 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
     // This has nothing to do with BuyerRequest - it's a direct smart-link quote.
     {
       const _scDraftRaw = flowSess?.tempData?.scPendingSellerQuote;
-      let _scDraft = _scDraftRaw
+      const _scDraft    = _scDraftRaw
         ? (typeof _scDraftRaw === "string" ? (() => { try { return JSON.parse(_scDraftRaw); } catch { return null; } })() : _scDraftRaw)
         : null;
-
-      // Guard: only use this draft if it was created for THIS seller phone.
-      // Prevents notification contacts (who may also be buyers) from having
-      // their buyer-side smart link quote accidentally fire here.
-      if (_scDraft) {
-        const _scDraftSupplierPhone = _scDraft.supplierPhone || _scDraft.sellerPhone || "";
-        const _myPhone2 = phone.startsWith("263") ? "0" + phone.slice(3) : "263" + phone.slice(1);
-        // Also check if this phone is a notification contact for the draft's supplier
-        const _scDraftSellerProfile = _scDraftSupplierPhone
-          ? await SupplierProfile.findOne({ phone: { $in: [_scDraftSupplierPhone, _myPhone2] } }).lean()
-          : null;
-        const _scIsMyDraft = (
-          _scDraftSupplierPhone === phone ||
-          _scDraftSupplierPhone === _myPhone2 ||
-          (_scDraftSellerProfile?.notificationContacts || []).some(nc => nc === phone || nc === _myPhone2)
-        );
-        if (!_scIsMyDraft) {
-          console.log(`[SC DRAFT GUARD] ${phone} has a scPendingSellerQuote that belongs to ${_scDraftSupplierPhone} — ignoring`);
-          _scDraft = null;
-        }
-      }
  
       if (_scDraft && (
         a === "view_and_quote" ||
@@ -4063,86 +4033,7 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
     // Fires regardless of what they typed ("hi", "hello", a price, anything).
     // Shows them the full item list + View & Quote button properly.
     // This is the reliable entry point for outside-24hr-session suppliers.
-    // ── ESCAPE HATCH: seller can always type 0/menu/cancel to exit offer flow ──────
-    // Without this, a pending BuyerRequest blocks ALL other actions permanently.
-    if (
-      sellerRequestReplyState &&
-      sellerRequestReplyState.startsWith("awaiting_offer") &&
-      (al === "0" || al === "00" || al === "menu" || al === "cancel" || al === "exit")
-    ) {
-      await UserSession.findOneAndUpdate(
-        { phone },
-        { $unset: {
-            "tempData.sellerRequestReplyState": "",
-            "tempData.sellerRequestId":         "",
-            "tempData.pendingDraftQuote":        "",
-            "tempData.pendingOfferResponse":     ""
-          }
-        },
-        { upsert: true }
-      );
-      console.log(`[ESCAPE] ${phone} exited offer flow via "${al}"`);
-      // Fall through to normal menu handling below
-    }
-
     if (sellerRequestReplyState === "awaiting_offer_intro" && sellerRequestId) {
-      // ── If queue has multiple pending requests, let seller pick which one ──────
-      const _introQueueRaw = flowSess?.tempData?.sellerPendingQueue;
-      const _introQueue = (() => { try { return JSON.parse(_introQueueRaw || "[]"); } catch { return []; } })()
-                          .filter(id => id && id !== sellerRequestId);
-
-      // If there are OTHER pending requests AND seller just typed "view_and_quote" (not a specific action),
-      // show them the queue so they can pick which request to open.
-      if (
-        _introQueue.length > 0 &&
-        (a === "view_and_quote" || al === "view & quote" || al === "view and quote") &&
-        !a?.startsWith("sc_req_open_")
-      ) {
-        // Load summary for all queued requests
-        const _queuedRequests = await BuyerRequest.find({
-          _id: { $in: [sellerRequestId, ..._introQueue].filter(Boolean) }
-        }).lean();
-
-        if (_queuedRequests.length > 1) {
-          // Build a numbered list of pending requests
-          const _reqSummaries = _queuedRequests.map((r, i) => {
-            const _items = (r.items || []).slice(0, 2).map(it => it.name || it.product || "item").join(", ");
-            const _city = r.city || r.area || "";
-            return `${i + 1}. *${_items}${_items.length < 30 && _queuedRequests[i].items?.length > 2 ? " + more" : ""}*${_city ? " · " + _city : ""}`;
-          });
-          const _reqIds = _queuedRequests.map(r => String(r._id));
-
-          // Store the ordered list for when they reply with a number
-          await UserSession.findOneAndUpdate(
-            { phone },
-            { $set: { "tempData.sellerQueueList": JSON.stringify(_reqIds) } },
-            { upsert: true }
-          );
-
-          return sendText(from,
-            `📋 *You have ${_queuedRequests.length} pending quote requests:*\n\n` +
-            _reqSummaries.join("\n") + "\n\n" +
-            `Type the *number* to open that request (e.g. *1*, *2*).\n` +
-            `Type *0* or *menu* to go to the main menu instead.`
-          );
-        }
-      }
-
-      // ── If seller replied with a number to pick from queue ───────────────────
-      const _queueListRaw = flowSess?.tempData?.sellerQueueList;
-      const _queueList    = (() => { try { return JSON.parse(_queueListRaw || "[]"); } catch { return []; } })();
-      const _numPick      = parseInt(text?.trim());
-      if (_queueList.length > 0 && !isNaN(_numPick) && _numPick >= 1 && _numPick <= _queueList.length && !isMetaAction) {
-        const _pickedId = _queueList[_numPick - 1];
-        await UserSession.findOneAndUpdate(
-          { phone },
-          { $set: { "tempData.sellerRequestId": _pickedId }, $unset: { "tempData.sellerQueueList": "" } },
-          { upsert: true }
-        );
-        // Re-route with the picked sellerRequestId
-        return handleIncomingMessage({ from, action: "view_and_quote" });
-      }
-
       const _introRequest  = await BuyerRequest.findById(sellerRequestId);
 
       if (!_introRequest) {
@@ -4196,15 +4087,6 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
       // ── If supplier tapped "View & Quote" from the v2 template ───────────────
       // Go DIRECTLY to the pricing form - skip the intermediate buttons message.
       if (a === "view_and_quote" || al === "view & quote" || al === "view and quote") {
-        // ── Remove this request from the pending queue now that it is being opened ──
-        const _openQueueRaw2 = flowSess?.tempData?.sellerPendingQueue;
-        const _openQueue2    = (() => { try { return JSON.parse(_openQueueRaw2 || "[]"); } catch { return []; } })()
-                               .filter(id => id !== sellerRequestId && id !== String(_introRequest._id));
-        await UserSession.findOneAndUpdate(
-          { phone },
-          { $set: { "tempData.sellerPendingQueue": JSON.stringify(_openQueue2) } },
-          { upsert: true }
-        );
         // ── Build auto-priced draft from supplier's own prices + preset prices ──
         const _draft = buildDraftQuoteFromRequest(_introSupplier, _introRequest);
 
