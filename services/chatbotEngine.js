@@ -4128,7 +4128,25 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
         }
       }
     }
- 
+ // ── SAFETY: orphan generic View & Quote button ───────────────────────────────
+// This happens when a seller taps View & Quote from a smart-link/profile-view
+// alert, but there is no actual quote/request draft attached to the session.
+if (
+  a === "view_and_quote" ||
+  al === "view & quote" ||
+  al === "view and quote"
+) {
+  return sendButtons(from, {
+    text:
+      `⚠️ *No quote request is attached to this button.*\n\n` +
+      `This alert was only telling you that someone opened your ZimQuote profile.\n\n` +
+      `When a buyer sends an actual quote or booking request, you will receive a request with items and prices to fill in.`,
+    buttons: [
+      { id: "my_supplier_account", title: "🏪 My Store" },
+      { id: "sup_request_sellers", title: "⚡ Marketplace" }
+    ]
+  });
+}
 
     // ── awaiting_offer_intro: supplier's FIRST reply after template ──────────────
     // Fires regardless of what they typed ("hi", "hello", a price, anything).
