@@ -3966,18 +3966,34 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
       if (_scDraft) {
         const _scDraftSupplierPhone = _scDraft.supplierPhone || _scDraft.sellerPhone || "";
         const _myPhone2 = phone.startsWith("263") ? "0" + phone.slice(3) : "263" + phone.slice(1);
-        // Also check if this phone is a notification contact for the draft's supplier
-        const _scDraftSellerProfile = _scDraftSupplierPhone
-          ? await SupplierProfile.findOne({ phone: { $in: [_scDraftSupplierPhone, _myPhone2] } }).lean()
-          : null;
-        const _scIsMyDraft = (
-          _scDraftSupplierPhone === phone ||
-          _scDraftSupplierPhone === _myPhone2 ||
-          (_scDraftSellerProfile?.notificationContacts || []).some(nc => nc === phone || nc === _myPhone2)
-        );
-        if (!_scIsMyDraft) {
-          console.log(`[SC DRAFT GUARD] ${phone} has a scPendingSellerQuote that belongs to ${_scDraftSupplierPhone} — ignoring`);
-          _scDraft = null;
+
+        // If the draft has NO supplierPhone (stored before this field was added),
+        // accept it if this phone directly owns a SupplierProfile — safe fallback.
+        if (!_scDraftSupplierPhone) {
+          const _fallbackProfile = await SupplierProfile.findOne({
+            phone: { $in: [phone, _myPhone2] }
+          }).lean();
+          if (!_fallbackProfile) {
+            // No supplier profile for this phone AND no supplierPhone in draft
+            // — could be a stale buyer-side quote, discard it.
+            console.log(`[SC DRAFT GUARD] ${phone} has legacy draft with no supplierPhone and no SupplierProfile — ignoring`);
+            _scDraft = null;
+          }
+          // else: phone owns a profile → accept the draft (it's theirs)
+        } else {
+          // Draft has a supplierPhone — verify it matches this phone or their notification contacts
+          const _scDraftSellerProfile = await SupplierProfile.findOne({
+            phone: { $in: [_scDraftSupplierPhone, _myPhone2] }
+          }).lean();
+          const _scIsMyDraft = (
+            _scDraftSupplierPhone === phone ||
+            _scDraftSupplierPhone === _myPhone2 ||
+            (_scDraftSellerProfile?.notificationContacts || []).some(nc => nc === phone || nc === _myPhone2)
+          );
+          if (!_scIsMyDraft) {
+            console.log(`[SC DRAFT GUARD] ${phone} has a scPendingSellerQuote that belongs to ${_scDraftSupplierPhone} — ignoring`);
+            _scDraft = null;
+          }
         }
       }
  
