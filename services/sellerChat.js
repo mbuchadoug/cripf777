@@ -220,32 +220,10 @@ export async function showSellerMenu(from, supplierId, biz, saveBiz, { source = 
       ? (Array.isArray(seller.rates) && seller.rates.length > 0)
       : (Array.isArray(seller.prices) && seller.prices.length > 0);
 
+  // ── Location — must be declared BEFORE deliveryLine uses it ────────────────
   const area     = seller.location?.area || "";
   const city     = seller.location?.city || "";
   const location = [area, city].filter(Boolean).join(", ");
-
-  // ── BUG FIX: Correct travel/delivery line ─────────────────────────────────
-  // Service providers with travelAvailable=true TRAVEL TO CLIENTS.
-  // NEVER show "Collection only" for a cleaning/plumbing/electrical service.
-  let deliveryLine = "";
-  if (isHospitality) {
-    deliveryLine = "📍 " + location + (seller.address ? " · " + seller.address : "");
-  } else if (isService) {
-    if (seller.travelAvailable) {
-      const svcArea = seller.serviceArea
-        || [seller.location?.area, seller.location?.city].filter(Boolean).join(", ");
-      deliveryLine = `🚗 Travels to clients · ${svcArea}`;
-    } else {
-      deliveryLine = `📍 Client visits provider · ${[seller.location?.area, seller.location?.city].filter(Boolean).join(", ")}`;
-    }
-  } else {
-    if (seller.delivery?.available) {
-      const rangeLabel = { area_only: "area only", city_wide: "citywide", nationwide: "nationwide" }[seller.delivery.range] || "";
-      deliveryLine = `🚚 Delivery available${rangeLabel ? " · " + rangeLabel : ""}`;
-    } else {
-      deliveryLine = `🏠 Collection · ${[seller.location?.area, seller.location?.city].filter(Boolean).join(", ")}`;
-    }
-  }
 
   // ── Credibility signals ────────────────────────────────────────────────────
   const ratingStr = (seller.reviewCount || 0) > 0
@@ -256,6 +234,27 @@ export async function showSellerMenu(from, supplierId, biz, saveBiz, { source = 
   const respStr   = (respMin !== null && respMin !== undefined && respMin <= 240)
     ? `⚡ Replies ${respMin <= 5 ? "instantly" : respMin <= 30 ? "within 30 min" : "within a few hours"}` : "";
   const credLine  = [ratingStr, ordersStr, respStr].filter(Boolean).join("  ·  ");
+
+  // ── Delivery / location line ───────────────────────────────────────────────
+  let deliveryLine = "";
+  if (isHospitality) {
+    deliveryLine = "📍 " + location + (seller.address ? " · " + seller.address : "");
+  } else if (isService) {
+    if (seller.travelAvailable) {
+      const svcArea = seller.serviceArea
+        || [seller.location?.area, seller.location?.city].filter(Boolean).join(", ");
+      deliveryLine = `🚗 Travels to clients · ${svcArea}`;
+    } else {
+      deliveryLine = `📍 Client visits provider · ${location}`;
+    }
+  } else {
+    if (seller.delivery?.available) {
+      const rangeLabel = { area_only: "area only", city_wide: "citywide", nationwide: "nationwide" }[seller.delivery.range] || "";
+      deliveryLine = `🚚 Delivery available${rangeLabel ? " · " + rangeLabel : ""}`;
+    } else {
+      deliveryLine = `🏠 Collection · ${location}`;
+    }
+  }
 
   // ── Store session context ─────────────────────────────────────────────────
   if (biz) {

@@ -4077,10 +4077,9 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
     }
  
 
-    // ── view_and_quote FALLBACK: no sc_ draft and no session state ──────────────
-    // Fires when seller taps "View & Quote" but their session was cleared (0/menu/escape)
-    // or was never set (outside 24hr window and session expired).
-    // Looks up the most recent open BuyerRequest notified to this supplier and re-hydrates.
+    // ── view_and_quote FALLBACK ───────────────────────────────────────────────
+    // Fires when seller taps "View & Quote" but has no session state (cleared or expired).
+    // Looks up the most recent open BuyerRequest for this supplier and re-hydrates.
     if (
       (a === "view_and_quote" || al === "view & quote" || al === "view and quote") &&
       !sellerRequestId &&
@@ -4088,58 +4087,63 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
     ) {
       console.log(`[VIEW_AND_QUOTE_FALLBACK] ${phone}: no session state — looking up pending BuyerRequest`);
 
-      // Find this supplier's profile (check primary phone and alternate format)
       const _vqPhone2 = phone.startsWith("263") ? "0" + phone.slice(3) : "263" + phone.slice(1);
       const _vqSupplier = await SupplierProfile.findOne({
         phone: { $in: [phone, _vqPhone2] }
       }).lean();
 
       if (_vqSupplier) {
-        // Find the most recent open BuyerRequest where this supplier was notified
-        const _vqRequest = await BuyerRequest.findOne({
+        console.log(`[VIEW_AND_QUOTE_FALLBACK] ${phone}: supplier=${_vqSupplier.businessName}`);
+
+        // Try 1: BuyerRequest where notifiedSuppliers contains this supplier
+        let _vqRequest = await BuyerRequest.findOne({
           notifiedSuppliers: _vqSupplier._id,
           status: "open"
         }).sort({ createdAt: -1 }).lean();
 
+        // Try 2: pending queue entries (set when notification was sent)
+        if (!_vqRequest) {
+          const _vqQueueRaw = flowSess?.tempData?.sellerPendingQueue;
+          const _vqQueue = (() => { try { return JSON.parse(_vqQueueRaw || "[]"); } catch { return []; } })();
+          if (_vqQueue.length > 0) {
+            _vqRequest = await BuyerRequest.findOne({
+              _id: { $in: _vqQueue },
+              status: "open"
+            }).sort({ createdAt: -1 }).lean();
+          }
+        }
+
         if (_vqRequest) {
-          console.log(`[VIEW_AND_QUOTE_FALLBACK] ${phone}: found request ${_vqRequest._id} — re-hydrating session`);
-          // Re-hydrate the session so awaiting_offer_intro fires
-          const _vqQueue = (() => { try { return JSON.parse(flowSess?.tempData?.sellerPendingQueue || "[]"); } catch { return []; } })();
-          if (!_vqQueue.includes(String(_vqRequest._id))) _vqQueue.push(String(_vqRequest._id));
+          console.log(`[VIEW_AND_QUOTE_FALLBACK] ${phone}: found request ${_vqRequest._id} — re-hydrating`);
+          const _vqQueueArr = (() => { try { return JSON.parse(flowSess?.tempData?.sellerPendingQueue || "[]"); } catch { return []; } })();
+          if (!_vqQueueArr.includes(String(_vqRequest._id))) _vqQueueArr.push(String(_vqRequest._id));
           await UserSession.findOneAndUpdate(
             { phone },
             { $set: {
                 "tempData.sellerRequestReplyState": "awaiting_offer_intro",
                 "tempData.sellerRequestId":         String(_vqRequest._id),
-                "tempData.sellerPendingQueue":       JSON.stringify(_vqQueue)
+                "tempData.sellerPendingQueue":       JSON.stringify(_vqQueueArr)
               }
             },
             { upsert: true }
           );
-          // Re-invoke so the awaiting_offer_intro handler fires with the new session
           return handleIncomingMessage({ from, action: "view_and_quote" });
         } else {
-          // No open requests found — tell the seller
           return sendText(from,
-            `📭 *No pending quote requests found.*
+            `📭 *No pending quote requests.*
 
 ` +
-            `Your last request may have expired or been filled.
+            `Your last request has expired or been filled.
+` +
+            `New requests will arrive automatically when buyers need your services.
 
 ` +
-            `New requests will be sent to you automatically when buyers need your products or services.
-
-` +
-            `Type *menu* to access your seller dashboard.`
+            `Type *menu* for your seller dashboard.`
           );
         }
       } else {
-        // Phone is not a registered supplier
-        return sendText(from,
-          `📭 No pending quote requests.
-
-Type *menu* to access the main menu.`
-        );
+        return sendText(from, `📭 No pending requests.
+Type *menu* for the main menu.`);
       }
     }
 
