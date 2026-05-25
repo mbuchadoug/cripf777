@@ -4166,7 +4166,17 @@ if (
       al === "view and quote" || a === "not_available" || al === "not available" ||
       a?.startsWith("req_offer_") || a?.startsWith("req_unavail_");
 
-    if (sellerRequestReplyState === "awaiting_offer_intro" && sellerRequestId &&
+    if (
+  (
+    sellerRequestReplyState === "awaiting_offer_intro" ||
+    a === "view_and_quote" ||
+    al === "view & quote" ||
+    al === "view and quote" ||
+    a === "not_available" ||
+    al === "not available" ||
+    a?.startsWith("req_offer_") ||
+    a?.startsWith("req_unavail_")
+  ) &&
         (!biz?.sessionState?.startsWith("sc_") || _isBuyerReqAction)) {
 
       // ── If biz is stuck in sc_ state but seller tapped a BuyerRequest button, ──
@@ -4183,7 +4193,24 @@ if (
       // When seller taps one of these, `a` already has the correct requestId embedded.
       // Using the button ID prevents the wrong request from opening when the scalar
       // was overwritten by a more recent notification.
-      let _resolvedRequestId = sellerRequestId;
+   let _resolvedRequestId = sellerRequestId;
+
+if (!_resolvedRequestId && (a === "view_and_quote" || al === "view & quote" || al === "view and quote")) {
+  const _supplierForLatest = await findSupplierByPhone(phone);
+
+  const _latestReq = await BuyerRequest.findOne({
+    status: { $in: ["open", "pending"] },
+    $or: [
+      { "matchedSuppliers.supplierId": _supplierForLatest?._id },
+      { "notifiedSuppliers.supplierId": _supplierForLatest?._id },
+      { "responses.supplierId": _supplierForLatest?._id }
+    ]
+  }).sort({ createdAt: -1 });
+
+  if (_latestReq) {
+    _resolvedRequestId = String(_latestReq._id);
+  }
+}
       if (a?.startsWith("req_offer_") && !a.startsWith("req_offer_confirm_")) {
         const _btnId = a.replace("req_offer_", "").trim();
         if (_btnId && _btnId.length > 5) _resolvedRequestId = _btnId;
