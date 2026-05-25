@@ -2653,7 +2653,13 @@ export async function notifySuppliersOfBuyerRequest(request) {
       continue;
     }
     try {
-      const ref = buildBuyerRequestRef(request);
+     const ref = buildBuyerRequestRef(request);
+const requestKey = getBuyerRequestKey(request);
+
+if (!requestKey) {
+  console.error("[BUYER REQ] Cannot notify suppliers: missing request._id", request);
+  return 0;
+}
       const itemLines = formatBuyerRequestItems(request.items || [], 12);
       const locationLine = request.area
         ? `📍 ${request.area}${request.city ? `, ${request.city}` : ""}`
@@ -4338,10 +4344,13 @@ if (!_resolvedRequestId && (a === "view_and_quote" || al === "view & quote" || a
   );
 }
 
-if (_supplierAlreadyResponded(_introRequest)) {
+// Do NOT block View & Quote just because a response exists.
+// Sellers may reopen the request to review, correct, or resend a quote.
+// Duplicate prevention must happen only when sending/confirming the final quote.
+if (_introRequest.status === "closed") {
   return sendText(
     from,
-    `✅ You already responded to this request.\n\nNew requests will be sent to you automatically.`
+    `⏰ *That request has closed.*\n\nThe buyer's request has expired or been filled.`
   );
 }
 
@@ -4370,7 +4379,11 @@ if (_supplierAlreadyResponded(_introRequest)) {
         const _pendingIds = Object.keys(_pendingMap).filter(Boolean);
         if (_pendingIds.length > 1) {
           const _reqDocs = await Promise.all(
-            _pendingIds.map(id => BuyerRequest.findById(id).lean().catch(() => null))
+          _pendingIds.map(id =>
+  findBuyerRequestByIdOrRef(id)
+    .then(r => r?.lean ? r.lean() : r)
+    .catch(() => null)
+)
           );
           // FIX: filter out requests where this supplier already responded or declined
           const _myPhone = String(phone).replace(/\D+/g, "");
@@ -17213,7 +17226,7 @@ if (a.startsWith("req_offer_")) {
     {
       $set: {
         "tempData.sellerRequestReplyState": "awaiting_offer",
-        "tempData.sellerRequestId": requestId,
+        "tempData.sellerRequestId": String(request._id),
         "tempData.pendingDraftQuote": draft
       }
     },
