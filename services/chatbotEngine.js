@@ -4283,7 +4283,9 @@ if (!_resolvedRequestId && (a === "view_and_quote" || al === "view & quote" || a
         const _nxtIds  = Object.keys(_nxtMap).filter(id => id !== skipId);
         const _validNxt = [];
         for (const id of _nxtIds) {
-          const _nxtReq = await BuyerRequest.findById(id).lean().catch(() => null);
+  const _nxtReq = await findBuyerRequestByIdOrRef(id)
+    .then(r => r?.lean ? r.lean() : r)
+    .catch(() => null);
           if (_nxtReq && !_supplierAlreadyResponded(_nxtReq)) {
             _validNxt.push(id);
           } else {
