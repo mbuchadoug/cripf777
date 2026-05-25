@@ -220,28 +220,10 @@ export async function showSellerMenu(from, supplierId, biz, saveBiz, { source = 
       ? (Array.isArray(seller.rates) && seller.rates.length > 0)
       : (Array.isArray(seller.prices) && seller.prices.length > 0);
 
-  // ── BUG FIX: Correct travel/delivery line ─────────────────────────────────
-  // Service providers with travelAvailable=true TRAVEL TO CLIENTS.
-  // NEVER show "Collection only" for a cleaning/plumbing/electrical service.
-  let deliveryLine = "";
-  if (isHospitality) {
-    deliveryLine = "📍 " + location + (seller.address ? " · " + seller.address : "");
-  } else if (isService) {
-    if (seller.travelAvailable) {
-      const svcArea = seller.serviceArea
-        || [seller.location?.area, seller.location?.city].filter(Boolean).join(", ");
-      deliveryLine = `🚗 Travels to clients · ${svcArea}`;
-    } else {
-      deliveryLine = `📍 Client visits provider · ${[seller.location?.area, seller.location?.city].filter(Boolean).join(", ")}`;
-    }
-  } else {
-    if (seller.delivery?.available) {
-      const rangeLabel = { area_only: "area only", city_wide: "citywide", nationwide: "nationwide" }[seller.delivery.range] || "";
-      deliveryLine = `🚚 Delivery available${rangeLabel ? " · " + rangeLabel : ""}`;
-    } else {
-      deliveryLine = `🏠 Collection · ${[seller.location?.area, seller.location?.city].filter(Boolean).join(", ")}`;
-    }
-  }
+  // ── Location — must be declared BEFORE deliveryLine uses it ────────────────
+  const area     = seller.location?.area || "";
+  const city     = seller.location?.city || "";
+  const location = [area, city].filter(Boolean).join(", ");
 
   // ── Credibility signals ────────────────────────────────────────────────────
   const ratingStr = (seller.reviewCount || 0) > 0
@@ -253,9 +235,26 @@ export async function showSellerMenu(from, supplierId, biz, saveBiz, { source = 
     ? `⚡ Replies ${respMin <= 5 ? "instantly" : respMin <= 30 ? "within 30 min" : "within a few hours"}` : "";
   const credLine  = [ratingStr, ordersStr, respStr].filter(Boolean).join("  ·  ");
 
-  const area     = seller.location?.area || "";
-  const city     = seller.location?.city || "";
-  const location = [area, city].filter(Boolean).join(", ");
+  // ── Delivery / location line ───────────────────────────────────────────────
+  let deliveryLine = "";
+  if (isHospitality) {
+    deliveryLine = "📍 " + location + (seller.address ? " · " + seller.address : "");
+  } else if (isService) {
+    if (seller.travelAvailable) {
+      const svcArea = seller.serviceArea
+        || [seller.location?.area, seller.location?.city].filter(Boolean).join(", ");
+      deliveryLine = `🚗 Travels to clients · ${svcArea}`;
+    } else {
+      deliveryLine = `📍 Client visits provider · ${location}`;
+    }
+  } else {
+    if (seller.delivery?.available) {
+      const rangeLabel = { area_only: "area only", city_wide: "citywide", nationwide: "nationwide" }[seller.delivery.range] || "";
+      deliveryLine = `🚚 Delivery available${rangeLabel ? " · " + rangeLabel : ""}`;
+    } else {
+      deliveryLine = `🏠 Collection · ${location}`;
+    }
+  }
 
   // ── Store session context ─────────────────────────────────────────────────
   if (biz) {
@@ -770,25 +769,43 @@ async function _scQuote(from, supplierId, biz, saveBiz) {
 
   // ── Hospitality instructions prompt ──────────────────────────────────────
   if (isHospitality) {
-    const ex1Name = allItems[0]?.service || "Double Room";
-    const ex2Name = allItems[1]?.service || null;
-    const ex3Name = allItems[2]?.service || null;
+    const ex1 = allItems[0];
+    const ex2 = allItems[1];
+    const ex3 = allItems[2];
+    const ex1Name = ex1?.service || "Double Room";
+    const ex2Name = ex2?.service || null;
+    const ex3Name = ex3?.service || null;
 
-    // Build context-aware examples
-    const exParts = [`_1_ → select item 1`];
-    if (ex2Name) exParts.push(`_2_ → ${ex2Name}`);
-    exParts.push(`_1×3_ → item 1, qty 3 (e.g. 3 nights)`);
-    if (ex2Name) exParts.push(`_1×2, 2×1_ → mix`);
+    // Build realistic examples using actual item names from THIS seller's catalogue
+    const roomItems    = allItems.filter(i => i._isRoom);
+    const activityItems = allItems.filter(i => !i._isRoom && !i._isExtra);
+    const extraItems   = allItems.filter(i => i._isExtra);
 
+    // Figure out what "qty" means contextually
+    const _qtyHint = roomItems.length > 0 ? "nights or rooms" : "people or sessions";
+
+    const exLines = [
+      `*1* → ${ex1Name} (1 unit)`,
+      `*1×3* → ${ex1Name}, qty 3 (e.g. 3 ${_qtyHint})`,
+      ex2Name ? `*2* → ${ex2Name}` : null,
+      ex2Name ? `*1, 2* → both ${ex1Name} and ${ex2Name}` : null,
+      ex2Name ? `*1×2, 2×3* → 2× ${ex1Name} and 3× ${ex2Name}` : null,
+    ].filter(Boolean);
+
+    // Send instructions as plain text first (no 1024-char limit), then buttons
+    await sendText(from,
+      `🏨 *How to select rooms, activities or services:*\n\n` +
+      `Type the *item number* from the list above.\n` +
+      `Use *×qty* for multiple nights, rooms, or people.\n\n` +
+      `*Examples:*\n` + exLines.map(e => `  ${e}`).join("\n") +
+      `\n\n` +
+      `💡 *Tips:*\n` +
+      `  _note: 2 adults, 3 nights, 15 June_ → adds details to your request\n` +
+      `  _edit: 1: correct name_ → fixes a misspelled item\n` +
+      `  Type *done* when finished  ·  *cancel* to go back`
+    );
     return sendButtons(from, {
-      text:
-        `🏨 *Select what you need:*\n\n` +
-        `Type the *item number* from the list.\n` +
-        `Add *×qty* for multiple nights, rooms, or people.\n\n` +
-        exParts.join("   ") + `\n\n` +
-        `Then type *done* to send your request.\n` +
-        `Or type *note: your message* to add details (e.g. _note: sunset cruise, 8 people, Saturday 18:00_).\n\n` +
-        `Type *cancel* to go back.`,
+      text: `Tap below to send an enquiry instead, or type item numbers above to get a quote.`,
       buttons: [{ id: `sc_enquiry_${supplierId}`, title: "💬 Send an enquiry instead" }]
     });
   }
@@ -905,12 +922,12 @@ async function _scProcessItemList(from, supplierId, raw, biz, saveBiz) {
         `Now type the item numbers you want from the list above, then type *done* to send.`
       );
     }
+    const _noteSummary2 = `🛒 *Selected (${existingCart.length}):*\n` +
+      existingCart.map(it => `• ${it.qty}× ${it.name}`).join("\n") +
+      `\n\n📝 _Note saved: "${touristNote}"_`;
+    await sendText(from, _noteSummary2);
     return sendButtons(from, {
-      text:
-        `📝 Note added: _"${touristNote}"_\n\n` +
-        `🛒 *Selected (${existingCart.length}):*\n` +
-        existingCart.map(it => `• ${it.qty}× ${it.name}`).join("\n") + `\n\n` +
-        `Type more item numbers, or tap *Get Quote* to send your request.`,
+      text: `Type more item numbers to add, or tap below when ready.`,
       buttons: [
         { id: `sc_quote_done_${supplierId}`, title: isHospitality ? "✅ Get Service Quote" : "✅ Get Quote" },
         { id: `sc_quote_clear_${supplierId}`, title: "🗑 Start Over" }
@@ -1046,19 +1063,38 @@ async function _scProcessItemList(from, supplierId, raw, biz, saveBiz) {
       : `• ${it.qty}× ${it.name}`;
   }).join("\n");
 
-  const termAdd  = isHospitality ? "room/activity" : (isService ? "service" : "item");
+  const termAdd  = isHospitality ? "room or activity" : (isService ? "service" : "item");
   const termDone = isRFQ && !isHospitality
     ? "📤 Send Request"
     : (isHospitality ? "✅ Get Service Quote" : (isService ? "✅ Get Service Quote" : "✅ Get Quote"));
 
-  const editHint = `\n\n_Type *note: your details* to add info (e.g. dates, group size)._\n_Type *edit: 1: new name* to rename an item._`;
+  // ── Send instructions as a SEPARATE message first ─────────────────────────
+  // WhatsApp button messages have a 1024-char body limit. With items + hints the
+  // text gets truncated silently, hiding all instructions. Splitting into two
+  // messages guarantees the tourist always sees the full instructions.
+  const _cartHeader = isHospitality ? "Selected (rooms/activities)" : (isService ? "Services" : "Items");
+  const _cartBody   = `🛒 *${_cartHeader} — ${allItems.length} item${allItems.length === 1 ? "" : "s"}:*\n${summary}` +
+    (savedNote ? `\n\n📝 _Note: ${savedNote}_` : "");
 
+  // Build context-aware instructions
+  const _noteExample = isHospitality
+    ? "note: 2 adults, 3 nights, 15 June"
+    : "note: office of 10 staff, 2nd floor";
+  const _editExample = `edit: 1: ${allItems[0]?.name || "correct name"}`;
+
+  const _instructionMsg =
+    `➕ *Add more ${termAdd}s* by typing their numbers (e.g. _3_, _5×2_)
+` +
+    `📝 *Add a note:* type _${_noteExample}_
+` +
+    `✏️ *Fix an item name:* type _${_editExample}_
+
+` +
+    `When done, tap *${termDone}* below, or *🗑 Start Over* to clear.`;
+
+  await sendText(from, _cartBody);
   return sendButtons(from, {
-    text:
-`🛒 *${isHospitality ? "Selected (rooms/activities)" : (isService ? "Services" : "Items")} — ${allItems.length} item${allItems.length === 1 ? "" : "s"}:*
-${summary}${savedNote ? "\n\n📝 _Note: " + savedNote + "_" : ""}${editHint}
-
-Add more ${termAdd}s, or tap below when ready.`,
+    text: _instructionMsg,
     buttons: [
       { id: `sc_quote_done_${supplierId}`,  title: termDone },
       { id: `sc_quote_clear_${supplierId}`, title: "🗑 Start Over" },
@@ -1213,7 +1249,8 @@ The seller will review and price your request.
   try {
     const UserSession = (await import("../models/userSession.js")).default;
     const _draftPayload = JSON.stringify({
-      refNum, supplierId, buyerPhone, buyerName, lineItems, total, expiry, isService
+      refNum, supplierId, buyerPhone, buyerName, lineItems, total, expiry, isService,
+      supplierPhone: _normPhone(seller.phone)  // FIX: lets chatbotEngine verify ownership
     });
     const _primaryPhone = _normPhone(seller.phone);
     await UserSession.findOneAndUpdate(
@@ -1227,24 +1264,14 @@ The seller will review and price your request.
       },
       { upsert: true }
     );
-    // Fan out to notification contacts - they receive the template too
-    const _notifPhones = (seller.notificationContacts || []).map(_normPhone).filter(Boolean);
-    if (_notifPhones.length > 0) {
-      await Promise.allSettled(_notifPhones.map(nc =>
-        UserSession.findOneAndUpdate(
-          { phone: nc },
-          {
-            $set: {
-              "tempData.scPendingSellerQuote": _draftPayload,
-              "tempData.scSellerQuoteState":   "awaiting_seller_quote_confirm",
-              "tempData.scBuyerPhone":          buyerPhone,
-            }
-          },
-          { upsert: true }
-        )
-      ));
-    }
-    console.log(`[SC QUOTE] Draft stored on ${1 + _notifPhones.length} session(s) for ${seller.businessName}`);
+    // NOTE: We intentionally do NOT fan-out scPendingSellerQuote to notification contacts.
+    // Notification contacts receive the Meta template notification (handled by _sendSellerNotification).
+    // Writing the draft to their session causes cross-contamination: a phone that is a
+    // notification contact for multiple sellers would see whichever draft was written last,
+    // regardless of which "View & Quote" button they tapped.
+    // Notification contacts who tap "View & Quote" are handled by the sellerRequestReplyState
+    // flow (BuyerRequest path), not the scPendingSellerQuote path.
+    console.log(`[SC QUOTE] Draft stored on primary session for ${seller.businessName} (${_primaryPhone})`);
   } catch (err) {
     console.error("[SC QUOTE] Failed to store draft on seller session:", err.message);
   }
