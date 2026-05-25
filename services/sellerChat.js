@@ -220,6 +220,10 @@ export async function showSellerMenu(from, supplierId, biz, saveBiz, { source = 
       ? (Array.isArray(seller.rates) && seller.rates.length > 0)
       : (Array.isArray(seller.prices) && seller.prices.length > 0);
 
+  const area     = seller.location?.area || "";
+  const city     = seller.location?.city || "";
+  const location = [area, city].filter(Boolean).join(", ");
+
   // ── BUG FIX: Correct travel/delivery line ─────────────────────────────────
   // Service providers with travelAvailable=true TRAVEL TO CLIENTS.
   // NEVER show "Collection only" for a cleaning/plumbing/electrical service.
@@ -252,10 +256,6 @@ export async function showSellerMenu(from, supplierId, biz, saveBiz, { source = 
   const respStr   = (respMin !== null && respMin !== undefined && respMin <= 240)
     ? `⚡ Replies ${respMin <= 5 ? "instantly" : respMin <= 30 ? "within 30 min" : "within a few hours"}` : "";
   const credLine  = [ratingStr, ordersStr, respStr].filter(Boolean).join("  ·  ");
-
-  const area     = seller.location?.area || "";
-  const city     = seller.location?.city || "";
-  const location = [area, city].filter(Boolean).join(", ");
 
   // ── Store session context ─────────────────────────────────────────────────
   if (biz) {
