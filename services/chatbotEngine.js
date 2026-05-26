@@ -4301,9 +4301,13 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
     // They ALWAYS bypass the sc_ guard — they must work even when biz is in sc_ state.
     // This handles the race condition where sc_quote saves sc_awaiting_items before failing,
     // leaving the biz stuck in sc_ state when the seller later taps "View & Quote".
+    // FIX: req_offer_confirm_ is handled by its OWN handler (line ~17230) which 
+    // returns before awaiting_offer_intro. Exclude it here so awaiting_offer_intro
+    // does not also fire and show the request again after the quote is sent.
     const _isBuyerReqAction = a === "view_and_quote" || al === "view & quote" ||
       al === "view and quote" || a === "not_available" || al === "not available" ||
-      a?.startsWith("req_offer_") || a?.startsWith("req_unavail_");
+      (a?.startsWith("req_offer_") && !a.startsWith("req_offer_confirm_")) ||
+      a?.startsWith("req_unavail_");
 
     // ── Resolve the requestId BEFORE deciding whether to enter the block ────────
     // Priority order:
@@ -4937,7 +4941,8 @@ if (_introRequest.status === "closed") {
   if (al === "cancel") {
     await UserSession.findOneAndUpdate(
       { phone },
-      { $unset: { "tempData.sellerRequestReplyState": "", "tempData.sellerRequestId": "", "tempData.pendingDraftQuote": "", "tempData.pendingOfferResponse": "" } },
+      { $unset: { "tempData.sellerRequestReplyState": "", "tempData.sellerRequestId": "", "tempData.pendingDraftQuote": "", "tempData.pendingOfferResponse": "",
+         [`tempData.sellerPendingRequests.${sellerRequestId}`]: "" } },
       { upsert: true }
     );
     return sendSupplierAccountMenu(from, await findSupplierByPhone(phone));
@@ -4947,7 +4952,8 @@ if (_introRequest.status === "closed") {
   if (!request) {
     await UserSession.findOneAndUpdate(
       { phone },
-      { $unset: { "tempData.sellerRequestReplyState": "", "tempData.sellerRequestId": "", "tempData.pendingDraftQuote": "", "tempData.pendingOfferResponse": "" } },
+      { $unset: { "tempData.sellerRequestReplyState": "", "tempData.sellerRequestId": "", "tempData.pendingDraftQuote": "", "tempData.pendingOfferResponse": "",
+         [`tempData.sellerPendingRequests.${sellerRequestId}`]: "" } },
       { upsert: true }
     );
     return sendText(from, "❌ Request not found or expired.");
@@ -4957,7 +4963,8 @@ if (_introRequest.status === "closed") {
   if (!supplier) {
     await UserSession.findOneAndUpdate(
       { phone },
-      { $unset: { "tempData.sellerRequestReplyState": "", "tempData.sellerRequestId": "", "tempData.pendingDraftQuote": "", "tempData.pendingOfferResponse": "" } },
+      { $unset: { "tempData.sellerRequestReplyState": "", "tempData.sellerRequestId": "", "tempData.pendingDraftQuote": "", "tempData.pendingOfferResponse": "",
+         [`tempData.sellerPendingRequests.${sellerRequestId}`]: "" } },
       { upsert: true }
     );
     console.warn(`[OFFER] Supplier not found for phone ${phone} - checked primary + notificationContacts`);
@@ -5235,7 +5242,8 @@ await UserSession.findOneAndUpdate(
 
     await UserSession.findOneAndUpdate(
       { phone },
-      { $unset: { "tempData.sellerRequestReplyState": "", "tempData.sellerRequestId": "", "tempData.pendingDraftQuote": "", "tempData.pendingOfferResponse": "" } },
+      { $unset: { "tempData.sellerRequestReplyState": "", "tempData.sellerRequestId": "", "tempData.pendingDraftQuote": "", "tempData.pendingOfferResponse": "",
+         [`tempData.sellerPendingRequests.${sellerRequestId}`]: "" } },
       { upsert: true }
     );
 
@@ -5424,7 +5432,8 @@ await UserSession.findOneAndUpdate(
       await request.save();
       await UserSession.findOneAndUpdate(
         { phone },
-        { $unset: { "tempData.sellerRequestReplyState": "", "tempData.sellerRequestId": "", "tempData.pendingDraftQuote": "", "tempData.pendingOfferResponse": "" } },
+        { $unset: { "tempData.sellerRequestReplyState": "", "tempData.sellerRequestId": "", "tempData.pendingDraftQuote": "", "tempData.pendingOfferResponse": "",
+         [`tempData.sellerPendingRequests.${sellerRequestId}`]: "" } },
         { upsert: true }
       );
       await sendBuyerRequestResponseToBuyer({ request, supplier, response: _msgResp });
@@ -17249,15 +17258,28 @@ if (a.startsWith("req_offer_confirm_")) {
     _confirmedResp = null;
   }
 
-  // Clear state immediately regardless
+  // Clear ALL BuyerRequest state immediately — including the sellerPendingRequests map entry
+  // FIX: must remove the entry from sellerPendingRequests map too. If left in,
+  // the next message from the seller triggers awaiting_offer_intro showing the same request.
+  const _confirmSessForCleanup = await UserSession.findOne({ phone }).lean();
+  let _pendingMapForCleanup = {};
+  try {
+    const _rawMap = _confirmSessForCleanup?.tempData?.sellerPendingRequests;
+    _pendingMapForCleanup = _rawMap ? (typeof _rawMap === "object" && !Array.isArray(_rawMap) ? _rawMap : JSON.parse(_rawMap)) : {};
+  } catch (_) {}
+  // Remove this specific request from the map
+  delete _pendingMapForCleanup[String(_confirmReq._id)];
+  delete _pendingMapForCleanup[_confirmReqId]; // also try by ref
+
   await UserSession.findOneAndUpdate(
     { phone },
     {
+      $set:   { "tempData.sellerPendingRequests": _pendingMapForCleanup },
       $unset: {
         "tempData.sellerRequestReplyState": "",
         "tempData.sellerRequestId":         "",
         "tempData.pendingOfferResponse":    "",
-        "tempData.pendingDraftQuote": ""
+        "tempData.pendingDraftQuote":       ""
       }
     },
     { upsert: true }
