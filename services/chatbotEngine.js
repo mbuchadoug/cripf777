@@ -11522,6 +11522,22 @@ if (!biz && !isMetaAction && flowSess?.tempData?.sfaqState?.startsWith("sfaq_"))
   if (handled) return;
 }
 
+
+// ── Seller chatbot text states for no-biz buyers (sc_ quote/book/enquiry flow) ─
+// A buyer who opened a supplier smart link and has NO business account still needs
+// to complete the quote flow.  State is in UserSession.tempData.scState.
+if (!biz && !isMetaAction && flowSess?.tempData?.scState?.startsWith("sc_")) {
+  const { handleSellerChatState: _handleScStateNoBiz } = await import("./sellerChat.js");
+  const _scNoBizHandled = await _handleScStateNoBiz({
+    state: flowSess.tempData.scState,
+    from,
+    text,
+    biz:     null,
+    saveBiz: null
+  });
+  if (_scNoBizHandled) return;
+}
+
 // ── School enquiry text state for no-biz users (sent from smart link enquiry button) ─
 // biz?.sessionData?.enquirySchoolId is null for first-time users.
 // Read from UserSession.tempData instead and process the enquiry directly here.
