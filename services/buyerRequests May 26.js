@@ -125,35 +125,21 @@ export function parseItemListWithQty(text = "") {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function autoCloseExpiredRequests({
-  timeoutMinutes = 60,   // raised from 15 → 60 min so sellers have time to respond
+  timeoutMinutes = 15,
   notifyBuyer    = true
 } = {}) {
   const cutoff = new Date(Date.now() - timeoutMinutes * 60 * 1000);
-  // Grace period: if a request was notified recently, keep it open for at least
-  // this long AFTER the last notification, so sellers can still respond.
-  const notifiedGraceMs = 30 * 60 * 1000; // 30 minutes after last notification
 
   const expiredRequests = await BuyerRequest.find({
     status:    "open",
     createdAt: { $lt: cutoff }
   }).lean();
 
-  // Filter out requests that were notified recently — give sellers their grace period
-  const now = Date.now();
-  const filteredRequests = expiredRequests.filter(req => {
-    const lastNotified = req.lastNotifiedAt ? new Date(req.lastNotifiedAt).getTime() : 0;
-    if (lastNotified && (now - lastNotified) < notifiedGraceMs) {
-      console.log(`[AUTO-CLOSE] Skipping recently-notified request ${req._id} (notified ${Math.round((now - lastNotified) / 60000)}m ago)`);
-      return false;
-    }
-    return true;
-  });
+  if (!expiredRequests.length) return 0;
 
-  if (!filteredRequests.length) return 0;
+  console.log(`[AUTO-CLOSE] Processing ${expiredRequests.length} expired request(s)`);
 
-  console.log(`[AUTO-CLOSE] Processing ${filteredRequests.length} expired request(s)`);
-
-  for (const req of filteredRequests) {
+  for (const req of expiredRequests) {
     try {
       const updated = await BuyerRequest.findOneAndUpdate(
         { _id: req._id, status: "open" },
@@ -209,7 +195,7 @@ export async function autoCloseExpiredRequests({
     }
   }
 
-  return filteredRequests.length;
+  return expiredRequests.length;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

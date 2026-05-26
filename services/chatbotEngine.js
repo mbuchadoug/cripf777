@@ -2800,7 +2800,20 @@ if (!requestKey) {
   }
 
   request.notifiedSuppliers = notifiedIds;
-  await request.save();
+  if (notifiedIds.length > 0) {
+    // Stamp the time suppliers were last notified so auto-close can give them a grace period.
+    // Uses findByIdAndUpdate to safely add the field even if not in the schema (strict: false).
+    try {
+      await BuyerRequest.findByIdAndUpdate(
+        request._id,
+        { $set: { notifiedSuppliers: notifiedIds, lastNotifiedAt: new Date() } }
+      );
+    } catch (_) {
+      await request.save();
+    }
+  } else {
+    await request.save();
+  }
 
   return notifiedIds.length;
 }
@@ -4491,10 +4504,22 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
 // Sellers may reopen the request to review, correct, or resend a quote.
 // Duplicate prevention must happen only when sending/confirming the final quote.
 if (_introRequest.status === "closed") {
+  // Grace period: if the request was notified recently (within 30 min) and then
+  // closed by the cron BEFORE the seller could respond, let them still quote it.
+  // This happens when createdAt is old but lastNotifiedAt is recent — the cron
+  // closes on createdAt but the seller just received the notification.
+  const _closedGraceMs  = 30 * 60 * 1000; // 30 minutes
+  const _lastNotifiedAt = _introRequest.lastNotifiedAt
+    ? new Date(_introRequest.lastNotifiedAt).getTime() : 0;
+  const _withinGrace    = _lastNotifiedAt && (Date.now() - _lastNotifiedAt) < _closedGraceMs;
+  if (!_withinGrace) {
   return sendText(
     from,
     `⏰ *That request has closed.*\n\nThe buyer's request has expired or been filled.`
   );
+  }
+  // Within grace: fall through and let seller quote it
+  console.log(`[OFFER INTRO] Closed request ${_introRequest._id} within grace period — allowing seller to quote (notified ${Math.round((Date.now() - _lastNotifiedAt) / 60000)}m ago)`);
 }
 
       const _introRef       = buildBuyerRequestRef(_introRequest);
@@ -11520,6 +11545,22 @@ if (!biz && !isMetaAction && flowSess?.tempData?.sfaqState?.startsWith("sfaq_"))
     state: flowSess.tempData.sfaqState, from, text, biz: null, saveBiz: null
   });
   if (handled) return;
+}
+
+
+// ── Seller chatbot text states for no-biz buyers (sc_ quote/book/enquiry flow) ─
+// A buyer who opened a supplier smart link and has NO business account still needs
+// to complete the quote flow.  State is in UserSession.tempData.scState.
+if (!biz && !isMetaAction && flowSess?.tempData?.scState?.startsWith("sc_")) {
+  const { handleSellerChatState: _handleScStateNoBiz } = await import("./sellerChat.js");
+  const _scNoBizHandled = await _handleScStateNoBiz({
+    state: flowSess.tempData.scState,
+    from,
+    text,
+    biz:     null,
+    saveBiz: null
+  });
+  if (_scNoBizHandled) return;
 }
 
 // ── School enquiry text state for no-biz users (sent from smart link enquiry button) ─
