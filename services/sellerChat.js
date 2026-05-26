@@ -164,42 +164,38 @@ const uniqueNotifyPhones = [...new Set(notifyPhones)];
     const axios    = (await import("axios")).default;
 
     // ── Try dedicated supplier_link_opened template (UTILITY - works outside 24hr) ──
-    // Submit to Meta as UTILITY with body:
-    //   👁 Someone just opened your ZimQuote profile!
-    //   Business: {{1}}
-    //   Via: {{2}}
-    //   Time: {{3}}
-    //   They can request a quote, book, or send an enquiry directly.
-    //   Type *menu* to see your store.
-    //   This is an automated activity alert from ZimQuote.
-    try {
-      await axios.post(
-        `https://graph.facebook.com/v24.0/${PHONE_ID}/messages`,
-        {
-          messaging_product: "whatsapp",
-          to:   targetPhone,
-          type: "template",
-          template: {
-            name: "supplier_link_opened",
-            language: { code: "en" },
-            components: [{
-              type: "body",
-              parameters: [
-                { type: "text", text: seller.businessName || "Your business" },
-                { type: "text", text: sourceLabel },
-                { type: "text", text: timeStr }
-              ]
-            }]
-          }
-        },
-        { headers: { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json" } }
-      );
-      console.log(`[SMART LINK NOTIFY] supplier_link_opened → ${sellerPhone} (via ${sourceLabel})`);
-      return;
-    } catch (templateErr) {
-      // Template not yet approved or not submitted - fall through to sendButtons
-      console.log(`[SMART LINK NOTIFY] supplier_link_opened → ${targetPhone} (via ${sourceLabel})`);
+    // FIX: iterate over all notify phones for the template (targetPhone was undefined before)
+    let _templateSentCount = 0;
+    for (const targetPhone of uniqueNotifyPhones) {
+      try {
+        await axios.post(
+          `https://graph.facebook.com/v24.0/${PHONE_ID}/messages`,
+          {
+            messaging_product: "whatsapp",
+            to:   targetPhone,
+            type: "template",
+            template: {
+              name: "supplier_link_opened",
+              language: { code: "en" },
+              components: [{
+                type: "body",
+                parameters: [
+                  { type: "text", text: seller.businessName || "Your business" },
+                  { type: "text", text: sourceLabel },
+                  { type: "text", text: timeStr }
+                ]
+              }]
+            }
+          },
+          { headers: { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json" } }
+        );
+        console.log(`[SMART LINK NOTIFY] supplier_link_opened → ${targetPhone} (via ${sourceLabel})`);
+        _templateSentCount++;
+      } catch (templateErr) {
+        // Template not yet approved - fall through to sendButtons for this phone
+      }
     }
+    if (_templateSentCount > 0) return;
 
     // ── Fallback: sendButtons (within 24hr session only) ────────────────────
    for (const targetPhone of uniqueNotifyPhones) {

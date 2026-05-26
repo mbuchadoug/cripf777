@@ -229,11 +229,29 @@ async function findBuyerRequestByIdOrRef(value) {
     return BuyerRequest.findById(raw);
   }
 
-  return BuyerRequest.findOne({
+  // FIX: try uppercase first (refs are stored uppercase like "RFQ-M5Q5TN"),
+  // then case-insensitive regex fallback for any mixed-case variants.
+  // This handles the case where WhatsApp lowercases the button payload.
+  const upper = raw.toUpperCase();
+  const exact = await BuyerRequest.findOne({
     $or: [
+      { ref: upper },
+      { reference: upper },
+      { requestRef: upper },
       { ref: raw },
       { reference: raw },
       { requestRef: raw }
+    ]
+  });
+  if (exact) return exact;
+
+  // Case-insensitive regex fallback
+  const pattern = new RegExp(`^${raw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i");
+  return BuyerRequest.findOne({
+    $or: [
+      { ref: pattern },
+      { reference: pattern },
+      { requestRef: pattern }
     ]
   });
 }
@@ -4204,11 +4222,14 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
     let _resolvedRequestId = sellerRequestId;
 
     // Step 1: extract ID from specific button press (overrides everything)
+    // FIX: uppercase the extracted value — WhatsApp lowercases button payloads
+    // so "req_offer_RFQ-M5Q5TN" arrives as "req_offer_rfq-m5q5tn".
+    // We uppercase so findBuyerRequestByIdOrRef gets "RFQ-M5Q5TN" not "rfq-m5q5tn".
     if (a?.startsWith("req_offer_") && !a.startsWith("req_offer_confirm_")) {
-      const _btnId = a.replace("req_offer_", "").trim();
+      const _btnId = a.replace("req_offer_", "").trim().toUpperCase();
       if (_btnId && _btnId.length > 5) _resolvedRequestId = _btnId;
     } else if (a?.startsWith("req_unavail_")) {
-      const _btnId = a.replace("req_unavail_", "").trim();
+      const _btnId = a.replace("req_unavail_", "").trim().toUpperCase();
       if (_btnId && _btnId.length > 5) _resolvedRequestId = _btnId;
     }
 
@@ -17113,8 +17134,10 @@ if (al === "quotes" || al === "my quotes") {
 if (a.startsWith("req_offer_confirm_")) {
   // ── Supplier tapped "Send Quote" from the preview ─────────────────────────
   // Retrieve stored pending response and send it to the buyer.
-  const _confirmReqId  = a.replace("req_offer_confirm_", "");
-  const _confirmReq    = await BuyerRequest.findById(_confirmReqId);
+  // FIX: uppercase extracted ID/ref (WhatsApp lowercases button payloads)
+  // and use findBuyerRequestByIdOrRef to handle both ObjectId and ref strings.
+  const _confirmReqId  = a.replace("req_offer_confirm_", "").toUpperCase();
+  const _confirmReq    = await findBuyerRequestByIdOrRef(_confirmReqId);
   const _confirmSup    = await SupplierProfile.findOne({ phone }).lean();
 
   if (!_confirmReq || !_confirmSup) {
