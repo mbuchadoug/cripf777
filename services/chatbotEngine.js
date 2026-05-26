@@ -4163,8 +4163,20 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
         !_btnIsSmartLinkRef
       );
 
+      // FIX: If a smart-link draft exists AND this is a view_and_quote tap, the sc_ draft
+      // ALWAYS wins — even if sellerRequestReplyState is set from a stale/previous marketplace
+      // request. The scLastNotifiedRef on the session proves this notification was for this
+      // smart-link draft, not for any BuyerRequest. Without this fix, a stale
+      // sellerRequestReplyState makes _hasBuyerReqPending=true which suppresses _scDraftHandles
+      // and routes the seller into the BuyerRequest flow → "That request has closed."
+      const _scDraftIsForThisNotification = _scDraft &&
+        (a === "view_and_quote" || al === "view & quote" || al === "view and quote") &&
+        flowSess?.tempData?.scLastNotifiedRef;
+
       const _scDraftHandles = _scDraft && !(
-        _hasBuyerReqPending && (
+        _hasBuyerReqPending &&
+        !_scDraftIsForThisNotification && // smart-link draft always overrides stale BuyerReq state
+        (
           a === "view_and_quote" || al === "view & quote" || al === "view and quote" ||
           a === "not_available" || al === "not available" ||
           (a?.startsWith("req_offer_") && _btnIsObjectId) ||
@@ -4184,7 +4196,20 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
         const { handleSellerChatAction, handleSellerChatState } = await import("./sellerChat.js");
  
         if (a === "view_and_quote" || al === "view & quote" || al === "view and quote") {
-          // Seller tapped template button - show them the draft quote for confirmation
+          // Seller tapped template button - show them the draft quote for confirmation.
+          // Clear any stale sellerRequestReplyState so it can't interfere with future actions.
+          if (sellerRequestReplyState) {
+            await UserSession.findOneAndUpdate(
+              { phone },
+              { $unset: {
+                  "tempData.sellerRequestReplyState": "",
+                  "tempData.sellerRequestId":          "",
+                  "tempData.pendingDraftQuote":        "",
+                  "tempData.pendingOfferResponse":     ""
+              }},
+              { upsert: true }
+            );
+          }
           const _scSeller  = await SupplierProfile.findById(_scDraft.supplierId).lean();
           const _scRefNum  = (_scDraft.refNum || "").toUpperCase();
           const _scItems   = (_scDraft.lineItems || []);
