@@ -513,7 +513,7 @@ export async function showSellerMenu(from, supplierId, biz, saveBiz, { source = 
     return sendList(from, "What would you like to do?", [
       { id: `sc_quote_${supplierId}`,   title: hasPrices ? "💵 Get a quote / Book" : "💵 Request a quote" },
       ...catalogueBtn,
-      { id: `sc_book_${supplierId}`,    title: "📅 Book a service / activity" },
+      { id: `sc_book_${supplierId}`,    title: "📅 Book / Reserve" },
       { id: `sc_enquiry_${supplierId}`, title: "💬 Send an enquiry" },
       ...repeatBtn,
       { id: `sc_contact_${supplierId}`, title: "📞 Contact details" },
@@ -2191,16 +2191,25 @@ async function _scBook(from, supplierId, biz, saveBiz) {
     await saveBiz(biz);
   }
 
+  const isHospitality2 = seller.profileType === "hospitality";
+  const _bookExampleA = isHospitality2
+    ? `"1" or "1, 4" or "3: 2 nights, 5: airport pickup"`
+    : `"1" or "1, 3" or "2, 4: office block"`;
+  const _bookExampleB = isHospitality2
+    ? `"1" or "1, 4" or "3: 2 nights"` 
+    : `"1" or "1, 3" or "2: details"`;
+  const _bookHeading = isHospitality2 ? "📅 *Book / Reserve*" : "📅 *Book a service*";
+
   if (travels) {
     // PATH A: Seller comes to client - ask what service(s) first
     return sendText(from,
-`📅 *Book a service - ${seller.businessName}*
+`${_bookHeading} - ${seller.businessName}
 🚗 _We come to you_
 
 ${serviceMenu}${totalSvcs > 20 ? "\n_(+ more services available)_" : ""}
 
-Type the *number(s)* of the service(s) you need.
-_e.g. "1" or "1, 3" or "2, 4: office block"_
+Type the *number(s)* of what you need.
+_e.g. ${_bookExampleA}_
 _(Add a colon after the number for extra detail)_
 
 Type *cancel* to go back.`
@@ -2208,13 +2217,13 @@ Type *cancel* to go back.`
   } else {
     // PATH B: Client visits seller - show their address first
     return sendText(from,
-`📅 *Book a service - ${seller.businessName}*
+`${_bookHeading} - ${seller.businessName}
 📍 _${seller.address || location}_
 
 ${serviceMenu}${totalSvcs > 20 ? "\n_(+ more services available)_" : ""}
 
-Type the *number(s)* of the service(s) you need.
-_e.g. "1" or "1, 3" or "2: gearbox, 4: oil change"_
+Type the *number(s)* of what you need.
+_e.g. ${_bookExampleB}_
 _(Add a colon for extra detail)_
 
 Type *cancel* to go back.`
@@ -2320,11 +2329,16 @@ Type *cancel* to go back.`
     );
   } else {
     if (biz) { biz.sessionState = "sc_awaiting_job_desc"; await saveBiz(biz); }
+    // Use hospitality-appropriate examples if available from biz session
+    const _isHospB = biz?.sessionData?.scIsHospitality;
+    const _jobDescEx = _isHospB
+      ? `"3 nights, 2 adults, need airport pickup" or "game drive for 4 people Saturday"`
+      : `"3 nights, 2 adults, need airport transfer" or "describe what you need"`;
     return sendText(from,
 `📝 *Describe what you need:*
 
 Services: _${services}_
-${peopleLine}_e.g. "Oil change and brake check" or "3 nights, 2 adults, need airport transfer"_
+${peopleLine}_e.g. ${_jobDescEx}_
 
 Type *cancel* to go back.`
     );
@@ -2365,11 +2379,17 @@ async function _scProcessJobDescription(from, supplierId, raw, biz, saveBiz) {
     await saveBiz(biz);
   }
 
+  // PATH B datetime - "bring it in" is mechanic language; use generic for hospitality
+  const _isHospD = biz?.sessionData?.scIsHospitality;
+  const _dateLabel = _isHospD
+    ? "📅 *When would you like to arrive / visit?*"
+    : "📅 *When will you visit?*";
+
   return sendButtons(from, {
     text:
-`📅 *When will you bring it in / visit?*
+`${_dateLabel}
 
-Job: _${raw}_
+${_isHospD ? "Booking" : "Job"}: _${raw}_
 
 Type your preferred date and time.
 _e.g. "Tomorrow morning", "Saturday 9am", "Monday after 2pm"_
@@ -2420,16 +2440,21 @@ async function _scProcessBookingDateTime(from, supplierId, raw, biz, saveBiz) {
   const city = seller.location?.city || "";
 
   const isServiceType = seller.profileType === "service";
+  const isHospitalityType = seller.profileType === "hospitality";
 
   const _peopleSummary = peopleCount ? `\n👥 People: ${peopleCount}` : "";
+  const _bookingLabel = isHospitalityType ? "🏨 Booking" : (isServiceType ? "🔧 Services" : "🔧 Job");
+  const _locationLine = travels
+    ? `📍 Location: ${location}`
+    : `📍 At: ${seller.address || [area, city].filter(Boolean).join(", ")}`;
 
   return sendButtons(from, {
     text:
 `✅ *Booking request sent - ${refNum}*
 
 🏪 ${seller.businessName}
-🔧 ${isServiceType ? "Services" : "Job"}: ${services}${_peopleSummary}
-📍 ${travels ? "Location: " + location : "At: " + (seller.address || [area, city].filter(Boolean).join(", "))}
+${_bookingLabel}: ${services}${_peopleSummary}
+${_locationLine}
 📅 Preferred time: ${raw}
 
 The seller will contact you to confirm and quote.
