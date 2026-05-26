@@ -511,8 +511,9 @@ export async function showSellerMenu(from, supplierId, biz, saveBiz, { source = 
 
   if (isHospitality) {
     return sendList(from, "What would you like to do?", [
-      { id: `sc_quote_${supplierId}`,   title: hasPrices ? "🛏 Book / Get a quote" : "🛏 Request availability" },
+      { id: `sc_quote_${supplierId}`,   title: hasPrices ? "💵 Get a quote / Book" : "💵 Request a quote" },
       ...catalogueBtn,
+      { id: `sc_book_${supplierId}`,    title: "📅 Book a service / activity" },
       { id: `sc_enquiry_${supplierId}`, title: "💬 Send an enquiry" },
       ...repeatBtn,
       { id: `sc_contact_${supplierId}`, title: "📞 Contact details" },
@@ -1185,10 +1186,11 @@ async function _scProcessItemList(from, supplierId, raw, biz, saveBiz) {
     if (isHospitality && !biz?.sessionData?.scPeopleCount) {
       if (biz) { biz.sessionState = "sc_awaiting_quote_people"; await saveBiz(biz); }
       return sendText(from,
-        `🛏 *How many guests and how many nights?*\n\n` +
+        `👥 *How many people, and when?*\n\n` +
         `_e.g. "2 adults 3 nights"_\n` +
-        `_e.g. "family of 4 double room 2 nights"_\n` +
-        `_e.g. "1 person rest/day use"_\n\n` +
+        `_e.g. "family of 4, double room, 2 nights"_\n` +
+        `_e.g. "4 people game drive Saturday morning"_\n` +
+        `_e.g. "2 people sunset cruise Friday"_\n\n` +
         `Type *skip* if not sure yet.`
       );
     }
