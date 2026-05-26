@@ -1233,6 +1233,65 @@ async function _scQuoteDone(from, supplierId, biz, saveBiz) {
       isRFQ:        true,
     });
 
+    // ── Write the RFQ draft directly into the seller's UserSession NOW ──────────
+    // Critical: must include the real buyerPhone (the buyer who made the request,
+    // NOT the seller). This prevents stale drafts from previous sessions bleeding in
+    // when the seller later taps "View & Quote" and triggering PDF delivery to wrong phone.
+    try {
+      const UserSession = (await import("../models/userSession.js")).default;
+      const _rfqLineItems = items.map(it => ({
+        name:      it.name || it.product || "Item",
+        qty:       Number(it.qty || it.quantity || 1),
+        unitPrice: 0,
+        lineTotal: 0,
+        unit:      it.unit || "job"
+      }));
+      const _rfqDraft = {
+        refNum,
+        supplierId: String(seller._id),
+        buyerPhone,       // ← the REAL buyer's phone (from = buyer in _scQuoteDone)
+        buyerName:  buyerName || _normPhone(buyerPhone),
+        lineItems:  _rfqLineItems,
+        items,
+        total:      0,
+        isRFQ:      true,
+        storedAt:   Date.now()
+      };
+
+      const _sellerNormPhone = _normPhone(seller.phone);
+      const _allNotifPhones  = [_sellerNormPhone,
+        ...(seller.notificationContacts || []).map(_normPhone)
+      ].filter(Boolean);
+
+      await Promise.allSettled(_allNotifPhones.map(async (ph) => {
+        const _existing = await UserSession.findOne({ phone: ph }).lean();
+        let _draftsMap = {};
+        try {
+          const _raw = _existing?.tempData?.scPendingDrafts;
+          _draftsMap = _raw ? (typeof _raw === "string" ? JSON.parse(_raw) : _raw) : {};
+        } catch (_) {}
+        // Prune drafts older than 48 hours
+        const _cutoff = Date.now() - 48 * 60 * 60 * 1000;
+        for (const key of Object.keys(_draftsMap)) {
+          if ((_draftsMap[key]?.storedAt || 0) < _cutoff) delete _draftsMap[key];
+        }
+        _draftsMap[refNum.toUpperCase()] = _rfqDraft;
+
+        await UserSession.findOneAndUpdate(
+          { phone: ph },
+          { $set: {
+              "tempData.scPendingDrafts":      JSON.stringify(_draftsMap),
+              "tempData.scPendingSellerQuote": JSON.stringify(_rfqDraft),
+              "tempData.scLastNotifiedRef":    refNum.toUpperCase()
+          }},
+          { upsert: true }
+        );
+      }));
+      console.log(`[SC RFQ DRAFT] Stored draft ${refNum} for seller ${_sellerNormPhone} (buyer: ${buyerPhone})`);
+    } catch (_rfqStoreErr) {
+      console.warn("[SC RFQ DRAFT] Failed to pre-store draft:", _rfqStoreErr.message);
+    }
+
     _trackConversion(biz);
 
     const _rfqPeopleSummary = _rfqPeople ? `\n👥 People / scope: ${_rfqPeople}` : "";
@@ -1492,8 +1551,15 @@ async function _scHandleQuoteConfirm(from, refNum, biz, saveBiz) {
   await _clearSellerDraft(from, refNum);
 
   const itemRows = lineItems.map((l, i) =>
-    `${i + 1}. ${l.name} × ${l.qty} @ $${l.unitPrice.toFixed(2)} = $${l.lineTotal.toFixed(2)}`
+    `${i + 1}. ${l.name} × ${l.qty} @ $${Number(l.unitPrice || 0).toFixed(2)} = $${Number(l.lineTotal || 0).toFixed(2)}`
   ).join("\n");
+
+  // Default expiry to 48 hours from now if not set
+  const _expiryDisplay = expiry && expiry !== "undefined" && expiry !== undefined
+    ? expiry
+    : new Date(Date.now() + 48 * 60 * 60 * 1000).toLocaleDateString("en-GB", {
+        day: "numeric", month: "short", year: "numeric"
+      });
 
   return sendButtons(from, {
     text:
@@ -1501,10 +1567,10 @@ async function _scHandleQuoteConfirm(from, refNum, biz, saveBiz) {
 
 ${itemRows}
 ${"─".repeat(28)}
-*Total: $${total.toFixed(2)} USD*
+*Total: $${Number(total || 0).toFixed(2)} USD*
 
 ${pdfSent ? "📄 PDF quotation delivered to buyer." : "✅ Quote confirmed and sent to buyer."}
-Valid until: ${expiry}`,
+Valid until: ${_expiryDisplay}`,
     buttons: [
       { id: "my_supplier_account", title: "🏪 My Account" }
     ]
@@ -1776,6 +1842,10 @@ async function _sendSellerNotification({ sellerPhone, notificationContacts = [],
 // Uses sendButtons fallback (PDF already sent via sendDocument above)
 // ─────────────────────────────────────────────────────────────────────────────
 async function _sendBuyerQuoteNotification({ buyerPhone, sellerName, refNum, total, expiry, pdfSent = false, isService = false }) {
+  // Default expiry to 48 hours if not set
+  expiry = (expiry && expiry !== "undefined") ? expiry : new Date(Date.now() + 48 * 60 * 60 * 1000).toLocaleDateString("en-GB", {
+    day: "numeric", month: "short", year: "numeric"
+  });
   try {
     await sendButtons(_normPhone(buyerPhone), {
       text:
