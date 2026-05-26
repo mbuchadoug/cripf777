@@ -6334,9 +6334,12 @@ const supplierRegState = sess?.supplierRegState;
 
 if (
   searchMode === "product" &&
+  !isMetaAction &&
   !GREETING_WORDS.has(text.trim().toLowerCase()) &&
   supplierAccountState !== "supplier_update_prices" &&
-  supplierRegState !== "supplier_reg_prices"
+  supplierRegState !== "supplier_reg_prices" &&
+  // FIX: don't intercept text typed by a no-biz user mid-sc_ quote flow
+  !sess?.tempData?.scState?.startsWith("sc_")
 ) {
   const productQuery = text.trim();
   if (!productQuery || productQuery.length < 1) {
@@ -11670,7 +11673,61 @@ if (a.startsWith("sfaq_")) {
 
 // ── Seller chatbot (sc_ actions) ─────────────────────────────────────────────
 if (a.startsWith("sc_")) {
-  const handled = await handleSellerChatAction({ from, action: a, biz, saveBiz: saveBizSafe.bind(null, biz) });
+  // FIX: for no-biz users mid-sc_ flow (e.g. sc_quote_done_ after typing items),
+  // reconstruct the virtual biz from UserSession so _scQuoteDone etc. can read
+  // scQuoteItems / scRFQ / scSellerId — otherwise biz=null and items=[].
+  let _scActionBiz = biz;
+  let _scActionSaveBiz = saveBizSafe.bind(null, biz);
+  if (!biz) {
+    const _scActSess = await UserSession.findOne({ phone });
+    const _scActState = _scActSess?.tempData?.scState;
+    const _scActSellerId = _scActSess?.tempData?.scSellerId;
+    if (_scActState?.startsWith("sc_") && _scActSellerId) {
+      const _parseArr = (v) => { try { return typeof v === "string" ? JSON.parse(v) : (v || []); } catch(_){return [];} };
+      _scActionBiz = {
+        sessionState: _scActState,
+        sessionData: {
+          scSellerId:      _scActSellerId,
+          scQuoteItems:    _parseArr(_scActSess.tempData.scQuoteItems),
+          scRFQ:           _scActSess.tempData.scRFQ === true || _scActSess.tempData.scRFQ === "true",
+          scIsHospitality: _scActSess.tempData.scIsHospitality === true || _scActSess.tempData.scIsHospitality === "true",
+          scIsService:     _scActSess.tempData.scIsService === true || _scActSess.tempData.scIsService === "true",
+          scCatalogue:     _scActSess.tempData.scCatalogue || "",
+          scCatalogueType: _scActSess.tempData.scCatalogueType || "product",
+          scTouristNote:   _scActSess.tempData.scTouristNote || "",
+          scPeopleCount:   _scActSess.tempData.scPeopleCount || ""
+        }
+      };
+      _scActionSaveBiz = async (vb) => {
+        const sd = vb.sessionData || {};
+        const { default: UserSessionModel } = await import("../models/userSession.js");
+        const updates = {
+          "tempData.scState":         vb.sessionState || "ready",
+          "tempData.scSellerId":      sd.scSellerId || _scActSellerId,
+          "tempData.scQuoteItems":    JSON.stringify(sd.scQuoteItems || []),
+          "tempData.scRFQ":           sd.scRFQ || false,
+          "tempData.scIsHospitality": sd.scIsHospitality || false,
+          "tempData.scIsService":     sd.scIsService || false,
+          "tempData.scCatalogue":     sd.scCatalogue || "",
+          "tempData.scCatalogueType": sd.scCatalogueType || "product",
+          "tempData.scTouristNote":   sd.scTouristNote || "",
+          "tempData.scPeopleCount":   sd.scPeopleCount || ""
+        };
+        if (!vb.sessionState || vb.sessionState === "ready") {
+          await UserSessionModel.findOneAndUpdate(
+            { phone },
+            { $unset: { "tempData.scState": "", "tempData.scSellerId": "", "tempData.scQuoteItems": "",
+                        "tempData.scRFQ": "", "tempData.scIsHospitality": "", "tempData.scIsService": "",
+                        "tempData.scCatalogue": "", "tempData.scCatalogueType": "", "tempData.scTouristNote": "", "tempData.scPeopleCount": "" }},
+            { upsert: true }
+          );
+        } else {
+          await UserSessionModel.findOneAndUpdate({ phone }, { $set: updates }, { upsert: true });
+        }
+      };
+    }
+  }
+  const handled = await handleSellerChatAction({ from, action: a, biz: _scActionBiz, saveBiz: _scActionSaveBiz });
   if (handled) return;
 }
 
