@@ -6637,7 +6637,9 @@ if (parsed.city || parsed.area) {
     !!sess?.tempData?.orderState ||
     !!sess?.tempData?.supplierSearchMode ||
     !!sess?.tempData?.supplierSearchCategory ||
-    !!sess?.tempData?.supplierSearchProduct;
+    !!sess?.tempData?.supplierSearchProduct ||
+    // FIX: no-biz buyers in sc_ quote flow must not be sent to welcome screen
+    !!sess?.tempData?.scState;
 
   // Allow supplier search/order actions through for non-registered users
 const allowedWithoutBiz =
@@ -6832,7 +6834,11 @@ if (
   !GREETING_WORDS.has(text.trim().toLowerCase()) &&
   !_orderBlockedStates.has(_activeOrderState) &&
   _schoolEnquiryState !== "school_parent_enquiry" &&
-  !biz?.sessionState?.startsWith("sc_")
+  !biz?.sessionState?.startsWith("sc_") &&
+  // FIX: no-biz buyers in the sc_ quote flow store their state in UserSession.
+  // Without this check, typed item selections (e.g. "1x3,6") hit the shortcode
+  // search instead of being routed to handleSellerChatState.
+  !_sessForOrderCheck?.tempData?.scState?.startsWith("sc_")
 ) {
   console.log(`[HIT-NOBIZ-SHORTCODE] text="${text}"`);
   const { parseShortcodeSearch } = await import("./supplierSearch.js");
