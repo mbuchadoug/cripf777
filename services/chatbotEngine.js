@@ -5764,7 +5764,13 @@ if (al === "my requests" || al === "buyer_my_requests") {
   );
 }
 
-    if (buyerRequestState === "awaiting_location") {
+    if (buyerRequestState === "awaiting_location" &&
+        a !== "sup_use_saved_location" &&
+        a !== "sup_request_delivery_yes" &&
+        a !== "sup_request_delivery_no" &&
+        a !== "sup_request_delivery_flexible" &&
+        a !== "change_location" &&
+        a !== "sup_skip_service_address") {
       if (al === "cancel" || al === "00" || al === "000") {
         await UserSession.findOneAndUpdate(
           { phone },
