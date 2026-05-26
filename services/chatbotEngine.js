@@ -4181,21 +4181,71 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
  
           if (_scIsRFQ) {
             // RFQ - seller needs to enter prices
+            // FIX: write the RFQ draft into scPendingDrafts so _scProcessSellerPriceEdit
+            // can find it when the seller types their prices (it looks up from session storage).
+            const _rfqRawItems = _scDraft.items || _scItems || [];
+            const _rfqLineItems = _rfqRawItems.map(it => ({
+              name:      it.name || it.product || "Item",
+              qty:       Number(it.qty || it.quantity || 1),
+              unitPrice: 0,
+              lineTotal: 0,
+              unit:      it.unit || "job"
+            }));
+            const _rfqDraftToStore = {
+              refNum:    _scRefNum,
+              supplierId: _scDraft.supplierId,
+              buyerPhone: _scDraft.buyerPhone,
+              buyerName:  _scDraft.buyerName,
+              lineItems:  _rfqLineItems,
+              items:      _rfqRawItems,
+              total:      0,
+              isRFQ:      true,
+              storedAt:   Date.now()
+            };
+
+            // Read existing drafts map, add this entry, write back
+            const _rfqSessNow = await UserSession.findOne({ phone }).lean();
+            let _rfqDraftsMap = {};
+            try {
+              const _rfqRaw = _rfqSessNow?.tempData?.scPendingDrafts;
+              _rfqDraftsMap = _rfqRaw ? (typeof _rfqRaw === "string" ? JSON.parse(_rfqRaw) : _rfqRaw) : {};
+            } catch (_) {}
+            _rfqDraftsMap[_scRefNum] = _rfqDraftToStore;
+
             await UserSession.findOneAndUpdate(
               { phone },
-              { $set: { "tempData.scSellerQuoteState": "awaiting_seller_price_edit" } },
+              { $set: {
+                  "tempData.scSellerQuoteState":   "awaiting_seller_price_edit",
+                  "tempData.scLastNotifiedRef":    _scRefNum,
+                  "tempData.scPendingDrafts":      JSON.stringify(_rfqDraftsMap),
+                  "tempData.scPendingSellerQuote": JSON.stringify(_rfqDraftToStore)
+              }},
               { upsert: true }
             );
-            const _rfqItemList = (_scDraft.items || _scItems).map((it, i) =>
-              `${i + 1}. ${it.name || it.product} × ${it.qty || it.quantity || 1}`
+
+            // Build the item list with qty shown so seller knows what they're pricing
+            const _rfqItemList = _rfqLineItems.map((it, i) =>
+              `${i + 1}. *${it.name}* × ${it.qty}`
             ).join("\n");
+
+            // Build examples using × separator (clearer than = for prices)
+            const _rfqEx = _rfqLineItems.slice(0, 3).map((it, i) => {
+              const exPrice = [50, 25, 10][i] || 15;
+              return `${i + 1}×${exPrice}`;
+            }).join("  ");
+
             return sendText(from,
               `📋 *Quote Request - ${_scRefNum}*\n\n` +
-              `Buyer: ${_scDraft.buyerName || _scDraft.buyerPhone || "Buyer"}\n\n` +
-              `Items:\n${_rfqItemList}\n\n` +
-              `Enter your prices:\n` +
-              `_1=12.50, 2=8.00, 3=3.00_\n\n` +
-              `Type *cancel* to discard.`
+              `Buyer: *${_scDraft.buyerName || _scDraft.buyerPhone || "Buyer"}*\n\n` +
+              `*Items requested:*\n${_rfqItemList}\n\n` +
+              `─────────────────\n` +
+              `💰 *Enter your price per unit for each item:*\n\n` +
+              `Type: *item number × price per unit*\n` +
+              `_e.g. ${_rfqEx}_\n\n` +
+              `• Prices are *per unit/night/person* (not total)\n` +
+              `• You can price all items in one message\n` +
+              `• You will *review the quote before it is sent*\n\n` +
+              `Type *cancel* to discard this request.`
             );
           }
  

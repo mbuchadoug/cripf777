@@ -1550,17 +1550,39 @@ Type *confirm* to send as-is, or *cancel* to discard.`
 // PROCESS SELLER'S TYPED PRICE EDITS
 // ─────────────────────────────────────────────────────────────────────────────
 async function _scProcessSellerPriceEdit(from, text, biz, saveBiz) {
-  // FIX: use map-aware lookup; fall back to last-notified ref if no specific refNum available
   const UserSession = (await import("../models/userSession.js")).default;
   const _tmpSess = await UserSession.findOne({ phone: _normPhone(from) }).lean();
   const _lastRef = _tmpSess?.tempData?.scLastNotifiedRef;
   let draft = _lastRef ? await _getSellerDraft(from, _lastRef) : null;
 
-  // Fallback: legacy scalar
+  // Fallback 1: legacy scPendingSellerQuote scalar
   if (!draft) {
     const _raw = _tmpSess?.tempData?.scPendingSellerQuote;
     if (_raw) {
       try { draft = typeof _raw === "string" ? JSON.parse(_raw) : _raw; } catch (_) {}
+    }
+  }
+
+  // Fallback 2: scLastRFQ in biz session (RFQ drafts are stored there)
+  // This kicks in when the draft was not yet written to UserSession (first price entry after view_and_quote)
+  if (!draft && biz?.sessionData?.scLastRFQ) {
+    const _rq = biz.sessionData.scLastRFQ;
+    if (_rq && (_rq.timestamp || 0) > Date.now() - 48 * 60 * 60 * 1000) {
+      draft = {
+        refNum:    _rq.refNum,
+        supplierId: _rq.supplierId,
+        buyerPhone: _rq.buyerPhone,
+        buyerName:  _rq.buyerName,
+        lineItems: (_rq.items || []).map(it => ({
+          name:      it.name || it.product || "Item",
+          qty:       Number(it.qty || it.quantity || 1),
+          unitPrice: 0,
+          lineTotal: 0,
+          unit:      it.unit || "job"
+        })),
+        total:     0,
+        isRFQ:     true
+      };
     }
   }
 
@@ -1570,6 +1592,12 @@ async function _scProcessSellerPriceEdit(from, text, biz, saveBiz) {
 
   if (al === "cancel") {
     await _clearSellerDraft(from, draft.refNum);
+    // Also clear the scSellerQuoteState
+    await UserSession.findOneAndUpdate(
+      { phone: _normPhone(from) },
+      { $unset: { "tempData.scSellerQuoteState": "" } },
+      { upsert: true }
+    );
     return sendText(from, `🗑 Quote ${draft.refNum} discarded.`);
   }
 
@@ -1577,8 +1605,8 @@ async function _scProcessSellerPriceEdit(from, text, biz, saveBiz) {
     return _scHandleQuoteConfirm(from, draft.refNum, biz, saveBiz);
   }
 
-  // Parse price edits: "1=12.50, 2=8.00" or "1x12.50 2x8"
-   const edits = {};
+  // Parse prices: "1×50, 2×3" or "1x50 2x3" or "1=50, 2=3" — all formats accepted
+  const edits = {};
   const matches = text.matchAll(/(\d+)\s*[=×xX@:]\s*(\d+(?:\.\d+)?)(?:\s*\/\s*([a-zA-Z]+))?/g);
 
   for (const m of matches) {
@@ -1590,36 +1618,35 @@ async function _scProcessSellerPriceEdit(from, text, biz, saveBiz) {
       };
     }
   }
+
   if (!Object.keys(edits).length) {
+    // Build the item list so seller can see what they need to price
+    const _currList = draft.lineItems.map((l, i) => `${i + 1}. *${l.name}* × ${l.qty}`).join("\n");
+    const _exParts  = draft.lineItems.slice(0, 3).map((_, i) => `${i + 1}×${[50, 25, 10][i] || 15}`).join("  ");
     return sendText(from,
-      `❌ Could not read prices.\n\n` +
-      `Format: _1=12.50, 2=8.00_\n` +
-      `Or type *confirm* to send as-is.`
+      `❌ Could not read your prices.\n\n` +
+      `*Items to price:*\n${_currList}\n\n` +
+      `Type *item number × price per unit*\n` +
+      `_e.g. ${_exParts}_\n\n` +
+      `Both × and = work: _1×50_ or _1=50_\n` +
+      `Type *cancel* to discard.`
     );
   }
 
-  // Apply edits to draft
+  // Apply edits to draft line items
   let newTotal = 0;
   const updatedItems = draft.lineItems.map((l, i) => {
     const edit = edits.hasOwnProperty(i) ? edits[i] : null;
     const unitPrice = edit ? edit.amount : l.unitPrice;
     const unit = edit?.unit || l.unit || "job";
     const lineTotal = unitPrice * l.qty;
-
     newTotal += lineTotal;
-
-    return {
-      ...l,
-      unit,
-      unitPrice,
-      lineTotal,
-      _edited: edits.hasOwnProperty(i)
-    };
+    return { ...l, unit, unitPrice, lineTotal, _edited: edits.hasOwnProperty(i) };
   });
 
   const updatedDraft = { ...draft, lineItems: updatedItems, total: newTotal };
 
-  // Update both the map entry and legacy scalar
+  // Write updated draft to both map and legacy scalar
   let _dm2 = {};
   try {
     const _r = _tmpSess?.tempData?.scPendingDrafts;
@@ -1632,29 +1659,42 @@ async function _scProcessSellerPriceEdit(from, text, biz, saveBiz) {
     { phone: _normPhone(from) },
     { $set: {
         "tempData.scPendingDrafts":      JSON.stringify(_dm2),
-        "tempData.scPendingSellerQuote": JSON.stringify(updatedDraft)
+        "tempData.scPendingSellerQuote": JSON.stringify(updatedDraft),
+        "tempData.scLastNotifiedRef":    _updRef,
+        "tempData.scSellerQuoteState":   "awaiting_seller_price_edit"
     }},
     { upsert: true }
   );
 
-  const numbered = updatedItems.map((l, i) =>
-       `${i + 1}. ${l.name} × ${l.qty} @ $${l.unitPrice.toFixed(2)}${_formatRateUnit(l.unit)} = $${l.lineTotal.toFixed(2)}${l._edited ? " ✏️" : ""}`
-  ).join("\n");
+  // Build review lines — show clearly: item name, qty, unit price, total per line
+  const _unpriced = updatedItems.filter(l => !l.unitPrice || l.unitPrice === 0);
+  const numbered = updatedItems.map((l, i) => {
+    const _unitLabel = _formatRateUnit(l.unit) || "/unit";
+    if (!l.unitPrice || l.unitPrice === 0) {
+      return `${i + 1}. *${l.name}* × ${l.qty} — ❓ _price not set_`;
+    }
+    return `${i + 1}. *${l.name}* × ${l.qty} @ $${Number(l.unitPrice).toFixed(2)}${_unitLabel} = *$${Number(l.lineTotal).toFixed(2)}*${l._edited ? " ✏️" : ""}`;
+  }).join("\n");
+
+  const _editHint = _unpriced.length > 0
+    ? `\n\n⚠️ *${_unpriced.length} item${_unpriced.length > 1 ? "s" : ""} still need${_unpriced.length === 1 ? "s" : ""} a price.* Add them before sending.`
+    : "";
 
   return sendButtons(from, {
     text:
-`✏️ *Updated quote - ${draft.refNum}*
+`📋 *Quote Review - ${draft.refNum}*
 
 ${numbered}
 ${"─".repeat(28)}
-*New total: $${newTotal.toFixed(2)} USD*
+*Total: $${newTotal.toFixed(2)} USD*${_editHint}
 
-_✏️ = price you changed_
+_✏️ = price you just set_
 
-Confirm to send to buyer, or edit again.`,
+To change a price: _1×60, 2×5_
+To confirm and send to buyer, tap the button below.`,
     buttons: [
-      { id: `sc_quote_confirm_${draft.refNum}`, title: "✅ Confirm & Send" },
-      { id: `sc_quote_edit_${draft.refNum}`,    title: "✏️ Edit Again" }
+      { id: `sc_quote_confirm_${draft.refNum}`, title: "✅ Send Quote" },
+      { id: `sc_quote_edit_${draft.refNum}`,    title: "✏️ Edit Prices" }
     ]
   });
 }
