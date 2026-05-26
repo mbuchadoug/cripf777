@@ -56,12 +56,9 @@
     /* ── COVER BAND ────────────────────────────────── */
     .cover {
       background:linear-gradient(160deg, var(--navy) 0%, var(--navy-mid) 100%);
-      padding:3rem 4rem 2.5rem;
+      padding:3.5rem 4rem 3rem;
       position:relative;
       overflow:hidden;
-      /* FIX: force cover onto its own page in PDF so body text never overlaps */
-      page-break-after: always;
-      break-after: page;
     }
     .cover::before {
       content:'SCOI';
@@ -111,7 +108,7 @@
       color:rgba(255,255,255,0.6);
       font-weight:500;
       letter-spacing:0.2px;
-      margin-bottom:2rem;
+      margin-bottom:2.5rem;
     }
 
     /* Meta grid on cover */
@@ -119,11 +116,11 @@
       display:grid;
       grid-template-columns:repeat(4, 1fr);
       gap:1.5px;
-      margin-top:1.75rem;
+      margin-top:2rem;
       background:rgba(255,255,255,0.08);
     }
     .cm-item {
-      padding:0.875rem 1.25rem;
+      padding:1rem 1.25rem;
       background:rgba(15,28,46,0.4);
     }
     .cm-label {
@@ -146,8 +143,6 @@
     /* ── BODY CONTENT ──────────────────────────────── */
     .body {
       padding:3.5rem 4rem;
-      /* FIX: CSS counter for auto-sequential section numbers */
-      counter-reset: section-counter;
     }
 
     /* Gold rule divider */
@@ -173,8 +168,6 @@
       gap:1rem;
       margin-bottom:1.5rem;
     }
-
-    /* FIX: auto-increment section numbers with CSS counter */
     .section-num {
       font-family:var(--sans);
       font-size:0.62rem;
@@ -183,15 +176,7 @@
       letter-spacing:2px;
       color:var(--gold);
       flex-shrink:0;
-      counter-increment: section-counter;
     }
-    /* Override the hardcoded text with the CSS counter value */
-    .section-num::before {
-      content: counter(section-counter, decimal-leading-zero);
-    }
-    /* Hide the original static text inside .section-num spans */
-    .section-num > * { display:none; }
-
     .section-title {
       font-family:var(--serif);
       font-size:1.35rem;
@@ -621,10 +606,10 @@
   <!-- ══ BODY ════════════════════════════════════════════════ -->
   <div class="body">
 
-    <!-- Section 01 — Purpose (always present) -->
+    <!-- 01 Purpose -->
     <div class="section">
       <div class="section-head">
-        <span class="section-num"></span>
+        <span class="section-num">01</span>
         <h2 class="section-title">Purpose of Audit</h2>
         <span class="section-title-line"></span>
       </div>
@@ -633,10 +618,10 @@
 
     {{#if audit.definitions}}
     <hr class="rule">
-    <!-- Section 02 — Definitions -->
+    <!-- 02 Definitions -->
     <div class="section">
       <div class="section-head">
-        <span class="section-num"></span>
+        <span class="section-num">02</span>
         <h2 class="section-title">Definitions</h2>
         <span class="section-title-line"></span>
       </div>
@@ -653,10 +638,10 @@
 
     {{#if audit.method}}
     <hr class="rule">
-    <!-- Section 03 — Method -->
+    <!-- 03 Method -->
     <div class="section">
       <div class="section-head">
-        <span class="section-num"></span>
+        <span class="section-num">03</span>
         <h2 class="section-title">Method</h2>
         <span class="section-title-line"></span>
       </div>
@@ -688,10 +673,10 @@
 
     {{#if audit.context}}
     <hr class="rule">
-    <!-- Section 04 — Context -->
+    <!-- 04 Context -->
     <div class="section">
       <div class="section-head">
-        <span class="section-num"></span>
+        <span class="section-num">04</span>
         <h2 class="section-title">Context</h2>
         <span class="section-title-line"></span>
       </div>
@@ -720,10 +705,10 @@
     {{/if}}
 
     <hr class="rule rule-gold">
-    <!-- Section N — SCOI Metrics (always present) -->
+    <!-- 05 SCOI Metrics -->
     <div class="section">
       <div class="section-head">
-        <span class="section-num"></span>
+        <span class="section-num">05</span>
         <h2 class="section-title">SCOI Metrics &amp; Actual Result</h2>
         <span class="section-title-line"></span>
       </div>
@@ -811,10 +796,10 @@
 
     {{#if audit.calculations}}
     <hr class="rule">
-    <!-- Section N — Calculations -->
+    <!-- 06 Calculations -->
     <div class="section">
       <div class="section-head">
-        <span class="section-num"></span>
+        <span class="section-num">06</span>
         <h2 class="section-title">Calculations</h2>
         <span class="section-title-line"></span>
       </div>
@@ -842,10 +827,10 @@
     {{/if}}
 
     <hr class="rule rule-gold">
-    <!-- Section N — Findings (always present) -->
+    <!-- 07 Findings -->
     <div class="section">
       <div class="section-head">
-        <span class="section-num"></span>
+        <span class="section-num">07</span>
         <h2 class="section-title">Findings</h2>
         <span class="section-title-line"></span>
       </div>
@@ -872,10 +857,10 @@
 
     {{#if audit.civilizationRiskSignals}}
     <hr class="rule">
-    <!-- Section N — Civilization Risk Signals -->
+    <!-- 08 Civilization Risk Signals -->
     <div class="section">
       <div class="section-head">
-        <span class="section-num"></span>
+        <span class="section-num">08</span>
         <h2 class="section-title">Civilization Risk Signals</h2>
         <span class="section-title-line"></span>
       </div>
@@ -893,10 +878,10 @@
 
     {{#if audit.counterfactual}}
     <hr class="rule">
-    <!-- Section N — Counterfactual -->
+    <!-- 09 Counterfactual -->
     <div class="section">
       <div class="section-head">
-        <span class="section-num"></span>
+        <span class="section-num">09</span>
         <h2 class="section-title">Counterfactual Requirements</h2>
         <span class="section-title-line"></span>
       </div>
@@ -917,10 +902,10 @@
 
     {{#if audit.disclaimers}}
     <hr class="rule">
-    <!-- Section N — Disclaimers -->
+    <!-- 10 Disclaimers -->
     <div class="section">
       <div class="section-head">
-        <span class="section-num"></span>
+        <span class="section-num">10</span>
         <h2 class="section-title">Disclaimers</h2>
         <span class="section-title-line"></span>
       </div>
@@ -936,10 +921,10 @@
 
     {{#if audit.tags}}
     <hr class="rule">
-    <!-- Section N — Tags -->
+    <!-- 11 Tags -->
     <div class="section">
       <div class="section-head">
-        <span class="section-num"></span>
+        <span class="section-num">11</span>
         <h2 class="section-title">Tags</h2>
         <span class="section-title-line"></span>
       </div>
