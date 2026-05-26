@@ -4082,24 +4082,7 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
         }
       }
  
-      // FIX: if the seller has a pending BuyerRequest notification AND is tapping
-      // view_and_quote/req_offer_/req_unavail_, the BuyerRequest handler must win.
-      // A stale _scDraft must NOT intercept these actions.
-      const _hasBuyerReqPending = !!(sellerRequestReplyState === "awaiting_offer_intro" ||
-        sellerRequestReplyState === "awaiting_offer" ||
-        sellerRequestId ||
-        a?.startsWith("req_offer_") || a?.startsWith("req_unavail_") ||
-        a === "not_available" || al === "not available");
-
-      const _scDraftHandles = _scDraft && !(
-        _hasBuyerReqPending && (
-          a === "view_and_quote" || al === "view & quote" || al === "view and quote" ||
-          a === "not_available" || al === "not available" ||
-          a?.startsWith("req_offer_") || a?.startsWith("req_unavail_")
-        )
-      );
-
-      if (_scDraftHandles && (
+      if (_scDraft && (
         a === "view_and_quote" ||
         al === "view & quote" ||
         al === "view and quote" ||
@@ -4175,7 +4158,25 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
         }
       }
     }
-
+ // ── SAFETY: orphan generic View & Quote button ───────────────────────────────
+// This happens when a seller taps View & Quote from a smart-link/profile-view
+// alert, but there is no actual quote/request draft attached to the session.
+if (
+  a === "view_and_quote" ||
+  al === "view & quote" ||
+  al === "view and quote"
+) {
+  return sendButtons(from, {
+    text:
+      `⚠️ *No quote request is attached to this button.*\n\n` +
+      `This alert was only telling you that someone opened your ZimQuote profile.\n\n` +
+      `When a buyer sends an actual quote or booking request, you will receive a request with items and prices to fill in.`,
+    buttons: [
+      { id: "my_supplier_account", title: "🏪 My Store" },
+      { id: "sup_request_sellers", title: "⚡ Marketplace" }
+    ]
+  });
+}
 
     // ── awaiting_offer_intro: supplier's FIRST reply after template ──────────────
     // Fires regardless of what they typed ("hi", "hello", a price, anything).
@@ -4195,54 +4196,18 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
       al === "view and quote" || a === "not_available" || al === "not available" ||
       a?.startsWith("req_offer_") || a?.startsWith("req_unavail_");
 
-    // ── Resolve the requestId BEFORE deciding whether to enter the block ────────
-    // Priority order:
-    //  1. req_offer_<id> / req_unavail_<id> button — most reliable, use directly
-    //  2. sellerRequestId from session — set when notification was sent
-    //  3. view_and_quote with no session id — look up from sellerPendingRequests map
-    // We do NOT fall back to "newest request in DB" — that always opens the wrong one.
-    let _resolvedRequestId = sellerRequestId;
-
-    // Step 1: extract ID from specific button press (overrides everything)
-    if (a?.startsWith("req_offer_") && !a.startsWith("req_offer_confirm_")) {
-      const _btnId = a.replace("req_offer_", "").trim();
-      if (_btnId && _btnId.length > 5) _resolvedRequestId = _btnId;
-    } else if (a?.startsWith("req_unavail_")) {
-      const _btnId = a.replace("req_unavail_", "").trim();
-      if (_btnId && _btnId.length > 5) _resolvedRequestId = _btnId;
-    }
-
-    // Step 2: for view_and_quote with no id, check the sellerPendingRequests map
-    // (stored when the notification was sent). Never use a generic DB newest query.
-    if (!_resolvedRequestId && (a === "view_and_quote" || al === "view & quote" || al === "view and quote")) {
-      try {
-        const _vpSess = await UserSession.findOne({ phone }).lean();
-        const _vpMap  = _vpSess?.tempData?.sellerPendingRequests || {};
-        const _vpIds  = Object.keys(_vpMap).filter(Boolean);
-        if (_vpIds.length === 1) {
-          _resolvedRequestId = _vpIds[0];
-        } else if (_vpIds.length > 1) {
-          // Multiple — use the most recently stored one (storedAt)
-          _resolvedRequestId = _vpIds.sort((a, b) =>
-            ((_vpMap[b]?.storedAt || 0) - (_vpMap[a]?.storedAt || 0))
-          )[0];
-        }
-      } catch (_) {}
-    }
-
-    // Only enter the BuyerRequest flow if there's actually a request to work with
-    // OR if we have an active sellerRequestReplyState from a previous interaction.
-    const _hasBuyerReqContext = !!(sellerRequestReplyState || _resolvedRequestId);
-
     if (
-      _hasBuyerReqContext &&
-      (
-        sellerRequestReplyState === "awaiting_offer_intro" ||
-        _isBuyerReqAction ||
-        a?.startsWith("req_offer_") ||
-        a?.startsWith("req_unavail_")
-      ) &&
-      (!biz?.sessionState?.startsWith("sc_") || _isBuyerReqAction)) {
+  (
+    sellerRequestReplyState === "awaiting_offer_intro" ||
+    a === "view_and_quote" ||
+    al === "view & quote" ||
+    al === "view and quote" ||
+    a === "not_available" ||
+    al === "not available" ||
+    a?.startsWith("req_offer_") ||
+    a?.startsWith("req_unavail_")
+  ) &&
+        (!biz?.sessionState?.startsWith("sc_") || _isBuyerReqAction)) {
 
       // ── If biz is stuck in sc_ state but seller tapped a BuyerRequest button, ──
       // reset the stale sc_ state so the BuyerRequest flow proceeds cleanly.
@@ -4250,6 +4215,38 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
         biz.sessionState = "ready";
         biz.sessionData  = {};
         await saveBizSafe(biz);
+        console.log(`[OFFER INTRO] Reset stale sc_ state for ${phone} to handle ${a}`);
+      }
+
+      // ── FIX: resolve requestId from the button ID, not just the scalar ──────────
+      // Template buttons are req_offer_<requestId> and req_unavail_<requestId>.
+      // When seller taps one of these, `a` already has the correct requestId embedded.
+      // Using the button ID prevents the wrong request from opening when the scalar
+      // was overwritten by a more recent notification.
+   let _resolvedRequestId = sellerRequestId;
+
+if (!_resolvedRequestId && (a === "view_and_quote" || al === "view & quote" || al === "view and quote")) {
+  const _supplierForLatest = await findSupplierByPhone(phone);
+
+  const _latestReq = await BuyerRequest.findOne({
+    status: { $in: ["open", "pending"] },
+    $or: [
+      { "matchedSuppliers.supplierId": _supplierForLatest?._id },
+      { "notifiedSuppliers.supplierId": _supplierForLatest?._id },
+      { "responses.supplierId": _supplierForLatest?._id }
+    ]
+  }).sort({ createdAt: -1 });
+
+  if (_latestReq) {
+    _resolvedRequestId = String(_latestReq._id);
+  }
+}
+      if (a?.startsWith("req_offer_") && !a.startsWith("req_offer_confirm_")) {
+        const _btnId = a.replace("req_offer_", "").trim();
+        if (_btnId && _btnId.length > 5) _resolvedRequestId = _btnId;
+      } else if (a?.startsWith("req_unavail_")) {
+        const _btnId = a.replace("req_unavail_", "").trim();
+        if (_btnId && _btnId.length > 5) _resolvedRequestId = _btnId;
       }
 
     const _introRequest = await findBuyerRequestByIdOrRef(_resolvedRequestId);
@@ -4511,8 +4508,8 @@ if (_introRequest.status === "closed") {
               `⚡ *Only have a few items:* _have 3,7_ (skips everything else)\n` +
               `🗑️ *Discard:* _cancel_`,
             buttons: [
-              { id: `req_offer_confirm_${_resolvedRequestId}`, title: "Confirm & Send" },
-              { id: `req_offer_${_resolvedRequestId}`,         title: "Edit Prices"    }
+              { id: `req_offer_confirm_${sellerRequestId}`, title: "Confirm & Send" },
+              { id: `req_offer_${sellerRequestId}`,         title: "Edit Prices"    }
             ]
           });
         }
@@ -4541,8 +4538,8 @@ if (_introRequest.status === "closed") {
               `• Only have a few: _have 1,2,3_ (skips rest)\n` +
               `• Discard: _cancel_`,
             buttons: [
-              { id: `req_offer_confirm_${_resolvedRequestId}`, title: "Send Priced Items" },
-              { id: `req_offer_${_resolvedRequestId}`,         title: "Edit Prices"       }
+              { id: `req_offer_confirm_${sellerRequestId}`, title: "Send Priced Items" },
+              { id: `req_offer_${sellerRequestId}`,         title: "Edit Prices"       }
             ]
           });
         }
