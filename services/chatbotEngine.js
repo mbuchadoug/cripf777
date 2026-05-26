@@ -4355,12 +4355,19 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
       (mongoose.Types.ObjectId.isValid(_resolvedRequestId) || mongoose.Types.ObjectId.isValid((_resolvedRequestId || "").toLowerCase()));
     const _hasBuyerReqContext = !!(sellerRequestReplyState || _resolvedIsObjectId);
 
+    // FIX: req_offer_confirm_ must NOT enter this block - it has its own handler
+    // at line ~17239. It arrives here first because flowSess is read once at the
+    // top and sellerRequestReplyState may still be "awaiting_offer" in that snapshot.
+    // Without this exclusion, req_offer_confirm_ shows the request again instead of
+    // sending the quote.
     if (
       _hasBuyerReqContext &&
+      !a.startsWith("req_offer_confirm_") &&
       (
         sellerRequestReplyState === "awaiting_offer_intro" ||
+        sellerRequestReplyState === "awaiting_offer" ||
         _isBuyerReqAction ||
-        a?.startsWith("req_offer_") ||
+        (a?.startsWith("req_offer_") && !a.startsWith("req_offer_confirm_")) ||
         a?.startsWith("req_unavail_")
       ) &&
       (!biz?.sessionState?.startsWith("sc_") || _isBuyerReqAction)) {
