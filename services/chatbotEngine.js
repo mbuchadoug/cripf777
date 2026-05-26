@@ -4099,21 +4099,63 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
           try { _scDraft = typeof _legacyRaw === "string" ? JSON.parse(_legacyRaw) : _legacyRaw; } catch (_) {}
         }
       }
+
+      // FIX: Also check biz.sessionData.scLastRFQ — RFQ smart-link quotes store
+      // their data there (not in UserSession scPendingDrafts). When the seller/buyer
+      // taps view_and_quote from the template, scLastRFQ has the items and refNum.
+      if (!_scDraft && biz?.sessionData?.scLastRFQ) {
+        const _lastRfq = biz.sessionData.scLastRFQ;
+        // Only use if reasonably recent (within 48 hours)
+        if (_lastRfq && (_lastRfq.timestamp || 0) > Date.now() - 48 * 60 * 60 * 1000) {
+          _scDraft = {
+            refNum:      _lastRfq.refNum,
+            supplierId:  _lastRfq.supplierId,
+            buyerPhone:  _lastRfq.buyerPhone,
+            buyerName:   _lastRfq.buyerName,
+            lineItems:   [],
+            items:       _lastRfq.items || [],
+            total:       0,
+            isRFQ:       true,
+            isService:   _lastRfq.isService || false
+          };
+        }
+      }
  
-      // FIX: if the seller has a pending BuyerRequest notification AND is tapping
-      // view_and_quote/req_offer_/req_unavail_, the BuyerRequest handler must win.
-      // A stale _scDraft must NOT intercept these actions.
-      const _hasBuyerReqPending = !!(sellerRequestReplyState === "awaiting_offer_intro" ||
-        sellerRequestReplyState === "awaiting_offer" ||
-        sellerRequestId ||
-        a?.startsWith("req_offer_") || a?.startsWith("req_unavail_") ||
-        a === "not_available" || al === "not available");
+      // Determine whether the sc_ draft handler or the BuyerRequest handler should win.
+      // Key insight: req_offer_<ObjectId> = marketplace BuyerRequest button
+      //              req_offer_<RFQ-/QT-> = smart-link quote button (no BuyerRequest doc)
+      //              view_and_quote        = could be either; check _scDraft first
+      //
+      // BuyerRequest handler wins ONLY when:
+      //   1. There is an active sellerRequestReplyState OR sellerRequestId in session, AND
+      //   2. The extracted button ID is a valid MongoDB ObjectId (marketplace request)
+      // In all other cases, sc_ draft handler wins (if _scDraft exists).
+
+      // Extract the button payload ID for classification
+      let _btnExtracted = "";
+      if (a?.startsWith("req_offer_") && !a.startsWith("req_offer_confirm_")) {
+        _btnExtracted = a.replace("req_offer_", "").trim();
+      } else if (a?.startsWith("req_unavail_")) {
+        _btnExtracted = a.replace("req_unavail_", "").trim();
+      }
+      // Is this button carrying a real MongoDB ObjectId (marketplace) or a ref string (smart-link)?
+      const _btnIsObjectId = _btnExtracted ? mongoose.Types.ObjectId.isValid(_btnExtracted.toUpperCase()) || 
+        mongoose.Types.ObjectId.isValid(_btnExtracted) : false;
+      const _btnIsSmartLinkRef = _btnExtracted && !_btnIsObjectId; // RFQ-xxxx, QT-xxxx etc
+
+      // BuyerRequest wins only when we have an active BuyerRequest session state
+      // AND the button carries a real ObjectId (not a smart-link ref)
+      const _hasBuyerReqPending = !!(
+        (sellerRequestReplyState === "awaiting_offer_intro" || sellerRequestReplyState === "awaiting_offer" || sellerRequestId) &&
+        !_btnIsSmartLinkRef
+      );
 
       const _scDraftHandles = _scDraft && !(
         _hasBuyerReqPending && (
           a === "view_and_quote" || al === "view & quote" || al === "view and quote" ||
           a === "not_available" || al === "not available" ||
-          a?.startsWith("req_offer_") || a?.startsWith("req_unavail_")
+          (a?.startsWith("req_offer_") && _btnIsObjectId) ||
+          (a?.startsWith("req_unavail_") && _btnIsObjectId)
         )
       );
 
@@ -4251,9 +4293,13 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
       } catch (_) {}
     }
 
-    // Only enter the BuyerRequest flow if there's actually a request to work with
-    // OR if we have an active sellerRequestReplyState from a previous interaction.
-    const _hasBuyerReqContext = !!(sellerRequestReplyState || _resolvedRequestId);
+    // Only enter the BuyerRequest flow if:
+    // - There's an active sellerRequestReplyState (from a previous notification), OR
+    // - The resolved ID is a valid MongoDB ObjectId (marketplace BuyerRequest)
+    // Smart-link refs (RFQ-xxxx, QT-xxxx) are NOT BuyerRequest IDs — they have no DB doc.
+    const _resolvedIsObjectId = _resolvedRequestId && 
+      (mongoose.Types.ObjectId.isValid(_resolvedRequestId) || mongoose.Types.ObjectId.isValid((_resolvedRequestId || "").toLowerCase()));
+    const _hasBuyerReqContext = !!(sellerRequestReplyState || _resolvedIsObjectId);
 
     if (
       _hasBuyerReqContext &&

@@ -1675,10 +1675,16 @@ async function _sendSellerNotification({ sellerPhone, notificationContacts = [],
       ? "Please reply with prices: 1=price, 2=price"
       : totalLine;
 
+    // FIX: smart-link quotes (RFQ-xxxx / QT-xxxx refs) have NO BuyerRequest document.
+    // Passing requestId: refNum makes the button payload "req_offer_RFQ-M5Q5TN"
+    // which routes to the BuyerRequest handler → finds nothing → "That request has closed".
+    // Fix: pass requestId: null so button payload is "view_and_quote".
+    // The view_and_quote handler checks _scDraft (stored in UserSession) first,
+    // finds the pending draft by scLastNotifiedRef, and routes correctly.
     await notifySupplierNewRequestTemplate({
       supplierPhone:        sellerPhone,
       notificationContacts: notificationContacts,
-      requestId:            refNum,
+      requestId:            null,
       ref:                  refNum,
       locationText:         `Smart Link Quote · ${buyerDisplay}`,
       itemCount,
