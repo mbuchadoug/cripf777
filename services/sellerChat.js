@@ -100,65 +100,6 @@ async function _clearSellerDraft(phone, refNum) {
   );
 }
 
-// ─── No-biz sc session helpers ───────────────────────────────────────────────
-// Buyers who have no Business record (not registered on the platform) still need
-// to complete the quote flow.  We store their sc_ state in UserSession.tempData
-// so the state machine can carry them through quote → items → done.
-//
-// Keys stored under tempData:
-//   scState        — current state string, e.g. "sc_awaiting_items"
-//   scSellerId     — 24-char supplier ObjectId
-//   scQuoteItems   — JSON array of cart items
-//   scRFQ          — boolean
-//   scIsHospitality— boolean
-//   scIsService    — boolean
-//   scCatalogue    — JSON string of full catalogue (same as biz.sessionData.scCatalogue)
-//   scCatalogueType— "service" | "product"
-//   scTouristNote  — optional buyer note
-//   scPeopleCount  — optional people/scope count
-
-async function _getScNoBizSession(phone) {
-  const UserSession = (await import("../models/userSession.js")).default;
-  const sess = await UserSession.findOne({ phone: _normPhone(phone) }).lean();
-  if (!sess?.tempData?.scState) return null;
-  return sess.tempData;
-}
-
-async function _saveScNoBizSession(phone, data) {
-  const UserSession = (await import("../models/userSession.js")).default;
-  const updates = {};
-  for (const [k, v] of Object.entries(data)) {
-    updates[`tempData.${k}`] = v;
-  }
-  await UserSession.findOneAndUpdate(
-    { phone: _normPhone(phone) },
-    { $set: updates },
-    { upsert: true }
-  );
-}
-
-async function _clearScNoBizSession(phone) {
-  const UserSession = (await import("../models/userSession.js")).default;
-  await UserSession.findOneAndUpdate(
-    { phone: _normPhone(phone) },
-    {
-      $unset: {
-        "tempData.scState":         "",
-        "tempData.scSellerId":      "",
-        "tempData.scQuoteItems":    "",
-        "tempData.scRFQ":           "",
-        "tempData.scIsHospitality": "",
-        "tempData.scIsService":     "",
-        "tempData.scCatalogue":     "",
-        "tempData.scCatalogueType": "",
-        "tempData.scTouristNote":   "",
-        "tempData.scPeopleCount":   ""
-      }
-    },
-    { upsert: true }
-  );
-}
-
 // Non-blocking smart link conversion tracker
 function _trackConversion(biz) {
   if (biz?.sessionData?.scSource && biz.sessionData.scSellerId) {
@@ -608,63 +549,8 @@ export async function handleSellerChatAction({ from, action: a, biz, saveBiz }) 
 export async function handleSellerChatState({ state, from, text, biz, saveBiz }) {
   if (!state?.startsWith("sc_")) return false;
 
-  // ── Resolve supplierId: prefer biz.sessionData, fall back to UserSession ──
-  // No-biz buyers (unregistered users) have their sc_ state in UserSession.
-  let supplierId = biz?.sessionData?.scSellerId;
-  let _noBizSess = null;
-  let _usingNoBizSess = false;
-  if (!supplierId) {
-    _noBizSess = await _getScNoBizSession(from);
-    supplierId = _noBizSess?.scSellerId;
-    _usingNoBizSess = !!supplierId;
-  }
+  const supplierId = biz?.sessionData?.scSellerId;
   if (!supplierId) return false;
-
-  // ── For no-biz users, synthesize a biz-like object from UserSession ───────
-  // This lets all downstream functions (which read biz.sessionData.scXxx) work
-  // without modification.  We intercept saveBiz to write back to UserSession.
-  if (_usingNoBizSess && !biz) {
-    const _sess    = _noBizSess;
-    let   _sd      = {
-      scSellerId:      _sess.scSellerId,
-      scQuoteItems:    (() => { try { return typeof _sess.scQuoteItems === "string" ? JSON.parse(_sess.scQuoteItems) : (_sess.scQuoteItems || []); } catch(_){return [];} })(),
-      scRFQ:           _sess.scRFQ === true || _sess.scRFQ === "true",
-      scIsHospitality: _sess.scIsHospitality === true || _sess.scIsHospitality === "true",
-      scIsService:     _sess.scIsService === true || _sess.scIsService === "true",
-      scCatalogue:     _sess.scCatalogue || "",
-      scCatalogueType: _sess.scCatalogueType || "product",
-      scTouristNote:   _sess.scTouristNote || "",
-      scPeopleCount:   _sess.scPeopleCount || ""
-    };
-    const _virtualBiz = {
-      sessionState: state,
-      sessionData:  _sd
-    };
-    const _virtualSaveBiz = async (vb) => {
-      const sd = vb.sessionData || {};
-      await _saveScNoBizSession(from, {
-        scState:         vb.sessionState || "ready",
-        scSellerId:      sd.scSellerId      || supplierId,
-        scQuoteItems:    JSON.stringify(sd.scQuoteItems    || []),
-        scRFQ:           sd.scRFQ           || false,
-        scIsHospitality: sd.scIsHospitality || false,
-        scIsService:     sd.scIsService     || false,
-        scCatalogue:     sd.scCatalogue     || "",
-        scCatalogueType: sd.scCatalogueType || "product",
-        scTouristNote:   sd.scTouristNote   || "",
-        scPeopleCount:   sd.scPeopleCount   || ""
-      });
-    };
-    // Clear no-biz session when returning to "ready"
-    const _wrappedSaveBiz = async (vb) => {
-      if (!vb.sessionState || vb.sessionState === "ready") {
-        await _clearScNoBizSession(from);
-      } else {
-        await _virtualSaveBiz(vb);
-      }
-    };
-    return handleSellerChatState({ state, from, text, biz: _virtualBiz, saveBiz: _wrappedSaveBiz });
-  }
 
   const raw = (text || "").trim();
   if (raw.toLowerCase() === "cancel") {
@@ -934,18 +820,6 @@ async function _scQuote(from, supplierId, biz, saveBiz) {
       scCatalogueType: (isHospitality || isService) ? "service" : "product"
     };
     await saveBiz(biz);
-  } else {
-    // No-biz buyer: persist sc_ state in UserSession so typed replies are routed correctly
-    await _saveScNoBizSession(from, {
-      scState:         "sc_awaiting_items",
-      scSellerId:      supplierId,
-      scQuoteItems:    JSON.stringify([]),
-      scRFQ:           !hasPrices,
-      scIsHospitality: isHospitality,
-      scIsService:     isService,
-      scCatalogue:     JSON.stringify(allItems),
-      scCatalogueType: (isHospitality || isService) ? "service" : "product"
-    });
   }
 
   const total = allItems.length;
