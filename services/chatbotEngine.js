@@ -4360,12 +4360,24 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
     // top and sellerRequestReplyState may still be "awaiting_offer" in that snapshot.
     // Without this exclusion, req_offer_confirm_ shows the request again instead of
     // sending the quote.
+    // ── awaiting_offer_intro block entry rules ────────────────────────────────
+    // This block handles the INTRO state (first message after template notification)
+    // and specific button actions (view_and_quote, req_offer_, req_unavail_).
+    //
+    // It must NOT fire for:
+    //   - req_offer_confirm_  → has own handler at line ~17239, returns quote sent
+    //   - awaiting_offer + plain text → seller is typing prices, handled below
+    //
+    // awaiting_offer with plain text must fall through to the awaiting_offer text
+    // handler so typed prices like "80/hour" or "1x250 2x80" are processed correctly.
+    const _isPlainTextPriceEntry = !isMetaAction && sellerRequestReplyState === "awaiting_offer";
+
     if (
       _hasBuyerReqContext &&
       !a.startsWith("req_offer_confirm_") &&
+      !_isPlainTextPriceEntry &&
       (
         sellerRequestReplyState === "awaiting_offer_intro" ||
-        sellerRequestReplyState === "awaiting_offer" ||
         _isBuyerReqAction ||
         (a?.startsWith("req_offer_") && !a.startsWith("req_offer_confirm_")) ||
         a?.startsWith("req_unavail_")
