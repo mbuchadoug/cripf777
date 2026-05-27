@@ -993,28 +993,27 @@ async function _scQuote(from, supplierId, biz, saveBiz) {
       ? `\n_...scroll up for full list (${allItems.length} total)_`
       : "";
 
-    // Build concrete examples using the supplier's actual item names
-    // Show up to 3 real items so the buyer sees familiar names, not abstract labels.
-    // Pick items that represent different service types where possible.
-    const ex1 = allItems[0]?.service || "Double Room";
-    const ex2 = allItems[3]?.service || allItems[1]?.service || null; // prefer a non-room item
-    const ex3 = allItems[4]?.service || allItems[2]?.service || null; // e.g. Boat Cruise / tour
+    // Build concrete examples using actual item names
+    const ex1Name = allItems[0]?.service || "Double Room";
+    const ex2Name = allItems[1]?.service || null;
 
     const exLines = [
-      `_1_ → ${ex1}`,
-      ex2 ? `_4_ → ${ex2}` : null,
-      ex3 ? `_5_ → ${ex3}` : null,
-      ex2 ? `_1×2, 4_ → ${ex1} for 2 nights + ${ex2}` : `_1×2_ → ${ex1} for 2 nights`,
+      `_1_ → ${ex1Name}`,
+      `_1×2_ → ${ex1Name}, 2 nights/units`,
+      ex2Name ? `_2_ → ${ex2Name}` : null,
+      ex2Name ? `_1×2, 2×1_ → mix of items` : null,
     ].filter(Boolean).join("\n");
 
     return sendButtons(from, {
       text:
         `🏨 *Select what you need:*\n\n` +
         `📌 *Quick reference:*\n${_hospRefLines}${_hospRefSuffix}\n\n` +
-        `Type the *number(s)* of what you need.\n\n` +
+        `Type the *item number* from the list above.\n` +
+        `Add *×qty* for multiple nights, rooms, or people.\n\n` +
         `*Examples:*\n${exLines}\n\n` +
-        `You can mix and match, e.g. _1×3, 4, 6_\n\n` +
-        `Type *done* when ready.\n` +
+        `Then type *done* to send your request.\n` +
+        `Or type *note: your message* to add details\n` +
+        `_e.g. note: 8 people, Saturday, need airport pickup_\n\n` +
         `Type *cancel* to go back.`,
       buttons: [{ id: `sc_enquiry_${supplierId}`, title: "💬 Enquiry" }]
     });
