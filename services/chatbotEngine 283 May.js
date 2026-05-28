@@ -6357,24 +6357,6 @@ const searchMode = sess?.tempData?.supplierSearchMode;
 const supplierAccountState = sess?.tempData?.supplierAccountState;
 const supplierRegState = sess?.supplierRegState;
 
-// ── ZQ deep link intercepts — MUST be first inside if(!biz) ─────────────────
-// These MUST run before searchMode/shortcode blocks, the welcome-screen gate,
-// and any other session-state logic. A no-biz visitor who has a leftover
-// searchMode="product" session state would otherwise have ZQ:GROUP: and ZQ:S:
-// treated as product queries, producing the "Which city?" prompt instead of
-// the correct group list or supplier profile.
-if (!isMetaAction && /^ZQ:S:[a-z0-9-]{2,40}$/i.test(text.trim())) {
-  const _handled = await handleZqDeepLink({ from, text: text.trim(), biz, saveBiz: saveBizSafe.bind(null, biz) });
-  if (_handled) return;
-}
-if (!isMetaAction && /^ZQ:GROUP:[a-z0-9-]{2,40}$/i.test(text.trim())) {
-  const _zqgSlug = text.trim().split(":")[2]?.toLowerCase().trim();
-  if (_zqgSlug) {
-    const _handled = await handleGroupSmartLink({ from, slug: _zqgSlug, biz, saveBiz: saveBizSafe.bind(null, biz) });
-    if (_handled) return;
-  }
-}
-
 if (
   searchMode === "product" &&
   !isMetaAction &&
@@ -6382,9 +6364,7 @@ if (
   supplierAccountState !== "supplier_update_prices" &&
   supplierRegState !== "supplier_reg_prices" &&
   // FIX: don't intercept text typed by a no-biz user mid-sc_ quote flow
-  !sess?.tempData?.scState?.startsWith("sc_") &&
-  // FIX: ZQ: deep links must never be treated as product search queries
-  !/^ZQ:/i.test(text.trim())
+  !sess?.tempData?.scState?.startsWith("sc_")
 ) {
   const productQuery = text.trim();
   if (!productQuery || productQuery.length < 1) {
