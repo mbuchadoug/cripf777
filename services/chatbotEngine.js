@@ -3711,6 +3711,24 @@ if (biz) {
   console.log("[OWNERSHIP] phone", phone, "has NO biz");
 }
 
+// ── ZQG EARLY HANDLER (TOP LEVEL — runs for ALL users, any session state) ──────
+// zqg_sel_<supplierId>  = buyer tapped a seller row in a group WhatsApp list
+// zqg_register_<slug>   = buyer tapped "List Your Business Here" CTA row
+//
+// MUST be at depth-1 top level — before ALL state machines, session gates,
+// and the no-biz welcome-screen gate. Without this placement:
+//   • Biz users with sessionState "supplier_search_city" get swallowed by
+//     handleSupplierRegistrationStates() which doesn't handle zqg_ actions.
+//   • No-biz users hit the welcome-screen gate before the handler below.
+// This mirrors the REG TYPE EARLY HANDLER pattern directly below.
+if (a.startsWith('zqg_sel_') || a.startsWith('zqg_register_')) {
+  console.log(`[ZQG EARLY HANDLER] from=${from} action=${a}`);
+  const _zqgEarlyHandled = await handleGroupSellerTap({
+    from, action: a, biz, saveBiz: saveBizSafe.bind(null, biz)
+  });
+  if (_zqgEarlyHandled) return;
+}
+
 // ── REG TYPE EARLY HANDLER ──────────────────────────────────────────────────
 // Inserted at the TOP LEVEL, before the if(!isMetaAction || isBuyerRequestMetaReply)
 // mega-block (line ~3818) which wraps almost the entire engine.
