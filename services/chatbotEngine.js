@@ -3711,6 +3711,36 @@ if (biz) {
   console.log("[OWNERSHIP] phone", phone, "has NO biz");
 }
 
+// ── ZQ TEXT DEEP LINK HANDLER (TOP LEVEL — runs for ALL users, any session state) ─
+// ZQ:GROUP:<slug> and ZQ:S:<slug> arrive as plain TEXT messages (not interactive).
+// They MUST be handled at depth-1 top level — before ALL state machines, the
+// if(!biz) block, the big !isMetaAction mega-block, and any session-state logic.
+// Without this: biz users with any sessionState, or no-biz users with leftover
+// searchMode/supplierRegState session data, all fall into product search flows
+// and get the "Which city?" prompt. This is the definitive fix.
+if (!isMetaAction && /^ZQ:GROUP:[a-z0-9_-]{1,60}$/i.test(text.trim())) {
+  console.log(`[ZQ:GROUP TOP LEVEL] from=${from} text=${text.trim()}`);
+  const _zqgTopSlug = text.trim().split(":")[2]?.toLowerCase().trim();
+  if (_zqgTopSlug) {
+    const _zqgTopHandled = await handleGroupSmartLink({
+      from, slug: _zqgTopSlug, biz, saveBiz: saveBizSafe.bind(null, biz)
+    });
+    if (_zqgTopHandled) return;
+    // Group not found — send a helpful message rather than falling through
+    try { await sendText(from, "❌ This group link is no longer active. Type *menu* to browse ZimQuote."); } catch(_) {}
+    return;
+  }
+}
+if (!isMetaAction && /^ZQ:S:[a-z0-9_-]{1,60}$/i.test(text.trim())) {
+  console.log(`[ZQ:S TOP LEVEL] from=${from} text=${text.trim()}`);
+  const _zqsTopHandled = await handleZqDeepLink({
+    from, text: text.trim(), biz, saveBiz: saveBizSafe.bind(null, biz)
+  });
+  if (_zqsTopHandled) return;
+  try { await sendText(from, "❌ This supplier link is no longer active. Type *menu* to browse ZimQuote."); } catch(_) {}
+  return;
+}
+
 // ── ZQG EARLY HANDLER (TOP LEVEL — runs for ALL users, any session state) ──────
 // zqg_sel_<supplierId>  = buyer tapped a seller row in a group WhatsApp list
 // zqg_register_<slug>   = buyer tapped "List Your Business Here" CTA row
@@ -6363,11 +6393,11 @@ const supplierRegState = sess?.supplierRegState;
 // searchMode="product" session state would otherwise have ZQ:GROUP: and ZQ:S:
 // treated as product queries, producing the "Which city?" prompt instead of
 // the correct group list or supplier profile.
-if (!isMetaAction && /^ZQ:S:[a-z0-9-]{2,40}$/i.test(text.trim())) {
+if (!isMetaAction && /^ZQ:S:[a-z0-9_-]{1,60}$/i.test(text.trim())) {
   const _handled = await handleZqDeepLink({ from, text: text.trim(), biz, saveBiz: saveBizSafe.bind(null, biz) });
   if (_handled) return;
 }
-if (!isMetaAction && /^ZQ:GROUP:[a-z0-9-]{2,40}$/i.test(text.trim())) {
+if (!isMetaAction && /^ZQ:GROUP:[a-z0-9_-]{1,60}$/i.test(text.trim())) {
   const _zqgSlug = text.trim().split(":")[2]?.toLowerCase().trim();
   if (_zqgSlug) {
     const _handled = await handleGroupSmartLink({ from, slug: _zqgSlug, biz, saveBiz: saveBizSafe.bind(null, biz) });
@@ -6898,7 +6928,7 @@ if (a.startsWith("zqg_sel_") || a.startsWith("zqg_register_")) {
 // being treated as product searches, triggering the "Which city?" prompt.
 // These must be handled HERE — before the shortcode block — for visitors who
 // have no business account (the common case for smart link visitors).
-if (!isMetaAction && /^ZQ:S:[a-z0-9-]{2,40}$/i.test(text.trim())) {
+if (!isMetaAction && /^ZQ:S:[a-z0-9_-]{1,60}$/i.test(text.trim())) {
   const _handled = await handleZqDeepLink({ from, text: text.trim(), biz, saveBiz: saveBizSafe.bind(null, biz) });
   if (_handled) return;
 }
@@ -6906,7 +6936,7 @@ if (!isMetaAction && /^ZQ:S:[a-z0-9-]{2,40}$/i.test(text.trim())) {
 // ── ZQ:GROUP:<slug> early intercept (no-biz path) ─────────────────────────
 // FIX: ZQ:GROUP: links were falling through to parseShortcodeSearch and
 // triggering the "Which city?" prompt for visitors without a business account.
-if (!isMetaAction && /^ZQ:GROUP:[a-z0-9-]{2,40}$/i.test(text.trim())) {
+if (!isMetaAction && /^ZQ:GROUP:[a-z0-9_-]{1,60}$/i.test(text.trim())) {
   const _slug = text.trim().split(":")[2]?.toLowerCase().trim();
   if (_slug) {
     const _handled = await handleGroupSmartLink({ from, slug: _slug, biz, saveBiz: saveBizSafe.bind(null, biz) });
@@ -10553,7 +10583,7 @@ if (shortcode.city) {
 }
 
 
-if (!isMetaAction && biz && biz.sessionState && !escapeWords.includes(al) && !settingsStates.includes(biz.sessionState) && !schoolAdminStates.includes(biz.sessionState) && !schoolTextStates.includes(biz.sessionState)) {
+if (!isMetaAction && biz && biz.sessionState && !escapeWords.includes(al) && !settingsStates.includes(biz.sessionState) && !schoolAdminStates.includes(biz.sessionState) && !schoolTextStates.includes(biz.sessionState) && !/^ZQ:/i.test(text.trim())) {
     if (al === "cancel" && supplierStates.includes(biz.sessionState)) {
       biz.sessionState = "ready";
       biz.sessionData = {};
@@ -11761,7 +11791,7 @@ if (!isMetaAction && /ZQ:(SCHOOL|SUPPLIER):[a-f0-9]{24}/i.test(text)) {
 }
 
 // ── ZQ:S:<slug> — human-readable named supplier link ─────────────────────────
-if (!isMetaAction && /^ZQ:S:[a-z0-9-]{2,40}$/i.test(text.trim())) {
+if (!isMetaAction && /^ZQ:S:[a-z0-9_-]{1,60}$/i.test(text.trim())) {
   const _handled = await handleZqDeepLink({ from, text: text.trim(), biz, saveBiz: saveBizSafe.bind(null, biz) });
   if (_handled) return;
 }
