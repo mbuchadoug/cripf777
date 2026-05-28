@@ -6805,7 +6805,13 @@ a === "sup_search_next_page" ||
 
   // ── School FAQ (sfaq_) — parents visiting via ZQ:SCHOOL link ────────────────
   // Same issue: parent taps a school FAQ button → redirected without this.
-  a.startsWith("sfaq_");
+  a.startsWith("sfaq_") ||
+  // ── Group smart link list-reply taps ─────────────────────────────────────
+  // zqg_sel_<id>        = buyer tapped a seller row in a group list
+  // zqg_register_<slug> = buyer tapped "List Your Business Here"
+  // Without these the welcome-screen gate fires and swallows the action.
+  a.startsWith("zqg_sel_") ||
+  a.startsWith("zqg_register_");
 
 // ── Shortcode search intercept: "find cement", "s plumber harare" etc ─────
 // ── Shortcode search intercept: "find cement", "find mushambahuro harare" etc ─────
@@ -7213,6 +7219,17 @@ if (shortcode.city && results.length) {
 }
 
  
+
+// ── Group smart link list-reply tap handler (no-biz path) ──────────────────
+// MUST be placed here — BEFORE the welcome-screen gate — so no-biz visitors
+// who tap a seller row or the "List Your Business" CTA from a group link
+// are handled correctly instead of being sent to the Welcome screen.
+// (allowedWithoutBiz includes zqg_ so the gate below is also bypassed,
+// but this handler ensures an immediate response and return.)
+if (a.startsWith("zqg_sel_") || a.startsWith("zqg_register_")) {
+  const _zqgHandled = await handleGroupSellerTap({ from, action: a, biz, saveBiz: saveBizSafe.bind(null, biz) });
+  if (_zqgHandled) return;
+}
 
  if (!supplierExists && al !== "join" && !allowedWithoutBiz && !hasActiveBuyerFlow) {
   return sendList(from, "👋 *Welcome to ZimQuote!*\n\nZimbabwe's marketplace for products & services.", [
