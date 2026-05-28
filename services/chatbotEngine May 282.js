@@ -6832,27 +6832,6 @@ const _orderBlockedStates = new Set([
 // AFTER:
 const _schoolEnquiryState = _sessForOrderCheck?.tempData?.schoolEnquiryState;
 
-// ── ZQ:S:<slug> early intercept (no-biz path) ─────────────────────────────
-// FIX: ZQ:S: smart links were falling through to parseShortcodeSearch and
-// being treated as product searches, triggering the "Which city?" prompt.
-// These must be handled HERE — before the shortcode block — for visitors who
-// have no business account (the common case for smart link visitors).
-if (!isMetaAction && /^ZQ:S:[a-z0-9-]{2,40}$/i.test(text.trim())) {
-  const _handled = await handleZqDeepLink({ from, text: text.trim(), biz, saveBiz: saveBizSafe.bind(null, biz) });
-  if (_handled) return;
-}
-
-// ── ZQ:GROUP:<slug> early intercept (no-biz path) ─────────────────────────
-// FIX: ZQ:GROUP: links were falling through to parseShortcodeSearch and
-// triggering the "Which city?" prompt for visitors without a business account.
-if (!isMetaAction && /^ZQ:GROUP:[a-z0-9-]{2,40}$/i.test(text.trim())) {
-  const _slug = text.trim().split(":")[2]?.toLowerCase().trim();
-  if (_slug) {
-    const _handled = await handleGroupSmartLink({ from, slug: _slug, biz, saveBiz: saveBizSafe.bind(null, biz) });
-    if (_handled) return;
-  }
-}
-
 if (
   !isMetaAction &&
   text.trim().length > 2 &&
@@ -6863,10 +6842,7 @@ if (
   // FIX: no-biz buyers in the sc_ quote flow store their state in UserSession.
   // Without this check, typed item selections (e.g. "1x3,6") hit the shortcode
   // search instead of being routed to handleSellerChatState.
-  !_sessForOrderCheck?.tempData?.scState?.startsWith("sc_") &&
-  // FIX: ZQ: deep links (ZQ:GROUP:, ZQ:S:, ZQ:SUPPLIER:, ZQ:SCHOOL:) must
-  // never reach parseShortcodeSearch — they are handled by the intercepts above.
-  !/^ZQ:/i.test(text.trim())
+  !_sessForOrderCheck?.tempData?.scState?.startsWith("sc_")
 ) {
   console.log(`[HIT-NOBIZ-SHORTCODE] text="${text}"`);
   const { parseShortcodeSearch } = await import("./supplierSearch.js");
