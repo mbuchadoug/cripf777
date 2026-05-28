@@ -173,6 +173,8 @@ const _EXTRA_SCHOOL_SUBURBS = {
   "highfield": "Harare",
   "mbare": "Harare",
   "ruwa": "Harare",
+  "zimre park": "Harare",
+  "gazebo": "Harare",
   "chitungwiza": "Harare",
   "epworth": "Harare",
   "norton": "Harare",

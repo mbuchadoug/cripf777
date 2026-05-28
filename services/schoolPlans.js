@@ -14,7 +14,7 @@ export const SCHOOL_SUBURB_TO_CITY = {
   "mbare": "Harare", "highfield": "Harare", "hatfield": "Harare",
   "greendale": "Harare", "msasa": "Harare", "eastlea": "Harare",
   "waterfalls": "Harare", "mufakose": "Harare", "chitungwiza": "Harare",
-  "ruwa": "Harare", "highlands": "Harare", "mount pleasant": "Harare",
+  "ruwa": "Harare","zimre park":"Harare","gazebo":"Harare","damafalls":"Harare", "highlands": "Harare", "mount pleasant": "Harare",
   "belgravia": "Harare", "milton park": "Harare", "newlands": "Harare",
   "chisipite": "Harare", "gunhill": "Harare", "greystone": "Harare",
   "strathaven": "Harare", "braeside": "Harare", "arcadia": "Harare",
