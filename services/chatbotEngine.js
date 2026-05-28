@@ -3649,7 +3649,13 @@ a.startsWith("sup_load_preset_") ||
       a.startsWith("school_followup_") ||
       a.startsWith("school_leads_page_") ||
       a.startsWith("sfaq_") ||
-      a.startsWith("sc_")
+      a.startsWith("sc_") ||
+      // ── Group smart link list-reply taps ─────────────────────────────────
+      // zqg_sel_<id>        = buyer tapped a seller row in a group list
+      // zqg_register_<slug> = buyer tapped "List Your Business Here" row
+      // Without these isMetaAction=false and both fall into shortcode search.
+      a.startsWith("zqg_sel_") ||
+      a.startsWith("zqg_register_")
     
     );
   // =========================
@@ -6832,6 +6838,17 @@ const _orderBlockedStates = new Set([
 // AFTER:
 const _schoolEnquiryState = _sessForOrderCheck?.tempData?.schoolEnquiryState;
 
+// ── Group list-reply tap early intercept (no-biz path) ─────────────────────
+// FIX: zqg_sel_ and zqg_register_ come in as interactive list_reply actions.
+// isMetaAction is now true for them (fixed above), so they no longer hit the
+// shortcode search. But they also need a handler HERE — before any no-biz
+// early-return gates that check !isMetaAction — because those gates would
+// otherwise block execution before the handler at the bottom of the file runs.
+if (a.startsWith("zqg_sel_") || a.startsWith("zqg_register_")) {
+  const _zqgHandled = await handleGroupSellerTap({ from, action: a, biz, saveBiz: saveBizSafe.bind(null, biz) });
+  if (_zqgHandled) return;
+}
+
 // ── ZQ:S:<slug> early intercept (no-biz path) ─────────────────────────────
 // FIX: ZQ:S: smart links were falling through to parseShortcodeSearch and
 // being treated as product searches, triggering the "Which city?" prompt.
@@ -6866,7 +6883,10 @@ if (
   !_sessForOrderCheck?.tempData?.scState?.startsWith("sc_") &&
   // FIX: ZQ: deep links (ZQ:GROUP:, ZQ:S:, ZQ:SUPPLIER:, ZQ:SCHOOL:) must
   // never reach parseShortcodeSearch — they are handled by the intercepts above.
-  !/^ZQ:/i.test(text.trim())
+  !/^ZQ:/i.test(text.trim()) &&
+  // FIX: zqg_ group list-reply actions must never reach shortcode search.
+  // isMetaAction is now true for them, but this guard is belt-and-suspenders.
+  !a.startsWith("zqg_")
 ) {
   console.log(`[HIT-NOBIZ-SHORTCODE] text="${text}"`);
   const { parseShortcodeSearch } = await import("./supplierSearch.js");
