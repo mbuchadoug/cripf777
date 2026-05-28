@@ -1,4 +1,4 @@
-a// routes/supplierSmartLinkAdmin.js
+// routes/supplierSmartLinkAdmin.js
 // ─── Smart Link Admin Routes ─────────────────────────────────────────────────
 //
 // Mount in supplierAdmin.js (or your main router) BEFORE export default router:
@@ -64,13 +64,8 @@ router.get("/", requireSupplierAdmin, async (req, res) => {
     const slug       = supplier.zqSlug || null;
     const allLinks   = buildAllLinks(supplierId);
     const directLink = buildDeepLink(supplierId, null);
-    const slugLink   = slug ? `https://wa.me/${(process.env.WHATSAPP_BOT_NUMBER || "263771143904").replace(/\D/g, "")}?text=${encodeURIComponent("ZQ:S:" + slug)}` : null;
-    const qrUrl      = slug
-      ? buildQrImageUrl(supplierId, 400).replace(encodeURIComponent(`ZQ:SUPPLIER:${supplierId}`), encodeURIComponent(`ZQ:S:${slug}`))
-      : buildQrImageUrl(supplierId, 400);
-    const qrUrlLarge = slug
-      ? buildQrImageUrl(supplierId, 600).replace(encodeURIComponent(`ZQ:SUPPLIER:${supplierId}`), encodeURIComponent(`ZQ:S:${slug}`))
-      : buildQrImageUrl(supplierId, 600);
+    const qrUrl      = buildQrImageUrl(supplierId, 400);
+    const qrUrlLarge = buildQrImageUrl(supplierId, 600);
 
     // Per-source analytics (from zqSourceViews map in DB)
     const sourceViews       = supplier.zqSourceViews       || {};
@@ -233,7 +228,6 @@ td{padding:9px 12px;border-bottom:1px solid #f1f5f9;vertical-align:middle}
       <h2>QR Code</h2>
       <div class="qr-wrap">
         <img src="${esc(qrUrl)}" alt="QR Code for ${esc(supplier.businessName)}" id="qrImg" />
-        <p class="qr-caption">${slug ? `Encodes: ZQ:S:${esc(slug)}` : `Encodes: ZQ:SUPPLIER:${esc(supplierId)}`}</p>
         <p class="qr-caption">Scan to open seller profile on WhatsApp</p>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:12px">
@@ -248,48 +242,22 @@ td{padding:9px 12px;border-bottom:1px solid #f1f5f9;vertical-align:middle}
 
     <!-- ── Direct link + slug ────────────────────────────────────────── -->
     <div class="card">
-      <h2>WhatsApp Smart Link</h2>
-      <p style="font-size:12px;color:var(--muted);margin-bottom:12px">
-        Share this link anywhere — it opens WhatsApp and loads the seller profile automatically.
-      </p>
-
-      ${slugLink ? `
-      <div style="background:#f0fdf4;border:2px solid #22c55e;border-radius:10px;padding:14px;margin-bottom:16px">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-          <span style="font-size:13px;font-weight:700;color:#15803d">✅ Named Link (recommended)</span>
-          <code style="background:#dcfce7;color:#15803d;font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px">ZQ:S:${esc(slug)}</code>
-        </div>
-        <p style="font-size:11px;color:#16a34a;margin-bottom:8px">Human-readable · shorter · easier to share</p>
-        <div class="link-box" onclick="copyText(${JSON.stringify(slugLink)}, this)" title="Click to copy" style="border-color:#86efac;background:#f0fdf4">
-          ${esc(slugLink)}
-        </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button onclick="copyText(${JSON.stringify(slugLink)}, this)" class="btn btn-green btn-sm">📋 Copy Named Link</button>
-          <a href="${esc(slugLink)}" target="_blank" class="btn btn-sm" style="background:#dcfce7;color:#15803d">🔗 Test</a>
-        </div>
-      </div>
-      ` : `
-      <div style="background:#fef9c3;border:1px solid #fde047;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#854d0e">
-        ⚠️ No slug assigned yet. Save a slug below to get a shorter, shareable named link.
-      </div>
-      `}
-
-      <details style="margin-bottom:16px">
-        <summary style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;cursor:pointer;padding:4px 0">ID-based link (always works) ▾</summary>
-        <div style="margin-top:8px">
-          <div class="link-box" onclick="copyText(${JSON.stringify(directLink)}, this)" title="Click to copy">
-            ${esc(directLink)}
-          </div>
-          <div style="display:flex;gap:8px">
-            <button onclick="copyText(${JSON.stringify(directLink)}, this)" class="btn btn-blue btn-sm">📋 Copy</button>
-            <a href="${esc(directLink)}" target="_blank" class="btn btn-green btn-sm">🔗 Test</a>
-          </div>
-        </div>
-      </details>
-
-      <h2 style="margin-top:4px">Slug / Short Name</h2>
+      <h2>WhatsApp Deep Link</h2>
       <p style="font-size:12px;color:var(--muted);margin-bottom:10px">
-        ${slug ? `Current slug: <code style="background:#f1f5f9;padding:2px 6px;border-radius:4px;font-family:monospace">${esc(slug)}</code>` : "<em>Not assigned yet</em>"}
+        This is the main link. Share it anywhere - it opens WhatsApp and loads this seller's profile automatically.
+      </p>
+      <div class="link-box" onclick="copyText(${JSON.stringify(directLink)}, this)" title="Click to copy">
+        ${esc(directLink)}
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:16px">
+        <button onclick="copyText(${JSON.stringify(directLink)}, this)" class="btn btn-blue btn-sm">📋 Copy Link</button>
+        <a href="${esc(directLink)}" target="_blank" class="btn btn-green btn-sm">🔗 Test Link</a>
+      </div>
+
+      <h2 style="margin-top:16px">Slug / Short Name</h2>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:10px">
+        A human-readable identifier for this seller. Used internally for reference.
+        ${slug ? `Current: <code style="background:#f1f5f9;padding:2px 6px;border-radius:4px;font-family:monospace">${esc(slug)}</code>` : "<em>Not assigned yet</em>"}
       </p>
       <form method="POST" action="/zq-admin/suppliers/${esc(supplierId)}/smart-link/assign">
         <div class="slug-row">
