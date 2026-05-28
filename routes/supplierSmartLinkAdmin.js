@@ -1,4 +1,4 @@
-a// routes/supplierSmartLinkAdmin.js
+// routes/supplierSmartLinkAdmin.js
 // ─── Smart Link Admin Routes ─────────────────────────────────────────────────
 //
 // Mount in supplierAdmin.js (or your main router) BEFORE export default router:
