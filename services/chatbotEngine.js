@@ -3441,6 +3441,7 @@ a.startsWith("sup_accept_") ||
       a.startsWith("dec_no_delivery") ||
       a.startsWith("dec_price_changed") ||
       a.startsWith("dec_other") ||
+      a.startsWith("zqg_") ||
       a.startsWith("sup_order_") ||
       a.startsWith("sup_view_") ||
       a.startsWith("sup_save_") ||
@@ -6630,7 +6631,7 @@ if (parsed.city || parsed.area) {
 }
 
   return sendList(from, `🔍 Looking for: *${cleanProduct}*\n\nWhich city?`, [
-    ...SUPPLIER_CITIES.map(c => ({
+    ...SUPPLIER_CITIES.slice(0, 9).map(c => ({
       id: `sup_search_city_${c.toLowerCase()}`,
       title: c
     })),
@@ -7159,7 +7160,7 @@ if (shortcode.city && results.length) {
       await saveBizSafe(biz);
     }
     return sendList(from, `🔍 Looking for: *${shortcode.product}*\n\nWhich city?`, [
-      ...SUPPLIER_CITIES.map(c => ({
+      ...SUPPLIER_CITIES.slice(0, 9).map(c => ({
         id: `sup_search_city_${c.toLowerCase()}`,
         title: c
       })),
@@ -10442,7 +10443,7 @@ if (shortcode.city) {
     biz.sessionState = "supplier_search_city";
     await saveBizSafe(biz);
     return sendList(from, `🔍 Looking for: *${shortcode.product}*\n\nWhich city?`, [
-      ...SUPPLIER_CITIES.map(c => ({
+      ...SUPPLIER_CITIES.slice(0, 9).map(c => ({
         id: `sup_search_city_${c.toLowerCase()}`,
         title: c
       })),
@@ -10588,7 +10589,7 @@ if (biz.sessionState === "supplier_search_city" && !isMetaAction && !schoolAdmin
     await saveBizSafe(biz);
 
     return sendList(from, `🔍 Looking for: *${cleanProduct}*\n\nWhich city?`, [
-      ...SUPPLIER_CITIES.map(c => ({ id: `sup_search_city_${c.toLowerCase()}`, title: c })),
+      ...SUPPLIER_CITIES.slice(0, 9).map(c => ({ id: `sup_search_city_${c.toLowerCase()}`, title: c })),
       { id: "sup_search_city_all", title: "📍 All Cities" }
     ]);
   }
@@ -10612,7 +10613,7 @@ if (biz.sessionState === "supplier_search_city" && !isMetaAction && !schoolAdmin
     await saveBizSafe(biz);
 
     return sendList(from, `🔍 Looking for: *${productQuery}*\n\nWhich city?`, [
-      ...SUPPLIER_CITIES.map(c => ({ id: `sup_search_city_${c.toLowerCase()}`, title: c })),
+      ...SUPPLIER_CITIES.slice(0, 9).map(c => ({ id: `sup_search_city_${c.toLowerCase()}`, title: c })),
       { id: "sup_search_city_all", title: "📍 All Cities" }
     ]);
   }
@@ -10780,7 +10781,7 @@ if (biz.sessionState === "supplier_search_city" && !isMetaAction && !schoolAdmin
           biz.sessionState = "supplier_search_city";
           await saveBizSafe(biz);
           return sendList(from, `🔍 Looking for: *${shortcode.product}*\n\nWhich city?`, [
-            ...SUPPLIER_CITIES.map(c => ({ id: `sup_search_city_${c.toLowerCase()}`, title: c })),
+            ...SUPPLIER_CITIES.slice(0, 9).map(c => ({ id: `sup_search_city_${c.toLowerCase()}`, title: c })),
             { id: "sup_search_city_all", title: "📍 All Cities" }
           ]);
         }
@@ -14229,7 +14230,7 @@ if (a.startsWith("sup_search_cat_")) {
   }
 
   return sendList(from, "📍 Which city?", [
-    ...SUPPLIER_CITIES.map(c => ({
+    ...SUPPLIER_CITIES.slice(0, 9).map(c => ({
       id: `sup_search_city_${c.toLowerCase()}`,
       title: c
     })),
@@ -17913,7 +17914,7 @@ if (biz?.sessionState === "supplier_search_product" && !isMetaAction) {
   await saveBizSafe(biz);
 
   return sendList(from, `🔍 Looking for: *${cleanProduct}*\n\nWhich city?`, [
-    ...SUPPLIER_CITIES.map(c => ({
+    ...SUPPLIER_CITIES.slice(0, 9).map(c => ({
       id: `sup_search_city_${c.toLowerCase()}`,
       title: c
     })),
