@@ -1,479 +1,293 @@
 // services/groupSmartLink.js
 // ─── ZimQuote Group Smart Link Engine ────────────────────────────────────────
 //
-// Handles grouped seller smart links — one link for a category of sellers.
-// e.g. ZQ:GROUP:kariba-tourism  or  ZQ:GROUP:harare-plumbers
+// A "group" bundles multiple sellers under one shareable WhatsApp link.
+// e.g.  ZQ:GROUP:plumber-zim  →  list of all plumbers → buyer taps one → showSellerMenu
 //
-// Link format:
-//   https://wa.me/263771143904?text=ZQ:GROUP:kariba-tourism
+// Deep link format:
+//   https://wa.me/<BOT>?text=ZQ:GROUP:<slug>
 //
-// When a buyer opens a group link:
-//   1. System fetches all active sellers in the group
-//   2. Sends a WhatsApp list showing seller names + taglines
-//   3. Buyer taps a seller → enters that seller's existing smart link flow
-//   4. Admin is notified (group opened)
-//   5. Seller is notified when buyer selects them (via existing supplier flow)
+// Chatbot flow:
+//   1. Buyer sends "ZQ:GROUP:plumber-zim"  (text message or QR scan)
+//   2. handleGroupSmartLink() looks up the group, sends a WhatsApp list of sellers
+//      with action IDs  zqg_sel_<supplierId>
+//   3. Buyer taps a seller from the list
+//   4. handleGroupSellerTap() extracts supplierId → calls showSellerMenu()
 //
-// Admin commands (WhatsApp bot):
-//   admin group create <slug> <name>         — create a new group
-//   admin group add <slug> <seller-phone>    — add a seller to a group
-//   admin group remove <slug> <seller-phone> — remove a seller from a group
-//   admin group list                         — list all groups
-//   admin group info <slug>                  — show group details
-//   admin group delete <slug>                — delete a group
-//   admin group tagline <slug> <tagline>     — set group tagline
+// Admin CRUD (called from supplierAdmin.js):
+//   createGroup / getAllGroups / getGroupBySlug / addSellerToGroup /
+//   removeSellerFromGroup / deleteGroup / setGroupTagline / validateGroupSlug
 //
-// Model: SupplierGroup (models/supplierGroup.js — create this)
-//   slug:      String (unique, lowercase, hyphens, max 40 chars)
-//   name:      String (display name, e.g. "Kariba Tourism")
-//   tagline:   String (one-liner shown in group list header)
-//   sellers:   [{ supplierId: ObjectId, order: Number }]
-//   active:    Boolean (default true)
-//   createdAt: Date
-//   viewCount: Number (total opens)
-//   lastViewAt: Date
+// Link builders (called from supplierAdmin.js page rendering):
+//   buildGroupDeepLink / buildGroupQrImageUrl
 //
 // ─────────────────────────────────────────────────────────────────────────────
 
-import mongoose        from "mongoose";
-import SupplierProfile from "../models/supplierProfile.js";
+import mongoose from "mongoose";
+import { sendList, sendText } from "./metaSender.js";
+import { showSellerMenu }    from "./sellerChat.js";
 
-// Lazy-load model to avoid circular imports
-async function _getGroupModel() {
-  try {
-    return mongoose.model("SupplierGroup");
-  } catch (_) {
-    // Model not registered yet — define it inline
-    const schema = new mongoose.Schema({
-      slug:      { type: String, required: true, unique: true, lowercase: true, trim: true },
-      name:      { type: String, required: true, trim: true },
-      tagline:   { type: String, default: "" },
-      sellers:   [{
-        supplierId: { type: mongoose.Schema.Types.ObjectId, ref: "SupplierProfile" },
-        order:      { type: Number, default: 0 }
-      }],
-      active:    { type: Boolean, default: true },
-      viewCount: { type: Number, default: 0 },
-      lastViewAt:{ type: Date },
-      createdAt: { type: Date, default: Date.now }
-    });
-    return mongoose.model("SupplierGroup", schema);
-  }
-}
-
+// ─── Config ───────────────────────────────────────────────────────────────────
 const BOT_NUMBER = (process.env.WHATSAPP_BOT_NUMBER || "263771143904").replace(/\D/g, "");
 const BOT_WA_URL = `https://wa.me/${BOT_NUMBER}`;
 
-// ─── Link builder ─────────────────────────────────────────────────────────────
+// ─── Mongoose model (defined inline - no separate model file needed) ──────────
 
-export function buildGroupDeepLink(slug) {
-  return `${BOT_WA_URL}?text=${encodeURIComponent("ZQ:GROUP:" + slug)}`;
-}
+const supplierGroupSchema = new mongoose.Schema(
+  {
+    slug:      { type: String, required: true, unique: true, lowercase: true, trim: true },
+    name:      { type: String, required: true, trim: true },
+    tagline:   { type: String, default: "" },
+    active:    { type: Boolean, default: true },
+    viewCount: { type: Number, default: 0 },
 
-export function buildGroupQrImageUrl(slug, sizePx = 400) {
-  const link = buildGroupDeepLink(slug);
-  return `https://chart.googleapis.com/chart?cht=qr&chs=${sizePx}x${sizePx}&chl=${encodeURIComponent(link)}&choe=UTF-8`;
-}
+    // sellers: ordered array of { supplierId, order }
+    sellers: [
+      {
+        supplierId: { type: mongoose.Schema.Types.ObjectId, ref: "SupplierProfile" },
+        order:      { type: Number, default: 0 }
+      }
+    ]
+  },
+  { timestamps: true }
+);
+
+// Use existing model if already compiled (hot-reload safe)
+const SupplierGroup = mongoose.models.SupplierGroup
+  || mongoose.model("SupplierGroup", supplierGroupSchema);
 
 // ─── Slug validation ──────────────────────────────────────────────────────────
 
+/**
+ * Returns null if slug is valid, or an error string if invalid.
+ * Slug rules: 2-40 chars, lowercase letters / digits / hyphens only,
+ * no leading/trailing hyphen, no double hyphens.
+ */
 export function validateGroupSlug(slug = "") {
-  const clean = String(slug).toLowerCase().trim()
-    .replace(/[^a-z0-9-]/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "")
-    .slice(0, 40);
-  if (!clean || clean.length < 2) return null;
-  return clean;
+  const s = String(slug).toLowerCase().trim();
+  if (s.length < 2)  return "Slug must be at least 2 characters.";
+  if (s.length > 40) return "Slug must be 40 characters or less.";
+  if (!/^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(s) && !/^[a-z0-9]$/.test(s))
+    return "Slug may only contain lowercase letters, numbers, and hyphens, and must not start or end with a hyphen.";
+  if (/--/.test(s))
+    return "Slug may not contain consecutive hyphens.";
+  return null;
+}
+
+// ─── Link builders ────────────────────────────────────────────────────────────
+
+export function buildGroupDeepLink(slug) {
+  const payload = `ZQ:GROUP:${slug}`;
+  return `${BOT_WA_URL}?text=${encodeURIComponent(payload)}`;
+}
+
+export function buildGroupQrImageUrl(slug, sizePx = 400) {
+  const link    = buildGroupDeepLink(slug);
+  const encoded = encodeURIComponent(link);
+  return `https://chart.googleapis.com/chart?cht=qr&chs=${sizePx}x${sizePx}&chl=${encoded}&choe=UTF-8`;
 }
 
 // ─── CRUD ─────────────────────────────────────────────────────────────────────
 
-export async function createGroup({ slug, name, tagline = "" }) {
-  const SupplierGroup = await _getGroupModel();
-  const cleanSlug = validateGroupSlug(slug);
-  if (!cleanSlug) throw new Error("Invalid slug — use lowercase letters, numbers and hyphens only");
-  const exists = await SupplierGroup.findOne({ slug: cleanSlug }).lean();
-  if (exists) throw new Error(`Slug "${cleanSlug}" is already taken by group: ${exists.name}`);
-  const group = await SupplierGroup.create({ slug: cleanSlug, name: name.trim(), tagline });
-  return group;
+export async function getAllGroups() {
+  return SupplierGroup.find({}).sort({ createdAt: -1 }).lean();
 }
 
 export async function getGroupBySlug(slug) {
-  const SupplierGroup = await _getGroupModel();
   return SupplierGroup.findOne({ slug: String(slug).toLowerCase().trim() }).lean();
 }
 
-export async function getAllGroups() {
-  const SupplierGroup = await _getGroupModel();
-  return SupplierGroup.find({}).sort({ name: 1 }).lean();
-}
+export async function createGroup({ slug, name, tagline = "" }) {
+  const s = String(slug).toLowerCase().trim();
+  const err = validateGroupSlug(s);
+  if (err) throw new Error(err);
 
-export async function addSellerToGroup(slug, sellerPhone) {
-  const SupplierGroup = await _getGroupModel();
-  const group = await SupplierGroup.findOne({ slug: String(slug).toLowerCase().trim() });
-  if (!group) throw new Error(`Group "${slug}" not found`);
+  const existing = await SupplierGroup.findOne({ slug: s });
+  if (existing) throw new Error(`Slug "${s}" is already taken.`);
 
-  const phone = String(sellerPhone).replace(/\D/g, "");
-  const seller = await SupplierProfile.findOne({ phone }).lean();
-  if (!seller) throw new Error(`No seller found with phone ${phone}`);
-
-  const alreadyIn = group.sellers.some(s => String(s.supplierId) === String(seller._id));
-  if (alreadyIn) throw new Error(`${seller.businessName} is already in this group`);
-
-  group.sellers.push({ supplierId: seller._id, order: group.sellers.length });
-  await group.save();
-  return { group, seller };
-}
-
-export async function removeSellerFromGroup(slug, sellerPhone) {
-  const SupplierGroup = await _getGroupModel();
-  const group = await SupplierGroup.findOne({ slug: String(slug).toLowerCase().trim() });
-  if (!group) throw new Error(`Group "${slug}" not found`);
-
-  const phone = String(sellerPhone).replace(/\D/g, "");
-  const seller = await SupplierProfile.findOne({ phone }).lean();
-  if (!seller) throw new Error(`No seller found with phone ${phone}`);
-
-  const before = group.sellers.length;
-  group.sellers = group.sellers.filter(s => String(s.supplierId) !== String(seller._id));
-  if (group.sellers.length === before) throw new Error(`${seller.businessName} is not in this group`);
-
-  await group.save();
-  return { group, seller };
+  return SupplierGroup.create({ slug: s, name: String(name).trim(), tagline: String(tagline).trim() });
 }
 
 export async function deleteGroup(slug) {
-  const SupplierGroup = await _getGroupModel();
-  const group = await SupplierGroup.findOneAndDelete({ slug: String(slug).toLowerCase().trim() });
-  if (!group) throw new Error(`Group "${slug}" not found`);
-  return group;
+  return SupplierGroup.findOneAndDelete({ slug: String(slug).toLowerCase().trim() });
 }
 
 export async function setGroupTagline(slug, tagline) {
-  const SupplierGroup = await _getGroupModel();
-  const group = await SupplierGroup.findOneAndUpdate(
+  return SupplierGroup.findOneAndUpdate(
     { slug: String(slug).toLowerCase().trim() },
-    { $set: { tagline: String(tagline).trim() } },
+    { $set: { tagline: String(tagline || "").trim() } },
     { new: true }
   );
+}
+
+/**
+ * Add a supplier to a group by phone number.
+ * Looks up the supplier by phone, then pushes to group.sellers (no duplicates).
+ */
+export async function addSellerToGroup(slug, phone) {
+  const SupplierProfile = (await import("../models/supplierProfile.js")).default;
+  const cleanPhone = String(phone || "").replace(/\D/g, "");
+  const supplier = await SupplierProfile.findOne({ phone: cleanPhone }).lean();
+  if (!supplier) throw new Error(`No supplier found with phone ${cleanPhone}`);
+
+  const group = await SupplierGroup.findOne({ slug: String(slug).toLowerCase().trim() });
   if (!group) throw new Error(`Group "${slug}" not found`);
+
+  // Prevent duplicates
+  const alreadyIn = (group.sellers || []).some(
+    s => String(s.supplierId) === String(supplier._id)
+  );
+  if (alreadyIn) throw new Error(`${supplier.businessName} is already in this group.`);
+
+  const nextOrder = Math.max(0, ...(group.sellers || []).map(s => s.order ?? 0)) + 1;
+  group.sellers.push({ supplierId: supplier._id, order: nextOrder });
+  await group.save();
   return group;
 }
 
-// ─── Main handler — called from chatbotEngine / handleZqDeepLink ──────────────
+/**
+ * Remove a supplier from a group by phone number.
+ */
+export async function removeSellerFromGroup(slug, phone) {
+  const SupplierProfile = (await import("../models/supplierProfile.js")).default;
+  const cleanPhone = String(phone || "").replace(/\D/g, "");
+  const supplier = await SupplierProfile.findOne({ phone: cleanPhone }).lean();
+  if (!supplier) throw new Error(`No supplier found with phone ${cleanPhone}`);
+
+  const group = await SupplierGroup.findOne({ slug: String(slug).toLowerCase().trim() });
+  if (!group) throw new Error(`Group "${slug}" not found`);
+
+  group.sellers = (group.sellers || []).filter(
+    s => String(s.supplierId) !== String(supplier._id)
+  );
+  await group.save();
+  return group;
+}
+
+// ─── Chatbot: handle ZQ:GROUP:<slug> ─────────────────────────────────────────
 
 /**
- * Handle an incoming ZQ:GROUP:<slug> message.
- * Shows a WhatsApp list of all sellers in the group.
- * Notifies admin of the group open.
- * Returns true if handled, false if group not found.
+ * Called when a buyer sends "ZQ:GROUP:<slug>" (text or button tap).
+ * Sends a WhatsApp list of sellers in the group.
+ * Returns true if handled, false if not (group not found / empty).
  */
 export async function handleGroupSmartLink({ from, slug, biz, saveBiz }) {
-  const SupplierGroup = await _getGroupModel();
-
-  const group = await SupplierGroup.findOne({
-    slug:   String(slug).toLowerCase().trim(),
-    active: true
-  }).lean();
-
-  if (!group) return false;
-
-  // Fire-and-forget: increment view counter + timestamp
-  SupplierGroup.findByIdAndUpdate(group._id, {
-    $inc: { viewCount: 1 },
-    $set: { lastViewAt: new Date() }
-  }).catch(() => {});
-
-  // Notify admin (non-blocking)
-  _notifyAdminGroupOpened({ group, visitorPhone: from }).catch(() => {});
-
-  // Fetch active sellers in order
-  const sellerIds = group.sellers
-    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-    .map(s => s.supplierId);
-
-  if (!sellerIds.length) {
-    const { sendText } = await import("../services/metaSender.js");
-    await sendText(from,
-      `🔍 *${group.name}*\n\n` +
-      (group.tagline ? `_${group.tagline}_\n\n` : "") +
-      `No businesses are listed in this group yet. Check back soon.`
-    );
-    return true;
-  }
-
-  const sellers = await SupplierProfile.find({
-    _id: { $in: sellerIds }
-  }).lean();
-
-  // Keep admin-defined order
-  const orderedSellers = sellerIds
-    .map(id => sellers.find(s => String(s._id) === String(id)))
-    .filter(Boolean);
-
-  // WhatsApp list: max 10 rows per section
-  const rows = orderedSellers.slice(0, 10).map(s => {
-    const area = s.location?.area || "";
-    const city = s.location?.city || "";
-    const loc  = [area, city].filter(Boolean).join(", ");
-    const desc = loc || (s.profileType === "hospitality" ? "Hospitality" : (s.profileType === "service" ? "Services" : "Products"));
-    return {
-      id:          `zqg_sel_${String(s._id)}`,
-      title:       (s.businessName || "Business").slice(0, 24),
-      description: desc.slice(0, 72)
-    };
-  });
-
-  const overflow = orderedSellers.length > 10
-    ? `\n_...and ${orderedSellers.length - 10} more. Type the name to search._`
-    : "";
-
-  const { sendList } = await import("../services/metaSender.js");
-  await sendList(from,
-    `🏪 *${group.name}*\n` +
-    (group.tagline ? `_${group.tagline}_\n` : "") +
-    `\nTap a business to view their services, catalogue and request a quote.${overflow}`,
-    rows
-  );
-
-  return true;
-}
-
-// ─── Handle buyer tapping a seller from the group list ────────────────────────
-// Action format: zqg_sel_<supplierId>
-// Wire into chatbotEngine sc_ / action handler block
-
-export async function handleGroupSellerTap({ from, action, biz, saveBiz }) {
-  if (!action.startsWith("zqg_sel_")) return false;
-  const supplierId = action.replace("zqg_sel_", "").trim();
-  if (!mongoose.Types.ObjectId.isValid(supplierId)) return false;
-
   try {
-    const { showSellerMenu } = await import("./sellerChat.js");
-    await showSellerMenu(from, supplierId, biz, saveBiz, { source: "group_link" });
-  } catch (_) {
-    const { sendText } = await import("../services/metaSender.js");
-    await sendText(from, "Sorry, couldn't load that business. Please try again.");
+    const group = await SupplierGroup.findOne({ slug: String(slug).toLowerCase().trim() }).lean();
+    if (!group || !group.active) return false;
+
+    // Track view (non-blocking)
+    SupplierGroup.findByIdAndUpdate(group._id, { $inc: { viewCount: 1 } }).catch(() => {});
+
+    // Notify admin (non-blocking)
+    _notifyAdminGroupOpened(group, from).catch(() => {});
+
+    const sellerIds = (group.sellers || [])
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+      .map(s => s.supplierId);
+
+    if (!sellerIds.length) {
+      await sendText(from, `❌ *${group.name}* has no sellers yet. Check back soon!`);
+      return true;
+    }
+
+    const SupplierProfile = (await import("../models/supplierProfile.js")).default;
+    const sellers = await SupplierProfile.find(
+      { _id: { $in: sellerIds }, active: true },
+      { businessName: 1, location: 1, profileType: 1, _id: 1 }
+    ).lean();
+
+    // Preserve admin-defined order
+    const orderedSellers = sellerIds
+      .map(id => sellers.find(s => String(s._id) === String(id)))
+      .filter(Boolean);
+
+    if (!orderedSellers.length) {
+      await sendText(from, `😕 No active sellers in *${group.name}* right now. Try again later.`);
+      return true;
+    }
+
+    // WhatsApp list rows: max 10 per section
+    const rows = orderedSellers.slice(0, 9).map(s => {
+      const loc = [s.location?.area, s.location?.city].filter(Boolean).join(", ");
+      return {
+        id:          `zqg_sel_${s._id}`,
+        title:       s.businessName || "Seller",
+        description: loc || undefined
+      };
+    });
+
+    const tagline  = group.tagline || "Tap a business to view their services, catalogue and request a quote.";
+    const header   = `🏪 *${group.name}*\n\n${tagline}`;
+
+    await sendList(from, header, rows);
+    return true;
+
+  } catch (err) {
+    console.error("[GROUP SMART LINK ERROR]", err.message);
+    return false;
   }
+}
+
+// ─── Chatbot: handle zqg_sel_<supplierId> ────────────────────────────────────
+
+/**
+ * Called when a buyer taps a seller from the group list reply.
+ * Action format: "zqg_sel_<supplierId>"
+ * Calls showSellerMenu() to display the seller's profile card + action buttons.
+ * Returns true if handled, false if not.
+ */
+export async function handleGroupSellerTap({ from, action, biz, saveBiz }) {
+  try {
+    const supplierId = String(action || "").replace(/^zqg_sel_/i, "").trim();
+    if (!supplierId || supplierId.length !== 24) {
+      console.warn(`[GROUP SELLER TAP] Invalid supplierId from action="${action}"`);
+      return false;
+    }
+
+    console.log(`[GROUP SELLER TAP] from=${from} supplierId=${supplierId}`);
+
+    await showSellerMenu(from, supplierId, biz, saveBiz, { source: "group" });
+    return true;
+
+  } catch (err) {
+    console.error("[GROUP SELLER TAP ERROR]", err.message, err.stack);
+    try {
+      await sendText(from, "❌ Could not load seller profile. Please try again.");
+    } catch (_) {}
+    return true; // return true so chatbotEngine doesn't fall through
+  }
+}
+
+// ─── Admin group command handler ──────────────────────────────────────────────
+
+/**
+ * Handles "admin group <command>" typed by admin phone.
+ * Currently a no-op stub — extend as needed.
+ * Returns true if handled.
+ */
+export async function handleGroupAdminCommand({ from, text }) {
+  const parts = String(text || "").trim().toLowerCase().split(/\s+/);
+  // parts[0] = "admin", parts[1] = "group", parts[2] = subcommand
+  const subCmd = parts[2] || "";
+  console.log(`[GROUP ADMIN CMD] from=${from} subCmd=${subCmd}`);
+  // Stub: just acknowledge
+  await sendText(from, `ℹ️ Group admin command received: "${text}". No automated action taken.`);
   return true;
 }
 
-// ─── Admin notification ───────────────────────────────────────────────────────
+// ─── Internal helpers ─────────────────────────────────────────────────────────
 
-async function _notifyAdminGroupOpened({ group, visitorPhone }) {
+async function _notifyAdminGroupOpened(group, visitorPhone) {
   try {
     const { notifyAdminGroupLinkOpened } = await import("./buyerRequestNotifications.js");
     await notifyAdminGroupLinkOpened({
-      groupName:   group.name,
-      slug:        group.slug,
-      viewCount:   (group.viewCount || 0) + 1,
-      visitorPhone
+      groupName:    group.name,
+      slug:         group.slug,
+      viewCount:    (group.viewCount || 0) + 1,
+      visitorPhone: visitorPhone
     });
-  } catch (_) {}
-}
-
-// ─── Admin WhatsApp bot command handler ───────────────────────────────────────
-// Called from chatbotEngine admin command section.
-// Usage: handleGroupAdminCommand({ from, text })
-// Returns true if handled.
-
-export async function handleGroupAdminCommand({ from, text }) {
-  const raw   = String(text || "").trim();
-  const lower = raw.toLowerCase();
-
-  if (!lower.startsWith("admin group")) return false;
-
-  const { sendText } = await import("../services/metaSender.js");
-
-  // "admin group list"
-  if (lower === "admin group list") {
-    const groups = await getAllGroups();
-    if (!groups.length) {
-      await sendText(from, "No groups created yet. Use:\n*admin group create <slug> <name>*");
-      return true;
-    }
-    const lines = groups.map(g => {
-      const sellerCount = g.sellers?.length || 0;
-      const status = g.active ? "✅" : "⏸";
-      return `${status} *${g.name}* (${g.slug})\n   ${sellerCount} seller${sellerCount === 1 ? "" : "s"} · ${g.viewCount || 0} views`;
-    });
-    await sendText(from, `📋 *Group Smart Links (${groups.length})*\n\n` + lines.join("\n\n"));
-    return true;
+  } catch (_) {
+    // Non-critical
   }
-
-  // "admin group info <slug>"
-  const infoMatch = lower.match(/^admin group info (.+)$/);
-  if (infoMatch) {
-    const slug = infoMatch[1].trim();
-    const group = await getGroupBySlug(slug);
-    if (!group) {
-      await sendText(from, `❌ Group "${slug}" not found.`);
-      return true;
-    }
-    const sellerIds = (group.sellers || []).sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).map(s => s.supplierId);
-    const sellers   = await SupplierProfile.find({ _id: { $in: sellerIds } }).lean();
-    const ordered   = sellerIds.map(id => sellers.find(s => String(s._id) === String(id))).filter(Boolean);
-    const sellerList = ordered.map((s, i) => `${i + 1}. ${s.businessName} (${s.phone})`).join("\n");
-    const link = buildGroupDeepLink(group.slug);
-    await sendText(from,
-      `📋 *${group.name}*\n` +
-      `Slug: ${group.slug}\n` +
-      `Tagline: ${group.tagline || "(none)"}\n` +
-      `Status: ${group.active ? "✅ Active" : "⏸ Inactive"}\n` +
-      `Views: ${group.viewCount || 0}\n\n` +
-      `*Sellers (${ordered.length}):*\n${sellerList || "(none)"}\n\n` +
-      `*Link:*\n${link}`
-    );
-    return true;
-  }
-
-  // "admin group create <slug> <name>"
-  const createMatch = raw.match(/^admin group create (\S+)\s+(.+)$/i);
-  if (createMatch) {
-    const slug = createMatch[1].trim();
-    const name = createMatch[2].trim();
-    try {
-      const group = await createGroup({ slug, name });
-      const link  = buildGroupDeepLink(group.slug);
-      await sendText(from,
-        `✅ *Group created!*\n\n` +
-        `Name: ${group.name}\n` +
-        `Slug: ${group.slug}\n\n` +
-        `*Link:*\n${link}\n\n` +
-        `Now add sellers:\n*admin group add ${group.slug} <phone>*`
-      );
-    } catch (err) {
-      await sendText(from, `❌ ${err.message}`);
-    }
-    return true;
-  }
-
-  // "admin group add <slug> <phone>"
-  const addMatch = raw.match(/^admin group add (\S+)\s+(\S+)$/i);
-  if (addMatch) {
-    const slug  = addMatch[1].trim();
-    const phone = addMatch[2].trim();
-    try {
-      const { seller } = await addSellerToGroup(slug, phone);
-      await sendText(from, `✅ *${seller.businessName}* added to group *${slug}*`);
-    } catch (err) {
-      await sendText(from, `❌ ${err.message}`);
-    }
-    return true;
-  }
-
-  // "admin group remove <slug> <phone>"
-  const removeMatch = raw.match(/^admin group remove (\S+)\s+(\S+)$/i);
-  if (removeMatch) {
-    const slug  = removeMatch[1].trim();
-    const phone = removeMatch[2].trim();
-    try {
-      const { seller } = await removeSellerFromGroup(slug, phone);
-      await sendText(from, `✅ *${seller.businessName}* removed from group *${slug}*`);
-    } catch (err) {
-      await sendText(from, `❌ ${err.message}`);
-    }
-    return true;
-  }
-
-  // "admin group tagline <slug> <tagline text>"
-  const taglineMatch = raw.match(/^admin group tagline (\S+)\s+(.+)$/i);
-  if (taglineMatch) {
-    const slug    = taglineMatch[1].trim();
-    const tagline = taglineMatch[2].trim();
-    try {
-      await setGroupTagline(slug, tagline);
-      await sendText(from, `✅ Tagline updated for *${slug}*:\n_${tagline}_`);
-    } catch (err) {
-      await sendText(from, `❌ ${err.message}`);
-    }
-    return true;
-  }
-
-  // "admin group delete <slug>"
-  const deleteMatch = raw.match(/^admin group delete (\S+)$/i);
-  if (deleteMatch) {
-    const slug = deleteMatch[1].trim();
-    try {
-      const group = await deleteGroup(slug);
-      await sendText(from, `✅ Group *${group.name}* (${slug}) deleted.`);
-    } catch (err) {
-      await sendText(from, `❌ ${err.message}`);
-    }
-    return true;
-  }
-
-  // Unknown group command — show help
-  await sendText(from,
-    `📋 *Group Smart Link commands:*\n\n` +
-    `*admin group list*\n   List all groups\n\n` +
-    `*admin group create <slug> <name>*\n   e.g. admin group create kariba-tourism Kariba Tourism\n\n` +
-    `*admin group add <slug> <phone>*\n   e.g. admin group add kariba-tourism 263771446827\n\n` +
-    `*admin group remove <slug> <phone>*\n   Remove a seller\n\n` +
-    `*admin group tagline <slug> <text>*\n   Set a one-line description\n\n` +
-    `*admin group info <slug>*\n   View group details and link\n\n` +
-    `*admin group delete <slug>*\n   Delete a group`
-  );
-  return true;
-}
-
-// ─── Re-engagement campaign admin commands ────────────────────────────────────
-// "admin reactivate dormant <days>"
-// "admin reactivate seller <slug>"
-//
-// These are handled in chatbotEngine's admin command section.
-// Export the handlers here so they can be imported cleanly.
-
-export async function sendWeeklySellerReports() {
-  // Called by a cron job (e.g. every Monday 8am).
-  // Sends each active seller their weekly activity summary.
-  const sellers = await SupplierProfile.find({ active: true }).lean();
-  let sent = 0;
-
-  for (const seller of sellers) {
-    if (!seller.phone) continue;
-    try {
-      await _sendWeeklyReportToSeller(seller);
-      sent++;
-      // Throttle: 1 per second to avoid Meta rate limits
-      await new Promise(r => setTimeout(r, 1000));
-    } catch (_) {}
-  }
-  console.log(`[WEEKLY REPORT] Sent ${sent} seller reports`);
-  return sent;
-}
-
-async function _sendWeeklyReportToSeller(seller) {
-  const phone   = String(seller.phone).replace(/\D/g, "");
-  const views   = seller.zqLinkViews   || 0;
-  const convs   = seller.zqLinkConversions || 0;
-  const slug    = seller.zqSlug;
-  const botNum  = (process.env.WHATSAPP_BOT_NUMBER || "263771143904").replace(/\D/g, "");
-  const link    = slug
-    ? `https://wa.me/${botNum}?text=${encodeURIComponent("ZQ:S:" + slug)}`
-    : `https://wa.me/${botNum}?text=${encodeURIComponent("ZQ:SUPPLIER:" + seller._id)}`;
-
-  // Try Meta template first
-  try {
-    const { _sendTemplate } = await import("./buyerRequestNotifications.js");
-    await _sendTemplate(phone, "zq_seller_weekly_report", [
-      seller.businessName || "Your Business",
-      String(views),
-      String(convs),
-      link
-    ]);
-    console.log(`[WEEKLY REPORT] zq_seller_weekly_report → ${phone}`);
-    return;
-  } catch (_) {}
-
-  // Fallback: sendText
-  const { sendText } = await import("../services/metaSender.js");
-  await sendText(phone,
-    `📊 *Your ZimQuote activity this week — ${seller.businessName}*\n\n` +
-    `👁 Profile views: ${views}\n` +
-    `✅ Enquiries / quotes: ${convs}\n\n` +
-    `Share your link to get more enquiries:\n${link}\n\n` +
-    `_Reply MENU to open your dashboard._`
-  );
 }
