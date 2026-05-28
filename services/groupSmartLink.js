@@ -7,31 +7,49 @@
 // Deep link format:
 //   https://wa.me/<BOT>?text=ZQ:GROUP:<slug>
 //
-// Chatbot flow:
-//   1. Buyer sends "ZQ:GROUP:plumber-zim"  (text message or QR scan)
-//   2. handleGroupSmartLink() looks up the group, sends a WhatsApp list of sellers
-//      with action IDs  zqg_sel_<supplierId>
-//   3. Buyer taps a seller from the list
-//   4. handleGroupSellerTap() extracts supplierId → calls showSellerMenu()
+// ─── CHATBOT FLOWS ───────────────────────────────────────────────────────────
 //
-// Admin CRUD (called from supplierAdmin.js):
+// BUYER / VISITOR FLOW (existing):
+//   1. Visitor sends "ZQ:GROUP:<slug>"
+//   2. handleGroupSmartLink() sends a WhatsApp list of sellers + "List Your Biz" CTA row
+//   3. Visitor taps a seller → handleGroupSellerTap() → showSellerMenu()
+//
+// NEW — SELLER SELF-REGISTRATION FLOW:
+//   1. Visitor taps "➕ List Your Business Here" row  (action: zqg_register_<slug>)
+//   2. handleGroupSellerTap() detects "zqg_register_" prefix
+//   3. handleGroupRegistrationFlow() is called:
+//        a. Checks if visitor is already a registered supplier
+//           → if YES: shows their own seller menu + friendly message
+//        b. If NOT registered:
+//           → Sends a warm WhatsApp message with benefits + a registration deep link
+//              e.g.  https://zimquote.co.zw/register?ref=group&slug=plumbers-zim&phone=263...
+//           → Tracks registrationTap counter on the group (analytics)
+//           → Notifies admin (non-blocking): who tapped, which group
+//
+// ─── ADMIN CRUD (called from supplierAdmin.js) ───────────────────────────────
 //   createGroup / getAllGroups / getGroupBySlug / addSellerToGroup /
-//   removeSellerFromGroup / deleteGroup / setGroupTagline / validateGroupSlug
+//   removeSellerFromGroup / deleteGroup / setGroupTagline / setGroupCTA /
+//   validateGroupSlug
 //
-// Link builders (called from supplierAdmin.js page rendering):
+// ─── LINK BUILDERS (called from supplierAdmin.js page rendering) ─────────────
 //   buildGroupDeepLink / buildGroupQrImageUrl
+//
+// ─── NEW SCHEMA FIELDS ───────────────────────────────────────────────────────
+//   registrationTaps  {Number}  — total "List Your Biz" taps (analytics)
+//   ctaText           {String}  — custom CTA label (override default per group)
 //
 // ─────────────────────────────────────────────────────────────────────────────
 
 import mongoose from "mongoose";
-import { sendList, sendText } from "./metaSender.js";
-import { showSellerMenu }    from "./sellerChat.js";
+import { sendList, sendText, sendButtons } from "./metaSender.js";
+import { showSellerMenu }                   from "./sellerChat.js";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
-const BOT_NUMBER = (process.env.WHATSAPP_BOT_NUMBER || "263771143904").replace(/\D/g, "");
-const BOT_WA_URL = `https://wa.me/${BOT_NUMBER}`;
+const BOT_NUMBER  = (process.env.WHATSAPP_BOT_NUMBER || "263771143904").replace(/\D/g, "");
+const BOT_WA_URL  = `https://wa.me/${BOT_NUMBER}`;
+const SITE_URL    = (process.env.NEXT_PUBLIC_SITE_URL || "https://zimquote.co.zw").replace(/\/$/, "");
 
-// ─── Mongoose model (defined inline - no separate model file needed) ──────────
+// ─── Mongoose model ───────────────────────────────────────────────────────────
 
 const supplierGroupSchema = new mongoose.Schema(
   {
@@ -39,7 +57,16 @@ const supplierGroupSchema = new mongoose.Schema(
     name:      { type: String, required: true, trim: true },
     tagline:   { type: String, default: "" },
     active:    { type: Boolean, default: true },
-    viewCount: { type: Number, default: 0 },
+
+    // ── Analytics ─────────────────────────────────────────────────────────────
+    viewCount:        { type: Number, default: 0 }, // group link opens
+    registrationTaps: { type: Number, default: 0 }, // "List Your Biz" taps
+
+    // ── Custom CTA label (optional) ───────────────────────────────────────────
+    // Shown as the bottom row in the seller list.
+    // e.g. "Are you a plumber? Get listed FREE 👇"
+    // Falls back to the default label if blank.
+    ctaText: { type: String, default: "" },
 
     // sellers: ordered array of { supplierId, order }
     sellers: [
@@ -52,7 +79,6 @@ const supplierGroupSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Use existing model if already compiled (hot-reload safe)
 const SupplierGroup = mongoose.models.SupplierGroup
   || mongoose.model("SupplierGroup", supplierGroupSchema);
 
@@ -85,6 +111,21 @@ export function buildGroupQrImageUrl(slug, sizePx = 400) {
   const link    = buildGroupDeepLink(slug);
   const encoded = encodeURIComponent(link);
   return `https://chart.googleapis.com/chart?cht=qr&chs=${sizePx}x${sizePx}&chl=${encoded}&choe=UTF-8`;
+}
+
+/**
+ * Builds the web registration URL pre-filled with referral info.
+ * e.g. https://zimquote.co.zw/register?ref=group&slug=plumbers-zim&phone=263773xxxxxx
+ *
+ * Your /register page should read these params and:
+ *   - Pre-fill the phone field  (phone param)
+ *   - Show a "You're joining via the Plumbers Zimbabwe group" banner  (slug + ref params)
+ *   - Track the referral source in your CRM / analytics
+ */
+function _buildRegistrationUrl(slug, visitorPhone = "") {
+  const params = new URLSearchParams({ ref: "group", slug });
+  if (visitorPhone) params.set("phone", visitorPhone);
+  return `${SITE_URL}/register?${params.toString()}`;
 }
 
 // ─── CRUD ─────────────────────────────────────────────────────────────────────
@@ -121,6 +162,22 @@ export async function setGroupTagline(slug, tagline) {
 }
 
 /**
+ * Set or clear a custom CTA label for the "List Your Business" row.
+ * Pass an empty string to revert to the default label.
+ *
+ * @example
+ *   await setGroupCTA("plumbers-zim", "Are you a plumber? Get listed FREE 👇")
+ *   await setGroupCTA("plumbers-zim", "")   // revert to default
+ */
+export async function setGroupCTA(slug, ctaText) {
+  return SupplierGroup.findOneAndUpdate(
+    { slug: String(slug).toLowerCase().trim() },
+    { $set: { ctaText: String(ctaText || "").trim().slice(0, 72) } }, // WhatsApp row title limit
+    { new: true }
+  );
+}
+
+/**
  * Add a supplier to a group by phone number.
  * Looks up the supplier by phone, then pushes to group.sellers (no duplicates).
  */
@@ -133,7 +190,6 @@ export async function addSellerToGroup(slug, phone) {
   const group = await SupplierGroup.findOne({ slug: String(slug).toLowerCase().trim() });
   if (!group) throw new Error(`Group "${slug}" not found`);
 
-  // Prevent duplicates
   const alreadyIn = (group.sellers || []).some(
     s => String(s.supplierId) === String(supplier._id)
   );
@@ -167,9 +223,13 @@ export async function removeSellerFromGroup(slug, phone) {
 // ─── Chatbot: handle ZQ:GROUP:<slug> ─────────────────────────────────────────
 
 /**
- * Called when a buyer sends "ZQ:GROUP:<slug>" (text or button tap).
- * Sends a WhatsApp list of sellers in the group.
- * Returns true if handled, false if not (group not found / empty).
+ * Called when a buyer/visitor sends "ZQ:GROUP:<slug>" (text or QR scan).
+ *
+ * Renders a WhatsApp interactive list with:
+ *   - Up to 9 active sellers (admin-ordered)
+ *   - A final "➕ List Your Business Here" CTA row  (action: zqg_register_<slug>)
+ *
+ * Returns true if handled, false if group not found / inactive.
  */
 export async function handleGroupSmartLink({ from, slug, biz, saveBiz }) {
   try {
@@ -186,11 +246,23 @@ export async function handleGroupSmartLink({ from, slug, biz, saveBiz }) {
       .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
       .map(s => s.supplierId);
 
+    // ── Build the CTA row (always shown, regardless of seller count) ──────────
+    const ctaLabel       = group.ctaText || "➕ List Your Business Here — It's Free";
+    const ctaDescription = "Tap to register and get found by buyers";
+    const ctaRow = {
+      id:          `zqg_register_${group.slug}`,
+      title:       ctaLabel.slice(0, 24),       // WhatsApp hard limit: 24 chars
+      description: ctaDescription.slice(0, 72)  // WhatsApp hard limit: 72 chars
+    };
+
+    // ── No sellers yet — still show the CTA so they can register ─────────────
     if (!sellerIds.length) {
-      await sendText(from, `❌ *${group.name}* has no sellers yet. Check back soon!`);
+      const header = `🏪 *${group.name}*\n\nNo businesses listed yet — be the first!`;
+      await sendList(from, header, [ctaRow]);
       return true;
     }
 
+    // ── Load active seller profiles ───────────────────────────────────────────
     const SupplierProfile = (await import("../models/supplierProfile.js")).default;
     const sellers = await SupplierProfile.find(
       { _id: { $in: sellerIds }, active: true },
@@ -203,24 +275,26 @@ export async function handleGroupSmartLink({ from, slug, biz, saveBiz }) {
       .filter(Boolean);
 
     if (!orderedSellers.length) {
-      await sendText(from, `😕 No active sellers in *${group.name}* right now. Try again later.`);
+      const header = `😕 No active sellers in *${group.name}* right now.\n\nBe the first to get listed!`;
+      await sendList(from, header, [ctaRow]);
       return true;
     }
 
-    // WhatsApp list rows: max 10 per section
-    const rows = orderedSellers.slice(0, 9).map(s => {
+    // ── Build seller rows (max 9 sellers + 1 CTA = 10 rows total, WA list limit) ─
+    const sellerRows = orderedSellers.slice(0, 9).map(s => {
       const loc = [s.location?.area, s.location?.city].filter(Boolean).join(", ");
       return {
         id:          `zqg_sel_${s._id}`,
-        title:       s.businessName || "Seller",
-        description: loc || undefined
+        title:       (s.businessName || "Seller").slice(0, 24),
+        description: (loc || undefined)
       };
     });
 
-    const tagline  = group.tagline || "Tap a business to view their services, catalogue and request a quote.";
-    const header   = `🏪 *${group.name}*\n\n${tagline}`;
+    const tagline = group.tagline || "Tap a business to view their profile, catalogue and request a quote.";
+    const header  = `🏪 *${group.name}*\n\n${tagline}`;
 
-    await sendList(from, header, rows);
+    // Sellers first, CTA last
+    await sendList(from, header, [...sellerRows, ctaRow]);
     return true;
 
   } catch (err) {
@@ -229,33 +303,133 @@ export async function handleGroupSmartLink({ from, slug, biz, saveBiz }) {
   }
 }
 
-// ─── Chatbot: handle zqg_sel_<supplierId> ────────────────────────────────────
+// ─── Chatbot: handle zqg_sel_* and zqg_register_* ────────────────────────────
 
 /**
- * Called when a buyer taps a seller from the group list reply.
- * Action format: "zqg_sel_<supplierId>"
- * Calls showSellerMenu() to display the seller's profile card + action buttons.
+ * Routes list-row taps from the group seller list.
+ *
+ * Handles two action prefixes:
+ *   zqg_sel_<supplierId>    → showSellerMenu()
+ *   zqg_register_<slug>     → handleGroupRegistrationFlow()
+ *
  * Returns true if handled, false if not.
  */
 export async function handleGroupSellerTap({ from, action, biz, saveBiz }) {
+  const actionStr = String(action || "").trim();
+
+  // ── Route: registration CTA ───────────────────────────────────────────────
+  if (/^zqg_register_/i.test(actionStr)) {
+    const slug = actionStr.replace(/^zqg_register_/i, "").trim();
+    return handleGroupRegistrationFlow({ from, slug, biz, saveBiz });
+  }
+
+  // ── Route: seller profile tap ─────────────────────────────────────────────
+  if (/^zqg_sel_/i.test(actionStr)) {
+    try {
+      const supplierId = actionStr.replace(/^zqg_sel_/i, "").trim();
+      if (!supplierId || supplierId.length !== 24) {
+        console.warn(`[GROUP SELLER TAP] Invalid supplierId from action="${action}"`);
+        return false;
+      }
+
+      console.log(`[GROUP SELLER TAP] from=${from} supplierId=${supplierId}`);
+      await showSellerMenu(from, supplierId, biz, saveBiz, { source: "group" });
+      return true;
+
+    } catch (err) {
+      console.error("[GROUP SELLER TAP ERROR]", err.message, err.stack);
+      try { await sendText(from, "❌ Could not load seller profile. Please try again."); } catch (_) {}
+      return true; // prevent chatbotEngine fall-through
+    }
+  }
+
+  return false;
+}
+
+// ─── NEW: Seller self-registration flow ──────────────────────────────────────
+
+/**
+ * Handles a tap on the "List Your Business Here" CTA row.
+ *
+ * Logic:
+ *   1. If visitor is already a registered supplier  → show their own menu + note.
+ *   2. If NOT registered:
+ *        a. Send warm pitch message with benefits
+ *        b. Send a registration link  (pre-filled with phone + referral slug)
+ *        c. Increment group.registrationTaps  (analytics)
+ *        d. Notify admin (non-blocking)
+ *
+ * Returns true always (fully handled).
+ */
+export async function handleGroupRegistrationFlow({ from, slug, biz, saveBiz }) {
   try {
-    const supplierId = String(action || "").replace(/^zqg_sel_/i, "").trim();
-    if (!supplierId || supplierId.length !== 24) {
-      console.warn(`[GROUP SELLER TAP] Invalid supplierId from action="${action}"`);
-      return false;
+    console.log(`[GROUP REGISTER] from=${from} slug=${slug}`);
+
+    // ── 1. Check if already a supplier ───────────────────────────────────────
+    const SupplierProfile = (await import("../models/supplierProfile.js")).default;
+    const cleanPhone = String(from || "").replace(/\D/g, "");
+    const existing   = await SupplierProfile.findOne({ phone: cleanPhone }).lean();
+
+    if (existing) {
+      // Already registered — show their own profile menu
+      console.log(`[GROUP REGISTER] Already a supplier: ${cleanPhone} → showing menu`);
+      try {
+        await sendText(
+          from,
+          `✅ *You're already listed on ZimQuote!*\n\n` +
+          `Here is your profile for *${existing.businessName}*.\n` +
+          `Type *menu* at any time to manage your listings, update prices or view your requests.`
+        );
+        await showSellerMenu(from, String(existing._id), biz, saveBiz, { source: "group_register_existing" });
+      } catch (e) {
+        console.warn(`[GROUP REGISTER] showSellerMenu failed for existing supplier: ${e.message}`);
+        await sendText(from, `✅ You're already registered as *${existing.businessName}*. Type *menu* to manage your profile.`);
+      }
+      return true;
     }
 
-    console.log(`[GROUP SELLER TAP] from=${from} supplierId=${supplierId}`);
+    // ── 2. Not registered — send pitch + registration link ───────────────────
 
-    await showSellerMenu(from, supplierId, biz, saveBiz, { source: "group" });
+    // Fetch group name for a personalised message
+    const group = await SupplierGroup.findOne({ slug: String(slug).toLowerCase().trim() }).lean();
+    const groupName = group?.name || "this group";
+
+    const regUrl = _buildRegistrationUrl(slug, cleanPhone);
+
+    const pitchMessage =
+      `👋 *Welcome to ZimQuote!*\n\n` +
+      `You tapped *"List Your Business"* from the *${groupName}* directory.\n\n` +
+      `✅ *What you get for FREE:*\n` +
+      `• Your own business profile visible to buyers\n` +
+      `• WhatsApp quote requests sent directly to you\n` +
+      `• Listed in buyer searches across Zimbabwe\n` +
+      `• Your own shareable smart link & QR code\n\n` +
+      `🚀 *Ready to get listed?*\n` +
+      `Tap the link below to register in under 2 minutes:\n\n` +
+      `${regUrl}\n\n` +
+      `_Your phone number has been pre-filled. Just add your business details and you're live!_`;
+
+    await sendText(from, pitchMessage);
+
+    // ── 3. Track registrationTaps (non-blocking) ──────────────────────────────
+    if (group) {
+      SupplierGroup.findByIdAndUpdate(group._id, { $inc: { registrationTaps: 1 } }).catch(() => {});
+    }
+
+    // ── 4. Notify admin (non-blocking) ────────────────────────────────────────
+    _notifyAdminRegistrationTap({ group: group || { name: groupName, slug }, visitorPhone: from }).catch(() => {});
+
     return true;
 
   } catch (err) {
-    console.error("[GROUP SELLER TAP ERROR]", err.message, err.stack);
+    console.error("[GROUP REGISTER ERROR]", err.message, err.stack);
     try {
-      await sendText(from, "❌ Could not load seller profile. Please try again.");
+      await sendText(
+        from,
+        `❌ Something went wrong. Please visit *${SITE_URL}/register* to sign up, or type *menu* to explore ZimQuote.`
+      );
     } catch (_) {}
-    return true; // return true so chatbotEngine doesn't fall through
+    return true;
   }
 }
 
@@ -263,15 +437,12 @@ export async function handleGroupSellerTap({ from, action, biz, saveBiz }) {
 
 /**
  * Handles "admin group <command>" typed by admin phone.
- * Currently a no-op stub — extend as needed.
  * Returns true if handled.
  */
 export async function handleGroupAdminCommand({ from, text }) {
-  const parts = String(text || "").trim().toLowerCase().split(/\s+/);
-  // parts[0] = "admin", parts[1] = "group", parts[2] = subcommand
+  const parts  = String(text || "").trim().toLowerCase().split(/\s+/);
   const subCmd = parts[2] || "";
   console.log(`[GROUP ADMIN CMD] from=${from} subCmd=${subCmd}`);
-  // Stub: just acknowledge
   await sendText(from, `ℹ️ Group admin command received: "${text}". No automated action taken.`);
   return true;
 }
@@ -290,4 +461,52 @@ async function _notifyAdminGroupOpened(group, visitorPhone) {
   } catch (_) {
     // Non-critical
   }
+}
+
+/**
+ * Notify admin when someone taps "List Your Business" in a group.
+ * Uses sendText (session-based) — non-blocking, failure is silent.
+ *
+ * Message format:
+ *   ➕ New registration tap!
+ *   Group: Plumbers Zimbabwe (plumbers-zim)
+ *   Phone: +263 77 312 3456
+ *   Time: 28 May, 14:32
+ */
+async function _notifyAdminRegistrationTap({ group, visitorPhone }) {
+  try {
+    const adminPhone = String(
+      process.env.ZQ_ADMIN_PHONE || process.env.ADMIN_WHATSAPP_PHONE || ""
+    ).replace(/\D/g, "");
+    if (!adminPhone || adminPhone.length < 10) return;
+
+    const timeStr = new Date().toLocaleString("en-GB", {
+      day: "numeric", month: "short", hour: "2-digit", minute: "2-digit"
+    });
+
+    const displayPhone = _formatPhoneDisplay(visitorPhone);
+
+    await sendText(
+      adminPhone,
+      `➕ *New registration tap!*\n\n` +
+      `Group: *${group.name}* (${group.slug})\n` +
+      `Phone: ${displayPhone}\n` +
+      `Time: ${timeStr}\n\n` +
+      `_This visitor tapped "List Your Business" and was sent the registration link._`
+    );
+    console.log(`[GROUP REGISTER ADMIN] notified ${adminPhone} — visitor ${visitorPhone} tapped register on "${group.slug}"`);
+  } catch (_) {
+    // Non-critical — never let this break the main flow
+  }
+}
+
+// ── Format phone for display  e.g.  "263773123456" → "+263 77 312 3456" ──────
+function _formatPhoneDisplay(raw = "") {
+  const digits = String(raw).replace(/\D/g, "");
+  let d = digits;
+  if (d.startsWith("0") && d.length === 10) d = "263" + d.slice(1);
+  if (d.startsWith("263") && d.length >= 12) {
+    return `+263 ${d.slice(3, 5)} ${d.slice(5, 8)} ${d.slice(8)}`;
+  }
+  return `+${d}`;
 }
