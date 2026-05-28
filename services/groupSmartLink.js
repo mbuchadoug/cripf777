@@ -15,7 +15,7 @@
 //   3. Visitor taps a seller → handleGroupSellerTap() → showSellerMenu()
 //
 // NEW — SELLER SELF-REGISTRATION FLOW:
-//   1. Visitor taps "➕ List Your Business Here" row  (action: zqg_register_<slug>)
+//   1. Visitor taps "➕ List Your Business" row  (action: zqg_register_<slug>)
 //   2. handleGroupSellerTap() detects "zqg_register_" prefix
 //   3. handleGroupRegistrationFlow() is called:
 //        a. Checks if visitor is already a registered supplier
@@ -212,7 +212,7 @@ export async function removeSellerFromGroup(slug, phone) {
  *
  * Renders a WhatsApp interactive list with:
  *   - Up to 9 active sellers (admin-ordered)
- *   - A final "➕ List Your Business Here" CTA row  (action: zqg_register_<slug>)
+ *   - A final "➕ List Your Business" CTA row  (action: zqg_register_<slug>)
  *
  * Returns true if handled, false if group not found / inactive.
  */
@@ -231,24 +231,36 @@ export async function handleGroupSmartLink({ from, slug, biz, saveBiz }) {
       .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
       .map(s => s.supplierId);
 
-    // ── Build the CTA row (always shown, regardless of seller count) ──────────
-    const ctaLabel       = group.ctaText || "➕ List Your Business Here — It's Free";
-    const ctaDescription = "Tap to register and get found by buyers";
-    const ctaRow = {
+    // ── Check if visitor is already a registered supplier ────────────────────
+    // If yes, skip the "List Your Business" CTA — they're already listed.
+    const cleanPhone    = String(from || "").replace(/\D/g, "");
+    const visitorIsSupplier = !!(await SupplierProfile.findOne(
+      { phone: cleanPhone }, { _id: 1 }
+    ).lean());
+
+    // ── Build the CTA row (only for non-registered visitors) ─────────────────
+    // "➕ List Your Business" = 20 chars — fits the WhatsApp 24-char title limit.
+    const ctaLabel       = (group.ctaText || "➕ List Your Business").slice(0, 24);
+    const ctaDescription = "Tap to get listed & found by buyers";
+    const ctaRow = visitorIsSupplier ? null : {
       id:          `zqg_register_${group.slug}`,
-      title:       ctaLabel.slice(0, 24),       // WhatsApp hard limit: 24 chars
-      description: ctaDescription.slice(0, 72)  // WhatsApp hard limit: 72 chars
+      title:       ctaLabel,
+      description: ctaDescription
     };
 
-    // ── No sellers yet — still show the CTA so they can register ─────────────
+    // ── No sellers yet ────────────────────────────────────────────────────────
     if (!sellerIds.length) {
       const header = `🏪 *${group.name}*\n\nNo businesses listed yet — be the first!`;
-      await sendList(from, header, [ctaRow]);
+      const rows = ctaRow ? [ctaRow] : [];
+      if (!rows.length) {
+        await sendText(from, `❌ *${group.name}* has no sellers yet. Check back soon!`);
+        return true;
+      }
+      await sendList(from, header, rows);
       return true;
     }
 
     // ── Load active seller profiles ───────────────────────────────────────────
-    const SupplierProfile = (await import("../models/supplierProfile.js")).default;
     const sellers = await SupplierProfile.find(
       { _id: { $in: sellerIds }, active: true },
       { businessName: 1, location: 1, profileType: 1, _id: 1 }
@@ -261,12 +273,19 @@ export async function handleGroupSmartLink({ from, slug, biz, saveBiz }) {
 
     if (!orderedSellers.length) {
       const header = `😕 No active sellers in *${group.name}* right now.\n\nBe the first to get listed!`;
-      await sendList(from, header, [ctaRow]);
+      const rows = ctaRow ? [ctaRow] : [];
+      if (!rows.length) {
+        await sendText(from, `😕 No active sellers in *${group.name}* right now. Try again later.`);
+        return true;
+      }
+      await sendList(from, header, rows);
       return true;
     }
 
-    // ── Build seller rows (max 9 sellers + 1 CTA = 10 rows total, WA list limit) ─
-    const sellerRows = orderedSellers.slice(0, 9).map(s => {
+    // ── Build seller rows ─────────────────────────────────────────────────────
+    // Max 9 sellers + optional CTA = max 10 rows (WhatsApp list limit)
+    const maxSellers = ctaRow ? 9 : 10;
+    const sellerRows = orderedSellers.slice(0, maxSellers).map(s => {
       const loc = [s.location?.area, s.location?.city].filter(Boolean).join(", ");
       return {
         id:          `zqg_sel_${s._id}`,
@@ -278,8 +297,9 @@ export async function handleGroupSmartLink({ from, slug, biz, saveBiz }) {
     const tagline = group.tagline || "Tap a business to view their profile, catalogue and request a quote.";
     const header  = `🏪 *${group.name}*\n\n${tagline}`;
 
-    // Sellers first, CTA last
-    await sendList(from, header, [...sellerRows, ctaRow]);
+    // Registered suppliers see sellers only; unregistered visitors see sellers + CTA last
+    const rows = ctaRow ? [...sellerRows, ctaRow] : sellerRows;
+    await sendList(from, header, rows);
     return true;
 
   } catch (err) {
