@@ -20,9 +20,9 @@
 //   3. handleGroupRegistrationFlow() is called:
 //        a. Checks if visitor is already a registered supplier
 //           → if YES: shows their own seller menu + friendly message
-//        b. If NOT registered:
-//           → Sends a warm WhatsApp message with benefits + a registration deep link
-//              e.g.  https://zimquote.co.zw/register?ref=group&slug=plumbers-zim&phone=263...
+//        b. If NOT registered (or incomplete):
+//           → Calls startSupplierRegistration() — the exact same WhatsApp flow
+//              as tapping "List My Business" on the main menu
 //           → Tracks registrationTap counter on the group (analytics)
 //           → Notifies admin (non-blocking): who tapped, which group
 //
@@ -47,7 +47,6 @@ import { showSellerMenu }                   from "./sellerChat.js";
 // ─── Config ───────────────────────────────────────────────────────────────────
 const BOT_NUMBER  = (process.env.WHATSAPP_BOT_NUMBER || "263771143904").replace(/\D/g, "");
 const BOT_WA_URL  = `https://wa.me/${BOT_NUMBER}`;
-const SITE_URL    = (process.env.NEXT_PUBLIC_SITE_URL || "https://zimquote.co.zw").replace(/\/$/, "");
 
 // ─── Mongoose model ───────────────────────────────────────────────────────────
 
@@ -113,20 +112,6 @@ export function buildGroupQrImageUrl(slug, sizePx = 400) {
   return `https://chart.googleapis.com/chart?cht=qr&chs=${sizePx}x${sizePx}&chl=${encoded}&choe=UTF-8`;
 }
 
-/**
- * Builds the web registration URL pre-filled with referral info.
- * e.g. https://zimquote.co.zw/register?ref=group&slug=plumbers-zim&phone=263773xxxxxx
- *
- * Your /register page should read these params and:
- *   - Pre-fill the phone field  (phone param)
- *   - Show a "You're joining via the Plumbers Zimbabwe group" banner  (slug + ref params)
- *   - Track the referral source in your CRM / analytics
- */
-function _buildRegistrationUrl(slug, visitorPhone = "") {
-  const params = new URLSearchParams({ ref: "group", slug });
-  if (visitorPhone) params.set("phone", visitorPhone);
-  return `${SITE_URL}/register?${params.toString()}`;
-}
 
 // ─── CRUD ─────────────────────────────────────────────────────────────────────
 
@@ -365,69 +350,28 @@ export async function handleGroupRegistrationFlow({ from, slug, biz, saveBiz }) 
   try {
     console.log(`[GROUP REGISTER] from=${from} slug=${slug}`);
 
-    // ── 1. Check if already a supplier ───────────────────────────────────────
-    const SupplierProfile = (await import("../models/supplierProfile.js")).default;
-    const cleanPhone = String(from || "").replace(/\D/g, "");
-    const existing   = await SupplierProfile.findOne({ phone: cleanPhone }).lean();
-
-    if (existing) {
-      // Already registered — show their own profile menu
-      console.log(`[GROUP REGISTER] Already a supplier: ${cleanPhone} → showing menu`);
-      try {
-        await sendText(
-          from,
-          `✅ *You're already listed on ZimQuote!*\n\n` +
-          `Here is your profile for *${existing.businessName}*.\n` +
-          `Type *menu* at any time to manage your listings, update prices or view your requests.`
-        );
-        await showSellerMenu(from, String(existing._id), biz, saveBiz, { source: "group_register_existing" });
-      } catch (e) {
-        console.warn(`[GROUP REGISTER] showSellerMenu failed for existing supplier: ${e.message}`);
-        await sendText(from, `✅ You're already registered as *${existing.businessName}*. Type *menu* to manage your profile.`);
-      }
-      return true;
-    }
-
-    // ── 2. Not registered — send pitch + registration link ───────────────────
-
-    // Fetch group name for a personalised message
+    // ── Track analytics + notify admin (non-blocking) ────────────────────────
     const group = await SupplierGroup.findOne({ slug: String(slug).toLowerCase().trim() }).lean();
-    const groupName = group?.name || "this group";
-
-    const regUrl = _buildRegistrationUrl(slug, cleanPhone);
-
-    const pitchMessage =
-      `👋 *Welcome to ZimQuote!*\n\n` +
-      `You tapped *"List Your Business"* from the *${groupName}* directory.\n\n` +
-      `✅ *What you get for FREE:*\n` +
-      `• Your own business profile visible to buyers\n` +
-      `• WhatsApp quote requests sent directly to you\n` +
-      `• Listed in buyer searches across Zimbabwe\n` +
-      `• Your own shareable smart link & QR code\n\n` +
-      `🚀 *Ready to get listed?*\n` +
-      `Tap the link below to register in under 2 minutes:\n\n` +
-      `${regUrl}\n\n` +
-      `_Your phone number has been pre-filled. Just add your business details and you're live!_`;
-
-    await sendText(from, pitchMessage);
-
-    // ── 3. Track registrationTaps (non-blocking) ──────────────────────────────
     if (group) {
       SupplierGroup.findByIdAndUpdate(group._id, { $inc: { registrationTaps: 1 } }).catch(() => {});
+      _notifyAdminRegistrationTap({ group, visitorPhone: from }).catch(() => {});
     }
 
-    // ── 4. Notify admin (non-blocking) ────────────────────────────────────────
-    _notifyAdminRegistrationTap({ group: group || { name: groupName, slug }, visitorPhone: from }).catch(() => {});
-
+    // ── Delegate entirely to startSupplierRegistration ───────────────────────
+    // This is the exact same function called when a user taps "List My Business"
+    // on the main menu. It handles all cases:
+    //   • Already active supplier  → shows their account menu
+    //   • Incomplete registration  → resumes where they left off
+    //   • First-time visitor       → shows "What would you like to list?" picker
+    //     (Products / Services / School) and starts the full WhatsApp reg flow
+    const { startSupplierRegistration } = await import("./supplierRegistration.js");
+    await startSupplierRegistration(from, biz || null);
     return true;
 
   } catch (err) {
     console.error("[GROUP REGISTER ERROR]", err.message, err.stack);
     try {
-      await sendText(
-        from,
-        `❌ Something went wrong. Please visit *${SITE_URL}/register* to sign up, or type *menu* to explore ZimQuote.`
-      );
+      await sendText(from, "❌ Something went wrong. Please type *menu* to continue.");
     } catch (_) {}
     return true;
   }
