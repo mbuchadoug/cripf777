@@ -3441,7 +3441,6 @@ a.startsWith("sup_accept_") ||
       a.startsWith("dec_no_delivery") ||
       a.startsWith("dec_price_changed") ||
       a.startsWith("dec_other") ||
-      a.startsWith("zqg_") ||
       a.startsWith("sup_order_") ||
       a.startsWith("sup_view_") ||
       a.startsWith("sup_save_") ||
@@ -10233,6 +10232,8 @@ if (
   // FIX: ZQ: deep links (ZQ:GROUP:, ZQ:S:, ZQ:SUPPLIER:, ZQ:SCHOOL:) must never
   // be treated as shortcode searches — they have their own handlers further down.
   !/^ZQ:/i.test(text.trim()) &&
+  // FIX: zqg_sel_ group seller taps must never be treated as shortcode searches
+  !text.trim().toLowerCase().startsWith("zqg_") &&
   !shortcodeBlockedStates.includes(biz.sessionState) &&
   !settingsStates.includes(biz.sessionState) &&
   !schoolAdminStates.includes(biz.sessionState) &&
@@ -10464,7 +10465,7 @@ if (!isMetaAction && biz && biz.sessionState && !escapeWords.includes(al) && !se
 
     // ── If in supplier_search_city state and user types a shortcode, treat as new search ──
 // FIX: exclude ZQ: deep links — they must fall through to the deep-link handler below.
-if (biz.sessionState === "supplier_search_city" && !isMetaAction && !schoolAdminStates.includes(biz.sessionState) && !/^ZQ:/i.test(text.trim())) {
+if (biz.sessionState === "supplier_search_city" && !isMetaAction && !schoolAdminStates.includes(biz.sessionState) && !/^ZQ:/i.test(text.trim()) && !text.trim().toLowerCase().startsWith("zqg_")) {
 
   console.log(`[HIT-SUPPLIER-SEARCH-CITY] text="${text}" sessionState="${biz.sessionState}"`);
 
