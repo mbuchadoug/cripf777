@@ -10229,6 +10229,9 @@ if (
   biz &&
   !isGhostSupplierBiz &&
   text.trim().length > 2 &&
+  // FIX: ZQ: deep links (ZQ:GROUP:, ZQ:S:, ZQ:SUPPLIER:, ZQ:SCHOOL:) must never
+  // be treated as shortcode searches — they have their own handlers further down.
+  !/^ZQ:/i.test(text.trim()) &&
   !shortcodeBlockedStates.includes(biz.sessionState) &&
   !settingsStates.includes(biz.sessionState) &&
   !schoolAdminStates.includes(biz.sessionState) &&
@@ -10459,7 +10462,8 @@ if (!isMetaAction && biz && biz.sessionState && !escapeWords.includes(al) && !se
     }
 
     // ── If in supplier_search_city state and user types a shortcode, treat as new search ──
-if (biz.sessionState === "supplier_search_city" && !isMetaAction && !schoolAdminStates.includes(biz.sessionState)) {
+// FIX: exclude ZQ: deep links — they must fall through to the deep-link handler below.
+if (biz.sessionState === "supplier_search_city" && !isMetaAction && !schoolAdminStates.includes(biz.sessionState) && !/^ZQ:/i.test(text.trim())) {
 
   console.log(`[HIT-SUPPLIER-SEARCH-CITY] text="${text}" sessionState="${biz.sessionState}"`);
 
