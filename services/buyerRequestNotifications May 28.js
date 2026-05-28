@@ -108,7 +108,7 @@ function _formatPhoneDisplay(raw = "") {
 }
 
 // ─── Low-level: send a body-variables-only Meta template ─────────────────────
-export async function _sendTemplate(to, templateName, variables = []) {
+async function _sendTemplate(to, templateName, variables = []) {
   const phone = _normalizeZimPhone(to);
   const components = variables.length
     ? [{ type: "body", parameters: variables.map(v => ({ type: "text", text: String(v).slice(0, 1024) })) }]
@@ -664,43 +664,5 @@ export async function notifyBuyerRequestRejected({
     } catch (e) {
       console.warn(`[BUYER REJECTED] fallback also failed: ${e.message}`);
     }
-  }
-}
-
-
-// ─────────────────────────────────────────────────────────────────────────────
-// PUBLIC: Notify admin that a Group Smart Link was opened
-// Called from groupSmartLink.js _notifyAdminGroupOpened
-// Template: zq_group_link_opened (UTILITY)
-//   {{1}} = group name  {{2}} = slug  {{3}} = view count  {{4}} = time
-// ─────────────────────────────────────────────────────────────────────────────
-export async function notifyAdminGroupLinkOpened({ groupName, slug, viewCount, visitorPhone }) {
-  const adminPhone = _normalizeZimPhone(
-    process.env.ZQ_ADMIN_PHONE || process.env.ADMIN_WHATSAPP_PHONE || ""
-  );
-  if (!adminPhone || adminPhone.length < 10) return;
-
-  const timeStr = new Date().toLocaleString("en-GB", {
-    day: "numeric", month: "short", hour: "2-digit", minute: "2-digit"
-  });
-
-  try {
-    await _sendTemplate(adminPhone, "zq_group_link_opened", [
-      groupName,
-      slug,
-      String(viewCount),
-      timeStr
-    ]);
-    console.log(`[GROUP LINK ADMIN] zq_group_link_opened → ${adminPhone} (${slug})`);
-  } catch (_) {
-    try {
-      await sendText(adminPhone,
-        `👥 *Group link opened*\n\n` +
-        `Group: *${groupName}* (${slug})\n` +
-        `Views: ${viewCount}\n` +
-        `Time: ${timeStr}` +
-        (visitorPhone ? `\nVisitor: ${_formatPhoneDisplay(visitorPhone)}` : "")
-      );
-    } catch (_) {}
   }
 }

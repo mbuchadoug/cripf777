@@ -153,7 +153,6 @@ import {
   handleSellerChatState,
   handleSellerPriceReply
 } from "./sellerChat.js";
-import { handleGroupSmartLink, handleGroupSellerTap, handleGroupAdminCommand } from "./groupSmartLink.js";
  
 
 import {
@@ -11655,31 +11654,6 @@ if (!isMetaAction && /ZQ:(SCHOOL|SUPPLIER):[a-f0-9]{24}/i.test(text)) {
   if (_handled) return;
 }
 
-// ── ZQ:S:<slug> — human-readable named supplier link ─────────────────────────
-if (!isMetaAction && /^ZQ:S:[a-z0-9-]{2,40}$/i.test(text.trim())) {
-  const _handled = await handleZqDeepLink({ from, text: text.trim(), biz, saveBiz: saveBizSafe.bind(null, biz) });
-  if (_handled) return;
-}
-
-// ── ZQ:GROUP:<slug> — group smart link ───────────────────────────────────────
-if (!isMetaAction && /^ZQ:GROUP:[a-z0-9-]{2,40}$/i.test(text.trim())) {
-  const _slug = text.trim().split(":")[2]?.toLowerCase().trim();
-  if (_slug) {
-    const _handled = await handleGroupSmartLink({ from, slug: _slug, biz, saveBiz: saveBizSafe.bind(null, biz) });
-    if (_handled) return;
-  }
-}
-
-// ── Admin group / reactivation commands (from ZQ admin WhatsApp numbers) ───────
-// Admin phone is set via ZQ_ADMIN_PHONE or ADMIN_WHATSAPP_PHONE env var.
-if (!isMetaAction && text.trim().toLowerCase().startsWith("admin group")) {
-  const _adminPhone = (process.env.ZQ_ADMIN_PHONE || process.env.ADMIN_WHATSAPP_PHONE || "").replace(/\D/g, "");
-  if (_adminPhone && phone === _adminPhone) {
-    const _handled = await handleGroupAdminCommand({ from, text: text.trim() });
-    if (_handled) return;
-  }
-}
-
 // ── ZQ slug shortcode "zq huxton-academy" ────────────────────────────────────
 if (!isMetaAction && /^zq /i.test(text) && text.trim().length > 4) {
   const _handled = await handleSchoolSlugSearch({ from, text, biz, saveBiz: saveBizSafe.bind(null, biz) });
@@ -11695,12 +11669,6 @@ if (a.startsWith("sfaq_")) {
   if (handled) return;
   // Don't fall through to sendMainMenu - just silently ignore unhandled sfaq
   return;
-}
-
-// ── Group smart link seller tap (zqg_sel_<supplierId>) ───────────────────────
-if (a.startsWith("zqg_sel_")) {
-  const _handled = await handleGroupSellerTap({ from, action: a, biz, saveBiz: saveBizSafe.bind(null, biz) });
-  if (_handled) return;
 }
 
 // ── Seller chatbot (sc_ actions) ─────────────────────────────────────────────

@@ -20,10 +20,6 @@ import {
 
 import { notifySellerSmartLinkOpened } from "./buyerRequestNotifications.js";
 import { notifyAllSupplierLinkOpened } from "./supplierNotifications.js";
-import {
-  handleGroupSmartLink,
-  handleGroupSellerTap,
-} from "./groupSmartLink.js";
 
 import SupplierProfile from "../models/supplierProfile.js";
 
@@ -464,34 +460,6 @@ export async function handleZqDeepLink({ from, text, biz, saveBiz }) {
       await _showSupplierCard(from, supplierId);
     }
     return true;
-  }
-
-  // ── NAMED SUPPLIER link: ZQ:S:<slug> ────────────────────────────────────────
-  if (/^ZQ:S:[a-z0-9-]{2,40}$/i.test(raw)) {
-    const slug = raw.split(":")[2].toLowerCase().trim();
-    const supplier = await SupplierProfile.findOne({ zqSlug: slug }).lean();
-    if (supplier) {
-      SupplierProfile.findByIdAndUpdate(supplier._id, {
-        $inc: { zqLinkViews: 1, viewCount: 1 }
-      }).catch(() => {});
-      notifyAllSupplierLinkOpened(supplier, "direct", from).catch(() => {});
-      try {
-        const { showSellerMenu } = await import("./sellerChat.js");
-        await showSellerMenu(from, String(supplier._id), biz, saveBiz, { source: "direct" });
-      } catch (_) {
-        await _showSupplierCard(from, String(supplier._id));
-      }
-      return true;
-    }
-    // Named link not found — silently ignore
-    return false;
-  }
-
-  // ── GROUP link: ZQ:GROUP:<slug> ──────────────────────────────────────────────
-  if (/^ZQ:GROUP:[a-z0-9-]{2,40}$/i.test(raw)) {
-    const slug = raw.split(":")[2].toLowerCase().trim();
-    const handled = await handleGroupSmartLink({ from, slug, biz, saveBiz });
-    return handled;
   }
 
   return false;
