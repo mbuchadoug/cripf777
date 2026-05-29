@@ -3895,8 +3895,9 @@ const isPresets     = t === "Presets" || t.startsWith("Preset:");
   const isBroadcast   = t === "Broadcast Offer";
   const isExpiry      = t === "Subscription Expiry" || t === "Expiry";
   const isDashboard   = t === "Dashboard";
-  const isGroups      = t === "Group Smart Links" || t.startsWith("Group:");
-  const isAssignSlugs = t === "Assign Slugs";
+  const isGroups        = t === "Group Smart Links" || t.startsWith("Group:");
+  const isSchoolGroups  = t === "School Group Smart Links" || t.startsWith("School Group:");
+  const isAssignSlugs   = t === "Assign Slugs";
 
   const nav = [
     { href: "/zq-admin",                 label: "📊 Dashboard",          active: isDashboard },
@@ -3905,7 +3906,7 @@ const isPresets     = t === "Presets" || t.startsWith("Preset:");
     { href: "/zq-admin/suppliers",       label: "🏪 Suppliers",           active: isSuppliers },
     { href: "/zq-admin/suppliers/new",   label: "➕ Register Supplier",   active: t === "Register Supplier" },
     { href: "/zq-admin/groups",          label: "🔗 Group Links",          active: isGroups },
-    { href: "/zq-admin/school-groups",   label: "🏫 School Groups",         active: req.path.startsWith("/school-groups") },
+    { href: "/zq-admin/school-groups",   label: "🏫 School Groups",         active: isSchoolGroups },
     { href: "/zq-admin/suppliers/assign-slugs", label: "🏷️ Assign Slugs",      active: isAssignSlugs },
     // ── Schools ───────────────────────────────────────────────────────────────
     { divider: "SCHOOLS" },
