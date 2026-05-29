@@ -606,6 +606,9 @@ export async function handleSchoolGroupSmartLink({ from, slug, biz, saveBiz }) {
     // Track view (non-blocking)
     SchoolGroup.findByIdAndUpdate(group._id, { $inc: { viewCount: 1 } }).catch(() => {});
 
+    // Notify admin — non-blocking, never breaks main flow
+    _notifyAdminSchoolGroupOpened(group, from).catch(() => {});
+
     const { default: SchoolProfile } = await import("../models/schoolProfile.js");
 
     // ── Check if visitor is already a registered school ───────────────────────
@@ -712,6 +715,11 @@ export async function handleSchoolGroupTap({ from, action, biz, saveBiz }) {
       const { default: SchoolProfile } = await import("../models/schoolProfile.js");
       SchoolProfile.findByIdAndUpdate(schoolId, { $inc: { monthlyViews: 1 } }).catch(() => {});
 
+      // Notify admin which school was tapped and by whom — non-blocking
+      SchoolProfile.findById(schoolId, { schoolName: 1, city: 1 }).lean().then(sch => {
+        if (sch) _notifyAdminSchoolTapped(sch, from).catch(() => {});
+      }).catch(() => {});
+
       // Open school FAQ menu — identical to tapping a ZQ:SCHOOL: link
       const { showSchoolFAQMenu } = await import("./schoolFAQ.js");
       await showSchoolFAQMenu(from, schoolId, biz, saveBiz, { source: "school_group" });
@@ -740,6 +748,8 @@ export async function handleSchoolGroupRegFlow({ from, slug, biz, saveBiz }) {
     const group = await SchoolGroup.findOne({ slug: String(slug).toLowerCase().trim() }).lean();
     if (group) {
       SchoolGroup.findByIdAndUpdate(group._id, { $inc: { registrationTaps: 1 } }).catch(() => {});
+      // Notify admin of registration tap — non-blocking
+      _notifyAdminSchoolGroupRegTap({ group, visitorPhone: from }).catch(() => {});
     }
 
     // Delegate to the same registration flow as "List My Business → I Run a School"
@@ -751,5 +761,97 @@ export async function handleSchoolGroupRegFlow({ from, slug, biz, saveBiz }) {
     console.error("[SCHOOL GROUP REGISTER ERROR]", err.message, err.stack);
     try { await sendText(from, "❌ Something went wrong. Please type *menu* to continue."); } catch (_) {}
     return true;
+  }
+}
+
+
+// ─── School group admin notification helpers ──────────────────────────────────
+
+/**
+ * Notify admin that a school group link was opened.
+ * Message includes the group name, slug, view count and visitor phone.
+ */
+async function _notifyAdminSchoolGroupOpened(group, visitorPhone) {
+  try {
+    const adminPhone = String(
+      process.env.ZQ_ADMIN_PHONE || process.env.ADMIN_WHATSAPP_PHONE || ""
+    ).replace(/\D/g, "");
+    if (!adminPhone || adminPhone.length < 10) return;
+
+    const timeStr = new Date().toLocaleString("en-GB", {
+      day: "numeric", month: "short", hour: "2-digit", minute: "2-digit"
+    });
+    const displayPhone = _formatPhoneDisplay(visitorPhone);
+
+    await sendText(
+      adminPhone,
+      `🏫 *School group link opened*\n\n` +
+      `Group: *${group.name}* (${group.slug})\n` +
+      `Views: ${(group.viewCount || 0) + 1}\n` +
+      `Visitor: ${displayPhone}\n` +
+      `Time: ${timeStr}`
+    );
+    console.log(`[SCHOOL GROUP ADMIN] group opened — visitor ${visitorPhone} slug "${group.slug}"`);
+  } catch (_) {
+    // Non-critical
+  }
+}
+
+/**
+ * Notify admin that a visitor tapped a specific school inside a school group list.
+ * Message includes the school name, city and visitor phone.
+ */
+async function _notifyAdminSchoolTapped(school, visitorPhone) {
+  try {
+    const adminPhone = String(
+      process.env.ZQ_ADMIN_PHONE || process.env.ADMIN_WHATSAPP_PHONE || ""
+    ).replace(/\D/g, "");
+    if (!adminPhone || adminPhone.length < 10) return;
+
+    const timeStr = new Date().toLocaleString("en-GB", {
+      day: "numeric", month: "short", hour: "2-digit", minute: "2-digit"
+    });
+    const displayPhone = _formatPhoneDisplay(visitorPhone);
+    const loc = school.city ? ` · ${school.city}` : "";
+
+    await sendText(
+      adminPhone,
+      `🏫 *School profile tapped from group link*\n\n` +
+      `School: *${school.schoolName}*${loc}\n` +
+      `Visitor: ${displayPhone}\n` +
+      `Time: ${timeStr}`
+    );
+    console.log(`[SCHOOL GROUP ADMIN] school tapped: "${school.schoolName}" by ${visitorPhone}`);
+  } catch (_) {
+    // Non-critical
+  }
+}
+
+/**
+ * Notify admin when someone taps "Add My School" in a school group.
+ */
+async function _notifyAdminSchoolGroupRegTap({ group, visitorPhone }) {
+  try {
+    const adminPhone = String(
+      process.env.ZQ_ADMIN_PHONE || process.env.ADMIN_WHATSAPP_PHONE || ""
+    ).replace(/\D/g, "");
+    if (!adminPhone || adminPhone.length < 10) return;
+
+    const timeStr = new Date().toLocaleString("en-GB", {
+      day: "numeric", month: "short", hour: "2-digit", minute: "2-digit"
+    });
+    const displayPhone = _formatPhoneDisplay(visitorPhone);
+
+    await sendText(
+      adminPhone,
+      `🏫 *New school registration tap!*\n\n` +
+      `Group: *${group.name}* (${group.slug})\n` +
+      `Phone: ${displayPhone}\n` +
+      `Time: ${timeStr}\n\n` +
+      `_This visitor tapped "Add My School" and was sent into the school registration flow._`
+    );
+    console.log(`[SCHOOL GROUP ADMIN] reg tap — visitor ${visitorPhone} on "${group.slug}"`);
+  } catch (_) {
+    // Non-critical
   }
 }
