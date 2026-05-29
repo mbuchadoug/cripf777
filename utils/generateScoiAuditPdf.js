@@ -10,7 +10,7 @@
 //  kernels with seccomp enforcement (kernel 5.18+).
 //
 //  Chrome exits before the DevTools protocol can accept commands, so the very
-//  next Puppeteer call — browser.newPage() — receives "Target closed."
+//  next Puppeteer call - browser.newPage() - receives "Target closed."
 //
 //  FIX: remove both flags entirely. Chrome then runs in standard multi-process
 //  mode, which works correctly on this server (confirmed by direct testing).
@@ -29,7 +29,7 @@ export async function generateScoiAuditPdf({ audit, req }) {
       : audit;
 
   if (!safeAudit || !safeAudit._id) {
-    throw new Error("Invalid audit object — missing _id");
+    throw new Error("Invalid audit object - missing _id");
   }
 
   // ── 2. Choose template ──────────────────────────────────────────────────────
@@ -70,7 +70,7 @@ export async function generateScoiAuditPdf({ audit, req }) {
     try {
       puppeteer = (await import("puppeteer-core")).default;
     } catch {
-      throw new Error("Puppeteer not installed — run: npm install puppeteer");
+      throw new Error("Puppeteer not installed - run: npm install puppeteer");
     }
   }
 
@@ -81,11 +81,11 @@ export async function generateScoiAuditPdf({ audit, req }) {
   //    --no-sandbox              Required when running as root or in containers
   //    --disable-setuid-sandbox  Same as above
   //    --disable-dev-shm-usage   Use /tmp instead of /dev/shm (safe on all VPS)
-  //    --disable-gpu             Headless server — no GPU available
+  //    --disable-gpu             Headless server - no GPU available
   //    --no-first-run            Skip first-run setup dialog
   //    --no-default-browser-check  Skip browser-check prompt
   //
-  //  ❌  REMOVED — these crash Chrome on this server:
+  //  ❌  REMOVED - these crash Chrome on this server:
   //
   //    --single-process   Causes SIGTRAP on Linux kernel 5.18+ with seccomp;
   //                       Chrome exits instantly → browser.newPage() = "Target closed"
@@ -168,7 +168,7 @@ export async function generateScoiAuditPdf({ audit, req }) {
     };
 
   } finally {
-    // Always close — even if pdf() throws — to avoid zombie Chrome processes
+    // Always close - even if pdf() throws - to avoid zombie Chrome processes
     await browser.close().catch(() => {});
   }
 }

@@ -71,7 +71,7 @@ router.get("/admin/scoi/reports/:id/view", ensureAuth, async (req, res) => {
       });
     }
 
-    // Not a placement — try special (use non-lean for getters)
+    // Not a placement - try special (use non-lean for getters)
     audit = await SpecialScoiAudit.findById(req.params.id);
 
     if (!audit) {
@@ -79,7 +79,7 @@ router.get("/admin/scoi/reports/:id/view", ensureAuth, async (req, res) => {
     }
 
     return res.render("admin/special_scoi_audit_view", {
-      title: `Special SCOI Audit — ${audit.subject?.name || "Report"}`,
+      title: `Special SCOI Audit - ${audit.subject?.name || "Report"}`,
       audit,
       user: req.user,
       layout: false
@@ -218,7 +218,7 @@ router.get("/scoi/audits/:id/download", async (req, res) => {
     const filePath = path.join(process.cwd(), "public", audit.pdfUrl);
 
     if (!fs.existsSync(filePath)) {
-      // File missing on disk — regenerate
+      // File missing on disk - regenerate
       console.warn(`[Download] PDF file missing on disk, regenerating: ${filePath}`);
       const pdf = await generateScoiPdf({ audit, req });
       audit.pdfUrl = pdf.url;

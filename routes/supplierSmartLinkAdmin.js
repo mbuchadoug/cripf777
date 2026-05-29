@@ -250,7 +250,7 @@ td{padding:9px 12px;border-bottom:1px solid #f1f5f9;vertical-align:middle}
     <div class="card">
       <h2>WhatsApp Smart Link</h2>
       <p style="font-size:12px;color:var(--muted);margin-bottom:12px">
-        Share this link anywhere — it opens WhatsApp and loads the seller profile automatically.
+        Share this link anywhere - it opens WhatsApp and loads the seller profile automatically.
       </p>
 
       ${slugLink ? `

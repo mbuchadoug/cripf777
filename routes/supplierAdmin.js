@@ -85,7 +85,7 @@ async function _streamReceiptPDF(res, {
   try {
     doc.image(logoPath, MARGIN, H - MARGIN - LOGO_SIZE, { width: LOGO_SIZE, height: LOGO_SIZE });
     textX = MARGIN + LOGO_SIZE + 10;
-  } catch (_) { /* logo not found — text only */ }
+  } catch (_) { /* logo not found - text only */ }
 
   doc.fontSize(16).font("Helvetica-Bold").fillColor("#333333")
      .text("ZimQuote", textX, H - MARGIN - 16, { lineBreak: false });
@@ -93,7 +93,7 @@ async function _streamReceiptPDF(res, {
      .text("Zimbabwe's Marketplace for Products & Services", textX, H - MARGIN - 30, { lineBreak: false })
      .text("support@zimquote.co.zw  |  zimquote.co.zw",    textX, H - MARGIN - 42, { lineBreak: false });
 
-  // ── RECEIPT LABEL / REF / DATE — top right ─────────────────────────────────
+  // ── RECEIPT LABEL / REF / DATE - top right ─────────────────────────────────
   const receiptLabel = isActivation ? "ACTIVATION RECEIPT" : "OFFICIAL RECEIPT";
   doc.fontSize(8).font("Helvetica-Bold").fillColor("#333333")
      .text(receiptLabel, 0, H - MARGIN - 10, { align: "right", width: W - MARGIN, lineBreak: false });
@@ -142,7 +142,7 @@ async function _streamReceiptPDF(res, {
   doc.fontSize(20).font("Helvetica-Bold").fillColor("#333333")
      .text(amtDisplay, MARGIN, y, { lineBreak: false });
 
-  // Status box — right-aligned, same line as amount
+  // Status box - right-aligned, same line as amount
   const SW = 74, SH = 22;
   const SX = W - MARGIN - SW;
   const SY = y - 2;
@@ -826,21 +826,21 @@ router.get("/suppliers/new", requireSupplierAdmin, async (req, res) => {
           </div>
 
           <div class="fg full" style="margin-top:12px">
-            <label>🛏 Room / Accommodation Types <span style="font-weight:400;color:var(--muted)">(one per line — price optional)</span></label>
+            <label>🛏 Room / Accommodation Types <span style="font-weight:400;color:var(--muted)">(one per line - price optional)</span></label>
             <textarea name="roomTypes" rows="5"
               placeholder="Double Room, 2, 80&#10;Twin Room, 2, 80&#10;Family Chalet, 6, 150&#10;Presidential Suite, 2&#10;Camping Site, 4"></textarea>
             <span style="font-size:11px;color:var(--muted)">
-              Format: <code>Room name, max guests, price/night</code> &nbsp;—&nbsp; price can be left out (shows "price on request")
+              Format: <code>Room name, max guests, price/night</code> &nbsp;-&nbsp; price can be left out (shows "price on request")
             </span>
           </div>
 
           <div class="fg full" style="margin-top:12px">
-            <label>🎯 Activities &amp; Tour Services <span style="font-weight:400;color:var(--muted)">(one per line — price optional)</span></label>
+            <label>🎯 Activities &amp; Tour Services <span style="font-weight:400;color:var(--muted)">(one per line - price optional)</span></label>
             <textarea name="activityServices" rows="6"
               placeholder="Safari Game Drive, 35&#10;Sunset Boat Cruise, 25&#10;Fishing Trip (half day), 20&#10;Full-Day Tour, 60&#10;Airport Transfer&#10;Canoe Hire (per hour)"></textarea>
             <span style="font-size:11px;color:var(--muted)">
               For safari operators, tour guides, boat hire, travel agencies, etc.
-              Format: <code>Service name, price per person/trip</code> &nbsp;—&nbsp; price can be left out.
+              Format: <code>Service name, price per person/trip</code> &nbsp;-&nbsp; price can be left out.
               These appear in the smart link catalogue and tourist can request a quote for any of them.
             </span>
           </div>
@@ -6540,7 +6540,7 @@ router.get("/requests/pending-photos", requireSupplierAdmin, async (req, res) =>
     const rows = pending.map(r => {
       const ref      = `REQ-${String(r._id).slice(-6).toUpperCase()}`;
       const items    = (r.items || []).map(it => `${it.product} x${it.quantity || 1}`).join(", ");
-      const location = r.area ? `${r.area}, ${r.city || ""}` : r.city || "—";
+      const location = r.area ? `${r.area}, ${r.city || ""}` : r.city || "-";
       const age      = Math.round((Date.now() - new Date(r.createdAt).getTime()) / 60000);
       return `
         <tr>
@@ -6559,7 +6559,7 @@ router.get("/requests/pending-photos", requireSupplierAdmin, async (req, res) =>
     res.send(layout("📸 Pending Photo Requests", `
       <a href="/zq-admin" class="back-link">← Dashboard</a>
       <div class="panel">
-        <h3>📸 Photo Requests — Awaiting Review (${pending.length})</h3>
+        <h3>📸 Photo Requests - Awaiting Review (${pending.length})</h3>
         ${pending.length === 0 ? '<p style="color:var(--muted)">No pending photo requests.</p>' : `
         <table class="data-table" style="width:100%">
           <thead><tr>
@@ -6582,7 +6582,7 @@ router.get("/requests/:id/review", requireSupplierAdmin, async (req, res) => {
 
     const ref      = `REQ-${String(r._id).slice(-6).toUpperCase()}`;
     const items    = (r.items || []).map((it, i) => `${i + 1}. ${it.product} × ${it.quantity || 1}`).join("<br>");
-    const location = r.area ? `${r.area}, ${r.city || ""}` : r.city || "—";
+    const location = r.area ? `${r.area}, ${r.city || ""}` : r.city || "-";
     const statusBadge = r.imageStatus === "pending_review"
       ? `<span style="background:#fef3c7;color:#92400e;padding:3px 10px;border-radius:20px;font-size:12px">⏳ Pending Review</span>`
       : r.imageStatus === "approved"
@@ -6592,7 +6592,7 @@ router.get("/requests/:id/review", requireSupplierAdmin, async (req, res) => {
     res.send(layout(`Review ${esc(ref)}`, `
       <a href="/zq-admin/requests/pending-photos" class="back-link">← Pending Photos</a>
       <div class="panel" style="max-width:700px">
-        <h3>📸 Photo Review — ${esc(ref)}</h3>
+        <h3>📸 Photo Review - ${esc(ref)}</h3>
         <div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:20px">
           <div style="flex:1;min-width:240px">
             <p style="color:var(--muted);font-size:12px;margin-bottom:4px">BUYER</p>
@@ -6616,7 +6616,7 @@ router.get("/requests/:id/review", requireSupplierAdmin, async (req, res) => {
                 <strong>⚠️ Image cannot be displayed in browser</strong><br><br>
                 This is usually because <strong>express.static is not serving the <code>docs/</code> folder</strong>,
                 or <code>SITE_URL</code> is wrong in your <code>.env</code>.<br><br>
-                <strong>Fix — add to your Express app (app.js / server.js):</strong><br>
+                <strong>Fix - add to your Express app (app.js / server.js):</strong><br>
                 <code style="background:#fff;padding:4px 8px;border-radius:4px;display:block;margin:6px 0;font-size:11px">
                   app.use('/docs', express.static(path.join(__dirname, 'docs')));
                 </code>
@@ -6636,7 +6636,7 @@ router.get("/requests/:id/review", requireSupplierAdmin, async (req, res) => {
         ${r.imageStatus === "pending_review" ? `
         <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:12px">
           <form method="POST" action="/zq-admin/requests/${r._id}/approve-photo" style="flex:1">
-            <button type="submit" class="btn btn-blue" style="width:100%;padding:12px">✅ Approve — Send to Sellers</button>
+            <button type="submit" class="btn btn-blue" style="width:100%;padding:12px">✅ Approve - Send to Sellers</button>
           </form>
           <form method="POST" action="/zq-admin/requests/${r._id}/reject-photo" style="flex:1">
             <select name="reason" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:7px;margin-bottom:8px;font-size:13px">
@@ -6644,9 +6644,9 @@ router.get("/requests/:id/review", requireSupplierAdmin, async (req, res) => {
               <option value="Photo is not related to the request">Photo not related to request</option>
               <option value="Photo quality is too low to be useful for sellers">Photo quality too low</option>
               <option value="Photo contains inappropriate content">Inappropriate content</option>
-              <option value="Other — please resubmit with a clearer photo">Other — please resubmit</option>
+              <option value="Other - please resubmit with a clearer photo">Other - please resubmit</option>
             </select>
-            <button type="submit" style="width:100%;padding:12px;background:#ef4444;color:white;border:none;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600">❌ Reject — Notify Buyer</button>
+            <button type="submit" style="width:100%;padding:12px;background:#ef4444;color:white;border:none;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600">❌ Reject - Notify Buyer</button>
           </form>
         </div>
         ` : `<p style="color:var(--muted);font-size:13px;margin-top:8px">This request has already been ${r.imageStatus}${r.imageRejectionReason ? ": " + r.imageRejectionReason : ""}.</p>`}
@@ -6668,7 +6668,7 @@ router.post("/requests/:id/approve-photo", requireSupplierAdmin, async (req, res
     r.imageReviewedBy = "admin";
     await r.save();
 
-    // 1. Notify suppliers — sets awaiting_offer_intro session for each matched seller
+    // 1. Notify suppliers - sets awaiting_offer_intro session for each matched seller
     let notifiedCount = 0;
     let notifiedSuppliers = [];
     try {
@@ -6740,7 +6740,7 @@ router.post("/requests/:id/reject-photo", requireSupplierAdmin, async (req, res)
     r.imageRejectionReason    = reason;
     r.imageReviewedAt         = new Date();
     r.imageReviewedBy         = "admin";
-    r.status                  = "closed"; // Close the request — buyer must resubmit
+    r.status                  = "closed"; // Close the request - buyer must resubmit
     await r.save();
 
     const ref = `REQ-${String(r._id).slice(-6).toUpperCase()}`;
@@ -6765,7 +6765,7 @@ router.post("/requests/:id/reject-photo", requireSupplierAdmin, async (req, res)
 
 const BOT_WA = `https://wa.me/${(process.env.WHATSAPP_BOT_NUMBER || "263771143904").replace(/\D/g, "")}`;
 
-// ── GET /zq-admin/groups — list all groups ───────────────────────────────────
+// ── GET /zq-admin/groups - list all groups ───────────────────────────────────
 router.get("/groups", requireSupplierAdmin, async (req, res) => {
   try {
     const groups = await getAllGroups();
@@ -6777,7 +6777,7 @@ router.get("/groups", requireSupplierAdmin, async (req, res) => {
       <tr>
         <td><a href="/zq-admin/groups/${esc(g.slug)}" style="font-weight:600;color:var(--blue)">${esc(g.name)}</a></td>
         <td style="font-family:monospace;font-size:12px;color:var(--muted)">${esc(g.slug)}</td>
-        <td>${esc(g.tagline || "—")}</td>
+        <td>${esc(g.tagline || "-")}</td>
         <td style="text-align:center">${sellerCount}</td>
         <td style="text-align:center">${g.viewCount || 0}</td>
         <td>
@@ -6843,7 +6843,7 @@ router.get("/groups", requireSupplierAdmin, async (req, res) => {
   }
 });
 
-// ── GET /zq-admin/groups/new — create form ───────────────────────────────────
+// ── GET /zq-admin/groups/new - create form ───────────────────────────────────
 router.get("/groups/new", requireSupplierAdmin, async (req, res) => {
   const err = req.query.error || "";
   const html = `
@@ -6922,7 +6922,7 @@ router.post("/groups/new", requireSupplierAdmin, async (req, res) => {
   }
 });
 
-// ── GET /zq-admin/groups/:slug — manage group ────────────────────────────────
+// ── GET /zq-admin/groups/:slug - manage group ────────────────────────────────
 router.get("/groups/:slug", requireSupplierAdmin, async (req, res) => {
   try {
     const group = await getGroupBySlug(req.params.slug);
@@ -7156,7 +7156,7 @@ router.post("/groups/:slug/delete", requireSupplierAdmin, async (req, res) => {
 //
 // Run once after deploying named links so all existing sellers get
 // a human-readable ZQ:S:<slug> link automatically.
-// Safe to run multiple times — skips sellers who already have a slug.
+// Safe to run multiple times - skips sellers who already have a slug.
 // ─────────────────────────────────────────────────────────────────────────────
 router.get("/suppliers/assign-slugs", requireSupplierAdmin, async (req, res) => {
   try {
@@ -7167,7 +7167,7 @@ router.get("/suppliers/assign-slugs", requireSupplierAdmin, async (req, res) => 
 
     const rows = missing.slice(0, 50).map(s =>
       `<tr>
-        <td style="padding:8px 12px">${esc(s.businessName || "—")}</td>
+        <td style="padding:8px 12px">${esc(s.businessName || "-")}</td>
         <td style="padding:8px 12px;font-family:monospace;color:var(--muted)">${esc(s.phone || "")}</td>
       </tr>`
     ).join("");
@@ -7195,13 +7195,13 @@ router.get("/suppliers/assign-slugs", requireSupplierAdmin, async (req, res) => 
             <p style="font-size:13px;margin-bottom:8px">
               ${missing.length === 0
                 ? "✅ All sellers already have named links. Nothing to do."
-                : `${missing.length} seller${missing.length === 1 ? "" : "s"} will be assigned a slug based on their business name. This is safe to run — sellers who already have a slug are skipped.`}
+                : `${missing.length} seller${missing.length === 1 ? "" : "s"} will be assigned a slug based on their business name. This is safe to run - sellers who already have a slug are skipped.`}
             </p>
             ${missing.length > 0 ? `
             <form method="POST" action="/zq-admin/suppliers/assign-slugs">
               <button type="submit" class="btn btn-green"
                 onclick="return confirm('Assign slugs to ${missing.length} seller${missing.length === 1 ? "" : "s"}? This is safe and can be run again.')">
-                ▶️ Run — Assign ${missing.length} Slug${missing.length === 1 ? "" : "s"}
+                ▶️ Run - Assign ${missing.length} Slug${missing.length === 1 ? "" : "s"}
               </button>
             </form>` : ""}
           </div>
@@ -7259,7 +7259,7 @@ router.post("/suppliers/assign-slugs", requireSupplierAdmin, async (req, res) =>
 
     const rows = results.map(r =>
       `<tr>
-        <td style="padding:8px 12px">${esc(r.name || "—")}</td>
+        <td style="padding:8px 12px">${esc(r.name || "-")}</td>
         <td style="padding:8px 12px">
           ${r.ok
             ? `<span style="font-family:monospace;color:#16a34a;font-size:13px">✅ ZQ:S:${esc(r.slug)}</span>`
@@ -7331,7 +7331,7 @@ router.get("/school-groups", requireSupplierAdmin, async (req, res) => {
       <tr>
         <td><a href="/zq-admin/school-groups/${esc(g.slug)}" style="font-weight:600;color:var(--blue)">${esc(g.name)}</a></td>
         <td style="font-family:monospace;font-size:12px;color:var(--muted)">${esc(g.slug)}</td>
-        <td>${esc(g.tagline || "—")}</td>
+        <td>${esc(g.tagline || "-")}</td>
         <td style="text-align:center">${schoolCount}</td>
         <td style="text-align:center">${g.viewCount || 0}</td>
         <td>
@@ -7430,7 +7430,7 @@ router.get("/school-groups/new", requireSupplierAdmin, async (req, res) => {
 
         <div style="margin-bottom:24px">
           <label style="display:block;font-weight:600;font-size:13px;margin-bottom:6px">Tagline <span style="color:var(--muted);font-weight:400">(optional)</span></label>
-          <input name="tagline" type="text" placeholder="e.g. Top private schools in Harare — tap a school to enquire"
+          <input name="tagline" type="text" placeholder="e.g. Top private schools in Harare - tap a school to enquire"
             style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px">
         </div>
 

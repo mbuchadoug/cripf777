@@ -77,7 +77,7 @@ router.post("/scoi/checkout", ensureAuth, async (req, res) => {
 });
 
 // ── STRIPE WEBHOOK ───────────────────────────────────────────────────────────
-// Must be mounted with express.raw() — raw body required for signature verification.
+// Must be mounted with express.raw() - raw body required for signature verification.
 // Register this route BEFORE express.json() middleware in your app.js:
 //
 //   app.use('/stripe/webhook', express.raw({ type: 'application/json' }), scoiCheckoutRouter);
@@ -130,7 +130,7 @@ router.post(
             customerEmail: session.customer_email || null,
             status: "completed"
           });
-          console.log(`[Stripe webhook] ✅ Purchase recorded — audit: ${auditId}, user: ${userId}`);
+          console.log(`[Stripe webhook] ✅ Purchase recorded - audit: ${auditId}, user: ${userId}`);
         } else {
           console.log(`[Stripe webhook] ℹ️  Duplicate session skipped: ${session.id}`);
         }
@@ -171,7 +171,7 @@ router.get("/scoi/checkout/success", ensureAuth, async (req, res) => {
     ) {
       const { userId, auditId, auditModel, price } = session.metadata;
 
-      // Idempotent upsert — safe to call even if webhook already ran
+      // Idempotent upsert - safe to call even if webhook already ran
       const existing = await AuditPurchase.findOne({
         stripeSessionId: session.id
       }).lean();
@@ -187,12 +187,12 @@ router.get("/scoi/checkout/success", ensureAuth, async (req, res) => {
           customerEmail: session.customer_email || null,
           status: "completed"
         });
-        console.log(`[Checkout success] ✅ Purchase recorded via success page — audit: ${auditId}`);
+        console.log(`[Checkout success] ✅ Purchase recorded via success page - audit: ${auditId}`);
       }
     }
   } catch (err) {
     console.error("[Checkout success] Session verification error:", err.message);
-    // Non-fatal — still redirect to purchased page
+    // Non-fatal - still redirect to purchased page
   }
 
   return res.redirect("/scoi/purchased");

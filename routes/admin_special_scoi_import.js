@@ -53,7 +53,7 @@ function mergeAuditObjects(arr) {
   );
 
   if (allArePartial) {
-    // Deep-merge all objects into one — later keys win for scalars,
+    // Deep-merge all objects into one - later keys win for scalars,
     // nested objects are recursively merged.
     const merged = {};
     for (const obj of arr) {
@@ -74,10 +74,10 @@ function mergeAuditObjects(arr) {
       if (current) result.push(current);
       current = deepMerge({}, obj);
     } else if (current) {
-      // Fragment — merge into current audit
+      // Fragment - merge into current audit
       deepMerge(current, obj);
     } else {
-      // Fragment before any anchor — start a new group anyway
+      // Fragment before any anchor - start a new group anyway
       current = deepMerge({}, obj);
     }
   }
@@ -153,12 +153,12 @@ router.post(
         try {
           // Validate required fields
           if (!audit.subject?.name) {
-            console.warn("[SCOI import] Skipping — missing subject.name:", JSON.stringify(audit).slice(0, 120));
+            console.warn("[SCOI import] Skipping - missing subject.name:", JSON.stringify(audit).slice(0, 120));
             skipped++;
             continue;
           }
           if (!audit.purpose) {
-            console.warn("[SCOI import] Skipping — missing purpose for:", audit.subject?.name);
+            console.warn("[SCOI import] Skipping - missing purpose for:", audit.subject?.name);
             skipped++;
             continue;
           }
@@ -166,7 +166,7 @@ router.post(
           // Choose model
           const Model = auditType === "special" ? SpecialScoiAudit : PlacementAudit;
 
-          // Check for duplicates — match on subject name + window label
+          // Check for duplicates - match on subject name + window label
           const dupQuery = { "subject.name": audit.subject.name };
           if (audit.assessmentWindow?.label) {
             dupQuery["assessmentWindow.label"] = audit.assessmentWindow.label;

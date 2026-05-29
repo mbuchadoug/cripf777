@@ -138,7 +138,7 @@ export async function autoCloseExpiredRequests({
     createdAt: { $lt: cutoff }
   }).lean();
 
-  // Filter out requests that were notified recently — give sellers their grace period
+  // Filter out requests that were notified recently - give sellers their grace period
   const now = Date.now();
   const filteredRequests = expiredRequests.filter(req => {
     const lastNotified = req.lastNotifiedAt ? new Date(req.lastNotifiedAt).getTime() : 0;

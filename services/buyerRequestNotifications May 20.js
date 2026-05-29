@@ -471,7 +471,7 @@ export async function remindSupplierOfPendingRequest({
 // PUBLIC: Notify ADMIN of a new picture request awaiting review
 //
 // Template: zq_admin_photo_review  (UTILITY)
-// Body (submit to Meta exactly as written — no edits):
+// Body (submit to Meta exactly as written - no edits):
 //   A new buyer request with a photo needs your review.
 //   Ref: {{1}}
 //   Items: {{2}}
@@ -530,7 +530,7 @@ export async function notifyAdminPhotoReview({
 // PUBLIC: Notify BUYER that their photo request was APPROVED
 //
 // Template: zq_buyer_request_approved  (UTILITY)
-// Body (submit to Meta exactly as written — no edits):
+// Body (submit to Meta exactly as written - no edits):
 //   Your ZimQuote request has been approved and sent to matching sellers.
 //   Ref: {{1}}
 //   Items: {{2}}
@@ -578,7 +578,7 @@ export async function notifyBuyerRequestApproved({
 // PUBLIC: Notify BUYER that their photo request was REJECTED
 //
 // Template: zq_buyer_request_rejected  (UTILITY)
-// Body (submit to Meta exactly as written — no edits):
+// Body (submit to Meta exactly as written - no edits):
 //   Your ZimQuote request with a photo could not be approved.
 //   Ref: {{1}}
 //   Reason: {{2}}

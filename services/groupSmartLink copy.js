@@ -263,7 +263,7 @@ export async function handleGroupSellerTap({ from, action, biz, saveBiz }) {
 
 /**
  * Handles "admin group <command>" typed by admin phone.
- * Currently a no-op stub — extend as needed.
+ * Currently a no-op stub - extend as needed.
  * Returns true if handled.
  */
 export async function handleGroupAdminCommand({ from, text }) {

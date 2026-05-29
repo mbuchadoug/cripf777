@@ -1447,7 +1447,7 @@ ${rating}
 // PRIVATE: supplier detail card (for ZQ deep-link / slug search)
 // ─────────────────────────────────────────────────────────────────────────────
 async function _showSupplierCard(from, supplierId) {
-  // Try the full showSellerMenu first — it handles all profileTypes properly
+  // Try the full showSellerMenu first - it handles all profileTypes properly
   try {
     const { showSellerMenu } = await import("./sellerChat.js");
     await showSellerMenu(from, supplierId, null, null, { source: "direct" });
@@ -1492,10 +1492,10 @@ async function _showSupplierCard(from, supplierId) {
       const night = rt.pricePerNight > 0 ? "$" + Number(rt.pricePerNight).toFixed(0) + "/night" : null;
       const rest  = rt.restRate       > 0 ? "$" + Number(rt.restRate).toFixed(0)       + "/rest"  : null;
       const rates = [night, rest].filter(Boolean).join(" · ");
-      return "• " + rt.name + (rates ? "  —  " + rates : "  —  price on request") + (rt.capacity > 0 ? " (sleeps " + rt.capacity + ")" : "");
+      return "• " + rt.name + (rates ? "  -  " + rates : "  -  price on request") + (rt.capacity > 0 ? " (sleeps " + rt.capacity + ")" : "");
     });
     const extraLines = (supplier.extraServices || []).slice(0, 4).map(es =>
-      "• " + es.name + (es.price > 0 ? "  —  $" + Number(es.price).toFixed(0) + "/" + (es.unit || "service") : "")
+      "• " + es.name + (es.price > 0 ? "  -  $" + Number(es.price).toFixed(0) + "/" + (es.unit || "service") : "")
     );
     const facilLine = (supplier.facilities || []).slice(0, 8).map(f => FACILITY_LABELS[f] || f).join("  ·  ");
     const ciLine = (supplier.checkInTime || supplier.checkOutTime)
@@ -1529,7 +1529,7 @@ async function _showSupplierCard(from, supplierId) {
   // Standard product/service fallback
   const priceSummary = isService
     ? (Array.isArray(supplier.rates) && supplier.rates.length
-        ? supplier.rates.slice(0, 3).map(r => r.service + (r.rate ? " — " + r.rate : "")).join(", ")
+        ? supplier.rates.slice(0, 3).map(r => r.service + (r.rate ? " - " + r.rate : "")).join(", ")
         : "_Rates on request_")
     : (Array.isArray(supplier.prices) && supplier.prices.length
         ? supplier.prices.slice(0, 3).map(p => p.product + " $" + Number(p.amount).toFixed(2)).join(", ")

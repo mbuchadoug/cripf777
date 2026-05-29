@@ -2640,7 +2640,7 @@ async function sendBuyerRequestResponseToBuyer({ request, supplier, response }) 
 export async function notifySuppliersOfBuyerRequest(request) {
   // ── Route to the correct supplier finder ─────────────────────────────────
   // findSuppliersForBuyerRequest uses runSupplierSearch which only searches
-  // profileType "product" or "service" — it will NEVER return hospitality suppliers.
+  // profileType "product" or "service" - it will NEVER return hospitality suppliers.
   // For hospitality/tourism requests, we must use findSuppliersForRequest from
   // requestMatchEngine which has the full hospitality intent classification.
   const _isTourismNotif = _buyerRequestIsTourism(request.items || []);
@@ -2766,9 +2766,9 @@ if (!requestKey) {
           { phone: targetPhone },
           {
             $set: {
-              // New map — safely accumulates multiple concurrent request pointers
+              // New map - safely accumulates multiple concurrent request pointers
               "tempData.sellerPendingRequests":    _map,
-              // Legacy scalar — kept for backward compat with in-flight sessions
+              // Legacy scalar - kept for backward compat with in-flight sessions
               "tempData.sellerRequestReplyState":  "awaiting_offer_intro",
               "tempData.sellerRequestId":           _reqId
             }
@@ -2885,7 +2885,7 @@ async function finalizeBuyerRequestSubmission({
 
   const _isServiceReq    = pendingRequest.isServiceRequest || _buyerRequestIsService(pendingRequest.items || []);
   const _isTourismReq2   = _buyerRequestIsTourism(pendingRequest.items || []);
-  // BuyerRequest.profileType enum only accepts "product" or "service" — hospitality is not a valid value.
+  // BuyerRequest.profileType enum only accepts "product" or "service" - hospitality is not a valid value.
   // We use "service" for hospitality/tourism requests (they behave like services: no delivery, service address).
   // The hospitality flag is re-derived at notify time from the item names via _buyerRequestIsTourism().
   const _storedProfileType = (_isTourismReq2 || _isServiceReq) ? "service" : (pendingRequest.profileType || "product");
@@ -2905,7 +2905,7 @@ async function finalizeBuyerRequestSubmission({
     serviceAddress: (_isServiceReq || _isTourismReq2) ? (serviceAddress || pendingRequest.serviceAddress || "") : "",
     status: "open",
 
-    // Image fields (null for text-only requests — no change to existing flow)
+    // Image fields (null for text-only requests - no change to existing flow)
     imageUrl:     attachedImageUrl     || null,
     imageCaption: attachedImageCaption || "",
     imageStatus:  attachedImageUrl ? "pending_review" : "none"
@@ -2938,7 +2938,7 @@ async function finalizeBuyerRequestSubmission({
     }
     return sendButtons(from, {
       text:
-        `✅ *Request submitted — photo under review.*\n\n` +
+        `✅ *Request submitted - photo under review.*\n\n` +
         `Ref: *${ref}*\n\n` +
         `${(request.items || []).map((it, i) => `${i + 1}. ${it.product} x${Number(it.quantity || 1)}`).join("\n")}\n\n` +
         `📸 Your photo is being reviewed before we send it to sellers.\n` +
@@ -3696,7 +3696,7 @@ if (biz) {
   const _ownerRoleCheck = await UserRole.findOne({ phone, businessId: biz._id, pending: false }).lean();
   if (!_ownerRoleCheck) {
     _bizIsOwnedByUser = false;
-    console.log("[OWNERSHIP] phone", phone, "has no role on biz", biz._id, "— notification contact only");
+    console.log("[OWNERSHIP] phone", phone, "has no role on biz", biz._id, "- notification contact only");
   } else {
     console.log("[OWNERSHIP] phone", phone, "owns biz", biz._id, "state:", biz.sessionState);
   }
@@ -3709,7 +3709,7 @@ if (biz) {
 // mega-block (line ~3818) which wraps almost the entire engine.
 // reg_type_* arrive as isMetaAction=true list_reply buttons, so ANY handler
 // inside that mega-block is dead code for these actions.
-// This block must stay here — at depth 1 inside handleIncomingMessage only.
+// This block must stay here - at depth 1 inside handleIncomingMessage only.
 if (
   a === "reg_type_product" ||
   a === "reg_type_service" ||
@@ -3773,7 +3773,7 @@ if (
 // ── END REG TYPE EARLY HANDLER ───────────────────────────────────────────────
 
 // ── SCHOOL FAQ EARLY HANDLER ────────────────────────────────────────────────
-// MUST be at top level — sfaq_* arrive as isMetaAction=true interactive replies.
+// MUST be at top level - sfaq_* arrive as isMetaAction=true interactive replies.
 // The handler inside the !isMetaAction block at ~line 10875 is dead for these.
 if (typeof a === "string" && a.startsWith("sfaq_")) {
   console.log("[SFAQ_FIXED] phone:", phone, "action:", a);
@@ -4113,7 +4113,7 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
         }
       }
 
-      // FIX: Also check biz.sessionData.scLastRFQ — RFQ smart-link quotes store
+      // FIX: Also check biz.sessionData.scLastRFQ - RFQ smart-link quotes store
       // their data there (not in UserSession scPendingDrafts). When the seller/buyer
       // taps view_and_quote from the template, scLastRFQ has the items and refNum.
       if (!_scDraft && biz?.sessionData?.scLastRFQ) {
@@ -4164,7 +4164,7 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
       );
 
       // FIX: If a smart-link draft exists AND this is a view_and_quote tap, the sc_ draft
-      // ALWAYS wins — even if sellerRequestReplyState is set from a stale/previous marketplace
+      // ALWAYS wins - even if sellerRequestReplyState is set from a stale/previous marketplace
       // request. The scLastNotifiedRef on the session proves this notification was for this
       // smart-link draft, not for any BuyerRequest. Without this fix, a stale
       // sellerRequestReplyState makes _hasBuyerReqPending=true which suppresses _scDraftHandles
@@ -4336,7 +4336,7 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
     // seller's biz.sessionState sc_awaiting_items is handled correctly downstream.
     // EXCEPTION: "view_and_quote", "not_available", and req_offer_/req_unavail_ actions
     // are definitive BuyerRequest seller actions (from the WhatsApp template button).
-    // They ALWAYS bypass the sc_ guard — they must work even when biz is in sc_ state.
+    // They ALWAYS bypass the sc_ guard - they must work even when biz is in sc_ state.
     // This handles the race condition where sc_quote saves sc_awaiting_items before failing,
     // leaving the biz stuck in sc_ state when the seller later taps "View & Quote".
     // FIX: req_offer_confirm_ is handled by its OWN handler (line ~17230) which 
@@ -4349,14 +4349,14 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
 
     // ── Resolve the requestId BEFORE deciding whether to enter the block ────────
     // Priority order:
-    //  1. req_offer_<id> / req_unavail_<id> button — most reliable, use directly
-    //  2. sellerRequestId from session — set when notification was sent
-    //  3. view_and_quote with no session id — look up from sellerPendingRequests map
-    // We do NOT fall back to "newest request in DB" — that always opens the wrong one.
+    //  1. req_offer_<id> / req_unavail_<id> button - most reliable, use directly
+    //  2. sellerRequestId from session - set when notification was sent
+    //  3. view_and_quote with no session id - look up from sellerPendingRequests map
+    // We do NOT fall back to "newest request in DB" - that always opens the wrong one.
     let _resolvedRequestId = sellerRequestId;
 
     // Step 1: extract ID from specific button press (overrides everything)
-    // FIX: uppercase the extracted value — WhatsApp lowercases button payloads
+    // FIX: uppercase the extracted value - WhatsApp lowercases button payloads
     // so "req_offer_RFQ-M5Q5TN" arrives as "req_offer_rfq-m5q5tn".
     // We uppercase so findBuyerRequestByIdOrRef gets "RFQ-M5Q5TN" not "rfq-m5q5tn".
     if (a?.startsWith("req_offer_") && !a.startsWith("req_offer_confirm_")) {
@@ -4377,7 +4377,7 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
         if (_vpIds.length === 1) {
           _resolvedRequestId = _vpIds[0];
         } else if (_vpIds.length > 1) {
-          // Multiple — use the most recently stored one (storedAt)
+          // Multiple - use the most recently stored one (storedAt)
           _resolvedRequestId = _vpIds.sort((a, b) =>
             ((_vpMap[b]?.storedAt || 0) - (_vpMap[a]?.storedAt || 0))
           )[0];
@@ -4388,7 +4388,7 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
     // Only enter the BuyerRequest flow if:
     // - There's an active sellerRequestReplyState (from a previous notification), OR
     // - The resolved ID is a valid MongoDB ObjectId (marketplace BuyerRequest)
-    // Smart-link refs (RFQ-xxxx, QT-xxxx) are NOT BuyerRequest IDs — they have no DB doc.
+    // Smart-link refs (RFQ-xxxx, QT-xxxx) are NOT BuyerRequest IDs - they have no DB doc.
     const _resolvedIsObjectId = _resolvedRequestId && 
       (mongoose.Types.ObjectId.isValid(_resolvedRequestId) || mongoose.Types.ObjectId.isValid((_resolvedRequestId || "").toLowerCase()));
     const _hasBuyerReqContext = !!(sellerRequestReplyState || _resolvedIsObjectId);
@@ -4531,7 +4531,7 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
 if (_introRequest.status === "closed") {
   // Grace period: if the request was notified recently (within 30 min) and then
   // closed by the cron BEFORE the seller could respond, let them still quote it.
-  // This happens when createdAt is old but lastNotifiedAt is recent — the cron
+  // This happens when createdAt is old but lastNotifiedAt is recent - the cron
   // closes on createdAt but the seller just received the notification.
   const _closedGraceMs  = 30 * 60 * 1000; // 30 minutes
   const _lastNotifiedAt = _introRequest.lastNotifiedAt
@@ -4544,7 +4544,7 @@ if (_introRequest.status === "closed") {
   );
   }
   // Within grace: fall through and let seller quote it
-  console.log(`[OFFER INTRO] Closed request ${_introRequest._id} within grace period — allowing seller to quote (notified ${Math.round((Date.now() - _lastNotifiedAt) / 60000)}m ago)`);
+  console.log(`[OFFER INTRO] Closed request ${_introRequest._id} within grace period - allowing seller to quote (notified ${Math.round((Date.now() - _lastNotifiedAt) / 60000)}m ago)`);
 }
 
       const _introRef       = buildBuyerRequestRef(_introRequest);
@@ -4553,7 +4553,7 @@ if (_introRequest.status === "closed") {
 
       // ── FIX: when seller types something generic (not a specific button tap),
       // check if they have multiple pending requests and show a picker so they
-      // can choose which one to open — preventing the wrong request from auto-opening.
+      // can choose which one to open - preventing the wrong request from auto-opening.
       const _isSpecificAction = a?.startsWith("req_offer_") || a?.startsWith("req_unavail_")
         || a === "view_and_quote" || al === "view & quote" || al === "view and quote"
         || a === "not_available"  || al === "not available";
@@ -4597,7 +4597,7 @@ if (_introRequest.status === "closed") {
               const _ref   = buildBuyerRequestRef(req);
               const _items = (req.items || []).map(it => it.product || it.service).slice(0, 2).join(", ");
               const _loc   = req.area ? `${req.area}, ${req.city || ""}` : (req.city || "");
-              return `${i + 1}. *${_ref}* — ${_items}${_loc ? ` (${_loc})` : ""}`;
+              return `${i + 1}. *${_ref}* - ${_items}${_loc ? ` (${_loc})` : ""}`;
             }).join("\n");
             return sendButtons(from, {
               text:
@@ -4615,7 +4615,7 @@ if (_introRequest.status === "closed") {
 
       // ── Send image to seller if this request has an approved photo ──────────
       // Sent BEFORE the pricing form so the seller sees context first.
-      // Uses a separate sendImage call — template messages cannot carry images.
+      // Uses a separate sendImage call - template messages cannot carry images.
       if (_introRequest.imageUrl && _introRequest.imageStatus === "approved") {
         try {
           await sendImage(from, {
@@ -5201,7 +5201,7 @@ await UserSession.findOneAndUpdate(
   const _isService = supplier.profileType === "service";
   const _ref = buildBuyerRequestRef(request);
 
-  // ── "add [item] [price]" — seller adds a line not in original request ─────
+  // ── "add [item] [price]" - seller adds a line not in original request ─────
   const _addCmd = _parseAddCommand(text);
   if (_addCmd) {
     const _addDraft = pendingDraftQuote?.responseItems?.length
@@ -5229,7 +5229,7 @@ await UserSession.findOneAndUpdate(
     return _sendDraftPreview(updatedItems, updatedDraft.skippedItems || [], _ref, newTotal, sellerRequestId);
   }
 
-  // ── "note [text]" — attach a note to the quote ───────────────────────────
+  // ── "note [text]" - attach a note to the quote ───────────────────────────
   const _noteText = _parseNoteCommand(text);
   if (_noteText) {
     const _noteDraft = pendingDraftQuote || { responseItems: [], skippedItems: [], totalAmount: 0 };
@@ -5473,7 +5473,7 @@ await UserSession.findOneAndUpdate(
       }
 
       // Do NOT allow empty service/hospitality quotations.
-      // Show correct examples based on profileType — never show /person /trip to plumbers.
+      // Show correct examples based on profileType - never show /person /trip to plumbers.
       if (_isService) {
         const _isHospSupplier = supplier?.profileType === "hospitality";
         return sendText(
@@ -6027,7 +6027,7 @@ if (buyerRequestState === "awaiting_delivery_address") {
             `Tap *Add Photo* then send your image, or tap *Skip* to submit now.`,
           buttons: [
             { id: "sup_req_photo_yes",  title: "📷 Add Photo"      },
-            { id: "sup_req_photo_skip", title: "⏭ Skip — submit now" }
+            { id: "sup_req_photo_skip", title: "⏭ Skip - submit now" }
           ]
         });
       }
@@ -6068,12 +6068,12 @@ if (buyerRequestState === "awaiting_delivery_address") {
           `_Type *skip* if you changed your mind and want to submit without a photo._`
         );
       }
-      // Any other text while in photo_choice — re-show prompt
+      // Any other text while in photo_choice - re-show prompt
       return sendButtons(from, {
         text: `📷 Would you like to attach a photo to your request?`,
         buttons: [
           { id: "sup_req_photo_yes",  title: "📷 Add Photo"       },
-          { id: "sup_req_photo_skip", title: "⏭ Skip — submit now" }
+          { id: "sup_req_photo_skip", title: "⏭ Skip - submit now" }
         ]
       });
     }
@@ -6128,7 +6128,7 @@ if (buyerRequestState === "awaiting_delivery_address") {
           deliveryAddress:  pendingBuyerRequest?.deliveryAddress  || null
         });
       }
-      // Buyer sent text instead of image — keep waiting
+      // Buyer sent text instead of image - keep waiting
       return sendText(from,
         `📷 Please *send a photo* (image message).\n\nOr type *skip* to submit your request without a photo.`
       );
@@ -6230,7 +6230,7 @@ if (
 
     return sendMainMenu(from);
   }
-  // else: fall through — let the offer/buyer flow handlers below take over
+  // else: fall through - let the offer/buyer flow handlers below take over
 }
 
 // ── All users: handle typed school enquiry message (biz and non-biz) ───────────
@@ -6791,12 +6791,12 @@ a === "sup_search_next_page" ||
   a.startsWith("req_offer_") ||
   a.startsWith("req_unavail_") ||
 
-  // ── Seller smart-link chat (sc_) — buyers visiting via ZQ:SUPPLIER link ─────
+  // ── Seller smart-link chat (sc_) - buyers visiting via ZQ:SUPPLIER link ─────
   // These MUST be here or no-biz visitors get sent to welcome screen after
   // tapping any menu option (Quote, Order, Enquiry, Contact, Review etc).
   a.startsWith("sc_") ||
 
-  // ── School FAQ (sfaq_) — parents visiting via ZQ:SCHOOL link ────────────────
+  // ── School FAQ (sfaq_) - parents visiting via ZQ:SCHOOL link ────────────────
   // Same issue: parent taps a school FAQ button → redirected without this.
   a.startsWith("sfaq_");
 
@@ -11675,7 +11675,7 @@ if (a.startsWith("sfaq_")) {
 if (a.startsWith("sc_")) {
   // FIX: for no-biz users mid-sc_ flow (e.g. sc_quote_done_ after typing items),
   // reconstruct the virtual biz from UserSession so _scQuoteDone etc. can read
-  // scQuoteItems / scRFQ / scSellerId — otherwise biz=null and items=[].
+  // scQuoteItems / scRFQ / scSellerId - otherwise biz=null and items=[].
   let _scActionBiz = biz;
   let _scActionSaveBiz = saveBizSafe.bind(null, biz);
   if (!biz) {
@@ -12923,7 +12923,7 @@ if (a === "reg_type_product" || a === "reg_type_service") {
     // Check for an existing pending biz for this phone (from a previous attempt)
     const _existingPendingBiz = await Business.findOne({ ownerPhone: phone, name: "pending_supplier_" + phone }).lean();
     if (_existingPendingBiz) {
-      // Re-use it — update UserSession pointer
+      // Re-use it - update UserSession pointer
       biz = await Business.findById(_existingPendingBiz._id);
       await UserSession.findOneAndUpdate({ phone }, { activeBusinessId: biz._id }, { upsert: true });
     } else {
@@ -13039,7 +13039,7 @@ if (a === "reg_type_product" || a === "reg_type_service") {
     // Check for an existing pending biz for this phone (from a previous attempt)
     const _existingPendingBiz = await Business.findOne({ ownerPhone: phone, name: "pending_supplier_" + phone }).lean();
     if (_existingPendingBiz) {
-      // Re-use it — update UserSession pointer
+      // Re-use it - update UserSession pointer
       biz = await Business.findById(_existingPendingBiz._id);
       await UserSession.findOneAndUpdate({ phone }, { activeBusinessId: biz._id }, { upsert: true });
     } else {
@@ -17270,7 +17270,7 @@ if (a === "sup_request_delivery_yes" || a === "sup_request_delivery_no") {
         `Tap *Add Photo* to send an image, or *Skip* to submit now.`,
       buttons: [
         { id: "sup_req_photo_yes",  title: "📷 Add Photo"       },
-        { id: "sup_req_photo_skip", title: "⏭ Skip — submit now" }
+        { id: "sup_req_photo_skip", title: "⏭ Skip - submit now" }
       ]
     });
   }
@@ -17412,7 +17412,7 @@ if (a.startsWith("req_offer_confirm_")) {
     _confirmedResp = null;
   }
 
-  // Clear ALL BuyerRequest state immediately — including the sellerPendingRequests map entry
+  // Clear ALL BuyerRequest state immediately - including the sellerPendingRequests map entry
   // FIX: must remove the entry from sellerPendingRequests map too. If left in,
   // the next message from the seller triggers awaiting_offer_intro showing the same request.
   const _confirmSessForCleanup = await UserSession.findOne({ phone }).lean();

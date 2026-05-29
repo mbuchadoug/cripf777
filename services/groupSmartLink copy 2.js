@@ -14,14 +14,14 @@
 //   2. handleGroupSmartLink() sends a WhatsApp list of sellers + "List Your Biz" CTA row
 //   3. Visitor taps a seller → handleGroupSellerTap() → showSellerMenu()
 //
-// NEW — SELLER SELF-REGISTRATION FLOW:
+// NEW - SELLER SELF-REGISTRATION FLOW:
 //   1. Visitor taps "➕ List Your Business Here" row  (action: zqg_register_<slug>)
 //   2. handleGroupSellerTap() detects "zqg_register_" prefix
 //   3. handleGroupRegistrationFlow() is called:
 //        a. Checks if visitor is already a registered supplier
 //           → if YES: shows their own seller menu + friendly message
 //        b. If NOT registered (or incomplete):
-//           → Calls startSupplierRegistration() — the exact same WhatsApp flow
+//           → Calls startSupplierRegistration() - the exact same WhatsApp flow
 //              as tapping "List My Business" on the main menu
 //           → Tracks registrationTap counter on the group (analytics)
 //           → Notifies admin (non-blocking): who tapped, which group
@@ -35,8 +35,8 @@
 //   buildGroupDeepLink / buildGroupQrImageUrl
 //
 // ─── NEW SCHEMA FIELDS ───────────────────────────────────────────────────────
-//   registrationTaps  {Number}  — total "List Your Biz" taps (analytics)
-//   ctaText           {String}  — custom CTA label (override default per group)
+//   registrationTaps  {Number}  - total "List Your Biz" taps (analytics)
+//   ctaText           {String}  - custom CTA label (override default per group)
 //
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -240,9 +240,9 @@ export async function handleGroupSmartLink({ from, slug, biz, saveBiz }) {
       description: ctaDescription.slice(0, 72)  // WhatsApp hard limit: 72 chars
     };
 
-    // ── No sellers yet — still show the CTA so they can register ─────────────
+    // ── No sellers yet - still show the CTA so they can register ─────────────
     if (!sellerIds.length) {
-      const header = `🏪 *${group.name}*\n\nNo businesses listed yet — be the first!`;
+      const header = `🏪 *${group.name}*\n\nNo businesses listed yet - be the first!`;
       await sendList(from, header, [ctaRow]);
       return true;
     }
@@ -409,7 +409,7 @@ async function _notifyAdminGroupOpened(group, visitorPhone) {
 
 /**
  * Notify admin when someone taps "List Your Business" in a group.
- * Uses sendText (session-based) — non-blocking, failure is silent.
+ * Uses sendText (session-based) - non-blocking, failure is silent.
  *
  * Message format:
  *   ➕ New registration tap!
@@ -438,9 +438,9 @@ async function _notifyAdminRegistrationTap({ group, visitorPhone }) {
       `Time: ${timeStr}\n\n` +
       `_This visitor tapped "List Your Business" and was sent the registration link._`
     );
-    console.log(`[GROUP REGISTER ADMIN] notified ${adminPhone} — visitor ${visitorPhone} tapped register on "${group.slug}"`);
+    console.log(`[GROUP REGISTER ADMIN] notified ${adminPhone} - visitor ${visitorPhone} tapped register on "${group.slug}"`);
   } catch (_) {
-    // Non-critical — never let this break the main flow
+    // Non-critical - never let this break the main flow
   }
 }
 

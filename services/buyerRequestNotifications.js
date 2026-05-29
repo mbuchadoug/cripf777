@@ -476,7 +476,7 @@ export async function remindSupplierOfPendingRequest({
 // PUBLIC: Notify ADMIN of a new picture request awaiting review
 //
 // Template: zq_admin_photo_review  (UTILITY)
-// Body (submit to Meta exactly as written — no edits):
+// Body (submit to Meta exactly as written - no edits):
 //   A new buyer request with a photo needs your review.
 //   Ref: {{1}}
 //   Items: {{2}}
@@ -505,25 +505,25 @@ export async function notifyAdminPhotoReview({
   const siteUrl    = (process.env.SITE_URL || "").replace(/\/$/, "");
   const reviewLink = `${siteUrl}/zq-admin/requests/${requestId}/review`;
 
-  // DELIVERY STRATEGY — ordered by reliability:
+  // DELIVERY STRATEGY - ordered by reliability:
   //
-  // Tier 1: sendButtons (interactive) — PRIMARY, works immediately within 24hr session.
+  // Tier 1: sendButtons (interactive) - PRIMARY, works immediately within 24hr session.
   //         Admin uses the bot daily so this covers 99% of cases.
   //         NOTE: Marketing-category templates return HTTP 200 but deliver NOTHING
   //         without an active session. That is why the old code silently failed.
   //
-  // Tier 2: sendText — belt-and-suspenders within session (only if Tier 1 fails)
+  // Tier 2: sendText - belt-and-suspenders within session (only if Tier 1 fails)
   //
-  // Tier 3: zq_admin_photo_review2 (Utility template) — works OUTSIDE 24hr session.
+  // Tier 3: zq_admin_photo_review2 (Utility template) - works OUTSIDE 24hr session.
   //         Always runs alongside Tiers 1/2. Once approved in Meta BM this is the
   //         permanent fix for any future session gaps.
   //
-  // Tier 4: zq_admin_photo_review (old Marketing template) — final fallback.
+  // Tier 4: zq_admin_photo_review (old Marketing template) - final fallback.
   //         Will still silently fail outside a session, but keeps it in the chain
   //         in case the account context changes later.
 
   const _msgText =
-    `📸 *New Photo Request — Action Required*\n\n` +
+    `📸 *New Photo Request - Action Required*\n\n` +
     `Ref: *${ref}*\n` +
     `Items: ${String(itemSummary).slice(0, 200)}\n` +
     `Location: ${locationText || "Zimbabwe"}\n\n` +
@@ -569,7 +569,7 @@ export async function notifyAdminPhotoReview({
     if (_code !== 404) {
       console.warn(`[ADMIN PHOTO REVIEW] zq_admin_photo_review2 failed (${_code}): ${err?.response?.data?.error?.message || err.message}`);
     }
-    // 404 = template pending approval — expected, suppress noise
+    // 404 = template pending approval - expected, suppress noise
   }
 
   // ── Tier 4: Old template last resort ──────────────────────────────────────
@@ -581,7 +581,7 @@ export async function notifyAdminPhotoReview({
         locationText || "Zimbabwe",
         reviewLink
       ]);
-      console.log(`[ADMIN PHOTO REVIEW] zq_admin_photo_review (old) → ${adminPhone} (${ref}) — may be silent if no session`);
+      console.log(`[ADMIN PHOTO REVIEW] zq_admin_photo_review (old) → ${adminPhone} (${ref}) - may be silent if no session`);
     } catch (err) {
       console.error(`[ADMIN PHOTO REVIEW] ALL methods failed for ${adminPhone} (${ref})`);
     }
@@ -626,7 +626,7 @@ export async function notifyBuyerRequestApproved({
 // PUBLIC: Notify BUYER that their photo request was REJECTED
 //
 // Template: zq_buyer_request_rejected  (UTILITY)
-// Body (submit to Meta exactly as written — no edits):
+// Body (submit to Meta exactly as written - no edits):
 //   Your ZimQuote request with a photo could not be approved.
 //   Ref: {{1}}
 //   Reason: {{2}}

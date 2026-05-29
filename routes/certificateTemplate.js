@@ -4,7 +4,7 @@
  * PMP-INSPIRED corporate international standard certificate.
  *
  * Design based directly on the PMP (Project Management Professional) certificate:
- *  ✅ Clean cream/white background — NOT dark background
+ *  ✅ Clean cream/white background - NOT dark background
  *  ✅ Dark institution header band at top
  *  ✅ "THIS IS TO CERTIFY THAT" eyebrow small-caps
  *  ✅ Large italic recipient name as the visual centrepiece
@@ -130,7 +130,7 @@ export function buildCertificateHtml({
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
-<title>Certificate — ${recipientName}</title>
+<title>Certificate - ${recipientName}</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400;1,600;1,700&family=Cinzel:wght@400;500;600;700&display=swap');
 
@@ -180,7 +180,7 @@ html,body{
 /* ── EYEBROW (PMP: "THIS IS TO CERTIFY THAT") ── */
 .eyebrow{font-family:'Cinzel',serif;font-size:8.5px;font-weight:500;letter-spacing:5px;color:${B.subtext};text-transform:uppercase;margin-bottom:10px;}
 
-/* ── RECIPIENT — centrepiece ── */
+/* ── RECIPIENT - centrepiece ── */
 .recipient{font-family:'Cormorant Garamond',serif;font-size:54px;font-weight:600;font-style:italic;color:${B.text};line-height:1.05;letter-spacing:0.5px;margin-bottom:14px;max-width:450px;word-break:break-word;}
 
 /* ── ACHIEVEMENT TEXT (PMP tracked caps paragraph) ── */

@@ -64,7 +64,7 @@ async function _getSellerDraft(phone, refNum) {
     } catch (_) {}
   }
 
-  // Fallback: legacy scalar — only if refNum matches
+  // Fallback: legacy scalar - only if refNum matches
   const _raw = sess?.tempData?.scPendingSellerQuote;
   if (!_raw) return null;
   try {
@@ -106,16 +106,16 @@ async function _clearSellerDraft(phone, refNum) {
 // so the state machine can carry them through quote → items → done.
 //
 // Keys stored under tempData:
-//   scState        — current state string, e.g. "sc_awaiting_items"
-//   scSellerId     — 24-char supplier ObjectId
-//   scQuoteItems   — JSON array of cart items
-//   scRFQ          — boolean
-//   scIsHospitality— boolean
-//   scIsService    — boolean
-//   scCatalogue    — JSON string of full catalogue (same as biz.sessionData.scCatalogue)
-//   scCatalogueType— "service" | "product"
-//   scTouristNote  — optional buyer note
-//   scPeopleCount  — optional people/scope count
+//   scState        - current state string, e.g. "sc_awaiting_items"
+//   scSellerId     - 24-char supplier ObjectId
+//   scQuoteItems   - JSON array of cart items
+//   scRFQ          - boolean
+//   scIsHospitality- boolean
+//   scIsService    - boolean
+//   scCatalogue    - JSON string of full catalogue (same as biz.sessionData.scCatalogue)
+//   scCatalogueType- "service" | "product"
+//   scTouristNote  - optional buyer note
+//   scPeopleCount  - optional people/scope count
 
 async function _getScNoBizSession(phone) {
   const UserSession = (await import("../models/userSession.js")).default;
@@ -284,7 +284,7 @@ export async function showSellerMenu(from, supplierId, biz, saveBiz, { source = 
   // ── FIX: Clear stale BuyerRequest seller-side state when a BUYER opens this
   // smart link. If the visitor is a SELLER who owns this profile, their BuyerRequest
   // state (awaiting_offer / awaiting_offer_intro) is NOT the buyer-facing sc_ flow,
-  // so it should NOT be cleared here — they need that state to respond to requests.
+  // so it should NOT be cleared here - they need that state to respond to requests.
   // We only clear if the visitor is NOT this seller (i.e. it's a buyer visiting).
   // Detection: if biz exists and biz is the supplier's own business, skip.
   try {
@@ -294,14 +294,14 @@ export async function showSellerMenu(from, supplierId, biz, saveBiz, { source = 
       (seller.notificationContacts || []).some(nc => String(nc).replace(/\D+/g,"") === _fromPhone);
 
     if (!_isOwnProfile) {
-      // This is a BUYER visiting the smart link — clear any residual sc_ biz state
+      // This is a BUYER visiting the smart link - clear any residual sc_ biz state
       // that could have been left from a previous sc_ interaction, and ensure
       // the BuyerRequest state in UserSession doesn't bleed through.
-      // We do NOT touch sellerRequestReplyState here — the seller's quote flow
+      // We do NOT touch sellerRequestReplyState here - the seller's quote flow
       // is in a different UserSession (the seller's phone, not the buyer's).
       if (biz && biz.sessionState && biz.sessionState.startsWith("sc_") &&
           biz.sessionData?.scSellerId && biz.sessionData.scSellerId !== supplierId) {
-        // Buyer was in a different seller's sc_ flow — reset to start fresh
+        // Buyer was in a different seller's sc_ flow - reset to start fresh
         biz.sessionState = "ready";
         biz.sessionData  = {};
         if (saveBiz) await saveBiz(biz);
@@ -1129,7 +1129,7 @@ async function _scProcessItemList(from, supplierId, raw, biz, saveBiz) {
   const isHospitality = seller.profileType === "hospitality";
   const isRFQ         = biz?.sessionData?.scRFQ;
 
-  // ── Handle "note: ..." — tourist adds context/details without leaving the flow ──
+  // ── Handle "note: ..." - tourist adds context/details without leaving the flow ──
   const _noteMatch = raw.match(/^note[:\s]+(.+)/i);
   if (_noteMatch) {
     const touristNote = _noteMatch[1].trim().slice(0, 300);
@@ -1157,7 +1157,7 @@ async function _scProcessItemList(from, supplierId, raw, biz, saveBiz) {
     });
   }
 
-  // ── Handle "edit: 1: corrected name" — tourist renames a cart item ──────
+  // ── Handle "edit: 1: corrected name" - tourist renames a cart item ──────
   const _editMatch = raw.match(/^edit[:\s]+(\d+)[:\s]+(.+)/i);
   if (_editMatch) {
     const editIdx  = parseInt(_editMatch[1]) - 1;
@@ -1295,7 +1295,7 @@ async function _scProcessItemList(from, supplierId, raw, biz, saveBiz) {
 
   return sendButtons(from, {
     text:
-`🛒 *${isHospitality ? "Selected (rooms/activities)" : (isService ? "Services" : "Items")} — ${allItems.length} item${allItems.length === 1 ? "" : "s"}:*
+`🛒 *${isHospitality ? "Selected (rooms/activities)" : (isService ? "Services" : "Items")} - ${allItems.length} item${allItems.length === 1 ? "" : "s"}:*
 ${summary}${savedNote ? "\n\n📝 _Note: " + savedNote + "_" : ""}${editHint}
 
 Add more ${termAdd}s, or tap below when ready.`,
@@ -1537,10 +1537,10 @@ The seller will review and price your request.
         { phone: targetPhone },
         {
           $set: {
-            // New map format — supports multiple concurrent drafts per phone
+            // New map format - supports multiple concurrent drafts per phone
             "tempData.scPendingDrafts":      JSON.stringify(_draftsMap),
             "tempData.scLastNotifiedRef":    refNum.toUpperCase(),
-            // Legacy scalar — kept so any in-flight sessions before this deploy still work
+            // Legacy scalar - kept so any in-flight sessions before this deploy still work
             "tempData.scPendingSellerQuote": JSON.stringify(_draftPayload),
             "tempData.scSellerQuoteState":   "awaiting_seller_quote_confirm",
             "tempData.scBuyerPhone":         buyerPhone,
@@ -1799,7 +1799,7 @@ async function _scProcessSellerPriceEdit(from, text, biz, saveBiz) {
     return _scHandleQuoteConfirm(from, draft.refNum, biz, saveBiz);
   }
 
-  // Parse prices: "1×50, 2×3" or "1x50 2x3" or "1=50, 2=3" — all formats accepted
+  // Parse prices: "1×50, 2×3" or "1x50 2x3" or "1=50, 2=3" - all formats accepted
   const edits = {};
   const matches = text.matchAll(/(\d+)\s*[=×xX@:]\s*(\d+(?:\.\d+)?)(?:\s*\/\s*([a-zA-Z]+))?/g);
 
@@ -1860,12 +1860,12 @@ async function _scProcessSellerPriceEdit(from, text, biz, saveBiz) {
     { upsert: true }
   );
 
-  // Build review lines — show clearly: item name, qty, unit price, total per line
+  // Build review lines - show clearly: item name, qty, unit price, total per line
   const _unpriced = updatedItems.filter(l => !l.unitPrice || l.unitPrice === 0);
   const numbered = updatedItems.map((l, i) => {
     const _unitLabel = _formatRateUnit(l.unit) || "/unit";
     if (!l.unitPrice || l.unitPrice === 0) {
-      return `${i + 1}. *${l.name}* × ${l.qty} — ❓ _price not set_`;
+      return `${i + 1}. *${l.name}* × ${l.qty} - ❓ _price not set_`;
     }
     return `${i + 1}. *${l.name}* × ${l.qty} @ $${Number(l.unitPrice).toFixed(2)}${_unitLabel} = *$${Number(l.lineTotal).toFixed(2)}*${l._edited ? " ✏️" : ""}`;
   }).join("\n");

@@ -890,7 +890,7 @@ async function _scProcessItemList(from, supplierId, raw, biz, saveBiz) {
   const isHospitality = seller.profileType === "hospitality";
   const isRFQ         = biz?.sessionData?.scRFQ;
 
-  // ── Handle "note: ..." — tourist adds context/details without leaving the flow ──
+  // ── Handle "note: ..." - tourist adds context/details without leaving the flow ──
   const _noteMatch = raw.match(/^note[:\s]+(.+)/i);
   if (_noteMatch) {
     const touristNote = _noteMatch[1].trim().slice(0, 300);
@@ -918,7 +918,7 @@ async function _scProcessItemList(from, supplierId, raw, biz, saveBiz) {
     });
   }
 
-  // ── Handle "edit: 1: corrected name" — tourist renames a cart item ──────
+  // ── Handle "edit: 1: corrected name" - tourist renames a cart item ──────
   const _editMatch = raw.match(/^edit[:\s]+(\d+)[:\s]+(.+)/i);
   if (_editMatch) {
     const editIdx  = parseInt(_editMatch[1]) - 1;
@@ -1055,7 +1055,7 @@ async function _scProcessItemList(from, supplierId, raw, biz, saveBiz) {
 
   return sendButtons(from, {
     text:
-`🛒 *${isHospitality ? "Selected (rooms/activities)" : (isService ? "Services" : "Items")} — ${allItems.length} item${allItems.length === 1 ? "" : "s"}:*
+`🛒 *${isHospitality ? "Selected (rooms/activities)" : (isService ? "Services" : "Items")} - ${allItems.length} item${allItems.length === 1 ? "" : "s"}:*
 ${summary}${savedNote ? "\n\n📝 _Note: " + savedNote + "_" : ""}${editHint}
 
 Add more ${termAdd}s, or tap below when ready.`,

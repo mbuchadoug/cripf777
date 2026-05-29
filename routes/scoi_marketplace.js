@@ -66,7 +66,7 @@ router.get("/scoi/purchased", ensureAuth, async (req, res) => {
   try {
     // Load all purchases for this user, populate the linked audit document.
     // AuditPurchase is expected to have:
-    //   auditId   : ObjectId  (ref to PlacementAudit or SpecialScoiAudit — stored as a plain ref)
+    //   auditId   : ObjectId  (ref to PlacementAudit or SpecialScoiAudit - stored as a plain ref)
     //   auditModel: String    ('PlacementAudit' | 'SpecialScoiAudit')
     //   pricePaid : Number    (in cents)
     //   userId    : ObjectId
@@ -86,7 +86,7 @@ router.get("/scoi/purchased", ensureAuth, async (req, res) => {
             audit = await PlacementAudit.findById(purchase.auditId).lean();
           }
         } catch (_) {
-          // audit may have been deleted — skip gracefully
+          // audit may have been deleted - skip gracefully
         }
         return { ...purchase, auditId: audit };
       })
