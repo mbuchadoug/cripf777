@@ -3655,12 +3655,7 @@ a.startsWith("sup_load_preset_") ||
       // zqg_register_<slug> = buyer tapped "List Your Business Here" row
       // Without these isMetaAction=false and both fall into shortcode search.
       a.startsWith("zqg_sel_") ||
-      a.startsWith("zqg_register_") ||
-      // ── School group smart link list-reply taps ─────────────────────────
-      // zqsg_sch_<schoolId>      = visitor tapped a school in a school group list
-      // zqsg_register_<slug>     = visitor tapped "Add My School Here" CTA
-      a.startsWith("zqsg_sch_") ||
-      a.startsWith("zqsg_register_")
+      a.startsWith("zqg_register_")
     
     );
   // =========================
@@ -3736,22 +3731,6 @@ if (!isMetaAction && /^ZQ:GROUP:[a-z0-9_-]{1,60}$/i.test(text.trim())) {
     return;
   }
 }
-// ── ZQ:SGROUP:<slug> — school group smart link (TOP LEVEL) ──────────────────
-// School group links arrive as plain text, same as ZQ:GROUP:.
-// Must be at depth-1 top level so no session state can intercept them.
-if (!isMetaAction && /^ZQ:SGROUP:[a-z0-9_-]{1,60}$/i.test(text.trim())) {
-  console.log(`[ZQ:SGROUP TOP LEVEL] from=${from} text=${text.trim()}`);
-  const _zqsgTopSlug = text.trim().split(":")[2]?.toLowerCase().trim();
-  if (_zqsgTopSlug) {
-    const { handleSchoolGroupSmartLink } = await import("./groupSmartLink.js");
-    const _zqsgTopHandled = await handleSchoolGroupSmartLink({
-      from, slug: _zqsgTopSlug, biz, saveBiz: saveBizSafe.bind(null, biz)
-    });
-    if (_zqsgTopHandled) return;
-    try { await sendText(from, "❌ This school group link is no longer active. Type *menu* to browse ZimQuote."); } catch(_) {}
-    return;
-  }
-}
 if (!isMetaAction && /^ZQ:S:[a-z0-9_-]{1,60}$/i.test(text.trim())) {
   console.log(`[ZQ:S TOP LEVEL] from=${from} text=${text.trim()}`);
   const _zqsTopHandled = await handleZqDeepLink({
@@ -3779,17 +3758,6 @@ if (a.startsWith('zqg_sel_') || a.startsWith('zqg_register_')) {
   });
   if (_zqgEarlyHandled) return;
 }
-// ── ZQSG EARLY HANDLER — school group list-reply taps ───────────────────────
-// zqsg_sch_<schoolId>   = visitor tapped a school row in a school group list
-// zqsg_register_<slug>  = visitor tapped "Add My School Here" CTA
-if (a.startsWith('zqsg_sch_') || a.startsWith('zqsg_register_')) {
-  console.log(`[ZQSG EARLY HANDLER] from=${from} action=${a}`);
-  const { handleSchoolGroupTap } = await import("./groupSmartLink.js");
-  const _zqsgEarlyHandled = await handleSchoolGroupTap({
-    from, action: a, biz, saveBiz: saveBizSafe.bind(null, biz)
-  });
-  if (_zqsgEarlyHandled) return;
-}
 
 // ── REG TYPE EARLY HANDLER ──────────────────────────────────────────────────
 // Inserted at the TOP LEVEL, before the if(!isMetaAction || isBuyerRequestMetaReply)
@@ -3800,8 +3768,7 @@ if (a.startsWith('zqsg_sch_') || a.startsWith('zqsg_register_')) {
 if (
   a === "reg_type_product" ||
   a === "reg_type_service" ||
-  a === "reg_type_hospitality" ||
-  a === "reg_type_school"
+  a === "reg_type_hospitality"
 ) {
   console.log("[REG_TYPE_FIXED] phone:", phone, "action:", a, "biz:", biz?._id, "state:", biz?.sessionState);
 
@@ -3838,15 +3805,6 @@ if (
         { upsert: true }
       );
     }
-  }
-
-  // ── School: set state to school_reg_name and ask for school name ────────
-  if (a === "reg_type_school") {
-    biz.sessionData  = { supplierReg: { profileType: "school" } };
-    biz.sessionState = "school_reg_name";
-    await saveBizSafe(biz);
-    console.log("[REG_TYPE_FIXED] profileType: school bizId:", biz._id, "-> school_reg_name");
-    return sendText(from, `🏫 *School Registration*\n\nWhat is your *school's full name*?\n\n_Type *cancel* at any time to stop._`);
   }
 
   const profileType =
@@ -6921,10 +6879,7 @@ a === "sup_search_next_page" ||
   // zqg_register_<slug> = buyer tapped "List Your Business Here"
   // Without these the welcome-screen gate fires and swallows the action.
   a.startsWith("zqg_sel_") ||
-  a.startsWith("zqg_register_") ||
-  // School group list-reply taps — allow no-biz visitors
-  a.startsWith("zqsg_sch_") ||
-  a.startsWith("zqsg_register_");
+  a.startsWith("zqg_register_");
 
 // ── Shortcode search intercept: "find cement", "s plumber harare" etc ─────
 // ── Shortcode search intercept: "find cement", "find mushambahuro harare" etc ─────
