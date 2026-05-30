@@ -43,9 +43,6 @@ const upload = multer({
 function mergeAuditObjects(arr) {
   if (!Array.isArray(arr) || arr.length === 0) return [];
 
-  // If every item is a plain object and none of them looks like a
-  // standalone complete audit (subject.name + purpose both present),
-  // treat the whole array as one split audit and merge it.
   const allArePartial = arr.every(
     obj =>
       obj && typeof obj === "object" &&
@@ -53,8 +50,6 @@ function mergeAuditObjects(arr) {
   );
 
   if (allArePartial) {
-    // Deep-merge all objects into one - later keys win for scalars,
-    // nested objects are recursively merged.
     const merged = {};
     for (const obj of arr) {
       deepMerge(merged, obj);
@@ -62,31 +57,24 @@ function mergeAuditObjects(arr) {
     return [merged];
   }
 
-  // Mixed array: some objects are standalone audits, some may be fragments.
-  // Group consecutive fragments that don't have subject.name into the
-  // nearest preceding object that has subject.name.
   const result = [];
   let current = null;
 
   for (const obj of arr) {
     if (obj?.subject?.name || obj?.auditType) {
-      // Start a new audit group
       if (current) result.push(current);
       current = deepMerge({}, obj);
     } else if (current) {
-      // Fragment - merge into current audit
       deepMerge(current, obj);
     } else {
-      // Fragment before any anchor - start a new group anyway
       current = deepMerge({}, obj);
     }
   }
 
   if (current) result.push(current);
-  return result.length > 0 ? result : arr; // fall back to raw if nothing matched
+  return result.length > 0 ? result : arr;
 }
 
-// Simple deep-merge (target mutated in place, returns target)
 function deepMerge(target, source) {
   if (!source || typeof source !== "object") return target;
   for (const [key, val] of Object.entries(source)) {
@@ -102,113 +90,121 @@ function deepMerge(target, source) {
   return target;
 }
 
-// Import page
+// ──────────────────────────────────────────────────────────────────────────────
+// Shared import logic — accepts a merged audit array + auditType string
+//
+// How it works:
+//   Both the file-upload path and the paste path call this after parsing JSON.
+//   No duplication of the core validation/upsert logic.
+// ──────────────────────────────────────────────────────────────────────────────
+async function runScoiImport(rawAudits, auditType) {
+  const audits = mergeAuditObjects(rawAudits);
+  console.log(`[SCOI import] Raw objects: ${rawAudits.length}, merged audits: ${audits.length}`);
+
+  let imported = 0;
+  let skipped  = 0;
+  const errors = [];
+
+  for (const audit of audits) {
+    try {
+      if (!audit.subject?.name) {
+        console.warn("[SCOI import] Skipping - missing subject.name:", JSON.stringify(audit).slice(0, 120));
+        skipped++;
+        continue;
+      }
+      if (!audit.purpose) {
+        console.warn("[SCOI import] Skipping - missing purpose for:", audit.subject?.name);
+        skipped++;
+        continue;
+      }
+
+      const Model = auditType === "special" ? SpecialScoiAudit : PlacementAudit;
+
+      const dupQuery = { "subject.name": audit.subject.name };
+      if (audit.assessmentWindow?.label) {
+        dupQuery["assessmentWindow.label"] = audit.assessmentWindow.label;
+      }
+
+      const exists = await Model.findOne(dupQuery).lean();
+      if (exists) {
+        console.log(`[SCOI import] Duplicate skipped: "${audit.subject.name}"`);
+        skipped++;
+        continue;
+      }
+
+      await Model.create({ framework: "CRIPFCnt SCOI", ...audit });
+      console.log(`[SCOI import] ✅ Imported: "${audit.subject.name}"`);
+      imported++;
+    } catch (docErr) {
+      console.error("[SCOI import] Error saving audit:", docErr.message);
+      errors.push(`${audit.subject?.name || "unknown"}: ${docErr.message}`);
+      skipped++;
+    }
+  }
+
+  return { imported, skipped, errors };
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// GET - Import page
+// ──────────────────────────────────────────────────────────────────────────────
 router.get("/admin/scoi/import", ensureAuth, (req, res) => {
   res.render("admin/scoi_import", {
     title: "Import SCOI Reports",
-    user: req.user
+    user:  req.user
   });
 });
 
-// Handle import
+// ──────────────────────────────────────────────────────────────────────────────
+// POST - Import via file upload OR pasted JSON
+//
+// How it works:
+//   1. multer runs — if a file was sent it populates req.file, otherwise no-op
+//   2. We check req.file first (file upload path, unchanged behaviour)
+//   3. If no file, we look for req.body.auditJson (the textarea input)
+//   4. Both paths parse JSON → mergeAuditObjects → runScoiImport
+// ──────────────────────────────────────────────────────────────────────────────
 router.post(
   "/admin/scoi/import",
   ensureAuth,
-  upload.single("auditFile"),
+  upload.single("auditFile"),   // always present; harmless when no file sent
   async (req, res) => {
-    try {
-      if (!req.file) {
-        return res.render("admin/scoi_import", {
-          error: "No file uploaded",
-          user: req.user
-        });
-      }
+    const renderPage = (props) =>
+      res.render("admin/scoi_import", { user: req.user, ...props });
 
+    try {
       const { auditType } = req.body; // 'placement' or 'special'
-      const raw = req.file.buffer.toString("utf8");
+      let raw;
+
+      if (req.file) {
+        // ── Path A: file upload (original behaviour) ──
+        raw = req.file.buffer.toString("utf8");
+      } else if (req.body?.auditJson?.trim()) {
+        // ── Path B: pasted JSON text ──
+        raw = req.body.auditJson.trim();
+      } else {
+        return renderPage({ error: "Please upload a JSON file or paste JSON text" });
+      }
 
       let data;
       try {
         data = JSON.parse(raw);
       } catch (parseErr) {
-        return res.render("admin/scoi_import", {
-          error: `Invalid JSON: ${parseErr.message}`,
-          user: req.user
-        });
+        return renderPage({ error: `Invalid JSON: ${parseErr.message}` });
       }
 
-      // Support single object or array
       const rawAudits = Array.isArray(data) ? data : [data];
-
-      // ✅ FIX: merge split-object arrays into proper single audit documents
-      const audits = mergeAuditObjects(rawAudits);
-
-      console.log(`[SCOI import] Raw objects: ${rawAudits.length}, merged audits: ${audits.length}`);
-
-      let imported = 0;
-      let skipped  = 0;
-      const errors = [];
-
-      for (const audit of audits) {
-        try {
-          // Validate required fields
-          if (!audit.subject?.name) {
-            console.warn("[SCOI import] Skipping - missing subject.name:", JSON.stringify(audit).slice(0, 120));
-            skipped++;
-            continue;
-          }
-          if (!audit.purpose) {
-            console.warn("[SCOI import] Skipping - missing purpose for:", audit.subject?.name);
-            skipped++;
-            continue;
-          }
-
-          // Choose model
-          const Model = auditType === "special" ? SpecialScoiAudit : PlacementAudit;
-
-          // Check for duplicates - match on subject name + window label
-          const dupQuery = { "subject.name": audit.subject.name };
-          if (audit.assessmentWindow?.label) {
-            dupQuery["assessmentWindow.label"] = audit.assessmentWindow.label;
-          }
-
-          const exists = await Model.findOne(dupQuery).lean();
-          if (exists) {
-            console.log(`[SCOI import] Duplicate skipped: "${audit.subject.name}"`);
-            skipped++;
-            continue;
-          }
-
-          // Create audit document
-          await Model.create({
-            framework: "CRIPFCnt SCOI",
-            ...audit
-          });
-
-          console.log(`[SCOI import] ✅ Imported: "${audit.subject.name}"`);
-          imported++;
-
-        } catch (docErr) {
-          console.error("[SCOI import] Error saving audit:", docErr.message);
-          errors.push(`${audit.subject?.name || "unknown"}: ${docErr.message}`);
-          skipped++;
-        }
-      }
+      const { imported, skipped, errors } = await runScoiImport(rawAudits, auditType);
 
       const message = `✅ Imported ${imported} report${imported !== 1 ? "s" : ""}. Skipped ${skipped} (duplicates or invalid).`;
 
-      return res.render("admin/scoi_import", {
-        success: message,
-        importErrors: errors.length ? errors : null,
-        user: req.user
+      return renderPage({
+        success:      message,
+        importErrors: errors.length ? errors : null
       });
-
     } catch (err) {
       console.error("[SCOI import]", err);
-      return res.render("admin/scoi_import", {
-        error: err.message || "Import failed",
-        user: req.user
-      });
+      return renderPage({ error: err.message || "Import failed" });
     }
   }
 );

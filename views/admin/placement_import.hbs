@@ -10,33 +10,129 @@
     input, button { padding: 10px; margin-top: 12px; }
     button { background: #003366; color: #fff; border: none; border-radius: 6px; cursor: pointer; }
     .success { color: green; margin-top: 12px; }
-    .error { color: red; margin-top: 12px; }
-    .note { margin-top: 16px; font-size: 13px; color: #555; }
+    .error   { color: red;   margin-top: 12px; }
+    .note    { margin-top: 16px; font-size: 13px; color: #555; }
+
+    /* ── Tab switcher ── */
+    .tabs {
+      display: flex;
+      gap: 0;
+      border-bottom: 2px solid #e0e6f0;
+      margin: 24px 0 20px;
+    }
+    .tab-btn {
+      padding: 10px 22px;
+      background: none;
+      color: #556;
+      border: none;
+      border-bottom: 3px solid transparent;
+      margin-bottom: -2px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      border-radius: 0;
+      transition: color 0.2s, border-color 0.2s;
+    }
+    .tab-btn.active {
+      color: #003366;
+      border-bottom-color: #003366;
+      background: none;
+    }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* ── Textarea ── */
+    textarea {
+      width: 100%;
+      min-height: 220px;
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 13px;
+      padding: 12px;
+      border: 1.5px solid #d0d8e8;
+      border-radius: 8px;
+      resize: vertical;
+      background: #f8fafc;
+      color: #1a2540;
+      margin-top: 8px;
+      box-sizing: border-box;
+    }
+    textarea:focus {
+      outline: none;
+      border-color: #003366;
+      background: #fff;
+    }
+    .paste-hint {
+      font-size: 12px;
+      color: #888;
+      margin-top: 6px;
+    }
+    .submit-row { margin-top: 16px; }
+    .submit-row button { width: 100%; padding: 12px; font-size: 15px; }
   </style>
 </head>
 <body>
   <main>
     <h1>Import Placement SCOI Audits</h1>
 
-    <form method="post" enctype="multipart/form-data">
-      <input type="file" name="auditFile" accept=".json" required />
-      <br />
-      <button type="submit">Import JSON</button>
-    </form>
-
     {{#if success}}
       <div class="success">✅ {{success}}</div>
     {{/if}}
-
     {{#if error}}
       <div class="error">❌ {{error}}</div>
     {{/if}}
 
+    <!-- Tab switcher -->
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab('file', this)">📂 Upload File</button>
+      <button class="tab-btn"        onclick="switchTab('paste', this)">📋 Paste JSON</button>
+    </div>
+
+    <!-- ── Tab A: File upload (original, unchanged) ── -->
+    <div class="tab-panel active" id="tab-file">
+      <form method="post" enctype="multipart/form-data">
+        <input type="file" name="auditFile" accept=".json" />
+        <div class="submit-row">
+          <button type="submit">📤 Import JSON File</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- ── Tab B: Paste JSON text ── -->
+    <div class="tab-panel" id="tab-paste">
+      <form method="post">
+        <label style="font-weight:600;font-size:14px;">Paste JSON content below</label>
+        <textarea
+          name="auditJson"
+          placeholder='[{"subject":{"name":"..."},"assessmentWindow":{"label":"..."},...}]'
+          spellcheck="false"
+        ></textarea>
+        <p class="paste-hint">Accepts a single object { } or an array [ ] of audits.</p>
+        <div class="submit-row">
+          <button type="submit">📥 Import Pasted JSON</button>
+        </div>
+      </form>
+    </div>
+
     <div class="note">
       • Placement audits are immutable<br>
       • Duplicates (same subject + time window) are skipped<br>
-      • JSON must be an array
+      • JSON must be an array or a single object
     </div>
   </main>
+
+  <script>
+    function switchTab(name, btn) {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('tab-' + name).classList.add('active');
+    }
+    // If there was a server error/success, keep the tab that was used
+    // (the form submits without a tab param; we re-activate "paste" if auditJson was submitted)
+    (function() {
+      const params = new URLSearchParams(window.location.search);
+      // Nothing needed — server re-renders the page; both tabs reset fine on reload
+    })();
+  </script>
 </body>
 </html>
