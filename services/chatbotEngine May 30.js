@@ -3449,7 +3449,6 @@ a.startsWith("sup_accept_") ||
       a.startsWith("sup_eta_") ||
 a === "find_supplier" ||
       a === "register_supplier" ||
-      a === "list_my_business" ||   // broadcast template button payload alias
       a === "my_supplier_account" ||
 a === "my_orders" ||
       a.startsWith("my_orders_page_") ||
@@ -3737,16 +3736,6 @@ if (!isMetaAction && /^ZQ:GROUP:[a-z0-9_-]{1,60}$/i.test(text.trim())) {
     return;
   }
 }
-
-// ── ZQ:REGISTER — "Add Your Business" broadcast deep link (TOP LEVEL) ────────
-// Sent via broadcast campaigns (zqm_add_your_business template button payload
-// is "list_my_business" which is handled below, but the link in the message
-// body uses ZQ:REGISTER so users who manually tap/copy the URL also land here).
-if (!isMetaAction && /^ZQ:REGISTER$/i.test(text.trim())) {
-  console.log(`[ZQ:REGISTER] from=${from} → startSupplierRegistration`);
-  return startSupplierRegistration(from, biz);
-}
-
 // ── ZQ:SGROUP:<slug> - school group smart link (TOP LEVEL) ──────────────────
 // School group links arrive as plain text, same as ZQ:GROUP:.
 // Must be at depth-1 top level so no session state can intercept them.
@@ -11621,7 +11610,7 @@ if (a === "sup_search_more_categories") {
   ]);
 }
 
-if (a === "register_supplier" || a === "list_my_business") {
+if (a === "register_supplier") {
   if (!_bizIsOwnedByUser) biz = null;
     const existingSupplier = await SupplierProfile.findOne({ phone });
 
