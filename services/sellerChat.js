@@ -31,6 +31,7 @@ import SupplierProfile from "../models/supplierProfile.js";
 import SchoolLead      from "../models/schoolLead.js";
 import { sendText, sendButtons, sendList, sendDocument } from "./metaSender.js";
 import { notifySupplierNewOrder } from "./supplierOrders.js";
+import { notifyAllSupplierLinkOpened } from "./supplierNotifications.js";
 
 const BOT_NUMBER = (process.env.WHATSAPP_BOT_NUMBER || "263771143904").replace(/\D/g, "");
 
@@ -198,6 +199,8 @@ function _trackConversion(biz) {
 //     This is an automated activity alert from ZimQuote.
 //   WHY UTILITY: triggered by buyer action on seller's account (not promotional content).
 //
+// DEPRECATED: superseded by notifyAllSupplierLinkOpened() from supplierNotifications.js
+// Kept for reference only - no longer called. VIP phone reveal now handled centrally.
 async function _notifySellerLinkOpened(seller, buyerPhone, source) {
   try {
     const sourceLabels = {
@@ -417,7 +420,9 @@ export async function showSellerMenu(from, supplierId, biz, saveBiz, { source = 
   }
 
   // ── Notify seller someone opened their link (non-blocking) ────────────────
-  _notifySellerLinkOpened(seller, from, source).catch(() => {});
+  // Uses notifyAllSupplierLinkOpened so VIP sellers (revealVisitorPhone=true)
+  // receive the visitor phone regardless of entry point (individual link, group link, slug, etc).
+  notifyAllSupplierLinkOpened(seller, source, from).catch(() => {});
 
   // ── Track analytics (non-blocking) ───────────────────────────────────────
   import("./supplierSmartLink.js").then(({ trackLinkEvent }) =>

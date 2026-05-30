@@ -245,15 +245,27 @@ export function buildProfileCard(supplier) {
   // ── Products / services preview ───────────────────────────────────────────
   let catalogueLines = "";
   if (isService) {
-    const rates = (supplier.rates || []).slice(0, 4);
-    if (rates.length) {
-      catalogueLines = rates
+    // BUG FIX: rates[] often empty even when listedProducts[]/products[] has services.
+    // Fall through: rates → listedProducts → products - always show something real.
+    const hasRates = (supplier.rates || []).length > 0;
+    if (hasRates) {
+      const allRates = (supplier.rates || []).filter(r => r.service);
+      catalogueLines = allRates.slice(0, 5)
         .map(r => `• ${r.service}${r.rate ? "  -  " + r.rate : ""}`)
         .join("\n");
-    } else if ((supplier.listedProducts || []).length) {
-      catalogueLines = (supplier.listedProducts || []).slice(0, 4)
+      const extraRates = allRates.length - 5;
+      if (extraRates > 0) catalogueLines += `\n_...and ${extraRates} more services_`;
+    } else {
+      const serviceList = (supplier.listedProducts?.length
+        ? supplier.listedProducts
+        : (supplier.products || [])
+      ).filter(p => p && p !== "pending_upload");
+      catalogueLines = serviceList
+        .slice(0, 6)
         .map(p => `• ${p}`)
         .join("\n");
+      const extraSvcs = serviceList.length - 6;
+      if (extraSvcs > 0) catalogueLines += `\n_...and ${extraSvcs} more services_`;
     }
   } else {
     // Product supplier - prefer prices list (has amounts), fall back to listedProducts
@@ -275,10 +287,13 @@ export function buildProfileCard(supplier) {
   }
 
   // ── Delivery ──────────────────────────────────────────────────────────────
+  // BUG FIX: Service providers with travelAvailable=true TRAVEL TO CLIENTS.
+  // NEVER show "Collection only" for cleaning/plumbing/service providers.
   let deliveryLine = "";
   if (isService) {
     if (supplier.travelAvailable) {
-      deliveryLine = `🚗 Travels to clients · ${supplier.serviceArea || city}`;
+      const svcArea = supplier.serviceArea || city || location;
+      deliveryLine = `🚗 Travels to clients · ${svcArea}`;
     } else {
       deliveryLine = `📍 Based in ${location}`;
     }
@@ -298,7 +313,15 @@ export function buildProfileCard(supplier) {
     ? `Min order: $${Number(supplier.minOrder).toFixed(2)}`
     : "";
 
-  // ── Assemble card ─────────────────────────────────────────────────────────
+  // ── HOSPITALITY card — route to dedicated builder ────────────────────────
+  if (supplier.profileType === "hospitality") {
+    return _buildHospitalityCard(supplier, {
+      name, location, city, area, verifiedBadge, topBadge,
+      ratingLine, ordersLine, responseLine
+    });
+  }
+
+  // ── Standard card (product / service) ─────────────────────────────────────
   const lines = [
     `${isService ? "🔧" : "🏪"} *${name}*${verifiedBadge}${topBadge}`,
     `📍 ${location}`,
@@ -321,6 +344,136 @@ export function buildProfileCard(supplier) {
   return lines.join("\n");
 }
 
+// ─── Hospitality profile card builder ────────────────────────────────────────
+function _buildHospitalityCard(supplier, { name, location, city, verifiedBadge, topBadge, ratingLine, ordersLine, responseLine }) {
+  const SUBTYPE_LABELS = {
+    lodge:"🌿 Lodge", hotel:"🏨 Hotel", guesthouse:"🏡 Guesthouse/B&B",
+    self_catering:"🍳 Self-Catering", campsite:"⛺ Campsite",
+    safari_operator:"🦁 Safari Operator", tour_guide:"🗺 Tour Guide",
+    boat_hire:"⛵ Boat Hire", travel_agency:"✈️ Travel Agency"
+  };
+  const FACILITY_LABELS = {
+    wifi:"📶 WiFi", pool:"🏊 Pool", hot_shower:"🚿 Hot shower",
+    breakfast:"🍳 Breakfast", en_suite:"🚪 En-suite", generator:"⚡ Generator/Solar",
+    dstv:"📺 DSTV", braai:"🔥 Braai", aircon:"❄️ AC",
+    game_drives:"🦁 Game drives", fishing:"🎣 Fishing", boat_hire:"⛵ Boat hire",
+    conference:"🏢 Conference", restaurant:"🍽 Restaurant/Bar", laundry:"👕 Laundry",
+    parking:"🅿️ Parking", pets_allowed:"🐕 Pets OK", child_friendly:"👶 Child-friendly"
+  };
+
+  const subtypes = supplier.tourismSubtype || [];
+  const subtypeLabel = subtypes.length
+    ? subtypes.map(s => SUBTYPE_LABELS[s] || s).join(" · ")
+    : "🏨 Hospitality";
+
+  const isAccom = subtypes.length === 0 ||
+    subtypes.some(s => ["lodge","hotel","guesthouse","self_catering","campsite"].includes(s));
+
+  // ── Areas served ──────────────────────────────────────────────────────────
+  const areas = (supplier.tourismAreas || []);
+  const locLine = areas.length
+    ? "📍 " + location + "  ·  🌍 " + areas.join(", ")
+    : "📍 " + location;
+
+  // ── Room types with night + rest rates ────────────────────────────────────
+  let roomLines = "";
+  if ((supplier.roomTypes || []).length > 0) {
+    roomLines = (supplier.roomTypes || []).slice(0, 6).map(rt => {
+      const night = rt.pricePerNight > 0 ? "$" + Number(rt.pricePerNight).toFixed(0) + "/night" : null;
+      const rest  = rt.restRate > 0      ? "$" + Number(rt.restRate).toFixed(0) + "/rest"        : null;
+      const rates = [night, rest].filter(Boolean).join(" · ");
+      const cap   = rt.capacity > 0 ? " (sleeps " + rt.capacity + ")" : "";
+      return "• " + rt.name + (rates ? " — " + rates : "") + cap;
+    }).join("\n");
+  }
+
+  // ── Activities / rates — shown for ALL hospitality providers that have them ─
+  // Mixed operators (e.g. lodge + safari + boat hire) show BOTH rooms AND activities.
+  let activityLines = "";
+  if ((supplier.rates || []).length > 0) {
+    const allRates = (supplier.rates || []).filter(r => r.service);
+    activityLines = allRates.slice(0, 6).map(r =>
+      "• " + r.service + (r.rate ? " — " + r.rate : " — price on request")
+    ).join("\n");
+    const moreRates = allRates.length - 6;
+    if (moreRates > 0) activityLines += "\n_...and " + moreRates + " more activities_";
+  }
+
+  // ── Extra services (activities, tours, etc.) ─────────────────────────────
+  let extraLines = "";
+  if ((supplier.extraServices || []).length > 0) {
+    const allExtras = supplier.extraServices || [];
+    extraLines = allExtras.slice(0, 8).map(es =>
+      "• " + es.name + (es.price > 0 ? " — $" + Number(es.price).toFixed(0) + "/" + (es.unit || "service") : " — price on request")
+    ).join("\n");
+    const moreExtras = allExtras.length - 8;
+    if (moreExtras > 0) extraLines += "\n_...and " + moreExtras + " more services_";
+  }
+
+  // ── Facilities ────────────────────────────────────────────────────────────
+  const facilLine = (supplier.facilities || []).length
+    ? (supplier.facilities || []).slice(0, 8).map(f => FACILITY_LABELS[f] || f).join("  ·  ")
+    : "";
+
+  // ── Check-in/out ──────────────────────────────────────────────────────────
+  const ciLine = (supplier.checkInTime || supplier.checkOutTime)
+    ? "⏰ Check-in: " + (supplier.checkInTime || "?") + "  ·  Check-out: " + (supplier.checkOutTime || "?")
+    : "";
+
+  // ── Capacity ──────────────────────────────────────────────────────────────
+  const capLine = supplier.maxCapacity > 0
+    ? "👥 Sleeps up to " + supplier.maxCapacity + " guests"
+    : "";
+
+  // ── Rating / credibility ──────────────────────────────────────────────────
+  const credibility = [ratingLine, ordersLine, responseLine].filter(Boolean).join(" · ");
+
+  // ── Build card ────────────────────────────────────────────────────────────
+  const lines = [
+    "🏨 *" + name + "*" + verifiedBadge + topBadge,
+    subtypeLabel,
+    locLine,
+  ];
+
+  if (credibility) lines.push(credibility);
+  if (capLine)     lines.push(capLine);
+
+  // Show rooms section if provider has rooms
+  if (roomLines) {
+    lines.push("");
+    lines.push("🛏 *Rooms & Rates:*");
+    lines.push(roomLines);
+    const moreRooms = (supplier.roomTypes || []).length - 6;
+    if (moreRooms > 0) lines.push("_...and " + moreRooms + " more room types_");
+  }
+
+  // Show activities section if provider has rates (shown for ALL — mixed operators get both)
+  if (activityLines) {
+    lines.push("");
+    lines.push("🎯 *Activities & Tours:*");
+    lines.push(activityLines);
+  }
+
+  // Extra services (e.g. airport transfer, fishing, canoe hire entered in admin)
+  if (extraLines) {
+    lines.push("");
+    // If no rates but has extraServices, use Activities label; else "Additional Services"
+    const extraLabel = !activityLines ? "🎯 *Activities & Services:*" : "➕ *Also Available:*";
+    lines.push(extraLabel);
+    lines.push(extraLines);
+  }
+
+  if (facilLine) {
+    lines.push("");
+    lines.push("🏷 *Facilities:*");
+    lines.push(facilLine);
+  }
+
+  if (ciLine) lines.push(ciLine);
+
+  return lines.join("\n");
+}
+
 // ─── Sharable caption text per channel ───────────────────────────────────────
 
 /**
@@ -336,12 +489,44 @@ export function buildSharableCaption(supplier, source = "wa") {
   const location = [area, city].filter(Boolean).join(", ");
   const isService = supplier.profileType === "service";
 
-  // Top 3 items/services as a teaser
+  // For hospitality: build teaser from roomTypes and extraServices
+  if (supplier.profileType === "hospitality") {
+    const hospLink = buildDeepLink(String(supplier._id), source);
+    const subtypes = (supplier.tourismSubtype || []);
+    const isAccom  = subtypes.length === 0 || subtypes.some(s => ["lodge","hotel","guesthouse","self_catering","campsite"].includes(s));
+    const rooms    = (supplier.roomTypes || []).slice(0, 3).map(r => {
+      const rates = [
+        r.pricePerNight > 0 ? "$" + Number(r.pricePerNight).toFixed(0) + "/night" : null,
+        r.restRate > 0      ? "$" + Number(r.restRate).toFixed(0) + "/rest"        : null
+      ].filter(Boolean).join(" · ");
+      return r.name + (rates ? " — " + rates : "");
+    });
+    const facilities = (supplier.facilities || []).slice(0, 4).map(f => ({
+      wifi:"WiFi",pool:"Pool",breakfast:"Breakfast",en_suite:"En-suite",
+      braai:"Braai",aircon:"AC",game_drives:"Game Drives",fishing:"Fishing",
+      hot_shower:"Hot shower",restaurant:"Restaurant",parking:"Parking",
+      dstv:"DSTV",generator:"Power backup",child_friendly:"Child-friendly"
+    }[f] || f)).join(" · ");
+    const roomTeaser = rooms.join("\n");
+
+    const hospCaptions = {
+      wa:  ["🏨 *" + name + "* - " + location, subtypes.length ? subtypes.map(s => ({lodge:"🌿 Lodge",hotel:"🏨 Hotel",guesthouse:"🏡 Guesthouse",self_catering:"🍳 Self-Catering",campsite:"⛺ Campsite",safari_operator:"🦁 Safari",tour_guide:"🗺 Tours",boat_hire:"⛵ Boat hire",travel_agency:"✈️ Travel"}[s]||s)).join(" · ") : "🏨 Hospitality", roomTeaser, facilities ? "✅ " + facilities : "", "", "📲 Book or request a quote on WhatsApp:", hospLink].filter(Boolean).join("\n"),
+      fb:  [isAccom ? "🌿 Looking for a perfect stay? " + name + " is now on ZimQuote!" : "🦁 Adventures await! " + name + " is now on ZimQuote!", "", roomTeaser || "Accommodation in " + location, facilities ? "✅ " + facilities : "", "", "📲 Request a quote instantly on WhatsApp — no app download needed.", "", hospLink, "#ZimQuote #Zimbabwe #Tourism #" + city.replace(/\s/g,"")].filter(Boolean).join("\n"),
+      tt:  ["Book your stay at " + name + " on ZimQuote 👇", hospLink, "#ZimQuote #ZimbabweTourism #" + name.replace(/\s/g,"")].join("\n"),
+      sms: [name + " - " + location, roomTeaser || "", "Book on WhatsApp: " + hospLink].filter(Boolean).join("\n"),
+      ig:  ["🏨 " + name + " | " + location, roomTeaser, facilities ? "✅ " + facilities : "", "", "Request a quote on WhatsApp 👇", hospLink, "#ZimQuote #Zimbabwe #" + city.replace(/\s/g,"") + " #Tourism"].filter(Boolean).join("\n"),
+    };
+    return hospCaptions[source] || hospCaptions.wa;
+  }
+
+  // Top 3 items/services as a teaser - same fallback chain: rates → listedProducts → products
   const items = isService
-    ? (supplier.rates || []).slice(0, 3).map(r => r.service)
-    : (supplier.prices || []).filter(p => p.inStock !== false).slice(0, 3).map(p => {
-        return p.amount ? `${p.product} @ $${Number(p.amount).toFixed(2)}` : p.product;
-      });
+    ? ((supplier.rates || []).length > 0
+        ? (supplier.rates || []).slice(0, 3).map(r => r.service)
+        : ((supplier.listedProducts || supplier.products || []).filter(p => p && p !== "pending_upload").slice(0, 3)))
+    : (supplier.prices || []).filter(p => p.inStock !== false).slice(0, 3).map(p =>
+        p.amount ? `${p.product} @ $${Number(p.amount).toFixed(2)}` : p.product
+      );
 
   const itemTeaser = items.length
     ? items.join(" · ")
@@ -392,6 +577,82 @@ export function buildSharableCaption(supplier, source = "wa") {
   };
 
   return captions[source] || captions.wa;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SMART LINK BENEFITS CARD
+// ─────────────────────────────────────────────────────────────────────────────
+// Explains to a seller why their ZimQuote link is better than WhatsApp Business,
+// Facebook, or a website - with real Zimbabwe context.
+//
+// ZIM REALITY:
+//   • Building a website costs $200-500 upfront + $15/mo hosting - most sellers can't afford it
+//   • Facebook algorithm hides posts unless you pay to boost
+//   • WhatsApp Business can't reach outside 24hr window, no PDF quotes, no analytics
+//   • ZimQuote link: FREE with subscription, works on any phone, WhatsApp-native,
+//     instant quotes, PDF delivery, seller notified every view, tracks which platform works
+//   • Economy is USD cash-based: buyers want a quote before committing, not guessing
+//   • Power cuts, data costs, bad internet: ZimQuote is lightweight, works on $1 bundles
+//
+export function buildSmartLinkBenefitsCard(supplier) {
+  const views    = supplier?.zqLinkViews || 0;
+  const converts = supplier?.zqLinkConversions || 0;
+  const sources  = supplier?.zqSourceViews || {};
+
+  const sourceLabels = {
+    fb: "Facebook", wa: "WhatsApp", tt: "TikTok",
+    qr: "QR Code", sms: "SMS/Flyer", ig: "Instagram",
+    yt: "YouTube", direct: "Direct"
+  };
+  const sourceBreakdown = Object.entries(sources)
+    .filter(([, v]) => v > 0)
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, 4)
+    .map(([k, v]) => `  • ${sourceLabels[k] || k}: ${v} view${v === 1 ? "" : "s"}`)
+    .join("\n");
+
+  const lines = [
+    `🔗 *Your ZimQuote Smart Link*`,
+    ``,
+    `📊 *Your stats so far:*`,
+    `  👁 ${views} profile view${views === 1 ? "" : "s"} total`,
+    `  ✅ ${converts} buyer action${converts === 1 ? "" : "s"} (quote/booking/enquiry)`,
+    sourceBreakdown ? `\n📱 *Where buyers come from:*\n${sourceBreakdown}` : "",
+    ``,
+    `─────────────────`,
+    `💡 *Why your ZimQuote link beats other options:*`,
+    ``,
+    `📱 *vs WhatsApp Business:*`,
+    `  • We reach buyers outside 24hr window - they can't`,
+    `  • We send PDF quotes automatically - they can't`,
+    `  • We show analytics per source - they don't`,
+    `  • We notify you every time someone opens your link`,
+    ``,
+    `📘 *vs Facebook page:*`,
+    `  • Facebook: buyer messages you, you quote manually (1-2 hrs lost)`,
+    `  • ZimQuote: buyer taps → quote generated → PDF sent instantly`,
+    `  • Facebook algorithm hides your posts unless you pay to boost`,
+    `  • ZimQuote: your link always works, no algorithm`,
+    ``,
+    `🌐 *vs a website:*`,
+    `  • Website: $200-500 to build, $15+/month to host`,
+    `  • ZimQuote link: FREE with your $5/month subscription`,
+    `  • Your link lives on WhatsApp - where your buyers already are`,
+    `  • No data-heavy app download needed`,
+    ``,
+    `─────────────────`,
+    `🎯 *How to get more from your link:*`,
+    `  1. Add it to your Facebook / TikTok bio`,
+    `  2. Print as QR code on flyers, receipts, business cards`,
+    `  3. Post it in your WhatsApp Status`,
+    `  4. Share in neighbourhood WhatsApp groups`,
+    `  5. Put it in your email signature / SMS`,
+    ``,
+    `Each source is tracked separately - you will see exactly`,
+    `which platform brings you the most buyers.`,
+  ].filter(l => l !== "").join("\n");
+
+  return lines;
 }
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
