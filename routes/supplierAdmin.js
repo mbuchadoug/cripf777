@@ -8017,11 +8017,15 @@ router.get("/broadcast", requireSupplierAdmin, async (req, res) => {
           </fieldset>
 
           <!-- Step 3: Optional media -->
-          <fieldset style="border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:16px">
-            <legend style="font-size:11px;font-weight:700;color:var(--muted);padding:0 8px;text-transform:uppercase;letter-spacing:.5px">Step 3 · Media Attachment (optional)</legend>
-            <p style="font-size:11px;color:var(--muted);margin-bottom:12px">
-              Attach an image, PDF or video to send alongside the message.
-              Meta fetches it via <code>lookaside.fbsbx.com</code> — the URL must stay live after sending.
+          <fieldset style="border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:16px;opacity:0.6">
+            <legend style="font-size:11px;font-weight:700;color:var(--muted);padding:0 8px;text-transform:uppercase;letter-spacing:.5px">Step 3 · Media Attachment</legend>
+            <div style="background:#fef9c3;border:1px solid #fde047;border-radius:6px;padding:10px 14px;font-size:12px;color:#854d0e">
+              ⚠️ <strong>Current templates have no media header slot.</strong>
+              The 4 approved templates (zqm_welcome_back, zqm_add_your_business, zqm_news_update, zqm_suppliers_ready)
+              were created without image/PDF headers. Attaching media will be ignored.
+              To send messages with images or PDFs, edit the templates in Meta Business Manager
+              to add a media header, then set <code>hasMediaHeader: true</code> in BROADCAST_TEMPLATES.
+            </div>
             </p>
 
             <!-- Media source tabs -->

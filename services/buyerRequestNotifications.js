@@ -778,28 +778,32 @@ export async function notifyAdminGroupLinkOpened({ groupName, slug, viewCount, v
 
 export const BROADCAST_TEMPLATES = {
   zqm_welcome_back: {
-    label:     "zqm_welcome_back · Welcome Back / Re-engagement",
-    headerVar: false,   // static text header — send NO header component
-    button:    "main_menu_back",
-    vars:      [{ key: "var1", label: "{{1}} — Total businesses listed", placeholder: "e.g. 47" }]
+    label:          "zqm_welcome_back · Welcome Back / Re-engagement",
+    headerVar:      false,   // static text header — NO header component
+    hasButton:      false,   // template has NO button — do NOT send button component
+    hasMediaHeader: false,   // template has NO media header slot
+    vars:           [{ key: "var1", label: "{{1}} — Total businesses listed", placeholder: "e.g. 47" }]
   },
   zqm_add_your_business: {
-    label:     "zqm_add_your_business · Add Your Business",
-    headerVar: false,
-    button:    "list_my_business",
-    vars:      [{ key: "var1", label: "{{1}} — Category buyers are searching", placeholder: "e.g. plumbers in Harare" }]
+    label:          "zqm_add_your_business · Add Your Business",
+    headerVar:      false,
+    hasButton:      false,
+    hasMediaHeader: false,
+    vars:           [{ key: "var1", label: "{{1}} — Category buyers are searching", placeholder: "e.g. plumbers in Harare" }]
   },
   zqm_news_update: {
-    label:     "zqm_news_update · News / Platform Update",
-    headerVar: false,
-    button:    "main_menu_back",
-    vars:      [{ key: "var1", label: "{{1}} — Full update text", placeholder: "e.g. We have added new verified suppliers..." }]
+    label:          "zqm_news_update · News / Platform Update",
+    headerVar:      false,
+    hasButton:      false,
+    hasMediaHeader: false,
+    vars:           [{ key: "var1", label: "{{1}} — Full update text", placeholder: "e.g. We have added new verified suppliers..." }]
   },
   zqm_suppliers_ready: {
-    label:     "zqm_suppliers_ready · Suppliers Ready to Quote",
-    headerVar: true,    // header TEXT contains {{1}} — must send header component
-    button:    "main_menu_back",
-    vars:      [
+    label:          "zqm_suppliers_ready · Suppliers Ready to Quote",
+    headerVar:      true,    // header TEXT contains {{1}} — send header component
+    hasButton:      false,
+    hasMediaHeader: false,
+    vars:           [
       { key: "var1", label: "{{1}} — Category (capitalised, used in header too)", placeholder: "e.g. Plumbing" },
       { key: "var2", label: "{{2}} — Number of suppliers", placeholder: "e.g. 4" }
     ]
@@ -863,9 +867,12 @@ export async function sendBroadcastTemplate({
   const tplMeta = BROADCAST_TEMPLATES[templateName];
   if (!tplMeta) throw new Error(`Unknown broadcast template: ${templateName}`);
 
-  // ── Re-upload media once before the send loop (same as school announcement) ─
+  // ── Re-upload media once before the send loop ────────────────────────────
+  // Only attempt if the template actually has a media header slot (hasMediaHeader=true).
+  // If the template has no media header, skip silently — sending a media component
+  // to a template without one causes #132012.
   let stableMediaId = null;
-  if (headerMediaUrl && !dryRun) {
+  if (tplMeta.hasMediaHeader && headerMediaUrl && !dryRun) {
     try {
       const mimeType = headerType === "document" ? "application/pdf"
                      : headerType === "video"    ? "video/mp4"
@@ -876,8 +883,9 @@ export async function sendBroadcastTemplate({
     } catch (err) {
       console.error(`[BROADCAST] Media re-upload failed: ${err.message} — sending text-only`);
       stableMediaId = null;
-      headerMediaUrl = null; // fall back to text-only
     }
+  } else if (headerMediaUrl && !tplMeta.hasMediaHeader) {
+    console.log(`[BROADCAST] Note: template "${templateName}" has no media header slot — file attachment ignored`);
   }
 
   let sent = 0, failed = 0, skipped = 0;
@@ -901,11 +909,14 @@ export async function sendBroadcastTemplate({
       const components = [];
 
       // ── Header component ────────────────────────────────────────────────────
-      // Rule 1: static TEXT header → send NO header component (Meta fills it)
-      // Rule 2: variable TEXT header (zqm_suppliers_ready) → header component with text param
-      // Rule 3: media attachment → header component with image/document/video id
-      if (stableMediaId) {
-        // Media header (replaces template's text header)
+      // ONLY send a header component if the template actually has one defined.
+      // Sending any component that doesn't exist in the template → #132012.
+      //
+      // Rules:
+      //   hasMediaHeader=true + stableMediaId → send image/doc/video header
+      //   headerVar=true                      → send text header with {{1}} value
+      //   everything else                     → NO header component at all
+      if (tplMeta.hasMediaHeader && stableMediaId) {
         if (headerType === "document") {
           components.push({ type: "header", parameters: [{ type: "document", document: { id: stableMediaId, filename: headerFilename } }] });
         } else if (headerType === "video") {
@@ -914,10 +925,10 @@ export async function sendBroadcastTemplate({
           components.push({ type: "header", parameters: [{ type: "image", image: { id: stableMediaId } }] });
         }
       } else if (tplMeta.headerVar && variables.length) {
-        // Variable text header — pass {{1}} value
+        // Variable text header (zqm_suppliers_ready) — pass {{1}} value
         components.push({ type: "header", parameters: [{ type: "text", text: _cleanVar(variables[0]) }] });
       }
-      // else: static text header — NO header component sent
+      // else: static text header OR no header — send NO header component
 
       // ── Body variables ──────────────────────────────────────────────────────
       if (variables.length) {
@@ -928,12 +939,15 @@ export async function sendBroadcastTemplate({
       }
 
       // ── Quick Reply button ──────────────────────────────────────────────────
-      components.push({
-        type:       "button",
-        sub_type:   "quick_reply",
-        index:      0,
-        parameters: [{ type: "payload", payload: tplMeta.button }]
-      });
+      // ONLY send button component if the template has a button defined.
+      if (tplMeta.hasButton && tplMeta.button) {
+        components.push({
+          type:       "button",
+          sub_type:   "quick_reply",
+          index:      0,
+          parameters: [{ type: "payload", payload: tplMeta.button }]
+        });
+      }
 
       await axios.post(
         `https://graph.facebook.com/${GRAPH_API_VERSION}/${PHONE_NUMBER_ID}/messages`,
