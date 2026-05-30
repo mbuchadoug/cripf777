@@ -857,38 +857,45 @@ export async function sendBroadcastTemplate({
     try {
       const components = [];
 
-      // ── Optional media header (image / document / video) ──────────────────
+      // ── Header component ──────────────────────────────────────────────────
+      // Rules:
+      //   - Static TEXT header (zqm_welcome_back, zqm_add_your_business,
+      //     zqm_news_update): NO header component needed — Meta fills it from
+      //     the template definition. Sending one causes #132018.
+      //   - Variable TEXT header (zqm_suppliers_ready, headerVar=true): MUST
+      //     send header component with type "text" and the variable value.
+      //   - Media header (image/document/video via URL): send header component
+      //     with the media object. This REPLACES the template TEXT header.
       if (headerMediaUrl) {
-        const mediaParam =
+        // Media attachment overrides the template's text header
+        const mediaObj =
           headerType === "document" ? { type: "document", document: { link: headerMediaUrl, filename: headerFilename } } :
           headerType === "video"    ? { type: "video",    video:    { link: headerMediaUrl } } :
                                       { type: "image",    image:    { link: headerMediaUrl } };
-        components.push({ type: "header", parameters: [mediaParam] });
+        components.push({ type: "header", parameters: [mediaObj] });
+      } else if (tplMeta.headerVar && variables.length) {
+        // Variable text header — send header component with {{1}} value
+        components.push({
+          type:       "header",
+          parameters: [{ type: "text", text: String(variables[0]).slice(0, 60) }]
+        });
       }
+      // else: static text header — send NO header component
 
       // ── Body variables ────────────────────────────────────────────────────
       if (variables.length) {
         components.push({
-          type: "body",
+          type:       "body",
           parameters: variables.map(v => ({ type: "text", text: String(v).slice(0, 1024) }))
         });
       }
 
-      // ── Header variable (zqm_suppliers_ready uses {{1}} in header text) ──
-      // When headerVar=true, Meta requires the header component with text param
-      // in ADDITION to the body component. Media header takes precedence if set.
-      if (tplMeta.headerVar && !headerMediaUrl && variables.length) {
-        components.unshift({
-          type: "header",
-          parameters: [{ type: "text", text: String(variables[0]).slice(0, 60) }]
-        });
-      }
-
       // ── Quick Reply button ─────────────────────────────────────────────────
+      // index must be integer 0, not string "0"
       components.push({
         type:       "button",
         sub_type:   "quick_reply",
-        index:      "0",
+        index:      0,
         parameters: [{ type: "payload", payload: tplMeta.button }]
       });
 

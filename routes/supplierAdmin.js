@@ -50,7 +50,32 @@ const router = express.Router();
 // ─────────────────────────────────────────────────────────────────────────────
 import _receiptPath from "path";
 import { fileURLToPath as _receiptFtu } from "url";
+import fs       from "fs";
+import multer   from "multer";
 const _receiptDir = _receiptPath.dirname(_receiptFtu(import.meta.url));
+
+// ── Broadcast media upload setup ──────────────────────────────────────────────
+// Files uploaded via the broadcast form are stored in public/broadcasts/
+// and served as https://<host>/broadcasts/<filename> for Meta to fetch.
+const _broadcastUploadDir = _receiptPath.join(_receiptDir, "..", "public", "broadcasts");
+if (!fs.existsSync(_broadcastUploadDir)) fs.mkdirSync(_broadcastUploadDir, { recursive: true });
+
+const _broadcastStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, _broadcastUploadDir),
+  filename:    (req, file, cb) => {
+    const ext  = _receiptPath.extname(file.originalname) || "";
+    const name = "bc_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7) + ext;
+    cb(null, name);
+  }
+});
+const _broadcastUpload = multer({
+  storage:  _broadcastStorage,
+  limits:   { fileSize: 16 * 1024 * 1024 },  // 16 MB max
+  fileFilter: (req, file, cb) => {
+    const allowed = /\.(jpg|jpeg|png|gif|webp|pdf|mp4|mov)$/i;
+    cb(null, allowed.test(file.originalname));
+  }
+});
 
 async function _streamReceiptPDF(res, {
   filename, ref, isActivation,
@@ -7994,29 +8019,69 @@ router.get("/broadcast", requireSupplierAdmin, async (req, res) => {
           <!-- Step 3: Optional media -->
           <fieldset style="border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:16px">
             <legend style="font-size:11px;font-weight:700;color:var(--muted);padding:0 8px;text-transform:uppercase;letter-spacing:.5px">Step 3 · Media Attachment (optional)</legend>
-            <p style="font-size:11px;color:var(--muted);margin-bottom:10px">
-              Attach an image or PDF alongside the message. Must be a public <code>https://</code> URL.
-              Meta fetches it via <code>lookaside.fbsbx.com</code> — keep the URL live after sending.
+            <p style="font-size:11px;color:var(--muted);margin-bottom:12px">
+              Attach an image, PDF or video to send alongside the message.
+              Meta fetches it via <code>lookaside.fbsbx.com</code> — the URL must stay live after sending.
             </p>
-            <div style="display:grid;grid-template-columns:1fr 120px 200px;gap:10px;align-items:end">
-              <div>
-                <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Media URL</label>
-                <input name="headerMediaUrl" placeholder="https://yourserver.com/promo.jpg"
-                  style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px" />
+
+            <!-- Media source tabs -->
+            <div style="display:flex;gap:8px;margin-bottom:14px">
+              <button type="button" id="mediaNone" onclick="setMediaMode('none')"
+                style="padding:5px 12px;border-radius:6px;border:2px solid var(--blue);background:var(--blue);color:white;font-size:11px;font-weight:700;cursor:pointer">No media</button>
+              <button type="button" id="mediaUpload" onclick="setMediaMode('upload')"
+                style="padding:5px 12px;border-radius:6px;border:2px solid var(--border);background:white;color:var(--text);font-size:11px;font-weight:600;cursor:pointer">⬆ Upload file</button>
+              <button type="button" id="mediaUrl" onclick="setMediaMode('url')"
+                style="padding:5px 12px;border-radius:6px;border:2px solid var(--border);background:white;color:var(--text);font-size:11px;font-weight:600;cursor:pointer">🔗 Use URL</button>
+            </div>
+            <input type="hidden" name="mediaMode" id="mediaMode" value="none" />
+
+            <!-- Upload panel -->
+            <div id="mediaUploadPanel" style="display:none">
+              <div style="border:2px dashed var(--border);border-radius:8px;padding:20px;text-align:center;background:#fafafa;cursor:pointer"
+                onclick="document.getElementById('mediaFileInput').click()"
+                ondragover="event.preventDefault();this.style.borderColor='var(--blue)'"
+                ondragleave="this.style.borderColor='var(--border)'"
+                ondrop="handleFileDrop(event)">
+                <div style="font-size:28px;margin-bottom:8px">📁</div>
+                <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px">Click or drag a file here</div>
+                <div style="font-size:11px;color:var(--muted)">Images (JPG, PNG, GIF, WebP) · PDF · Video (MP4) · Max 16 MB</div>
+                <input type="file" id="mediaFileInput" accept=".jpg,.jpeg,.png,.gif,.webp,.pdf,.mp4,.mov"
+                  style="display:none" onchange="handleFileSelect(this)" />
               </div>
-              <div>
-                <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Type</label>
-                <select name="headerType" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px">
-                  <option value="image">🖼 Image</option>
-                  <option value="document">📄 PDF</option>
-                  <option value="video">🎬 Video</option>
-                </select>
+              <div id="uploadStatus" style="margin-top:8px;font-size:12px;display:none"></div>
+              <!-- After upload, the returned URL is stored here -->
+              <input type="hidden" name="uploadedMediaUrl" id="uploadedMediaUrl" value="" />
+              <input type="hidden" name="uploadedMediaType" id="uploadedMediaType" value="" />
+            </div>
+
+            <!-- URL panel -->
+            <div id="mediaUrlPanel" style="display:none">
+              <div style="display:grid;grid-template-columns:1fr 120px 200px;gap:10px;align-items:end">
+                <div>
+                  <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Public Media URL</label>
+                  <input name="headerMediaUrl" id="headerMediaUrl" placeholder="https://yourserver.com/promo.jpg"
+                    style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px" />
+                </div>
+                <div>
+                  <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Type</label>
+                  <select name="headerType" id="headerType" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px">
+                    <option value="image">🖼 Image</option>
+                    <option value="document">📄 PDF</option>
+                    <option value="video">🎬 Video</option>
+                  </select>
+                </div>
+                <div>
+                  <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Filename (PDF only)</label>
+                  <input name="headerFilename" value="ZimQuote.pdf"
+                    style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px" />
+                </div>
               </div>
-              <div>
-                <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Filename (PDF only)</label>
-                <input name="headerFilename" value="ZimQuote.pdf"
-                  style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px" />
-              </div>
+            </div>
+
+            <!-- Recently uploaded files picker -->
+            <div id="recentUploadsWrap" style="margin-top:12px;display:none">
+              <p style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">Recently uploaded files</p>
+              <div id="recentUploadsList" style="display:flex;gap:8px;flex-wrap:wrap"></div>
             </div>
           </fieldset>
 
@@ -8088,7 +8153,107 @@ router.get("/broadcast", requireSupplierAdmin, async (req, res) => {
       }
       onTplChange(document.getElementById("tplSelect").value);
 
-      // ── Audience mode tabs ───────────────────────────────────────────────────
+      // ── Media mode tabs ──────────────────────────────────────────────────
+      const _recentUploads = []; // in-memory for this session
+
+      function setMediaMode(mode) {
+        document.getElementById("mediaMode").value = mode;
+        ["none","upload","url"].forEach(m => {
+          const btn = document.getElementById("media" + m.charAt(0).toUpperCase() + m.slice(1));
+          const panel = document.getElementById("mediaUploadPanel") || null;
+          if (btn) {
+            btn.style.background   = m === mode ? "var(--blue)" : "white";
+            btn.style.color        = m === mode ? "white"       : "var(--text)";
+            btn.style.borderColor  = m === mode ? "var(--blue)" : "var(--border)";
+          }
+        });
+        const up = document.getElementById("mediaUploadPanel");
+        const ur = document.getElementById("mediaUrlPanel");
+        if (up) up.style.display = mode === "upload" ? "" : "none";
+        if (ur) ur.style.display = mode === "url"    ? "" : "none";
+        if (mode === "upload" && _recentUploads.length) renderRecentUploads();
+        document.getElementById("recentUploadsWrap").style.display =
+          (mode === "upload" && _recentUploads.length) ? "" : "none";
+      }
+
+      // ── File upload ──────────────────────────────────────────────────────
+      function handleFileDrop(e) {
+        e.preventDefault();
+        e.currentTarget.style.borderColor = "var(--border)";
+        const file = e.dataTransfer.files[0];
+        if (file) uploadFile(file);
+      }
+      function handleFileSelect(input) {
+        const file = input.files[0];
+        if (file) uploadFile(file);
+      }
+
+      async function uploadFile(file) {
+        const status = document.getElementById("uploadStatus");
+        status.style.display = "";
+        status.innerHTML = \`<span style="color:var(--blue)">⬆ Uploading <strong>\${file.name}</strong>...</span>\`;
+
+        const fd = new FormData();
+        fd.append("broadcastFile", file);
+
+        try {
+          const res  = await fetch("/zq-admin/broadcast/upload", { method: "POST", body: fd });
+          const data = await res.json();
+          if (!res.ok || data.error) throw new Error(data.error || "Upload failed");
+
+          document.getElementById("uploadedMediaUrl").value  = data.url;
+          document.getElementById("uploadedMediaType").value = data.mediaType;
+
+          status.innerHTML = \`
+            <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:6px;padding:10px 12px;display:flex;align-items:center;gap:10px">
+              \${data.mediaType === "image"
+                ? \`<img src="\${data.url}" style="height:48px;width:48px;object-fit:cover;border-radius:4px" />\`
+                : \`<span style="font-size:24px">\${data.mediaType === "document" ? "📄" : "🎬"}</span>\`}
+              <div>
+                <div style="font-size:12px;font-weight:700;color:#15803d">✅ Uploaded successfully</div>
+                <div style="font-size:11px;color:#16a34a;word-break:break-all">\${data.url}</div>
+                <div style="font-size:11px;color:var(--muted)">Type: \${data.mediaType} · \${(file.size/1024).toFixed(0)} KB</div>
+              </div>
+              <button type="button" onclick="clearUpload()" style="margin-left:auto;padding:4px 8px;font-size:11px;background:#fee2e2;color:#dc2626;border:none;border-radius:4px;cursor:pointer">✕ Remove</button>
+            </div>\`;
+
+          _recentUploads.unshift({ url: data.url, mediaType: data.mediaType, name: file.name });
+          if (_recentUploads.length > 10) _recentUploads.pop();
+          renderRecentUploads();
+          document.getElementById("recentUploadsWrap").style.display = "";
+
+        } catch(e) {
+          status.innerHTML = \`<div style="color:#dc2626;font-size:12px">❌ Upload failed: \${e.message}</div>\`;
+        }
+      }
+
+      function clearUpload() {
+        document.getElementById("uploadedMediaUrl").value  = "";
+        document.getElementById("uploadedMediaType").value = "";
+        document.getElementById("uploadStatus").style.display = "none";
+        document.getElementById("mediaFileInput").value = "";
+      }
+
+      function renderRecentUploads() {
+        const list = document.getElementById("recentUploadsList");
+        list.innerHTML = _recentUploads.map((u,i) => \`
+          <div style="border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:11px;cursor:pointer;background:white;display:flex;align-items:center;gap:6px"
+            onclick="useRecentUpload(\${i})" title="Click to use this file">
+            <span>\${u.mediaType==="image"?"🖼":u.mediaType==="document"?"📄":"🎬"}</span>
+            <span style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">\${u.name}</span>
+            <span style="color:var(--blue);font-weight:700">Use</span>
+          </div>\`).join("");
+      }
+
+      function useRecentUpload(i) {
+        const u = _recentUploads[i];
+        document.getElementById("uploadedMediaUrl").value  = u.url;
+        document.getElementById("uploadedMediaType").value = u.mediaType;
+        const status = document.getElementById("uploadStatus");
+        status.style.display = "";
+        status.innerHTML = \`<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:6px;padding:8px 12px;font-size:12px;color:#15803d">
+          ✅ Using: \${u.name} (<a href="\${u.url}" target="_blank" style="color:#0369a1">\${u.url}</a>)</div>\`;
+      }
       function setAudienceMode(mode) {
         document.getElementById("audienceMode").value = mode;
         ["filter","manual","select"].forEach(m => {
@@ -8182,6 +8347,27 @@ router.get("/broadcast", requireSupplierAdmin, async (req, res) => {
   }
 });
 
+// ── POST /zq-admin/broadcast/upload  (file upload for media attachments) ─────
+router.post("/broadcast/upload", requireSupplierAdmin, _broadcastUpload.single("broadcastFile"), (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: "No file received or file type not allowed." });
+
+    const ext       = _receiptPath.extname(req.file.originalname).toLowerCase();
+    const mediaType = [".jpg",".jpeg",".png",".gif",".webp"].includes(ext) ? "image"
+                    : [".mp4",".mov"].includes(ext)                         ? "video"
+                    :                                                         "document";
+
+    // Build the public URL — assumes express.static serves /public at root
+    const host    = req.protocol + "://" + req.get("host");
+    const fileUrl = host + "/broadcasts/" + req.file.filename;
+
+    console.log(`[BROADCAST UPLOAD] ${req.file.originalname} → ${fileUrl} (${mediaType})`);
+    res.json({ url: fileUrl, mediaType, filename: req.file.filename, originalName: req.file.originalname });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── GET /zq-admin/broadcast/contacts  (JSON — used by contact picker) ────────
 router.get("/broadcast/contacts", requireSupplierAdmin, async (req, res) => {
   try {
@@ -8236,9 +8422,12 @@ router.post("/broadcast", requireSupplierAdmin, async (req, res) => {
       templateName,
       var1          = "",
       var2          = "",
+      mediaMode     = "none",
       headerMediaUrl = "",
       headerType    = "image",
       headerFilename = "ZimQuote.pdf",
+      uploadedMediaUrl  = "",
+      uploadedMediaType = "image",
       dryRun,
       action        = "send"
     } = req.body;
@@ -8247,6 +8436,20 @@ router.post("/broadcast", requireSupplierAdmin, async (req, res) => {
     if (!var1.trim())  throw new Error("{{1}} variable is required.");
 
     const isDryRun = dryRun === "1" || action === "preview";
+
+    // Resolve final media URL and type from whichever mode was used
+    let finalMediaUrl  = null;
+    let finalMediaType = "image";
+    let finalFilename  = "ZimQuote.pdf";
+    if (mediaMode === "upload" && uploadedMediaUrl.trim()) {
+      finalMediaUrl  = uploadedMediaUrl.trim();
+      finalMediaType = uploadedMediaType || "image";
+      finalFilename  = "ZimQuote-Broadcast.pdf";
+    } else if (mediaMode === "url" && headerMediaUrl.trim()) {
+      finalMediaUrl  = headerMediaUrl.trim();
+      finalMediaType = headerType;
+      finalFilename  = headerFilename;
+    }
 
     const normPhone = p => {
       let d = String(p || "").replace(/\D+/g, "");
@@ -8300,9 +8503,9 @@ router.post("/broadcast", requireSupplierAdmin, async (req, res) => {
       phones,
       templateName,
       variables,
-      headerMediaUrl: headerMediaUrl.trim() || null,
-      headerType,
-      headerFilename,
+      headerMediaUrl: finalMediaUrl,
+      headerType:     finalMediaType,
+      headerFilename: finalFilename,
       msPerMessage: isDryRun ? 0 : 3000,
       dryRun: isDryRun
     });
