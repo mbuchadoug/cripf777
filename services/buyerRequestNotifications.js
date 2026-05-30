@@ -705,107 +705,133 @@ export async function notifyAdminGroupLinkOpened({ groupName, slug, viewCount, v
   }
 }
 // ═════════════════════════════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════════════════════
 // BROADCAST ENGINE  –  sendBroadcastTemplate()
 // ─────────────────────────────────────────────────────────────────────────────
 //
-// Sends one of the 4 approved MARKETING templates to an array of phones.
-// Rate-limited to 1 message per 3 s (≈ 20/min) to stay within Meta limits.
+// HOW IT WORKS (based on working school announcement pattern from whatsapp.js):
 //
-// APPROVED TEMPLATES  (Marketing · English · Active as of May 2026)
+//   1. Admin uploads a file via the broadcast form → stored on server → public URL
+//   2. We download that file and RE-UPLOAD it to Meta's /media endpoint
+//      to get a stable media_id. This is REQUIRED — Meta delivery servers
+//      cannot fetch lookaside.fbsbx.com URLs or even plain public URLs
+//      reliably as template header "link" values. The stable id always works.
+//   3. We build components:
+//      - Text-only:  just body component  (NO header component at all)
+//      - With image: header {image: {id}} + body
+//      - With PDF:   header {document: {id}} + body
+//   4. Button component added last for Quick Reply
+//
+// APPROVED TEMPLATES  (Marketing · English · Active)
 // ─────────────────────────────────────────────────────────────────────────────
 //
 // 1. zqm_welcome_back
 //    Header (Text): Welcome Back to ZimQuote
-//    Body:
-//      Good news — ZimQuote now has {{1}} businesses listed across Zimbabwe,
-//      including plumbers, electricians, builders, grocers and more.
-//      You can search for any product or service and receive quotes directly
-//      on WhatsApp within minutes.
-//      Our team is on 263789901058 if you need help.
+//    Body: Good news — ZimQuote now has {{1}} businesses listed across Zimbabwe,
+//          including plumbers, electricians, builders, grocers and more.
+//          You can search for any product or service and receive quotes directly
+//          on WhatsApp within minutes.
+//          Our team is on 263789901058 if you need help.
 //    Footer: ZimQuote · Zimbabwe on WhatsApp
 //    Button: Quick Reply · "🔍 Search Now" · payload: main_menu_back
 //    Variable sample → {{1}}: 47
 //
 // 2. zqm_add_your_business
 //    Header (Text): Add Your Business to ZimQuote
-//    Body:
-//      Hi! Buyers in Zimbabwe are already searching for {{1}} on ZimQuote
-//      but we have no supplier listed yet. If your business offers this,
-//      you can add your listing at no cost and start receiving quote requests
-//      directly on WhatsApp.
-//      Send us a message to register. Our team is on 263789901058.
+//    Body: Hi! Buyers in Zimbabwe are already searching for {{1}} on ZimQuote
+//          but we have no supplier listed yet. If your business offers this,
+//          you can add your listing at no cost and start receiving quote requests
+//          directly on WhatsApp.
+//          Send us a message to register. Our team is on 263789901058.
 //    Footer: ZimQuote · Zimbabwe on WhatsApp
 //    Button: Quick Reply · "➕ Register My Business" · payload: list_my_business
 //    Variable sample → {{1}}: plumbers in Harare
 //
 // 3. zqm_news_update
 //    Header (Text): ZimQuote News
-//    Body:
-//      Hi! Here is an update from the ZimQuote team.
-//      {{1}}
-//      If you have questions or need assistance, our team is available
-//      on 263789901058 — just send us a message.
+//    Body: Hi! Here is an update from the ZimQuote team.
+//          {{1}}
+//          If you have questions or need assistance, our team is available
+//          on 263789901058 — just send us a message.
 //    Footer: ZimQuote · Zimbabwe on WhatsApp
 //    Button: Quick Reply · "💬 Get in Touch" · payload: main_menu_back
-//    Variable sample → {{1}}: We have added new verified suppliers in Harare
-//      and Bulawayo covering plumbing, electrical work and solar installations.
-//      Send us what you need and we will find you quotes right away.
+//    Variable sample → {{1}}: We have added new verified suppliers in Harare...
 //
 // 4. zqm_suppliers_ready
-//    Header (Text): {{1}} Suppliers Ready to Quote You
-//    Body:
-//      Hi! ZimQuote has {{2}} verified {{1}} businesses in Zimbabwe who
-//      can send you a price and availability quote directly on WhatsApp.
-//      No phone calls needed — just send us a message to get started.
-//      Our team is on 263789901058 if you need help.
+//    Header (Text): {{1}} Suppliers Ready to Quote You  ← header has variable
+//    Body: Hi! ZimQuote has {{2}} verified {{1}} businesses in Zimbabwe who
+//          can send you a price and availability quote directly on WhatsApp.
+//          No phone calls needed — just send us a message to get started.
+//          Our team is on 263789901058 if you need help.
 //    Footer: ZimQuote · Zimbabwe on WhatsApp
 //    Button: Quick Reply · "🏪 View Suppliers" · payload: main_menu_back
 //    Variable samples → {{1}}: Plumbing  {{2}}: 4
 //
 // ─────────────────────────────────────────────────────────────────────────────
-// lookaside.fbsbx.com NOTE:
-//   Optional image/document header: pass a public https:// URL in
-//   headerMediaUrl. Meta fetches and caches it via lookaside.fbsbx.com.
-//   For PDFs set headerType: "document" and headerFilename: "file.pdf".
-//   Header media is separate from the TEXT header already in the template.
+// FILE UPLOAD / MEDIA NOTES:
+//   - Admin uploads image/PDF via the broadcast form → saved to public/broadcasts/
+//   - The public URL is passed to sendBroadcastTemplate as headerMediaUrl
+//   - We download the file bytes and re-upload to Meta /media to get a stable id
+//   - That id is used in the header component: { type: "image", image: { id } }
+//   - This is the same pattern used in the working school announcement templates
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Template metadata — used by broadcast UI to show correct variable fields
 export const BROADCAST_TEMPLATES = {
   zqm_welcome_back: {
-    label:       "zqm_welcome_back · Welcome Back / Re-engagement",
-    headerVar:   false,          // header text is static
-    button:      "main_menu_back",
-    vars: [
-      { key: "var1", label: "{{1}} — Total businesses listed", placeholder: "e.g. 47" }
-    ]
+    label:     "zqm_welcome_back · Welcome Back / Re-engagement",
+    headerVar: false,   // static text header — send NO header component
+    button:    "main_menu_back",
+    vars:      [{ key: "var1", label: "{{1}} — Total businesses listed", placeholder: "e.g. 47" }]
   },
   zqm_add_your_business: {
-    label:       "zqm_add_your_business · Add Your Business",
-    headerVar:   false,
-    button:      "list_my_business",
-    vars: [
-      { key: "var1", label: "{{1}} — Category buyers are searching", placeholder: "e.g. plumbers in Harare" }
-    ]
+    label:     "zqm_add_your_business · Add Your Business",
+    headerVar: false,
+    button:    "list_my_business",
+    vars:      [{ key: "var1", label: "{{1}} — Category buyers are searching", placeholder: "e.g. plumbers in Harare" }]
   },
   zqm_news_update: {
-    label:       "zqm_news_update · News / Platform Update",
-    headerVar:   false,
-    button:      "main_menu_back",
-    vars: [
-      { key: "var1", label: "{{1}} — Full update text", placeholder: "e.g. We have added new verified suppliers in Harare..." }
-    ]
+    label:     "zqm_news_update · News / Platform Update",
+    headerVar: false,
+    button:    "main_menu_back",
+    vars:      [{ key: "var1", label: "{{1}} — Full update text", placeholder: "e.g. We have added new verified suppliers..." }]
   },
   zqm_suppliers_ready: {
-    label:       "zqm_suppliers_ready · Suppliers Ready to Quote",
-    headerVar:   true,           // header TEXT contains {{1}}
-    button:      "main_menu_back",
-    vars: [
-      { key: "var1", label: "{{1}} — Category name (capitalised, used in header too)", placeholder: "e.g. Plumbing" },
+    label:     "zqm_suppliers_ready · Suppliers Ready to Quote",
+    headerVar: true,    // header TEXT contains {{1}} — must send header component
+    button:    "main_menu_back",
+    vars:      [
+      { key: "var1", label: "{{1}} — Category (capitalised, used in header too)", placeholder: "e.g. Plumbing" },
       { key: "var2", label: "{{2}} — Number of suppliers", placeholder: "e.g. 4" }
     ]
   }
 };
+
+// ── Re-upload a media file to Meta to get a stable media_id ──────────────────
+// Downloads bytes from a public URL then POSTs to /<PHONE_NUMBER_ID>/media.
+// This is the same pattern used in the working school announcement/homework flow.
+async function _reuploadBroadcastMedia(publicUrl, mimeType) {
+  const FormData = (await import("form-data")).default;
+  const dlRes = await axios.get(publicUrl, { responseType: "arraybuffer" });
+  const form  = new FormData();
+  form.append("messaging_product", "whatsapp");
+  form.append("type", mimeType);
+  form.append("file", Buffer.from(dlRes.data), {
+    filename:    mimeType === "application/pdf" ? "broadcast.pdf" : "broadcast.jpg",
+    contentType: mimeType
+  });
+  const upRes = await axios.post(
+    `https://graph.facebook.com/${GRAPH_API_VERSION}/${PHONE_NUMBER_ID}/media`,
+    form,
+    { headers: { ...form.getHeaders(), Authorization: `Bearer ${ACCESS_TOKEN}` } }
+  );
+  const mediaId = upRes.data?.id;
+  console.log(`[BROADCAST MEDIA] Re-uploaded ${mimeType} → id=${mediaId}`);
+  return mediaId;
+}
+
+function _cleanVar(v) {
+  return String(v || "").replace(/[\n\r\t]/g, " ").replace(/ +/g, " ").trim().slice(0, 1024);
+}
 
 /**
  * Send an approved MARKETING template to multiple recipients.
@@ -813,12 +839,12 @@ export const BROADCAST_TEMPLATES = {
  * @param {object}   opts
  * @param {string[]} opts.phones           E.164 or local Zim format
  * @param {string}   opts.templateName     One of the 4 approved template names above
- * @param {string[]} opts.variables        Body variable values [var1, var2, ...]
- * @param {string}   [opts.headerMediaUrl] Optional public image/PDF URL for header
- * @param {string}   [opts.headerType]     "image" | "document" | "video" (default: "image")
- * @param {string}   [opts.headerFilename] Filename label shown for document headers
- * @param {number}   [opts.msPerMessage]   Delay between sends in ms (default: 3000)
- * @param {boolean}  [opts.dryRun]         If true, simulate — no actual API calls
+ * @param {string[]} opts.variables        [var1, var2, ...]  body variable values
+ * @param {string}   [opts.headerMediaUrl] Public URL of image/PDF to attach as header
+ * @param {string}   [opts.headerType]     "image" | "document" | "video"
+ * @param {string}   [opts.headerFilename] Filename shown for document attachments
+ * @param {number}   [opts.msPerMessage]   Delay between sends ms (default 3000)
+ * @param {boolean}  [opts.dryRun]         If true, simulate — no API calls
  * @returns {Promise<{sent, failed, skipped, results}>}
  */
 export async function sendBroadcastTemplate({
@@ -836,6 +862,23 @@ export async function sendBroadcastTemplate({
 
   const tplMeta = BROADCAST_TEMPLATES[templateName];
   if (!tplMeta) throw new Error(`Unknown broadcast template: ${templateName}`);
+
+  // ── Re-upload media once before the send loop (same as school announcement) ─
+  let stableMediaId = null;
+  if (headerMediaUrl && !dryRun) {
+    try {
+      const mimeType = headerType === "document" ? "application/pdf"
+                     : headerType === "video"    ? "video/mp4"
+                     :                             "image/jpeg";
+      stableMediaId = await _reuploadBroadcastMedia(headerMediaUrl, mimeType);
+      if (!stableMediaId) throw new Error("Re-upload returned no id");
+      console.log(`[BROADCAST] Media ready: id=${stableMediaId}`);
+    } catch (err) {
+      console.error(`[BROADCAST] Media re-upload failed: ${err.message} — sending text-only`);
+      stableMediaId = null;
+      headerMediaUrl = null; // fall back to text-only
+    }
+  }
 
   let sent = 0, failed = 0, skipped = 0;
   const results = [];
@@ -857,41 +900,34 @@ export async function sendBroadcastTemplate({
     try {
       const components = [];
 
-      // ── Header component ──────────────────────────────────────────────────
-      // Rules:
-      //   - Static TEXT header (zqm_welcome_back, zqm_add_your_business,
-      //     zqm_news_update): NO header component needed — Meta fills it from
-      //     the template definition. Sending one causes #132018.
-      //   - Variable TEXT header (zqm_suppliers_ready, headerVar=true): MUST
-      //     send header component with type "text" and the variable value.
-      //   - Media header (image/document/video via URL): send header component
-      //     with the media object. This REPLACES the template TEXT header.
-      if (headerMediaUrl) {
-        // Media attachment overrides the template's text header
-        const mediaObj =
-          headerType === "document" ? { type: "document", document: { link: headerMediaUrl, filename: headerFilename } } :
-          headerType === "video"    ? { type: "video",    video:    { link: headerMediaUrl } } :
-                                      { type: "image",    image:    { link: headerMediaUrl } };
-        components.push({ type: "header", parameters: [mediaObj] });
+      // ── Header component ────────────────────────────────────────────────────
+      // Rule 1: static TEXT header → send NO header component (Meta fills it)
+      // Rule 2: variable TEXT header (zqm_suppliers_ready) → header component with text param
+      // Rule 3: media attachment → header component with image/document/video id
+      if (stableMediaId) {
+        // Media header (replaces template's text header)
+        if (headerType === "document") {
+          components.push({ type: "header", parameters: [{ type: "document", document: { id: stableMediaId, filename: headerFilename } }] });
+        } else if (headerType === "video") {
+          components.push({ type: "header", parameters: [{ type: "video", video: { id: stableMediaId } }] });
+        } else {
+          components.push({ type: "header", parameters: [{ type: "image", image: { id: stableMediaId } }] });
+        }
       } else if (tplMeta.headerVar && variables.length) {
-        // Variable text header — send header component with {{1}} value
-        components.push({
-          type:       "header",
-          parameters: [{ type: "text", text: String(variables[0]).slice(0, 60) }]
-        });
+        // Variable text header — pass {{1}} value
+        components.push({ type: "header", parameters: [{ type: "text", text: _cleanVar(variables[0]) }] });
       }
-      // else: static text header — send NO header component
+      // else: static text header — NO header component sent
 
-      // ── Body variables ────────────────────────────────────────────────────
+      // ── Body variables ──────────────────────────────────────────────────────
       if (variables.length) {
         components.push({
           type:       "body",
-          parameters: variables.map(v => ({ type: "text", text: String(v).slice(0, 1024) }))
+          parameters: variables.map(v => ({ type: "text", text: _cleanVar(v) }))
         });
       }
 
-      // ── Quick Reply button ─────────────────────────────────────────────────
-      // index must be integer 0, not string "0"
+      // ── Quick Reply button ──────────────────────────────────────────────────
       components.push({
         type:       "button",
         sub_type:   "quick_reply",
@@ -921,8 +957,9 @@ export async function sendBroadcastTemplate({
     } catch (err) {
       failed++;
       const errMsg = err?.response?.data?.error?.message || err.message;
+      const errCode = err?.response?.data?.error?.code || "";
       results.push({ phone, status: "failed", reason: errMsg });
-      console.warn(`[BROADCAST] ❌ ${templateName} → ${phone}: ${errMsg}`);
+      console.warn(`[BROADCAST] ❌ ${templateName} → ${phone} (#${errCode}): ${errMsg}`);
     }
 
     if (msPerMessage > 0) await new Promise(r => setTimeout(r, msPerMessage));
