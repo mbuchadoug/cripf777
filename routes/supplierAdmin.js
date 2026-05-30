@@ -7696,6 +7696,49 @@ router.post("/school-groups/:slug/delete", requireSupplierAdmin, async (req, res
 const _broadcastLog   = [];   // in-memory session log (last 50 campaigns)
 const _ENQUIRIES_LINK = "https://wa.me/263789901058";
 
+// ── helpers shared by broadcast routes ───────────────────────────────────────
+async function _buildPhoneList({ pool, cutoffDays, city, keyword }) {
+  const Business  = (await import("../models/business.js")).default;
+  const cutoffDate = cutoffDays > 0 ? new Date(Date.now() - cutoffDays * 86400000) : null;
+  const normPhone  = p => {
+    let d = String(p || "").replace(/\D+/g, "");
+    if (d.startsWith("0") && d.length === 10) d = "263" + d.slice(1);
+    return d.length >= 10 ? d : null;
+  };
+  let phones = [];
+  if (pool === "searchers" || pool === "all") {
+    const q = {};
+    if (cutoffDate) q.createdAt = { $lte: cutoffDate };
+    if (keyword)    q.$or = [{ rawText: { $regex: keyword, $options: "i" } }, { "parsed.product": { $regex: keyword, $options: "i" } }];
+    phones.push(...await SearchCommandLog.distinct("phone", q));
+  }
+  if (pool === "businesses" || pool === "all") {
+    const q = {};
+    if (cutoffDate) q.updatedAt = { $lte: cutoffDate };
+    if (city)       q["location.city"] = { $regex: city, $options: "i" };
+    phones.push(...await Business.distinct("phone", q));
+  }
+  if (pool === "buyers" || pool === "all") {
+    const q = {};
+    if (cutoffDate) q.createdAt = { $lte: cutoffDate };
+    phones.push(...await BuyerRequest.distinct("buyerPhone", q));
+  }
+  phones = [...new Set(phones)].map(normPhone).filter(Boolean);
+  phones = [...new Set(phones)];
+  return phones;
+}
+
+// Resolve a phone to a display name from SupplierProfile or Business
+async function _resolveContactName(phone) {
+  const SupProf = (await import("../models/supplierProfile.js")).default;
+  const Biz     = (await import("../models/business.js")).default;
+  const sp = await SupProf.findOne({ phone }, { businessName:1, location:1 }).lean();
+  if (sp) return `${sp.businessName}${sp.location?.city ? " · "+sp.location.city : ""}`;
+  const biz = await Biz.findOne({ phone }, { sessionData:1 }).lean();
+  if (biz?.sessionData?.businessName) return biz.sessionData.businessName;
+  return null;
+}
+
 // ── GET /zq-admin/broadcast ───────────────────────────────────────────────────
 router.get("/broadcast", requireSupplierAdmin, async (req, res) => {
   try {
@@ -7803,44 +7846,120 @@ router.get("/broadcast", requireSupplierAdmin, async (req, res) => {
           <!-- Step 1: Audience -->
           <fieldset style="border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:16px">
             <legend style="font-size:11px;font-weight:700;color:var(--muted);padding:0 8px;text-transform:uppercase;letter-spacing:.5px">Step 1 · Audience</legend>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
-              <div>
-                <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Contact Pool</label>
-                <select name="pool" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px">
-                  <option value="all">👥 All contacts</option>
-                  <option value="searchers">🔎 Searchers only</option>
-                  <option value="businesses">🏪 Registered businesses only</option>
-                  <option value="buyers">📋 Buyer request submitters only</option>
-                </select>
+
+            <!-- Audience mode tabs -->
+            <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+              <button type="button" id="modeFilter" onclick="setAudienceMode('filter')"
+                style="padding:6px 14px;border-radius:6px;border:2px solid var(--blue);background:var(--blue);color:white;font-size:12px;font-weight:700;cursor:pointer">
+                🔎 Filter from database
+              </button>
+              <button type="button" id="modeManual" onclick="setAudienceMode('manual')"
+                style="padding:6px 14px;border-radius:6px;border:2px solid var(--border);background:white;color:var(--text);font-size:12px;font-weight:600;cursor:pointer">
+                ✏️ Enter phones manually
+              </button>
+              <button type="button" id="modeSelect" onclick="setAudienceMode('select')"
+                style="padding:6px 14px;border-radius:6px;border:2px solid var(--border);background:white;color:var(--text);font-size:12px;font-weight:600;cursor:pointer">
+                ☑️ Pick contacts from list
+              </button>
+            </div>
+            <input type="hidden" name="audienceMode" id="audienceMode" value="filter" />
+
+            <!-- Filter mode -->
+            <div id="filterPanel">
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+                <div>
+                  <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Contact Pool</label>
+                  <select name="pool" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px">
+                    <option value="all">👥 All contacts</option>
+                    <option value="searchers">🔎 Searchers only</option>
+                    <option value="businesses">🏪 Registered businesses only</option>
+                    <option value="buyers">📋 Buyer request submitters only</option>
+                  </select>
+                </div>
+                <div>
+                  <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Inactive for at least</label>
+                  <select name="inactiveDays" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px">
+                    <option value="0">All (any activity)</option>
+                    <option value="7">7+ days</option>
+                    <option value="14" selected>14+ days</option>
+                    <option value="30">30+ days</option>
+                    <option value="60">60+ days</option>
+                    <option value="90">90+ days</option>
+                  </select>
+                </div>
               </div>
-              <div>
-                <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Inactive for at least</label>
-                <select name="inactiveDays" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px">
-                  <option value="0">All (any activity)</option>
-                  <option value="7">7+ days</option>
-                  <option value="14" selected>14+ days</option>
-                  <option value="30">30+ days</option>
-                  <option value="60">60+ days</option>
-                  <option value="90">90+ days</option>
-                </select>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                <div>
+                  <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">City (optional)</label>
+                  <select name="city" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px">
+                    <option value="">🌍 All cities</option>
+                    <option>Harare</option><option>Bulawayo</option><option>Mutare</option>
+                    <option>Gweru</option><option>Kwekwe</option><option>Masvingo</option>
+                    <option>Chinhoyi</option><option>Bindura</option><option>Victoria Falls</option>
+                  </select>
+                </div>
+                <div>
+                  <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Keyword filter (optional)</label>
+                  <input name="keyword" placeholder="e.g. plumber, solar, grocery"
+                    style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px" />
+                </div>
               </div>
             </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-              <div>
-                <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">City (optional)</label>
-                <select name="city" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px">
-                  <option value="">🌍 All cities</option>
-                  <option>Harare</option><option>Bulawayo</option><option>Mutare</option>
-                  <option>Gweru</option><option>Kwekwe</option><option>Masvingo</option>
-                  <option>Chinhoyi</option><option>Bindura</option><option>Victoria Falls</option>
-                </select>
-              </div>
-              <div>
-                <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Keyword filter (optional)</label>
-                <input name="keyword" placeholder="e.g. plumber, solar, grocery"
-                  style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px" />
-              </div>
+
+            <!-- Manual phone entry mode -->
+            <div id="manualPanel" style="display:none">
+              <label style="font-size:12px;font-weight:600;display:block;margin-bottom:6px">
+                Phone numbers — one per line, or comma separated
+                <span style="font-weight:400;color:var(--muted)">(Zim format: 0771234567 or 263771234567)</span>
+              </label>
+              <textarea name="manualPhones" rows="6" placeholder="0771234567&#10;0772345678&#10;263773456789&#10;..."
+                style="width:100%;padding:10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:monospace;resize:vertical"></textarea>
+              <p style="font-size:11px;color:var(--muted);margin-top:4px">Duplicates are automatically removed before sending.</p>
             </div>
+
+            <!-- Pick from list mode -->
+            <div id="selectPanel" style="display:none">
+              <p style="font-size:12px;color:var(--muted);margin-bottom:10px">
+                First use the filter above to narrow down contacts, then click <strong>Load Contact List</strong> to choose individually.
+              </p>
+              <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+                <select id="selectPool" style="padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px">
+                  <option value="all">All contacts</option>
+                  <option value="searchers">Searchers only</option>
+                  <option value="businesses">Businesses only</option>
+                  <option value="buyers">Buyers only</option>
+                </select>
+                <select id="selectDays" style="padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px">
+                  <option value="0">Any activity</option>
+                  <option value="7">7+ days inactive</option>
+                  <option value="14" selected>14+ days inactive</option>
+                  <option value="30">30+ days inactive</option>
+                  <option value="60">60+ days inactive</option>
+                  <option value="90">90+ days inactive</option>
+                </select>
+                <input id="selectCity" placeholder="City (optional)" style="padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;width:140px" />
+                <input id="selectKeyword" placeholder="Keyword (optional)" style="padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;width:160px" />
+                <button type="button" onclick="loadContactList()"
+                  style="padding:7px 16px;background:var(--blue);color:white;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer">
+                  Load List
+                </button>
+              </div>
+              <div id="contactListWrap" style="display:none;border:1px solid var(--border);border-radius:8px;overflow:hidden">
+                <div style="background:#f8fafc;padding:8px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+                  <span id="contactListCount" style="font-size:12px;font-weight:700;color:var(--muted)">0 contacts</span>
+                  <div style="display:flex;gap:8px">
+                    <button type="button" onclick="selectAllContacts(true)"
+                      style="padding:4px 10px;font-size:11px;background:#e0f2fe;color:#0369a1;border:none;border-radius:4px;cursor:pointer;font-weight:600">Select All</button>
+                    <button type="button" onclick="selectAllContacts(false)"
+                      style="padding:4px 10px;font-size:11px;background:#f1f5f9;color:var(--text);border:none;border-radius:4px;cursor:pointer">Deselect All</button>
+                  </div>
+                </div>
+                <div id="contactListBody" style="max-height:320px;overflow-y:auto;padding:8px 12px"></div>
+              </div>
+              <!-- hidden field that carries selected phones to POST -->
+              <textarea name="selectedPhones" id="selectedPhones" style="display:none"></textarea>
+            </div>
+
           </fieldset>
 
           <!-- Step 2: Template -->
@@ -7953,6 +8072,7 @@ router.get("/broadcast", requireSupplierAdmin, async (req, res) => {
       </div>
 
       <script>
+      // ── Template variable hints ──────────────────────────────────────────────
       const TPL_META = {
         zqm_welcome_back:      { v1: "{{1}} — Total businesses listed  e.g. 47",                                               v2: false },
         zqm_add_your_business: { v1: "{{1}} — Category buyers are searching  e.g. plumbers in Harare",                        v2: false },
@@ -7967,6 +8087,94 @@ router.get("/broadcast", requireSupplierAdmin, async (req, res) => {
         else        r2.style.display = "none";
       }
       onTplChange(document.getElementById("tplSelect").value);
+
+      // ── Audience mode tabs ───────────────────────────────────────────────────
+      function setAudienceMode(mode) {
+        document.getElementById("audienceMode").value = mode;
+        ["filter","manual","select"].forEach(m => {
+          const panel = document.getElementById(m + "Panel");
+          const btn   = document.getElementById("mode" + m.charAt(0).toUpperCase() + m.slice(1));
+          if (m === mode) {
+            panel.style.display = "";
+            btn.style.background = "var(--blue)";
+            btn.style.color      = "white";
+            btn.style.borderColor = "var(--blue)";
+          } else {
+            panel.style.display = "none";
+            btn.style.background  = "white";
+            btn.style.color       = "var(--text)";
+            btn.style.borderColor = "var(--border)";
+          }
+        });
+      }
+
+      // ── Contact list loader (calls /broadcast/contacts JSON endpoint) ────────
+      let _selectedPhones = new Set();
+
+      async function loadContactList() {
+        const pool    = document.getElementById("selectPool").value;
+        const days    = document.getElementById("selectDays").value;
+        const city    = document.getElementById("selectCity").value;
+        const keyword = document.getElementById("selectKeyword").value;
+
+        const wrap = document.getElementById("contactListWrap");
+        const body = document.getElementById("contactListBody");
+        body.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px">Loading...</div>';
+        wrap.style.display = "";
+
+        try {
+          const qs = new URLSearchParams({ pool, days, city, keyword });
+          const res = await fetch("/zq-admin/broadcast/contacts?" + qs);
+          const data = await res.json();
+
+          document.getElementById("contactListCount").textContent = data.contacts.length + " contacts";
+
+          if (!data.contacts.length) {
+            body.innerHTML = '<div style="padding:16px;text-align:center;color:var(--muted);font-size:13px">No contacts matched.</div>';
+            return;
+          }
+
+          body.innerHTML = data.contacts.map(c => \`
+            <label style="display:flex;align-items:center;gap:10px;padding:7px 4px;border-bottom:1px solid #f1f5f9;cursor:pointer;font-size:13px">
+              <input type="checkbox" value="\${c.phone}" onchange="onContactCheck(this)"
+                \${_selectedPhones.has(c.phone) ? "checked" : ""}
+                style="width:15px;height:15px;cursor:pointer;flex-shrink:0" />
+              <span style="font-family:monospace;color:#0369a1;font-size:12px;min-width:110px">\${c.phone}</span>
+              <span style="color:var(--muted);font-size:12px">\${c.name || ""}</span>
+              \${c.source ? \`<span style="margin-left:auto;background:#f1f5f9;color:var(--muted);font-size:10px;padding:1px 6px;border-radius:4px">\${c.source}</span>\` : ""}
+            </label>
+          \`).join("");
+
+          syncSelectedField();
+        } catch(e) {
+          body.innerHTML = '<div style="padding:16px;color:#dc2626;font-size:13px">Error loading contacts: ' + e.message + '</div>';
+        }
+      }
+
+      function onContactCheck(cb) {
+        if (cb.checked) _selectedPhones.add(cb.value);
+        else            _selectedPhones.delete(cb.value);
+        syncSelectedField();
+        const count = document.getElementById("contactListCount");
+        const total = document.querySelectorAll("#contactListBody input[type=checkbox]").length;
+        count.textContent = total + " contacts (" + _selectedPhones.size + " selected)";
+      }
+
+      function selectAllContacts(checked) {
+        document.querySelectorAll("#contactListBody input[type=checkbox]").forEach(cb => {
+          cb.checked = checked;
+          if (checked) _selectedPhones.add(cb.value);
+          else         _selectedPhones.delete(cb.value);
+        });
+        syncSelectedField();
+        const total = document.querySelectorAll("#contactListBody input[type=checkbox]").length;
+        document.getElementById("contactListCount").textContent =
+          total + " contacts (" + _selectedPhones.size + " selected)";
+      }
+
+      function syncSelectedField() {
+        document.getElementById("selectedPhones").value = [..._selectedPhones].join("\\n");
+      }
       </script>
     `));
   } catch (err) {
@@ -7974,23 +8182,71 @@ router.get("/broadcast", requireSupplierAdmin, async (req, res) => {
   }
 });
 
+// ── GET /zq-admin/broadcast/contacts  (JSON — used by contact picker) ────────
+router.get("/broadcast/contacts", requireSupplierAdmin, async (req, res) => {
+  try {
+    const { pool = "all", days = "14", city = "", keyword = "" } = req.query;
+    const phones = await _buildPhoneList({
+      pool,
+      cutoffDays: parseInt(days, 10) || 0,
+      city,
+      keyword
+    });
+
+    // Resolve names in parallel (batched, max 100 at a time to avoid overload)
+    const SupProf = (await import("../models/supplierProfile.js")).default;
+    const Biz     = (await import("../models/business.js")).default;
+    const SearchLog = SearchCommandLog;
+
+    // Batch-load profiles
+    const [profiles, bizDocs, searchDocs] = await Promise.all([
+      SupProf.find({ phone: { $in: phones } }, { phone:1, businessName:1, "location.city":1 }).lean(),
+      Biz.find({ phone: { $in: phones } }, { phone:1, sessionData:1 }).lean(),
+      SearchLog.find({ phone: { $in: phones } }, { phone:1, rawText:1 }).sort({ createdAt: -1 }).lean()
+    ]);
+
+    const profileMap = {};
+    profiles.forEach(p => { profileMap[p.phone] = { name: p.businessName + (p.location?.city ? " · " + p.location.city : ""), source: "supplier" }; });
+    bizDocs.forEach(b => { if (!profileMap[b.phone] && b.sessionData?.businessName) profileMap[b.phone] = { name: b.sessionData.businessName, source: "business" }; });
+    searchDocs.forEach(s => { if (!profileMap[s.phone]) profileMap[s.phone] = { name: s.rawText ? "Searched: " + String(s.rawText).slice(0, 40) : "", source: "searcher" }; });
+
+    const contacts = phones.map(phone => ({
+      phone,
+      name:   profileMap[phone]?.name   || "",
+      source: profileMap[phone]?.source || "contact"
+    }));
+
+    res.json({ contacts });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── POST /zq-admin/broadcast ──────────────────────────────────────────────────
 router.post("/broadcast", requireSupplierAdmin, async (req, res) => {
   try {
     const {
-      pool = "all", inactiveDays = "14", city = "", keyword = "",
-      templateName, var1 = "", var2 = "",
-      headerMediaUrl = "", headerType = "image", headerFilename = "ZimQuote.pdf",
-      dryRun, dedupePhones, action = "send"
+      audienceMode  = "filter",
+      pool          = "all",
+      inactiveDays  = "14",
+      city          = "",
+      keyword       = "",
+      manualPhones  = "",
+      selectedPhones = "",
+      templateName,
+      var1          = "",
+      var2          = "",
+      headerMediaUrl = "",
+      headerType    = "image",
+      headerFilename = "ZimQuote.pdf",
+      dryRun,
+      action        = "send"
     } = req.body;
 
     if (!templateName) throw new Error("Please select a template.");
     if (!var1.trim())  throw new Error("{{1}} variable is required.");
 
-    const Business   = (await import("../models/business.js")).default;
-    const isDryRun   = dryRun === "1" || action === "preview";
-    const cutoffDays = parseInt(inactiveDays, 10) || 0;
-    const cutoffDate = cutoffDays > 0 ? new Date(Date.now() - cutoffDays * 86400000) : null;
+    const isDryRun = dryRun === "1" || action === "preview";
 
     const normPhone = p => {
       let d = String(p || "").replace(/\D+/g, "");
@@ -7999,37 +8255,42 @@ router.post("/broadcast", requireSupplierAdmin, async (req, res) => {
     };
 
     let phones = [];
+    let audienceLabel = "";
 
-    if (pool === "searchers" || pool === "all") {
-      const q = {};
-      if (cutoffDate) q.createdAt = { $lte: cutoffDate };
-      if (keyword)    q.$or = [{ rawText: { $regex: keyword, $options: "i" } }, { "parsed.product": { $regex: keyword, $options: "i" } }];
-      phones.push(...await SearchCommandLog.distinct("phone", q));
-    }
-    if (pool === "businesses" || pool === "all") {
-      const q = {};
-      if (cutoffDate) q.updatedAt = { $lte: cutoffDate };
-      if (city)       q["location.city"] = { $regex: city, $options: "i" };
-      phones.push(...await Business.distinct("phone", q));
-    }
-    if (pool === "buyers" || pool === "all") {
-      const q = {};
-      if (cutoffDate) q.createdAt = { $lte: cutoffDate };
-      phones.push(...await BuyerRequest.distinct("buyerPhone", q));
-    }
+    if (audienceMode === "manual") {
+      // Parse manual textarea — split on newlines, commas, semicolons, spaces
+      const raw = String(manualPhones || "").split(/[\n,;\s]+/).filter(Boolean);
+      phones = raw.map(normPhone).filter(Boolean);
+      phones = [...new Set(phones)];
+      audienceLabel = `manual (${phones.length} entered)`;
 
-    if (dedupePhones === "1" || true) phones = [...new Set(phones)];
-    phones = phones.map(normPhone).filter(Boolean);
-    phones = [...new Set(phones)];
+    } else if (audienceMode === "select") {
+      // Selected phones come from the hidden textarea (newline-separated)
+      const raw = String(selectedPhones || "").split(/[\n,;\s]+/).filter(Boolean);
+      phones = raw.map(normPhone).filter(Boolean);
+      phones = [...new Set(phones)];
+      audienceLabel = `selected (${phones.length} picked)`;
+
+    } else {
+      // filter mode — same DB query as before
+      phones = await _buildPhoneList({
+        pool,
+        cutoffDays: parseInt(inactiveDays, 10) || 0,
+        city,
+        keyword
+      });
+      const cutoffDays = parseInt(inactiveDays, 10) || 0;
+      audienceLabel = `${pool} / ${cutoffDays}d inactive${city ? " / "+city : ""}${keyword ? ' / "'+keyword+'"' : ""}`;
+    }
 
     if (action === "preview") {
       return res.redirect(`/zq-admin/broadcast?success=${encodeURIComponent(
-        `Preview: ${phones.length} contacts match — pool: ${pool}, inactive ${cutoffDays}+ days${city ? ", city: "+city : ""}${keyword ? ', keyword: "'+keyword+'"' : ""}. Uncheck Dry Run to send.`
+        `Preview: ${phones.length} contacts will receive this broadcast (mode: ${audienceMode}). Uncheck Dry Run to send.`
       )}`);
     }
 
     if (!phones.length) {
-      return res.redirect(`/zq-admin/broadcast?error=${encodeURIComponent("No contacts matched the selected filters.")}`);
+      return res.redirect(`/zq-admin/broadcast?error=${encodeURIComponent("No contacts to send to. Check your audience settings.")}`);
     }
 
     const variables = [var1.trim(), var2.trim()].filter(Boolean);
@@ -8049,7 +8310,7 @@ router.post("/broadcast", requireSupplierAdmin, async (req, res) => {
     _broadcastLog.push({
       ts:       Date.now(),
       tpl:      templateName,
-      audience: `${pool} / ${cutoffDays}d${city?" / "+city:""}${keyword?" / \""+keyword+"\"":""}`,
+      audience: audienceLabel,
       total:    phones.length,
       sent:     result.sent,
       failed:   result.failed,
