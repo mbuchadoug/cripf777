@@ -597,7 +597,11 @@
       </div>
       <div class="cm-item">
         <div class="cm-label">Assessment Window</div>
-        <div class="cm-value">{{audit.assessmentWindow.label}}</div>
+        <div class="cm-value">
+          {{#if audit.assessmentWindow.label}}{{audit.assessmentWindow.label}}
+          {{else if audit.assessmentDate.label}}{{audit.assessmentDate.label}}
+          {{else}}N/A{{/if}}
+        </div>
       </div>
       <div class="cm-item">
         <div class="cm-label">Status</div>
@@ -716,6 +720,53 @@
           {{/each}}
         </ul>
       {{/if}}
+
+      {{!-- coreDoctrine stored under context.doctrine by the importer --}}
+      {{#if audit.context.doctrine}}
+        {{#if audit.context.doctrine.primaryEquilibrium}}
+          <p style="margin-top:1.25rem;">
+            <strong>{{audit.context.doctrine.primaryEquilibrium.label}}:</strong>
+            {{audit.context.doctrine.primaryEquilibrium.definition}}
+          </p>
+        {{/if}}
+        {{#if audit.context.doctrine.CRIPFCntPosition.summary}}
+          <p style="margin-top:0.75rem;font-style:italic;color:var(--g500);">
+            {{audit.context.doctrine.CRIPFCntPosition.summary}}
+          </p>
+        {{/if}}
+        {{#if audit.context.doctrine.secondaryEquilibriums}}
+          <p style="margin-top:0.75rem;"><strong>Secondary Equilibriums:</strong></p>
+          <ul>
+            {{#each audit.context.doctrine.secondaryEquilibriums}}
+              <li>{{this}}</li>
+            {{/each}}
+          </ul>
+        {{/if}}
+      {{/if}}
+
+      {{!-- fallback: coreDoctrine stored at top level (older records) --}}
+      {{#unless audit.context.doctrine}}
+        {{#if audit.coreDoctrine.primaryEquilibrium}}
+          <p style="margin-top:1.25rem;">
+            <strong>{{audit.coreDoctrine.primaryEquilibrium.label}}:</strong>
+            {{audit.coreDoctrine.primaryEquilibrium.definition}}
+          </p>
+        {{/if}}
+        {{#if audit.coreDoctrine.CRIPFCntPosition.summary}}
+          <p style="margin-top:0.75rem;font-style:italic;color:var(--g500);">
+            {{audit.coreDoctrine.CRIPFCntPosition.summary}}
+          </p>
+        {{/if}}
+        {{#if audit.coreDoctrine.secondaryEquilibriums}}
+          <p style="margin-top:0.75rem;"><strong>Secondary Equilibriums:</strong></p>
+          <ul>
+            {{#each audit.coreDoctrine.secondaryEquilibriums}}
+              <li>{{this}}</li>
+            {{/each}}
+          </ul>
+        {{/if}}
+      {{/unless}}
+
     </div>
     {{/if}}
 
@@ -850,22 +901,40 @@
         <span class="section-title-line"></span>
       </div>
 
+      {{!-- Core finding: try findings.coreFinding first, then CRIPFCntInterpretation.summary --}}
       <div class="finding-core">
-        <p>{{audit.findings.coreFinding}}</p>
+        {{#if audit.findings.coreFinding}}
+          <p>{{audit.findings.coreFinding}}</p>
+        {{else if audit.CRIPFCntInterpretation.summary}}
+          <p>{{audit.CRIPFCntInterpretation.summary}}</p>
+        {{else}}
+          <p style="opacity:0.45;font-style:italic;">No core finding recorded.</p>
+        {{/if}}
       </div>
 
+      {{!-- Secondary findings --}}
       {{#if audit.findings.secondaryFindings}}
         <ul style="margin-top:1.25rem;">
           {{#each audit.findings.secondaryFindings}}
             <li>{{this}}</li>
           {{/each}}
         </ul>
+      {{else if audit.CRIPFCntInterpretation.keyDoctrine}}
+        <ul style="margin-top:1.25rem;">
+          <li>{{audit.CRIPFCntInterpretation.keyDoctrine}}</li>
+        </ul>
       {{/if}}
 
+      {{!-- Classification: try findings.classification, then top-level classification --}}
       {{#if audit.findings.classification}}
         <div class="classification-block">
           <div class="class-label">{{audit.findings.classification.label}}</div>
           <div class="class-def">{{audit.findings.classification.definition}}</div>
+        </div>
+      {{else if audit.classification}}
+        <div class="classification-block">
+          <div class="class-label">{{audit.classification.label}}</div>
+          <div class="class-def">{{audit.classification.definition}}</div>
         </div>
       {{/if}}
     </div>
