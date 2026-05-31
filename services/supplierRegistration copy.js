@@ -151,12 +151,12 @@ export async function startSupplierRegistration(from, biz) {
   // ── Ownership check: ignore biz if this user has no role on it ──────────────
   // getBizForPhone returns a biz if the phone is in notificationContacts.
   // For registration we only want bizneses this user owns.
-  // ownerPhone is unreliable on old records — use UserRole instead.
+  // ownerPhone is unreliable on old records - use UserRole instead.
   if (biz) {
     const UserRole = (await import("../models/userRole.js")).default;
     const _role = await UserRole.findOne({ phone, businessId: biz._id, pending: false }).lean();
     if (!_role) {
-      console.log("[startSupplierRegistration] no role for", phone, "on biz", biz._id, "— using no-biz path");
+      console.log("[startSupplierRegistration] no role for", phone, "on biz", biz._id, "- using no-biz path");
       biz = null;
     }
   }
@@ -426,7 +426,7 @@ if (state === "supplier_reg_website") {
 
     return sendList(from,
       `🏨 *What type of hospitality business are you?*\n\n` +
-      `_You can select the option that best describes you.\nIf you offer both a lodge AND safaris, pick the primary one — you can update later._`,
+      `_You can select the option that best describes you.\nIf you offer both a lodge AND safaris, pick the primary one - you can update later._`,
       [
         { id: "sup_hosp_type_lodge",           title: "🌿 Lodge / Bush Camp"         },
         { id: "sup_hosp_type_hotel",            title: "🏨 Hotel / Motel"             },
@@ -1085,7 +1085,7 @@ if (state === "supplier_reg_hospitality_areas") {
     );
   }
 
-  // For safari operators, tour guides, boat hire — go to services listing
+  // For safari operators, tour guides, boat hire - go to services listing
   biz.sessionState = "supplier_reg_hospitality_activities";
   await saveBiz(biz);
   return sendText(from,
@@ -1108,7 +1108,7 @@ if (state === "supplier_reg_hospitality_rooms") {
     const rooms = raw.split(/[,;]+/).map(s => s.trim()).filter(Boolean);
     // Store as products[] for catalogue display
     biz.sessionData.supplierReg.products = rooms;
-    // Also build roomTypes[] with placeholders — nightly rates entered in next step
+    // Also build roomTypes[] with placeholders - nightly rates entered in next step
     biz.sessionData.supplierReg.roomTypes = rooms.map(name => ({
       name, capacity: 2, pricePerNight: 0, currency: "USD", description: ""
     }));
@@ -1176,7 +1176,7 @@ if (state === "supplier_reg_hospitality_activities") {
   });
 }
 
-// Step: Hospitality rates — handles nightly rate input, then routes to rest rate question
+// Step: Hospitality rates - handles nightly rate input, then routes to rest rate question
 if (state === "supplier_reg_hospitality_rates") {
   const raw = (text || "").trim();
   const isSkip = raw.toLowerCase() === "skip" || text === "sup_skip_prices";
@@ -1205,7 +1205,7 @@ if (state === "supplier_reg_hospitality_rates") {
     }
   }
 
-  // For activity/safari operators, rates go into rates[] — same parsing
+  // For activity/safari operators, rates go into rates[] - same parsing
   const isActivity = !isAccom;
   if (isActivity && !isSkip && raw.length > 1) {
     const activities = biz.sessionData.supplierReg.products || [];
@@ -1224,11 +1224,11 @@ if (state === "supplier_reg_hospitality_rates") {
 
   await saveBiz(biz);
 
-  // After nightly rates — ask about rest/day rates for accommodation providers
+  // After nightly rates - ask about rest/day rates for accommodation providers
   if (isAccom) {
     biz.sessionState = "supplier_reg_hospitality_rest_rates";
     await saveBiz(biz);
-    const roomList = (biz.sessionData.supplierReg.roomTypes || []).map((rt, i) => `${i + 1}. ${rt.name} — $${rt.pricePerNight || "?"}/night`).join("\n");
+    const roomList = (biz.sessionData.supplierReg.roomTypes || []).map((rt, i) => `${i + 1}. ${rt.name} - $${rt.pricePerNight || "?"}/night`).join("\n");
     return sendButtons(from, {
       text:
         `⏰ *Do you offer a rest / day-use rate?*\n\n` +
@@ -1335,7 +1335,7 @@ if (state === "supplier_reg_hospitality_extra_services") {
 
 // Step: Facilities selection for hospitality suppliers
 if (state === "supplier_reg_hospitality_facilities") {
-  // Handled by sup_hosp_fac_toggle_ buttons — this state collects typed input as fallback
+  // Handled by sup_hosp_fac_toggle_ buttons - this state collects typed input as fallback
   const raw = (text || "").trim();
   const _DONE_WORDS = ["done", "next", "skip", "continue", "ok", "okay"];
 
@@ -1449,7 +1449,7 @@ async function _showHospFacilitiesPrompt(from, biz) {
     description: existing.includes(f.code) ? "Tap to remove" : "Tap to add"
   }));
 
-  facilityRows.push({ id: "sup_hosp_facilities_done", title: "✅ Done — save facilities" });
+  facilityRows.push({ id: "sup_hosp_facilities_done", title: "✅ Done - save facilities" });
 
   const selected = existing.length
     ? `\n\n_Selected: ${existing.map(f => f.replace("_", " ")).join(", ")}_`
@@ -1461,7 +1461,7 @@ async function _showHospFacilitiesPrompt(from, biz) {
   );
 }
 
-// ── Step: Tourism / Hospitality details (legacy — kept for backward compat) ──
+// ── Step: Tourism / Hospitality details (legacy - kept for backward compat) ──
 if (state === "supplier_reg_tourism_details") {
   const raw = (text || "").trim();
   if (raw.toLowerCase() !== "skip" && raw.length > 1) {

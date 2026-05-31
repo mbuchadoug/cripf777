@@ -3,7 +3,7 @@
  * ─────────────────────────────────────────────────────────────────────────────
  * Real-time WhatsApp transaction notification engine.
  *
- * IMPORTANT — 24-HOUR SESSION WINDOW:
+ * IMPORTANT - 24-HOUR SESSION WINDOW:
  * ─────────────────────────────────────────────────────────────────────────────
  * WhatsApp Cloud API rules:
  *   • type:"text" messages → ONLY work if the recipient messaged your number
@@ -78,7 +78,7 @@ async function _safeNotify(phone, message, templateType = null, templateData = n
         console.error(`[BIZ_NOTIF] Template fallback also failed for ${phone}:`, tplErr.message);
       }
     } else if (isSessionExpired) {
-      console.warn(`[BIZ_NOTIF] ${phone} outside 24hr window — no template configured for type "${templateType || "none"}". Submit templates to Meta to fix this.`);
+      console.warn(`[BIZ_NOTIF] ${phone} outside 24hr window - no template configured for type "${templateType || "none"}". Submit templates to Meta to fix this.`);
     } else {
       console.error(`[BIZ_NOTIF] Failed to notify ${phone}:`, err.message);
     }
@@ -174,7 +174,7 @@ Cash at hand: {{8}}"
 
 function _param(text) {
   // Truncate to Meta's 1024-char limit per parameter
-  const t = String(text || "—");
+  const t = String(text || "-");
   return { type: "text", text: t.length > 100 ? t.slice(0, 97) + "..." : t };
 }
 
@@ -201,7 +201,7 @@ async function _postTemplate(phone, templateName, params) {
 }
 
 /**
- * Template dispatchers — one per notification type.
+ * Template dispatchers - one per notification type.
  * Each maps exactly to its approved Meta template.
  * Pass the same data object you pass to the sendText notification function.
  */
@@ -425,23 +425,23 @@ export async function notifyDocumentCreated({
   const _bal  = bal.replace(/\n💰 \*Cash at hand: |\*.*$/g, "").trim() ||
                 `${fmt((await getDailyRunningBalance(biz._id, branchId, biz.currency).catch(()=>({closing:0}))).closing, biz.currency)}`;
   // strip markdown for template
-  const _balClean = bal.replace(/[*_]/g, "").replace(/\n/g, " ").trim() || "—";
+  const _balClean = bal.replace(/[*_]/g, "").replace(/\n/g, " ").trim() || "-";
 
   await _dispatch(biz._id, clerkPhone,
-`${emoji} *New ${label} — ${biz.name}*
+`${emoji} *New ${label} - ${biz.name}*
 📅 ${dateNow()} at ${_time}${branch}${clerk}
 
-  🔢 Ref: *${doc.number || "—"}*
+  🔢 Ref: *${doc.number || "-"}*
   👥 Client: ${doc.clientName || "Walk-in"}
   💵 Amount: *${fmt(doc.total, biz.currency)}*${bal}`,
     "invoice",
     {
       docType:    label,
-      ref:        `${doc.number || "—"} | ${biz.name}${branchName ? " | " + branchName : ""}`,
+      ref:        `${doc.number || "-"} | ${biz.name}${branchName ? " | " + branchName : ""}`,
       clientName: doc.clientName || "Walk-in",
       amount:     `${fmt(doc.total, biz.currency)} | Cash at hand: ${_balClean}`,
       timeDate:   timeDateNow(),
-      clerkPhone: clerkPhone || "—"
+      clerkPhone: clerkPhone || "-"
     }
   );
 }
@@ -455,24 +455,24 @@ export async function notifyPaymentRecorded({
   const clerk  = clerkPhone ? `\n  👤 By: ${clerkPhone}` : "";
 
   const _time2 = timeNow();
-  const _balClean2 = bal.replace(/[*_]/g, "").replace(/\n/g, " ").trim() || "—";
+  const _balClean2 = bal.replace(/[*_]/g, "").replace(/\n/g, " ").trim() || "-";
 
   await _dispatch(biz._id, clerkPhone,
-`💳 *Payment Received — ${biz.name}*
+`💳 *Payment Received - ${biz.name}*
 📅 ${dateNow()} at ${_time2}${branch}${clerk}
 
-  📄 Invoice: *${invoiceNumber || "—"}*
-  👥 Client: ${clientName || "—"}
+  📄 Invoice: *${invoiceNumber || "-"}*
+  👥 Client: ${clientName || "-"}
   💵 Amount: *${fmt(payment.amount, biz.currency)}*
   💳 Method: ${payment.method || "Cash"}${bal}`,
     "payment",
     {
-      invoiceRef:  `${invoiceNumber || "—"} | ${biz.name}${branchName ? " | " + branchName : ""}`,
-      clientName:  clientName || "—",
+      invoiceRef:  `${invoiceNumber || "-"} | ${biz.name}${branchName ? " | " + branchName : ""}`,
+      clientName:  clientName || "-",
       amount:      `${fmt(payment.amount, biz.currency)} | Cash at hand: ${_balClean2}`,
       method:      payment.method || "Cash",
       timeDate:    timeDateNow(),
-      clerkPhone:  clerkPhone || "—"
+      clerkPhone:  clerkPhone || "-"
     }
   );
 }
@@ -486,17 +486,17 @@ export async function notifyExpensesRecorded({
   const branch = branchName ? `\n  🏬 Branch: ${branchName}` : "";
   const clerk  = clerkPhone ? `\n  👤 By: ${clerkPhone}` : "";
   const lines  = expenses
-    .map(e => `  • ${e.description} — ${fmt(e.amount, biz.currency)} (${e.category || "Other"})`)
+    .map(e => `  • ${e.description} - ${fmt(e.amount, biz.currency)} (${e.category || "Other"})`)
     .join("\n");
 
   const _time3 = timeNow();
-  const _balClean3 = bal.replace(/[*_]/g, "").replace(/\n/g, " ").trim() || "—";
+  const _balClean3 = bal.replace(/[*_]/g, "").replace(/\n/g, " ").trim() || "-";
   const _itemsFlat = expenses
     .map(e => `${e.description} ${fmt(e.amount, biz.currency)}`)
     .join(", ");
 
   await _dispatch(biz._id, clerkPhone,
-`💸 *Expenses Recorded — ${biz.name}*
+`💸 *Expenses Recorded - ${biz.name}*
 📅 ${dateNow()} at ${_time3}${branch}${clerk}
 
 ${lines}
@@ -508,7 +508,7 @@ ${lines}
       items:      _itemsFlat,
       total:      `${fmt(total, biz.currency)} | Cash at hand: ${_balClean3}`,
       timeDate:   timeDateNow(),
-      clerkPhone: clerkPhone || "—"
+      clerkPhone: clerkPhone || "-"
     }
   );
 }
@@ -522,21 +522,21 @@ export async function notifyPayoutRecorded({
   const clerk  = clerkPhone ? `\n  👤 By: ${clerkPhone}` : "";
 
   const _time4 = timeNow();
-  const _balClean4 = bal.replace(/[*_]/g, "").replace(/\n/g, " ").trim() || "—";
+  const _balClean4 = bal.replace(/[*_]/g, "").replace(/\n/g, " ").trim() || "-";
 
   await _dispatch(biz._id, clerkPhone,
-`📤 *Cash Payout — ${biz.name}*
+`📤 *Cash Payout - ${biz.name}*
 📅 ${dateNow()} at ${_time4}${branch}${clerk}
 
   💵 Amount: *${fmt(payout.amount, biz.currency)}*
-  📝 Reason: ${payout.reason || "—"}${bal}`,
+  📝 Reason: ${payout.reason || "-"}${bal}`,
     "payout",
     {
       bizBranch:  `${biz.name}${branchName ? " | " + branchName : ""}`,
       amount:     `${fmt(payout.amount, biz.currency)} | Cash at hand: ${_balClean4}`,
-      reason:     payout.reason || "—",
+      reason:     payout.reason || "-",
       timeDate:   timeDateNow(),
-      clerkPhone: clerkPhone || "—"
+      clerkPhone: clerkPhone || "-"
     }
   );
 }
@@ -549,7 +549,7 @@ export async function notifyOpeningBalanceSet({
   const clerk  = clerkPhone ? `\n  👤 By: ${clerkPhone}` : "";
 
   await _dispatch(biz._id, clerkPhone,
-`🔓 *Opening Balance Set — ${biz.name}*
+`🔓 *Opening Balance Set - ${biz.name}*
 📅 ${dateNow()} at ${timeNow()}${branch}${clerk}
 
   💰 Opening: *${fmt(amount, biz.currency)}*
@@ -559,7 +559,7 @@ export async function notifyOpeningBalanceSet({
       bizBranch:  `${biz.name}${branchName ? " | " + branchName : ""}`,
       amount:     fmt(amount, biz.currency),
       date:       dateNow(),
-      clerkPhone: clerkPhone || "—"
+      clerkPhone: clerkPhone || "-"
     }
   );
 }
@@ -576,7 +576,7 @@ export async function sendDailyRunningReport({
 
   const _date = dateNow();
   await _safeNotify(toPhone,
-`📊 *Daily Summary — ${biz.name}*
+`📊 *Daily Summary - ${biz.name}*
 ${branchName ? `🏬 ${branchName}\n` : ""}📅 ${_date}
 ━━━━━━━━━━━━━━━━━━━━
 📂 Opening balance: ${fmt(b.opening, cur)}

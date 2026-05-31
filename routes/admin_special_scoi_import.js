@@ -91,7 +91,7 @@ function deepMerge(target, source) {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// Shared import logic — accepts a merged audit array + auditType string
+// Shared import logic - accepts a merged audit array + auditType string
 //
 // How it works:
 //   Both the file-upload path and the paste path call this after parsing JSON.
@@ -159,7 +159,7 @@ router.get("/admin/scoi/import", ensureAuth, (req, res) => {
 // POST - Import via file upload OR pasted JSON
 //
 // How it works:
-//   1. multer runs — if a file was sent it populates req.file, otherwise no-op
+//   1. multer runs - if a file was sent it populates req.file, otherwise no-op
 //   2. We check req.file first (file upload path, unchanged behaviour)
 //   3. If no file, we look for req.body.auditJson (the textarea input)
 //   4. Both paths parse JSON → mergeAuditObjects → runScoiImport

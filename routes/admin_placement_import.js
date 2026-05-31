@@ -19,7 +19,7 @@ const upload = multer({
 });
 
 // ─────────────────────────────────────────────
-// Shared import logic — accepts parsed array
+// Shared import logic - accepts parsed array
 // ─────────────────────────────────────────────
 async function runPlacementImport(audits) {
   if (!Array.isArray(audits)) {
@@ -75,7 +75,7 @@ router.get(
 // POST - Import via file upload OR pasted JSON
 //
 // How it works:
-//   1. multer runs — if a file was sent it populates req.file, otherwise no-op
+//   1. multer runs - if a file was sent it populates req.file, otherwise no-op
 //   2. We check req.file first (file upload path, unchanged behaviour)
 //   3. If no file, we look for req.body.auditJson (the textarea input)
 //   4. Both paths feed the same runPlacementImport() function

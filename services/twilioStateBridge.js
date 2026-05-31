@@ -2395,7 +2395,7 @@ console.log("INVOICE BRANCH DEBUG", {
       const SupplierProfile = (await import("../models/supplierProfile.js")).default;
       const _newNames = saved.map(p => p.name);
 
-      // 1. Always upsert into Product model — works for both supplier and non-supplier users
+      // 1. Always upsert into Product model - works for both supplier and non-supplier users
       for (const _itemName of _newNames) {
         await Product.findOneAndUpdate(
           { businessId: _bizId, name: _itemName },

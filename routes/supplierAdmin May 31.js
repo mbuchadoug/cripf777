@@ -7807,14 +7807,14 @@ router.get("/broadcast", requireSupplierAdmin, async (req, res) => {
       <!-- template reference -->
       <details style="margin-bottom:20px;background:white;border-radius:10px;border:1px solid var(--border)">
         <summary style="cursor:pointer;font-size:13px;font-weight:700;color:var(--blue);padding:14px 16px;list-style:none">
-          📋 Approved Template Reference — click to expand
+          📋 Approved Template Reference - click to expand
         </summary>
         <div style="padding:0 16px 16px;font-size:12px;line-height:2;color:#334155;font-family:monospace;border-top:1px solid var(--border);margin-top:0">
 
           <strong style="font-size:13px">1. zqm_welcome_back</strong> &nbsp;<span style="background:#dbeafe;color:#1e40af;padding:1px 7px;border-radius:4px;font-size:10px;font-family:sans-serif">MARKETING</span><br>
           <b>Header:</b> Welcome Back to ZimQuote<br>
           <b>Body:</b><br>
-          Good news — ZimQuote now has <b>{{1}}</b> businesses listed across Zimbabwe,<br>
+          Good news - ZimQuote now has <b>{{1}}</b> businesses listed across Zimbabwe,<br>
           including plumbers, electricians, builders, grocers and more.<br>
           You can search for any product or service and receive quotes directly<br>
           on WhatsApp within minutes.<br>
@@ -7841,7 +7841,7 @@ router.get("/broadcast", requireSupplierAdmin, async (req, res) => {
           Hi! Here is an update from the ZimQuote team.<br>
           <b>{{1}}</b><br>
           If you have questions or need assistance, our team is available<br>
-          on 263789901058 — just send us a message.<br>
+          on 263789901058 - just send us a message.<br>
           <b>Footer:</b> ZimQuote · Zimbabwe on WhatsApp<br>
           <b>Button:</b> Quick Reply · 💬 Get in Touch · payload: main_menu_back<br>
           <b>Example:</b> {{1}} = <code>We have added new verified suppliers in Harare and Bulawayo covering plumbing, electrical work and solar installations. Send us what you need and we will find you quotes right away.</code><br><br>
@@ -7851,7 +7851,7 @@ router.get("/broadcast", requireSupplierAdmin, async (req, res) => {
           <b>Body:</b><br>
           Hi! ZimQuote has <b>{{2}}</b> verified <b>{{1}}</b> businesses in Zimbabwe who<br>
           can send you a price and availability quote directly on WhatsApp.<br>
-          No phone calls needed — just send us a message to get started.<br>
+          No phone calls needed - just send us a message to get started.<br>
           Our team is on 263789901058 if you need help.<br>
           <b>Footer:</b> ZimQuote · Zimbabwe on WhatsApp<br>
           <b>Button:</b> Quick Reply · 🏪 View Suppliers · payload: main_menu_back<br>
@@ -7934,7 +7934,7 @@ router.get("/broadcast", requireSupplierAdmin, async (req, res) => {
             <!-- Manual phone entry mode -->
             <div id="manualPanel" style="display:none">
               <label style="font-size:12px;font-weight:600;display:block;margin-bottom:6px">
-                Phone numbers — one per line, or comma separated
+                Phone numbers - one per line, or comma separated
                 <span style="font-weight:400;color:var(--muted)">(Zim format: 0771234567 or 263771234567)</span>
               </label>
               <textarea name="manualPhones" rows="6" placeholder="0771234567&#10;0772345678&#10;263773456789&#10;..."
@@ -8004,13 +8004,13 @@ router.get("/broadcast", requireSupplierAdmin, async (req, res) => {
             </div>
 
             <div style="margin-bottom:10px">
-              <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px" id="var1Label">{{1}} — Total businesses listed</label>
+              <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px" id="var1Label">{{1}} - Total businesses listed</label>
               <input name="var1" id="var1Input" placeholder="e.g. 47"
                 style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px" />
             </div>
 
             <div id="var2Row" style="display:none;margin-bottom:10px">
-              <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px" id="var2Label">{{2}} — Number of suppliers</label>
+              <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px" id="var2Label">{{2}} - Number of suppliers</label>
               <input name="var2" id="var2Input" placeholder="e.g. 4"
                 style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px" />
             </div>
@@ -8095,7 +8095,7 @@ router.get("/broadcast", requireSupplierAdmin, async (req, res) => {
             <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap">
               <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:600">
                 <input type="checkbox" name="dryRun" value="1" checked style="width:16px;height:16px" />
-                🧪 Dry Run — preview count, no messages sent
+                🧪 Dry Run - preview count, no messages sent
               </label>
               <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px">
                 <input type="checkbox" name="dedupePhones" value="1" checked style="width:16px;height:16px" />
@@ -8143,10 +8143,10 @@ router.get("/broadcast", requireSupplierAdmin, async (req, res) => {
       <script>
       // ── Template variable hints ──────────────────────────────────────────────
       const TPL_META = {
-        zqm_welcome_back:      { v1: "{{1}} — Total businesses listed  e.g. 47",                                               v2: false },
-        zqm_add_your_business: { v1: "{{1}} — Category buyers are searching  e.g. plumbers in Harare",                        v2: false },
-        zqm_news_update:       { v1: "{{1}} — Full update text  e.g. We have added new verified suppliers in Harare...",       v2: false },
-        zqm_suppliers_ready:   { v1: "{{1}} — Category name, capitalised (also goes in header)  e.g. Plumbing",               v2: "{{2}} — Number of suppliers  e.g. 4" }
+        zqm_welcome_back:      { v1: "{{1}} - Total businesses listed  e.g. 47",                                               v2: false },
+        zqm_add_your_business: { v1: "{{1}} - Category buyers are searching  e.g. plumbers in Harare",                        v2: false },
+        zqm_news_update:       { v1: "{{1}} - Full update text  e.g. We have added new verified suppliers in Harare...",       v2: false },
+        zqm_suppliers_ready:   { v1: "{{1}} - Category name, capitalised (also goes in header)  e.g. Plumbing",               v2: "{{2}} - Number of suppliers  e.g. 4" }
       };
       function onTplChange(v) {
         const m = TPL_META[v] || {};
@@ -8361,7 +8361,7 @@ router.post("/broadcast/upload", requireSupplierAdmin, _broadcastUpload.single("
                     : [".mp4",".mov"].includes(ext)                         ? "video"
                     :                                                         "document";
 
-    // Build the public URL — assumes express.static serves /public at root
+    // Build the public URL - assumes express.static serves /public at root
     const host    = req.protocol + "://" + req.get("host");
     const fileUrl = host + "/broadcasts/" + req.file.filename;
 
@@ -8372,7 +8372,7 @@ router.post("/broadcast/upload", requireSupplierAdmin, _broadcastUpload.single("
   }
 });
 
-// ── GET /zq-admin/broadcast/contacts  (JSON — used by contact picker) ────────
+// ── GET /zq-admin/broadcast/contacts  (JSON - used by contact picker) ────────
 router.get("/broadcast/contacts", requireSupplierAdmin, async (req, res) => {
   try {
     const { pool = "all", days = "14", city = "", keyword = "" } = req.query;
@@ -8465,7 +8465,7 @@ router.post("/broadcast", requireSupplierAdmin, async (req, res) => {
     let audienceLabel = "";
 
     if (audienceMode === "manual") {
-      // Parse manual textarea — split on newlines, commas, semicolons, spaces
+      // Parse manual textarea - split on newlines, commas, semicolons, spaces
       const raw = String(manualPhones || "").split(/[\n,;\s]+/).filter(Boolean);
       phones = raw.map(normPhone).filter(Boolean);
       phones = [...new Set(phones)];
@@ -8479,7 +8479,7 @@ router.post("/broadcast", requireSupplierAdmin, async (req, res) => {
       audienceLabel = `selected (${phones.length} picked)`;
 
     } else {
-      // filter mode — same DB query as before
+      // filter mode - same DB query as before
       phones = await _buildPhoneList({
         pool,
         cutoffDays: parseInt(inactiveDays, 10) || 0,
@@ -8527,7 +8527,7 @@ router.post("/broadcast", requireSupplierAdmin, async (req, res) => {
 
     const modeLabel = isDryRun ? "Dry run" : "Broadcast sent";
     res.redirect(`/zq-admin/broadcast?success=${encodeURIComponent(
-      `${modeLabel}: ${result.sent} ${isDryRun?"simulated":"sent"}, ${result.failed} failed, ${result.skipped} skipped — ${phones.length} total (${templateName})`
+      `${modeLabel}: ${result.sent} ${isDryRun?"simulated":"sent"}, ${result.failed} failed, ${result.skipped} skipped - ${phones.length} total (${templateName})`
     )}`);
 
   } catch (err) {

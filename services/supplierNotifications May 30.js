@@ -533,7 +533,7 @@ export async function runSupplierExpiryChecks() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PUBLIC: Fan-out wrapper — notify ALL contacts when smart link is opened.
+// PUBLIC: Fan-out wrapper - notify ALL contacts when smart link is opened.
 //
 // Standard sellers (revealVisitorPhone = false):
 //   → supplier_link_opened  (3 variables, no phone)

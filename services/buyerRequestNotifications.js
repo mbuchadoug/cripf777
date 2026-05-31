@@ -713,7 +713,7 @@ export async function notifyAdminGroupLinkOpened({ groupName, slug, viewCount, v
 //
 //   1. Admin uploads a file via the broadcast form → stored on server → public URL
 //   2. We download that file and RE-UPLOAD it to Meta's /media endpoint
-//      to get a stable media_id. This is REQUIRED — Meta delivery servers
+//      to get a stable media_id. This is REQUIRED - Meta delivery servers
 //      cannot fetch lookaside.fbsbx.com URLs or even plain public URLs
 //      reliably as template header "link" values. The stable id always works.
 //   3. We build components:
@@ -727,7 +727,7 @@ export async function notifyAdminGroupLinkOpened({ groupName, slug, viewCount, v
 //
 // 1. zqm_welcome_back
 //    Header (Text): Welcome Back to ZimQuote
-//    Body: Good news — ZimQuote now has {{1}} businesses listed across Zimbabwe,
+//    Body: Good news - ZimQuote now has {{1}} businesses listed across Zimbabwe,
 //          including plumbers, electricians, builders, grocers and more.
 //          You can search for any product or service and receive quotes directly
 //          on WhatsApp within minutes.
@@ -752,7 +752,7 @@ export async function notifyAdminGroupLinkOpened({ groupName, slug, viewCount, v
 //    Body: Hi! Here is an update from the ZimQuote team.
 //          {{1}}
 //          If you have questions or need assistance, our team is available
-//          on 263789901058 — just send us a message.
+//          on 263789901058 - just send us a message.
 //    Footer: ZimQuote · Zimbabwe on WhatsApp
 //    Button: Quick Reply · "💬 Get in Touch" · payload: main_menu_back
 //    Variable sample → {{1}}: We have added new verified suppliers in Harare...
@@ -761,7 +761,7 @@ export async function notifyAdminGroupLinkOpened({ groupName, slug, viewCount, v
 //    Header (Text): {{1}} Suppliers Ready to Quote You  ← header has variable
 //    Body: Hi! ZimQuote has {{2}} verified {{1}} businesses in Zimbabwe who
 //          can send you a price and availability quote directly on WhatsApp.
-//          No phone calls needed — just send us a message to get started.
+//          No phone calls needed - just send us a message to get started.
 //          Our team is on 263789901058 if you need help.
 //    Footer: ZimQuote · Zimbabwe on WhatsApp
 //    Button: Quick Reply · "🏪 View Suppliers" · payload: main_menu_back
@@ -779,33 +779,33 @@ export async function notifyAdminGroupLinkOpened({ groupName, slug, viewCount, v
 export const BROADCAST_TEMPLATES = {
   zqm_welcome_back: {
     label:          "zqm_welcome_back · Welcome Back / Re-engagement",
-    headerVar:      false,   // static text header — NO header component
-    hasButton:      false,   // template has NO button — do NOT send button component
+    headerVar:      false,   // static text header - NO header component
+    hasButton:      false,   // template has NO button - do NOT send button component
     hasMediaHeader: false,   // template has NO media header slot
-    vars:           [{ key: "var1", label: "{{1}} — Total businesses listed", placeholder: "e.g. 47" }]
+    vars:           [{ key: "var1", label: "{{1}} - Total businesses listed", placeholder: "e.g. 47" }]
   },
   zqm_add_your_business: {
     label:          "zqm_add_your_business · Add Your Business",
     headerVar:      false,
     hasButton:      false,
     hasMediaHeader: false,
-    vars:           [{ key: "var1", label: "{{1}} — Category buyers are searching", placeholder: "e.g. plumbers in Harare" }]
+    vars:           [{ key: "var1", label: "{{1}} - Category buyers are searching", placeholder: "e.g. plumbers in Harare" }]
   },
   zqm_news_update: {
     label:          "zqm_news_update · News / Platform Update",
     headerVar:      false,
     hasButton:      false,
     hasMediaHeader: false,
-    vars:           [{ key: "var1", label: "{{1}} — Full update text", placeholder: "e.g. We have added new verified suppliers..." }]
+    vars:           [{ key: "var1", label: "{{1}} - Full update text", placeholder: "e.g. We have added new verified suppliers..." }]
   },
   zqm_suppliers_ready: {
     label:          "zqm_suppliers_ready · Suppliers Ready to Quote",
-    headerVar:      true,    // header TEXT contains {{1}} — send header component
+    headerVar:      true,    // header TEXT contains {{1}} - send header component
     hasButton:      false,
     hasMediaHeader: false,
     vars:           [
-      { key: "var1", label: "{{1}} — Category (capitalised, used in header too)", placeholder: "e.g. Plumbing" },
-      { key: "var2", label: "{{2}} — Number of suppliers", placeholder: "e.g. 4" }
+      { key: "var1", label: "{{1}} - Category (capitalised, used in header too)", placeholder: "e.g. Plumbing" },
+      { key: "var2", label: "{{2}} - Number of suppliers", placeholder: "e.g. 4" }
     ]
   }
 };
@@ -848,7 +848,7 @@ function _cleanVar(v) {
  * @param {string}   [opts.headerType]     "image" | "document" | "video"
  * @param {string}   [opts.headerFilename] Filename shown for document attachments
  * @param {number}   [opts.msPerMessage]   Delay between sends ms (default 3000)
- * @param {boolean}  [opts.dryRun]         If true, simulate — no API calls
+ * @param {boolean}  [opts.dryRun]         If true, simulate - no API calls
  * @returns {Promise<{sent, failed, skipped, results}>}
  */
 export async function sendBroadcastTemplate({
@@ -869,7 +869,7 @@ export async function sendBroadcastTemplate({
 
   // ── Re-upload media once before the send loop ────────────────────────────
   // Only attempt if the template actually has a media header slot (hasMediaHeader=true).
-  // If the template has no media header, skip silently — sending a media component
+  // If the template has no media header, skip silently - sending a media component
   // to a template without one causes #132012.
   let stableMediaId = null;
   if (tplMeta.hasMediaHeader && headerMediaUrl && !dryRun) {
@@ -881,11 +881,11 @@ export async function sendBroadcastTemplate({
       if (!stableMediaId) throw new Error("Re-upload returned no id");
       console.log(`[BROADCAST] Media ready: id=${stableMediaId}`);
     } catch (err) {
-      console.error(`[BROADCAST] Media re-upload failed: ${err.message} — sending text-only`);
+      console.error(`[BROADCAST] Media re-upload failed: ${err.message} - sending text-only`);
       stableMediaId = null;
     }
   } else if (headerMediaUrl && !tplMeta.hasMediaHeader) {
-    console.log(`[BROADCAST] Note: template "${templateName}" has no media header slot — file attachment ignored`);
+    console.log(`[BROADCAST] Note: template "${templateName}" has no media header slot - file attachment ignored`);
   }
 
   let sent = 0, failed = 0, skipped = 0;
@@ -925,10 +925,10 @@ export async function sendBroadcastTemplate({
           components.push({ type: "header", parameters: [{ type: "image", image: { id: stableMediaId } }] });
         }
       } else if (tplMeta.headerVar && variables.length) {
-        // Variable text header (zqm_suppliers_ready) — pass {{1}} value
+        // Variable text header (zqm_suppliers_ready) - pass {{1}} value
         components.push({ type: "header", parameters: [{ type: "text", text: _cleanVar(variables[0]) }] });
       }
-      // else: static text header OR no header — send NO header component
+      // else: static text header OR no header - send NO header component
 
       // ── Body variables ──────────────────────────────────────────────────────
       if (variables.length) {
@@ -979,6 +979,6 @@ export async function sendBroadcastTemplate({
     if (msPerMessage > 0) await new Promise(r => setTimeout(r, msPerMessage));
   }
 
-  console.log(`[BROADCAST] Done — sent:${sent} failed:${failed} skipped:${skipped} (${templateName})`);
+  console.log(`[BROADCAST] Done - sent:${sent} failed:${failed} skipped:${skipped} (${templateName})`);
   return { sent, failed, skipped, results };
 }

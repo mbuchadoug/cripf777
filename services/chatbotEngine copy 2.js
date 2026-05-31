@@ -3780,7 +3780,7 @@ if (!isMetaAction && /^ZQ:GROUP:[a-z0-9_-]{1,60}$/i.test(text.trim())) {
   }
 }
 
-// ── ZQ:REGISTER — "Add Your Business" broadcast deep link (TOP LEVEL) ────────
+// ── ZQ:REGISTER - "Add Your Business" broadcast deep link (TOP LEVEL) ────────
 // Sent via broadcast campaigns (zqm_add_your_business template button payload
 // is "list_my_business" which is handled below, but the link in the message
 // body uses ZQ:REGISTER so users who manually tap/copy the URL also land here).

@@ -313,7 +313,7 @@ export function buildProfileCard(supplier) {
     ? `Min order: $${Number(supplier.minOrder).toFixed(2)}`
     : "";
 
-  // ── HOSPITALITY card — route to dedicated builder ────────────────────────
+  // ── HOSPITALITY card - route to dedicated builder ────────────────────────
   if (supplier.profileType === "hospitality") {
     return _buildHospitalityCard(supplier, {
       name, location, city, area, verifiedBadge, topBadge,
@@ -383,17 +383,17 @@ function _buildHospitalityCard(supplier, { name, location, city, verifiedBadge, 
       const rest  = rt.restRate > 0      ? "$" + Number(rt.restRate).toFixed(0) + "/rest"        : null;
       const rates = [night, rest].filter(Boolean).join(" · ");
       const cap   = rt.capacity > 0 ? " (sleeps " + rt.capacity + ")" : "";
-      return "• " + rt.name + (rates ? " — " + rates : "") + cap;
+      return "• " + rt.name + (rates ? " - " + rates : "") + cap;
     }).join("\n");
   }
 
-  // ── Activities / rates — shown for ALL hospitality providers that have them ─
+  // ── Activities / rates - shown for ALL hospitality providers that have them ─
   // Mixed operators (e.g. lodge + safari + boat hire) show BOTH rooms AND activities.
   let activityLines = "";
   if ((supplier.rates || []).length > 0) {
     const allRates = (supplier.rates || []).filter(r => r.service);
     activityLines = allRates.slice(0, 6).map(r =>
-      "• " + r.service + (r.rate ? " — " + r.rate : " — price on request")
+      "• " + r.service + (r.rate ? " - " + r.rate : " - price on request")
     ).join("\n");
     const moreRates = allRates.length - 6;
     if (moreRates > 0) activityLines += "\n_...and " + moreRates + " more activities_";
@@ -404,7 +404,7 @@ function _buildHospitalityCard(supplier, { name, location, city, verifiedBadge, 
   if ((supplier.extraServices || []).length > 0) {
     const allExtras = supplier.extraServices || [];
     extraLines = allExtras.slice(0, 8).map(es =>
-      "• " + es.name + (es.price > 0 ? " — $" + Number(es.price).toFixed(0) + "/" + (es.unit || "service") : " — price on request")
+      "• " + es.name + (es.price > 0 ? " - $" + Number(es.price).toFixed(0) + "/" + (es.unit || "service") : " - price on request")
     ).join("\n");
     const moreExtras = allExtras.length - 8;
     if (moreExtras > 0) extraLines += "\n_...and " + moreExtras + " more services_";
@@ -447,7 +447,7 @@ function _buildHospitalityCard(supplier, { name, location, city, verifiedBadge, 
     if (moreRooms > 0) lines.push("_...and " + moreRooms + " more room types_");
   }
 
-  // Show activities section if provider has rates (shown for ALL — mixed operators get both)
+  // Show activities section if provider has rates (shown for ALL - mixed operators get both)
   if (activityLines) {
     lines.push("");
     lines.push("🎯 *Activities & Tours:*");
@@ -499,7 +499,7 @@ export function buildSharableCaption(supplier, source = "wa") {
         r.pricePerNight > 0 ? "$" + Number(r.pricePerNight).toFixed(0) + "/night" : null,
         r.restRate > 0      ? "$" + Number(r.restRate).toFixed(0) + "/rest"        : null
       ].filter(Boolean).join(" · ");
-      return r.name + (rates ? " — " + rates : "");
+      return r.name + (rates ? " - " + rates : "");
     });
     const facilities = (supplier.facilities || []).slice(0, 4).map(f => ({
       wifi:"WiFi",pool:"Pool",breakfast:"Breakfast",en_suite:"En-suite",
@@ -511,7 +511,7 @@ export function buildSharableCaption(supplier, source = "wa") {
 
     const hospCaptions = {
       wa:  ["🏨 *" + name + "* - " + location, subtypes.length ? subtypes.map(s => ({lodge:"🌿 Lodge",hotel:"🏨 Hotel",guesthouse:"🏡 Guesthouse",self_catering:"🍳 Self-Catering",campsite:"⛺ Campsite",safari_operator:"🦁 Safari",tour_guide:"🗺 Tours",boat_hire:"⛵ Boat hire",travel_agency:"✈️ Travel"}[s]||s)).join(" · ") : "🏨 Hospitality", roomTeaser, facilities ? "✅ " + facilities : "", "", "📲 Book or request a quote on WhatsApp:", hospLink].filter(Boolean).join("\n"),
-      fb:  [isAccom ? "🌿 Looking for a perfect stay? " + name + " is now on ZimQuote!" : "🦁 Adventures await! " + name + " is now on ZimQuote!", "", roomTeaser || "Accommodation in " + location, facilities ? "✅ " + facilities : "", "", "📲 Request a quote instantly on WhatsApp — no app download needed.", "", hospLink, "#ZimQuote #Zimbabwe #Tourism #" + city.replace(/\s/g,"")].filter(Boolean).join("\n"),
+      fb:  [isAccom ? "🌿 Looking for a perfect stay? " + name + " is now on ZimQuote!" : "🦁 Adventures await! " + name + " is now on ZimQuote!", "", roomTeaser || "Accommodation in " + location, facilities ? "✅ " + facilities : "", "", "📲 Request a quote instantly on WhatsApp - no app download needed.", "", hospLink, "#ZimQuote #Zimbabwe #Tourism #" + city.replace(/\s/g,"")].filter(Boolean).join("\n"),
       tt:  ["Book your stay at " + name + " on ZimQuote 👇", hospLink, "#ZimQuote #ZimbabweTourism #" + name.replace(/\s/g,"")].join("\n"),
       sms: [name + " - " + location, roomTeaser || "", "Book on WhatsApp: " + hospLink].filter(Boolean).join("\n"),
       ig:  ["🏨 " + name + " | " + location, roomTeaser, facilities ? "✅ " + facilities : "", "", "Request a quote on WhatsApp 👇", hospLink, "#ZimQuote #Zimbabwe #" + city.replace(/\s/g,"") + " #Tourism"].filter(Boolean).join("\n"),
