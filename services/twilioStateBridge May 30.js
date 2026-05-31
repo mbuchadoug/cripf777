@@ -1117,11 +1117,9 @@ ${lines}
     for (const w of descWords) {
       if (KEYWORD_CAT[w.toLowerCase()]) { cat = KEYWORD_CAT[w.toLowerCase()]; break; }
     }
-    // Override auto-detected category with preset (from Pick by Category)
-    const finalCat = biz.sessionData?.presetCategory || cat;
     parsed.push({
       description: descWords.join(" "),
-      amount: amt, category: finalCat,
+      amount: amt, category: cat,
       method: method || "Cash"
     });
   }
@@ -1298,20 +1296,6 @@ Total: *${formatMoney(total, biz.currency)}*`
   } catch (pdfErr) {
     console.error("[BULK EXP PDF]", pdfErr.message);
   }
-
-  // ── Notify owners/managers/clerk of recorded expenses ──────────────────────
-  try {
-    const { notifyExpensesRecorded } = await import("./bizNotifications.js");
-    const Branch = (await import("../models/branch.js")).default;
-    const branchDoc = savedBranchId ? await Branch.findById(savedBranchId).lean() : null;
-    await notifyExpensesRecorded({
-      biz,
-      expenses: items,
-      clerkPhone: phone,
-      branchName: branchDoc?.name || null,
-      branchId:   savedBranchId
-    });
-  } catch (_notifErr) { console.error("[EXP NOTIF]", _notifErr.message); }
 
   const { sendExpenseAddAnotherMenu } = await import("./metaMenus.js");
   await sendExpenseAddAnotherMenu(from);
@@ -1520,25 +1504,6 @@ ${invoice.status === "paid" ? "Fully paid ✅" : `Balance: ${formatMoney(invoice
 
     biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
     await sendText(from, `✅ Payment recorded\n*Invoice:* ${invoice.number}\n*Amount:* ${amount} ${invoice.currency}\n*Method:* ${method}`);
-
-    // ── Notify owners/managers/clerk ─────────────────────────────────────────
-    try {
-      const { notifyPaymentRecorded } = await import("./bizNotifications.js");
-      const ClientModel = (await import("../models/client.js")).default;
-      const client = invoice.clientId ? await ClientModel.findById(invoice.clientId).lean() : null;
-      const Branch = (await import("../models/branch.js")).default;
-      const branchDoc = invoice.branchId ? await Branch.findById(invoice.branchId).lean() : null;
-      await notifyPaymentRecorded({
-        biz,
-        payment: { amount, method },
-        invoiceNumber: invoice.number,
-        clientName: client?.name || "Walk-in",
-        clerkPhone: phone,
-        branchName: branchDoc?.name || null,
-        branchId:   invoice.branchId
-      });
-    } catch (_n) { console.error("[PAY NOTIF]", _n.message); }
-
     await sendMainMenu(from);
     return true;
   }
@@ -2263,22 +2228,6 @@ console.log("INVOICE BRANCH DEBUG", {
 
     await sendDocument(from, { link: url, filename });
     biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
-
-    // ── Notify owners/managers/clerk ─────────────────────────────────────────
-    try {
-      const { notifyDocumentCreated } = await import("./bizNotifications.js");
-      const Branch = (await import("../models/branch.js")).default;
-      const branchDoc = effectiveBranchId ? await Branch.findById(effectiveBranchId).lean() : null;
-      await notifyDocumentCreated({
-        biz,
-        doc: { number, total, clientName: client.name || client.phone },
-        docType,
-        clerkPhone: phone,
-        branchName: branchDoc?.name || null,
-        branchId:   effectiveBranchId
-      });
-    } catch (_n) { console.error("[DOC NOTIF]", _n.message); }
-
     await sendMainMenu(from);
     return true;
   }
@@ -2387,24 +2336,6 @@ console.log("INVOICE BRANCH DEBUG", {
 
     biz.sessionState = "ready"; biz.sessionData = {};
     await saveBizSafe(biz);
-
-    // ── Sync to SupplierProfile if this business has a linked supplier ────────
-    try {
-      const SupplierProfile = (await import("../models/supplierProfile.js")).default;
-      const supplier = await SupplierProfile.findOne({ businessId: biz._id });
-      if (supplier) {
-        const newNames = saved.map(p => p.name);
-        const existing = [...new Set([
-          ...(supplier.listedProducts || []),
-          ...(supplier.products       || [])
-        ])];
-        const merged = [...new Set([...existing, ...newNames])];
-        supplier.listedProducts = merged;
-        await supplier.save();
-        console.log(`[SYNC] Products synced to SupplierProfile ${supplier._id}`);
-      }
-    } catch (_syncErr) { console.error("[SYNC] product sync error:", _syncErr.message); }
-
     const { sendProductsMenu } = await import("./metaMenus.js");
     return sendProductsMenu(from);
   }
@@ -2789,16 +2720,6 @@ console.log("INVOICE BRANCH DEBUG", {
     const Branch = (await import("../models/branch.js")).default;
     const branch = await Branch.findById(targetBranchId);
     await sendText(from, `✅ Opening balance set to *${amount} ${biz.currency}*${branch ? ` for *${branch.name}*` : ""}`);
-
-    // ── Notify ───────────────────────────────────────────────────────────────
-    try {
-      const { notifyOpeningBalanceSet } = await import("./bizNotifications.js");
-      await notifyOpeningBalanceSet({
-        biz, amount, clerkPhone: phone,
-        branchName: branch?.name || null, branchId: targetBranchId
-      });
-    } catch (_n) { console.error("[OB NOTIF]", _n.message); }
-
     const { sendCashBalanceMenu } = await import("./metaMenus.js");
     return sendCashBalanceMenu(from);
   }
@@ -2826,76 +2747,6 @@ console.log("INVOICE BRANCH DEBUG", {
   /* ===========================
      CASH BALANCE: PAYOUT REASON
   =========================== */
-  if (state === "cash_payout_reason") {
-    if (trimmed.toLowerCase() === "cancel") {
-      biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
-      const { sendCashBalanceMenu } = await import("./metaMenus.js");
-      return sendCashBalanceMenu(from);
-    }
-
-    const reason = trimmed || "No reason given";
-    const amount = biz.sessionData?.payoutAmount;
-    const targetBranchId = biz.sessionData?.targetBranchId || caller?.branchId || null;
-
-    if (!amount || amount <= 0) {
-      biz.sessionState = "ready"; biz.sessionData = {};
-      await saveBizSafe(biz);
-      await sendText(from, "❌ Payout amount missing. Please start again.");
-      const { sendCashBalanceMenu } = await import("./metaMenus.js");
-      return sendCashBalanceMenu(from);
-    }
-
-    // Save payout record
-    let payoutDoc = null;
-    try {
-      const CashPayout = (await import("../models/cashPayout.js")).default;
-      const today = new Date(); today.setHours(0, 0, 0, 0);
-      payoutDoc = await CashPayout.create({
-        businessId: biz._id,
-        branchId:   targetBranchId,
-        amount,
-        reason,
-        recordedBy: phone,
-        date:       today
-      });
-    } catch (dbErr) {
-      console.error("[PAYOUT SAVE]", dbErr.message);
-      await sendText(from, "❌ Error saving payout. Please try again.");
-      return true;
-    }
-
-    biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
-
-    const Branch = (await import("../models/branch.js")).default;
-    const branch = targetBranchId ? await Branch.findById(targetBranchId).lean() : null;
-    const cur    = biz.currency;
-
-    await sendText(from,
-`✅ *Payout Recorded*
-
-  💵 Amount: *${amount} ${cur}*
-  📝 Reason: ${reason}${branch ? `
-  🏬 Branch: ${branch.name}` : ""}
-
-_Cash balance updated._`
-    );
-
-    // ── Notify owners/managers/clerk ─────────────────────────────────────────
-    try {
-      const { notifyPayoutRecorded } = await import("./bizNotifications.js");
-      await notifyPayoutRecorded({
-        biz,
-        payout: { amount, reason },
-        clerkPhone: phone,
-        branchName: branch?.name || null,
-        branchId:   targetBranchId
-      });
-    } catch (_n) { console.error("[PAYOUT NOTIF]", _n.message); }
-
-    const { sendCashBalanceMenu } = await import("./metaMenus.js");
-    return sendCashBalanceMenu(from);
-  }
-
 /* ===========================
      SUPPLIER: ENTER ECOCASH (payment after registration)
   =========================== */

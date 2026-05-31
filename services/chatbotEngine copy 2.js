@@ -3697,8 +3697,6 @@ a.startsWith("sup_load_preset_") ||
       a.startsWith("vdoc_") ||
       a.startsWith("svc_rate_") ||
       a === "add_another_expense" ||
-      a.startsWith("exp_cat_") ||
-      a === "exp_show_categories" ||
       a === "view_all_products" ||
       a === "view_all_invoices" ||
       a === "view_all_quotes" ||
@@ -4300,7 +4298,6 @@ const isBuyerRequestMetaReply =
   a.startsWith("vdoc_") ||
   a.startsWith("svc_rate_") ||
   a === "add_another_expense" ||
-  a.startsWith("exp_cat_") ||
   a === "view_all_products" ||
   a === "view_all_invoices" ||
   a === "view_all_quotes" ||
@@ -8977,51 +8974,6 @@ Or tap to pick a category:`,
     ]);
   }
 
-  // ── exp_cat_* → user picked a category, now prompt for description + amount
-  if (a.startsWith("exp_cat_")) {
-    if (!biz) return sendMainMenu(from);
-    const CAT_MAP = {
-      exp_cat_rent:        "Rent",
-      exp_cat_utilities:   "Utilities",
-      exp_cat_transport:   "Transport",
-      exp_cat_supplies:    "Supplies",
-      exp_cat_salaries:    "Salaries",
-      exp_cat_maintenance: "Maintenance",
-      exp_cat_other:       "Other"
-    };
-    const CAT_EXAMPLES = {
-      exp_cat_rent:        "_office rent 500_",
-      exp_cat_utilities:   "_zesa 50, water 20, wifi 30_",
-      exp_cat_transport:   "_fuel 40, kombi fare 5_",
-      exp_cat_supplies:    "_printing paper 15, toner 30_",
-      exp_cat_salaries:    "_cashier salary 300 bank_",
-      exp_cat_maintenance: "_AC service 80, plumber 50_",
-      exp_cat_other:       "_miscellaneous 25_"
-    };
-    const chosenCat = CAT_MAP[a] || "Other";
-    const example   = CAT_EXAMPLES[a] || "_description amount_";
-    biz.sessionState = "expense_smart_entry";
-    biz.sessionData  = {
-      targetBranchId:  biz.sessionData?.targetBranchId,
-      bulkExpenses:    biz.sessionData?.bulkExpenses || [],
-      presetCategory:  chosenCat
-    };
-    await saveBizSafe(biz);
-    return sendButtons(from, {
-      text:
-`📂 *${chosenCat} Expense*
-
-Type description and amount:
-${example}
-
-Multiple items: _desc1 amount1, desc2 amount2_`,
-      buttons: [
-        { id: "exp_bulk_confirm_yes", title: "✅ Save What I Have" },
-        { id: ACTIONS.PAYMENTS_MENU, title: "❌ Cancel" }
-      ]
-    });
-  }
-
   // ── Expense bulk: button taps route into continueTwilioFlow ──────────────
   if (
     a === "exp_bulk_confirm_yes" ||
@@ -9360,13 +9312,12 @@ if (a === "expense_generate_receipt") {
     return sendButtons(from, {
       text:
         `✍️ *Custom items - ${_docLabel}*\n\n` +
-        `Type one or more items separated by commas:\n\n` +
-        `• _labour charge_\n` +
-        `• _materials, transport fee, call-out charge_\n` +
-        `• _geyser installation, plumbing supplies, consultation_\n\n` +
-        `Quantities and prices come in the next step.\n` +
-        `_Type *cancel* at any time to stop._`,
-      buttons: [{ id: "inv_cancel", title: "❌ Cancel" }]
+        `Type one item or many separated by commas:\n\n` +
+        `_labour charge_\n` +
+        `_materials, transport fee, call-out charge_\n` +
+        `_geyser installation, plumbing supplies, consultation_\n\n` +
+        `You will set quantities and prices in the next steps.`,
+      buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
     });
   }
 
