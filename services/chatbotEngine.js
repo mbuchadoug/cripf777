@@ -4217,7 +4217,9 @@ const isBuyerRequestMetaReply =
   a === "suppliers_home" ||
   a === "biz_tools_menu" ||
   a === "main_menu_back" ||
-  a.startsWith("sc_");
+  a.startsWith("sc_") ||
+  // ── All ACTIONS-constant menu taps must enter the mega-block ─────────────
+  Object.values(ACTIONS).some(v => (v || "").toLowerCase() === a);
 
 if (!isMetaAction || isBuyerRequestMetaReply) {
     const flowSess = await UserSession.findOne({ phone });
