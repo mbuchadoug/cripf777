@@ -6758,7 +6758,7 @@ if (parsed.city || parsed.area) {
 
   return sendList(from, `🔍 Looking for: *${cleanProduct}*\n\nWhich city?`, [
     ...SUPPLIER_CITIES.slice(0, 9).map(c => ({
-      id: `sup_search_city_${c.toLowerCase()}`,
+      id: `sup_search_city_${c.toLowerCase().replace(/\s+/g, '_')}`,
       title: c
     })),
     { id: "sup_search_city_all", title: "📍 All Cities" }
@@ -7334,7 +7334,7 @@ if (shortcode.city && results.length) {
     }
     return sendList(from, `🔍 Looking for: *${shortcode.product}*\n\nWhich city?`, [
       ...SUPPLIER_CITIES.slice(0, 9).map(c => ({
-        id: `sup_search_city_${c.toLowerCase()}`,
+        id: `sup_search_city_${c.toLowerCase().replace(/\s+/g, '_')}`,
         title: c
       })),
       { id: "sup_search_city_all", title: "📍 All Cities" }
@@ -10630,7 +10630,7 @@ if (shortcode.city) {
     await saveBizSafe(biz);
     return sendList(from, `🔍 Looking for: *${shortcode.product}*\n\nWhich city?`, [
       ...SUPPLIER_CITIES.slice(0, 9).map(c => ({
-        id: `sup_search_city_${c.toLowerCase()}`,
+        id: `sup_search_city_${c.toLowerCase().replace(/\s+/g, '_')}`,
         title: c
       })),
       { id: "sup_search_city_all", title: "📍 All Cities" }
@@ -10837,7 +10837,7 @@ if (biz.sessionState === "supplier_search_city" && !isMetaAction && !schoolAdmin
     await saveBizSafe(biz);
 
     return sendList(from, `🔍 Looking for: *${cleanProduct}*\n\nWhich city?`, [
-      ...SUPPLIER_CITIES.slice(0, 9).map(c => ({ id: `sup_search_city_${c.toLowerCase()}`, title: c })),
+      ...SUPPLIER_CITIES.slice(0, 9).map(c => ({ id: `sup_search_city_${c.toLowerCase().replace(/\s+/g, '_')}`, title: c })),
       { id: "sup_search_city_all", title: "📍 All Cities" }
     ]);
   }
@@ -10861,7 +10861,7 @@ if (biz.sessionState === "supplier_search_city" && !isMetaAction && !schoolAdmin
     await saveBizSafe(biz);
 
     return sendList(from, `🔍 Looking for: *${productQuery}*\n\nWhich city?`, [
-      ...SUPPLIER_CITIES.slice(0, 9).map(c => ({ id: `sup_search_city_${c.toLowerCase()}`, title: c })),
+      ...SUPPLIER_CITIES.slice(0, 9).map(c => ({ id: `sup_search_city_${c.toLowerCase().replace(/\s+/g, '_')}`, title: c })),
       { id: "sup_search_city_all", title: "📍 All Cities" }
     ]);
   }
@@ -11029,7 +11029,7 @@ if (biz.sessionState === "supplier_search_city" && !isMetaAction && !schoolAdmin
           biz.sessionState = "supplier_search_city";
           await saveBizSafe(biz);
           return sendList(from, `🔍 Looking for: *${shortcode.product}*\n\nWhich city?`, [
-            ...SUPPLIER_CITIES.slice(0, 9).map(c => ({ id: `sup_search_city_${c.toLowerCase()}`, title: c })),
+            ...SUPPLIER_CITIES.slice(0, 9).map(c => ({ id: `sup_search_city_${c.toLowerCase().replace(/\s+/g, '_')}`, title: c })),
             { id: "sup_search_city_all", title: "📍 All Cities" }
           ]);
         }
@@ -13139,8 +13139,8 @@ if (a === "sup_upgrade_plan" || a === "sup_renew_plan") {
 
   // ── Supplier city selected from list during registration ──────────────────
   if (a.startsWith("sup_city_")) {
-    const cityRaw = a.replace("sup_city_", "");
-    const city = cityRaw === "other" ? null : cityRaw.charAt(0).toUpperCase() + cityRaw.slice(1);
+    const cityRaw = a.replace("sup_city_", "").replace(/_/g, " ");
+    const city = cityRaw === "other" ? null : cityRaw.split(" ").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
 
     if (!city) {
       // Ask them to type their city
@@ -14479,7 +14479,7 @@ if (a.startsWith("sup_search_cat_")) {
 
   return sendList(from, "📍 Which city?", [
     ...SUPPLIER_CITIES.slice(0, 9).map(c => ({
-      id: `sup_search_city_${c.toLowerCase()}`,
+      id: `sup_search_city_${c.toLowerCase().replace(/\s+/g, '_')}`,
       title: c
     })),
     { id: "sup_search_city_other", title: "📍 Other" }
@@ -14488,8 +14488,8 @@ if (a.startsWith("sup_search_cat_")) {
 
   // ── Supplier search: city selected ────────────────────────────────────────
 if (a.startsWith("sup_search_city_")) {
-  const cityRaw = a.replace("sup_search_city_", "");
-  const city = cityRaw === "all" ? null : cityRaw.charAt(0).toUpperCase() + cityRaw.slice(1);
+  const cityRaw = a.replace("sup_search_city_", "").replace(/_/g, " ");
+  const city = cityRaw === "all" ? null : cityRaw.split(" ").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
 
   let category = biz?.sessionData?.supplierSearch?.category || null;
   let product = biz?.sessionData?.supplierSearch?.product || null;
@@ -18163,7 +18163,7 @@ if (biz?.sessionState === "supplier_search_product" && !isMetaAction) {
 
   return sendList(from, `🔍 Looking for: *${cleanProduct}*\n\nWhich city?`, [
     ...SUPPLIER_CITIES.slice(0, 9).map(c => ({
-      id: `sup_search_city_${c.toLowerCase()}`,
+      id: `sup_search_city_${c.toLowerCase().replace(/\s+/g, '_')}`,
       title: c
     })),
     { id: "sup_search_city_all", title: "📍 All Cities" }

@@ -343,7 +343,7 @@ export async function handleSupplierRegistrationStates({
     await saveBiz(biz);
 
     return sendList(from, "📍 Where are you based?\n\n_Not listed? Tap Other_", [
-      ...SUPPLIER_CITIES.map(c => ({ id: `sup_city_${c.toLowerCase()}`, title: c })),
+      ...SUPPLIER_CITIES.map(c => ({ id: `sup_city_${c.toLowerCase().replace(/\s+/g, '_')}`, title: c })),
       { id: "sup_city_other", title: "📍 Other City" }
     ]);
   }
