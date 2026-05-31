@@ -8148,6 +8148,9 @@ router.get("/broadcast", requireSupplierAdmin, async (req, res) => {
 
       <script>
       // ── Template variable hints ──────────────────────────────────────────────
+      // ── Shared state — must be declared before any function that uses it ──────
+      let _recentUploads = []; // in-memory uploaded files for this session
+
       const TPL_META = {
         zqm_broadcast_image:   { v1: "{{1}} — Your message text (image must be attached via Step 3)  e.g. Dear customer, please find attached.", v2: false, hasMedia: true },
         zqm_welcome_back:      { v1: "{{1}} — Total businesses listed  e.g. 47",                                               v2: false, hasMedia: false },
@@ -8177,8 +8180,6 @@ router.get("/broadcast", requireSupplierAdmin, async (req, res) => {
       onTplChange(document.getElementById("tplSelect").value);
 
       // ── Media mode tabs ──────────────────────────────────────────────────
-      const _recentUploads = []; // in-memory for this session
-
       function setMediaMode(mode) {
         document.getElementById("mediaMode").value = mode;
         ["none","upload","url"].forEach(m => {
