@@ -3,41 +3,7 @@
 import SupplierProfile from "../models/supplierProfile.js";
 import { sendText, sendButtons, sendList } from "./metaSender.js";
 import { SUPPLIER_CITIES, SUPPLIER_CATEGORIES } from "./supplierPlans.js";
-import axios from "axios";
 
-// ── City list sender: splits 16 cities + Other into 2 sections to stay within
-//    WhatsApp's hard limit of 10 rows per section. ────────────────────────────
-async function sendCityList(to, bodyText) {
-  const PHONE_ID = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.META_PHONE_NUMBER_ID || process.env.PHONE_NUMBER_ID;
-  const TOKEN    = process.env.META_ACCESS_TOKEN || process.env.WHATSAPP_ACCESS_TOKEN;
-  const toRow = c => ({ id: `sup_city_${c.toLowerCase().replace(/\s+/g, "_")}`, title: c });
-  const section1Rows = SUPPLIER_CITIES.slice(0, 9).map(toRow);
-  const section2Rows = [
-    ...SUPPLIER_CITIES.slice(9).map(toRow),
-    { id: "sup_city_other", title: "📍 Other City" }
-  ];
-  const payload = {
-    messaging_product: "whatsapp",
-    to,
-    type: "interactive",
-    interactive: {
-      type: "list",
-      body: { text: bodyText },
-      action: {
-        button: "Select",
-        sections: [
-          { title: "Major Cities", rows: section1Rows },
-          { title: "More Cities",  rows: section2Rows }
-        ]
-      }
-    }
-  };
-  return axios.post(
-    `https://graph.facebook.com/v24.0/${PHONE_ID}/messages`,
-    payload,
-    { headers: { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json" } }
-  );
-}
 
 // ── Category-specific product/service examples ────────────────────────────
 export const CATEGORY_PRODUCT_EXAMPLES = {
@@ -377,7 +343,10 @@ export async function handleSupplierRegistrationStates({
     biz.sessionState = "supplier_reg_city";
     await saveBiz(biz);
 
-    return sendCityList(from, "📍 Where are you based?\n\n_Not listed? Tap Other_");
+    return sendList(from, "📍 Where are you based?\n\n_Not listed? Tap Other_", [
+      ...SUPPLIER_CITIES.slice(0, 9).map(c => ({ id: `sup_city_${c.toLowerCase().replace(/\s+/g, "_")}`, title: c })),
+      { id: "sup_city_more", title: "➕ More Cities" }
+    ]);
   }
 
   // ── Step 2: Area ───────────────────────────────────────

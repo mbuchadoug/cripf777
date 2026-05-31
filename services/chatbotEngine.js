@@ -13137,6 +13137,15 @@ if (a === "sup_upgrade_plan" || a === "sup_renew_plan") {
   }
 
 
+  // ── Supplier city "More Cities" page 2 ───────────────────────────────────────
+  if (a === "sup_city_more") {
+    const { SUPPLIER_CITIES } = await import("./supplierPlans.js");
+    return sendList(from, "📍 Where are you based?\n\n_Not listed? Tap Other_", [
+      ...SUPPLIER_CITIES.slice(9).map(c => ({ id: `sup_city_${c.toLowerCase().replace(/\s+/g, "_")}`, title: c })),
+      { id: "sup_city_other", title: "📍 Other City" }
+    ]);
+  }
+
   // ── Supplier city selected from list during registration ──────────────────
   if (a.startsWith("sup_city_")) {
     const cityRaw = a.replace("sup_city_", "").replace(/_/g, " ");
