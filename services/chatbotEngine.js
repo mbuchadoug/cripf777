@@ -3896,6 +3896,89 @@ if (typeof a === "string" && a.startsWith("sfaq_")) {
   return sendText(from, "Sorry, that option expired. Please open the school link again to start fresh.");
 }
 // ── END SCHOOL FAQ EARLY HANDLER ─────────────────────────────────────────────
+// ── SCHOOL REG EARLY HANDLER ────────────────────────────────────────────────
+// MUST be at top level - school_reg_* and school_admin_* arrive as
+// isMetaAction=true interactive replies. The handler inside the
+// !isMetaAction block (~line 12278) is dead code for these actions.
+// This mirrors the REG TYPE EARLY HANDLER pattern above.
+if (
+  a.startsWith("school_reg_type_") ||
+  a.startsWith("school_reg_city_") ||
+  a.startsWith("school_reg_cur_") ||
+  a.startsWith("school_reg_gender_") ||
+  a.startsWith("school_reg_boarding_") ||
+  a.startsWith("school_reg_fac_") ||
+  a.startsWith("school_reg_ext_") ||
+  a === "school_reg_city_more" ||
+  a.startsWith("school_plan_") ||
+  a === "school_reg_address_skip" ||
+  a === "school_reg_principal_skip" ||
+  a === "school_reg_email_skip" ||
+  a === "school_reg_cur_done" ||
+  a === "school_reg_fac_done" ||
+  a === "school_reg_ext_done" ||
+  a === "school_reg_city_other" ||
+  a === "school_reg_confirm_yes" ||
+  a === "school_reg_confirm_no" ||
+  a === "school_admin_manage_facilities" ||
+  a === "school_admin_manage_extramural" ||
+  a === "school_admin_edit_fees" ||
+  a === "school_admin_edit_reg_link" ||
+  a === "school_admin_edit_email" ||
+  a === "school_admin_edit_website" ||
+  a === "school_admin_upload_brochure" ||
+  a.startsWith("school_fac_page_") ||
+  a.startsWith("school_fac_toggle_") ||
+  a.startsWith("school_ext_page_") ||
+  a.startsWith("school_ext_toggle_")
+) {
+  console.log("[SCHOOL_REG_FIXED] phone:", phone, "action:", a, "state:", biz?.sessionState);
+
+  if (!biz) {
+    await sendText(from, "❌ Session expired. Type *menu* to start again.");
+    return;
+  }
+
+  // ── school registration + plan actions ──────────────────────────────────
+  if (a.startsWith("school_reg_") || a.startsWith("school_plan_")) {
+    const handled = await handleSchoolRegistrationActions({
+      action: a, from, biz, saveBiz: saveBizSafe.bind(null, biz)
+    });
+    if (handled) return;
+  }
+
+  // ── school admin: facilities ─────────────────────────────────────────────
+  if (
+    a === "school_admin_manage_facilities" ||
+    a.startsWith("school_fac_page_") ||
+    a.startsWith("school_fac_toggle_")
+  ) {
+    const handled = await handleSchoolSearchActions({
+      action: a, from, biz, saveBiz: saveBizSafe.bind(null, biz)
+    });
+    if (handled) return;
+  }
+
+  // ── school admin: extramural + other admin ───────────────────────────────
+  if (
+    a === "school_admin_manage_extramural" ||
+    a === "school_admin_edit_fees" ||
+    a === "school_admin_edit_reg_link" ||
+    a === "school_admin_edit_email" ||
+    a === "school_admin_edit_website" ||
+    a === "school_admin_upload_brochure" ||
+    a.startsWith("school_ext_page_") ||
+    a.startsWith("school_ext_toggle_")
+  ) {
+    const handled = await handleSchoolAdminStates({
+      state: biz.sessionState, from, text: "", action: a,
+      biz, saveBiz: saveBizSafe.bind(null, biz)
+    });
+    if (handled) return;
+  }
+}
+// ── END SCHOOL REG EARLY HANDLER ─────────────────────────────────────────────
+
 
 
 
