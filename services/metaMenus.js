@@ -179,12 +179,27 @@ export async function sendMainMenu(to) {
   // ── Case 3: Has a staff role (clerk/manager/owner) — the key fix ──────────
   // A clerk or manager has a UserRole but NO SupplierProfile of their own.
   // They must see Business Tools regardless of whether biz.name is "pending_supplier_".
+  // EXCEPTION: if the biz is still "pending_supplier_" registration in progress,
+  // show "List My Business" so they can complete registration.
   if (hasStaffRole) {
     const staffBiz = biz || (staffRole.businessId
       ? await (await import("../models/business.js")).default.findById(staffRole.businessId)
       : null);
+
+    // If their only biz is a pending supplier registration, treat as new user
+    const isPendingRegistration = !staffBiz || staffBiz.name?.startsWith("pending_supplier_");
+    if (isPendingRegistration) {
+      return sendList(to, "👋 *Welcome to ZimQuote!*\nZimbabwe's marketplace for products & services.", [
+        { id: "sup_request_sellers", title: "⚡ Request Sellers" },
+        { id: "find_supplier",       title: "🔍 Browse & Shop" },
+        { id: "my_orders",           title: "📋 My Orders" },
+        { id: "find_school",         title: "🏫 Find a School" },
+        { id: "register_supplier",   title: "🏪 List My Business" }
+      ]);
+    }
+
     const items = [
-      { id: "biz_tools_menu",      title: "📊 Business Tools" },   // always show — they have a role
+      { id: "biz_tools_menu",      title: "📊 Business Tools" },
       { id: "sup_request_sellers", title: "⚡ Request Sellers" },
       { id: "find_supplier",       title: "🔍 Browse & Shop" },
       { id: "my_orders",           title: "📋 My Orders" },
