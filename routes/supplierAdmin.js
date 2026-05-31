@@ -1,5 +1,6 @@
 // routes/supplierAdmin.js
 import express from "express";
+import axios from "axios";
 import { requireSupplierAdmin } from "../middleware/supplierAdminAuth.js";
 import SupplierProfile from "../models/supplierProfile.js";
 import SupplierOrder from "../models/supplierOrder.js";
@@ -8433,6 +8434,63 @@ router.get("/broadcast/contacts", requireSupplierAdmin, async (req, res) => {
 });
 
 // ── POST /zq-admin/broadcast ──────────────────────────────────────────────────
+// ── Self-contained sender for zqm_broadcast_image (image header + {{1}} body) ──
+// Bypasses sendBroadcastTemplate since that function only knows the 4 older templates.
+// Returns { sent, failed, skipped } matching the shape sendBroadcastTemplate returns.
+async function _sendBroadcastImage({ phones, messageText, imageUrl, msPerMessage = 3000, dryRun = false }) {
+  const PHONE_ID = process.env.WHATSAPP_PHONE_NUMBER_ID
+                || process.env.META_PHONE_NUMBER_ID
+                || process.env.PHONE_NUMBER_ID;
+  const TOKEN    = process.env.META_ACCESS_TOKEN
+                || process.env.WHATSAPP_ACCESS_TOKEN;
+
+  let sent = 0, failed = 0, skipped = 0;
+
+  for (const phone of phones) {
+    if (dryRun) { skipped++; continue; }
+
+    try {
+      const body = {
+        messaging_product: "whatsapp",
+        to:   phone,
+        type: "template",
+        template: {
+          name:     "zqm_broadcast_image",
+          language: { code: "en" },
+          components: [
+            // Header: image
+            {
+              type: "header",
+              parameters: [{ type: "image", image: { link: imageUrl } }]
+            },
+            // Body: {{1}} = messageText
+            {
+              type: "body",
+              parameters: [{ type: "text", text: String(messageText || "").slice(0, 1024) }]
+            }
+          ]
+        }
+      };
+
+      await axios.post(
+        `https://graph.facebook.com/v24.0/${PHONE_ID}/messages`,
+        body,
+        { headers: { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json" } }
+      );
+      sent++;
+    } catch (err) {
+      console.error(`[BROADCAST IMAGE] Failed to ${phone}:`, err.response?.data?.error?.message || err.message);
+      failed++;
+    }
+
+    if (msPerMessage > 0) {
+      await new Promise(r => setTimeout(r, msPerMessage));
+    }
+  }
+
+  return { sent, failed, skipped };
+}
+
 router.post("/broadcast", requireSupplierAdmin, async (req, res) => {
   try {
     const {
@@ -8522,17 +8580,32 @@ router.post("/broadcast", requireSupplierAdmin, async (req, res) => {
 
     const variables = [var1.trim(), var2.trim()].filter(Boolean);
 
-    const { sendBroadcastTemplate } = await import("../services/buyerRequestNotifications.js");
-    const result = await sendBroadcastTemplate({
-      phones,
-      templateName,
-      variables,
-      headerMediaUrl: finalMediaUrl,
-      headerType:     finalMediaType,
-      headerFilename: finalFilename,
-      msPerMessage: isDryRun ? 0 : 3000,
-      dryRun: isDryRun
-    });
+    let result;
+    if (templateName === "zqm_broadcast_image") {
+      // Handle the image broadcast template directly — sendBroadcastTemplate doesn't know this one
+      if (!finalMediaUrl && !isDryRun) {
+        return res.redirect(`/zq-admin/broadcast?error=${encodeURIComponent("zqm_broadcast_image requires an image. Please attach one in Step 3.")}`);
+      }
+      result = await _sendBroadcastImage({
+        phones,
+        messageText:  var1.trim() || "Dear customer, please find attached.",
+        imageUrl:     finalMediaUrl || "",
+        msPerMessage: isDryRun ? 0 : 3000,
+        dryRun:       isDryRun
+      });
+    } else {
+      const { sendBroadcastTemplate } = await import("../services/buyerRequestNotifications.js");
+      result = await sendBroadcastTemplate({
+        phones,
+        templateName,
+        variables,
+        headerMediaUrl: finalMediaUrl,
+        headerType:     finalMediaType,
+        headerFilename: finalFilename,
+        msPerMessage: isDryRun ? 0 : 3000,
+        dryRun: isDryRun
+      });
+    }
 
     _broadcastLog.push({
       ts:       Date.now(),
