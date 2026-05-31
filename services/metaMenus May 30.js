@@ -42,11 +42,7 @@ async function filterMenuByRole({ from, biz, items }) {
   if (phone.startsWith("0")) phone = "263" + phone.slice(1);
 
   if (!biz) {
-    // No biz: only show items with no section or items accessible by clerk
-    return items.filter(item =>
-      !item.section ||
-      (item.section !== "owner_only" && item.section !== "biz_tools" && canAccessSection("clerk", item.section))
-    );
+    return items.filter(item => !item.section || canAccessSection("clerk", item.section));
   }
 
   // Look up by biz._id first; fall back to phone-only (handles UserRole businessId mismatch)
@@ -55,21 +51,12 @@ async function filterMenuByRole({ from, biz, items }) {
     user = await UserRole.findOne({ phone, pending: false });
   }
 
-  const role = user?.role || null;
+  if (user?.role === "owner") return items;
+  if (!user) return items.filter(item => !item.section || canAccessSection("clerk", item.section));
 
   return items.filter(item => {
     if (!item.section) return true;
-
-    // owner_only items: only owners see My Store / account management
-    if (item.section === "owner_only") return role === "owner";
-
-    // biz_tools: any assigned staff member sees Business Tools
-    if (item.section === "biz_tools") return role !== null;
-
-    // All other sections: use roleMatrix
-    if (role === "owner") return true;
-    if (!role) return canAccessSection("clerk", item.section);
-    return canAccessSection(role, item.section);
+    return canAccessSection(user.role, item.section);
   });
 }
 
@@ -133,17 +120,17 @@ if (supplier?.active) {
     const items = [
       { id: "sup_request_sellers", title: "⚡ Request Sellers" },
       { id: "find_supplier",       title: "🔍 Browse & Shop" },
+      
       { id: "my_orders",           title: "📋 My Orders (Buyer)" },
       { id: "find_school",         title: "🏫 Find a School" },
-      { id: "my_supplier_account", title: "🏪 My Store", section: "owner_only" },
-      { id: "biz_tools_menu",      title: "📊 Business Tools", section: "biz_tools" }
+      { id: "my_supplier_account", title: "🏪 My Store" },
+      { id: "biz_tools_menu",      title: "📊 Business Tools" }
     ];
-    // Hide Business Tools for trial users without a role
-    const filtered = await filterMenuByRole({ from: to, biz, items });
-    const finalFiltered = (biz && biz.package === "trial")
-      ? filtered.filter(i => i.id !== "biz_tools_menu")
-      : filtered;
-    return sendList(to, "👋 *Welcome to ZimQuote!*\nZimbabwe's marketplace for products & services.", finalFiltered);
+    // Hide Business Tools for trial users
+    const filtered = (biz && biz.package === "trial")
+      ? items.filter(i => i.id !== "biz_tools_menu")
+      : items;
+    return sendList(to, "👋 *Welcome to ZimQuote!*\nZimbabwe's marketplace for products & services.", filtered);
   }
 
   // ── Case 2: Registered supplier but not yet paid ──────────────────────────
@@ -160,15 +147,14 @@ if (supplier?.active) {
 }
 
   // ── Case 3: Has a business but no supplier profile ────────────────────────
-  // This covers clerks/managers assigned by admin who don't have supplier profiles.
 if (biz && !biz.name?.startsWith("pending_supplier_")) {
   const items = [
-    { id: "biz_tools_menu",      title: "📊 Business Tools", section: "biz_tools" },
+   
     { id: "sup_request_sellers", title: "⚡ Request Sellers" },
-    { id: "find_supplier",       title: "🔍 Browse & Shop" },
+     { id: "find_supplier",       title: "🔍 Browse & Shop" },
     { id: "my_orders",           title: "📋 My Orders" },
     { id: "find_school",         title: "🏫 Find a School" },
-    { id: "my_supplier_account", title: "🏪 My Store", section: "owner_only" }
+    { id: "my_supplier_account", title: "🏪 My Store" }
   ];
     const filtered = await filterMenuByRole({ from: to, biz, items });
    return sendList(to, "👋 *Welcome to ZimQuote!*\nZimbabwe's marketplace for products & services.", filtered);
