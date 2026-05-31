@@ -20,9 +20,7 @@ const UserRoleSchema = new mongoose.Schema({
     type: String,
     enum: ["owner", "admin", "manager", "clerk"],
     default: "owner"
-  },
-  // ── Admin-level suspend flag (set by supplierAdmin, blocks chatbot access) ──
-  suspended: { type: Boolean, default: false }
+  }
 }, { timestamps: true });
 
 export default mongoose.model("UserRole", UserRoleSchema);

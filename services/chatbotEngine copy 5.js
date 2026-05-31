@@ -8455,9 +8455,9 @@ return sendButtons(from, {
     callerRole = caller?.role || null;
   }
 
-  // ── Block suspended or locked users ──────────────────────────────────────
-  if (caller?.locked || caller?.suspended) {
-    await sendText(from, "🔒 Your account has been suspended by an administrator. Please contact your business owner.");
+  // ✅ LOCKED USER CHECK - block bot access for locked users
+  if (caller?.locked) {
+    await sendText(from, "🔒 Your account has been suspended. Please contact the business owner.");
     return;
   }
 
