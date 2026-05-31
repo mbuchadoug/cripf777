@@ -2388,14 +2388,12 @@ console.log("INVOICE BRANCH DEBUG", {
     biz.sessionState = "ready"; biz.sessionData = {};
     await saveBizSafe(biz);
 
-    // ── Sync to SupplierProfile AND Product model (business tools catalogue) ──
+    // ── Sync to SupplierProfile if this business has a linked supplier ────────
     try {
       const SupplierProfile = (await import("../models/supplierProfile.js")).default;
-      const Product         = (await import("../models/product.js")).default;
       const supplier = await SupplierProfile.findOne({ businessId: biz._id });
       if (supplier) {
         const newNames = saved.map(p => p.name);
-        // 1. Merge into SupplierProfile.listedProducts
         const existing = [...new Set([
           ...(supplier.listedProducts || []),
           ...(supplier.products       || [])
@@ -2403,25 +2401,7 @@ console.log("INVOICE BRANCH DEBUG", {
         const merged = [...new Set([...existing, ...newNames])];
         supplier.listedProducts = merged;
         await supplier.save();
-        // 2. Upsert each into Product model so invoice/quote/receipt catalogue stays current
-        for (const itemName of newNames) {
-          const priceEntry = (supplier.prices || []).find(p => p.product?.toLowerCase() === itemName.toLowerCase());
-          const rateEntry  = (supplier.rates  || []).find(r => r.service?.toLowerCase() === itemName.toLowerCase());
-          await Product.findOneAndUpdate(
-            { businessId: biz._id, name: itemName },
-            { $set: {
-                businessId:  biz._id,
-                branchId:    supplier.mainBranchId || null,
-                unitPrice:   priceEntry?.amount || 0,
-                description: rateEntry?.rate    || null,
-                isService:   supplier.profileType === "service",
-                isActive:    true
-              }
-            },
-            { upsert: true }
-          );
-        }
-        console.log(`[SYNC] ${newNames.length} products synced to SupplierProfile + Product model`);
+        console.log(`[SYNC] Products synced to SupplierProfile ${supplier._id}`);
       }
     } catch (_syncErr) { console.error("[SYNC] product sync error:", _syncErr.message); }
 

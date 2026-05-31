@@ -54,6 +54,13 @@ function timeDateNow() {
 }
 
 /**
+ * _safeNotify: Sends a WhatsApp text message.
+ *
+ * Works within 24hr session. If recipient hasn't messaged in 24hrs,
+ * Meta drops the message (error 131026). To fix this, submit a template
+ * named "biz_transaction_alert" to Meta and uncomment the template fallback below.
+ */
+/**
  * _safeNotify: Send a message, falling back to a Meta template if the 24hr
  * session window is expired.
  *
