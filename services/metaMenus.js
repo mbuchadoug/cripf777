@@ -117,73 +117,108 @@ export async function sendMainMenu(to) {
   const biz = await (await import("./bizHelpers.js")).getBizForPhone(to);
   const SupplierProfile = (await import("../models/supplierProfile.js")).default;
   const SchoolProfile   = (await import("../models/schoolProfile.js")).default;
+  const UserRole        = (await import("../models/userRole.js")).default;
   const phone = to.replace(/\D+/g, "");
   const supplier = await SupplierProfile.findOne({ phone });
 
-  // ── Case 0: School admin - always takes priority ──────────────────────────
-// ── Case 0: School admin - always takes priority ──────────────────────────
-const school = await SchoolProfile.findOne({ phone });
+  // ── Case 0: School admin ───────────────────────────────────────────────────
+  const school = await SchoolProfile.findOne({ phone });
   if (school) {
-    // Dynamic import avoids hoisting issues
     const { sendSchoolAccountMenu: _schoolMenu } = await import("./metaMenus.js");
     return _schoolMenu(to, school);
   }
-  // ── Case 1: Active supplier (paid) - may also have full biz tools ─────────
-if (supplier?.active) {
+
+  // ── Resolve staff role for this phone ─────────────────────────────────────
+  // Check BEFORE branching so clerks/managers always reach Business Tools.
+  // We look up by biz._id if biz is known, otherwise by phone alone.
+  let staffRole = null;
+  if (biz) {
+    staffRole = await UserRole.findOne({ businessId: biz._id, phone, pending: false }).lean();
+  }
+  if (!staffRole) {
+    staffRole = await UserRole.findOne({ phone, pending: false }).sort({ updatedAt: -1 }).lean();
+  }
+  const hasStaffRole = !!staffRole;
+  const isOwnerRole  = staffRole?.role === "owner";
+
+  // ── Case 1: Active supplier (paid) ───────────────────────────────────────
+  if (supplier?.active) {
     const items = [
       { id: "sup_request_sellers", title: "⚡ Request Sellers" },
       { id: "find_supplier",       title: "🔍 Browse & Shop" },
       { id: "my_orders",           title: "📋 My Orders (Buyer)" },
       { id: "find_school",         title: "🏫 Find a School" },
-      { id: "my_supplier_account", title: "🏪 My Store", section: "owner_only" },
-      { id: "biz_tools_menu",      title: "📊 Business Tools", section: "biz_tools" }
+      { id: "my_supplier_account", title: "🏪 My Store",        section: "owner_only" },
+      { id: "biz_tools_menu",      title: "📊 Business Tools",  section: "biz_tools" }
     ];
-    // Hide Business Tools for trial users without a role
     const filtered = await filterMenuByRole({ from: to, biz, items });
-    const finalFiltered = (biz && biz.package === "trial")
+    const finalFiltered = (biz && biz.package === "trial" && !hasStaffRole)
       ? filtered.filter(i => i.id !== "biz_tools_menu")
       : filtered;
     return sendList(to, "👋 *Welcome to ZimQuote!*\nZimbabwe's marketplace for products & services.", finalFiltered);
   }
 
-  // ── Case 2: Registered supplier but not yet paid ──────────────────────────
- if (supplier && !supplier.active) {
-  return sendList(to, "👋 *Welcome to ZimQuote!*\n\nYour listing is saved but not yet live.", [
-  
-    { id: "sup_request_sellers", title: "⚡ Request Sellers" },
+  // ── Case 2: Supplier registered but not yet paid ──────────────────────────
+  if (supplier && !supplier.active) {
+    const items = [
+      { id: "sup_request_sellers", title: "⚡ Request Sellers" },
       { id: "find_supplier",       title: "🔍 Browse & Shop" },
-    { id: "my_orders",           title: "📋 My Orders" },
-    { id: "find_school",         title: "🏫 Find a School" },
-    { id: "my_supplier_account", title: "🏪 My Store" },
-    { id: "sup_upgrade_plan",    title: "💳 Activate Listing" }
-  ]);
-}
+      { id: "my_orders",           title: "📋 My Orders" },
+      { id: "find_school",         title: "🏫 Find a School" },
+      { id: "my_supplier_account", title: "🏪 My Store" },
+      { id: "sup_upgrade_plan",    title: "💳 Activate Listing" }
+    ];
+    // Even unactivated suppliers might be assigned as staff in a biz
+    if (hasStaffRole) {
+      items.unshift({ id: "biz_tools_menu", title: "📊 Business Tools", section: "biz_tools" });
+    }
+    const filtered = await filterMenuByRole({ from: to, biz, items });
+    return sendList(to, "👋 *Welcome to ZimQuote!*\n\nYour listing is saved but not yet live.", filtered);
+  }
 
-  // ── Case 3: Has a business but no supplier profile ────────────────────────
-  // This covers clerks/managers assigned by admin who don't have supplier profiles.
-if (biz && !biz.name?.startsWith("pending_supplier_")) {
-  const items = [
-    { id: "biz_tools_menu",      title: "📊 Business Tools", section: "biz_tools" },
+  // ── Case 3: Has a staff role (clerk/manager/owner) — the key fix ──────────
+  // A clerk or manager has a UserRole but NO SupplierProfile of their own.
+  // They must see Business Tools regardless of whether biz.name is "pending_supplier_".
+  if (hasStaffRole) {
+    const staffBiz = biz || (staffRole.businessId
+      ? await (await import("../models/business.js")).default.findById(staffRole.businessId)
+      : null);
+    const items = [
+      { id: "biz_tools_menu",      title: "📊 Business Tools" },   // always show — they have a role
+      { id: "sup_request_sellers", title: "⚡ Request Sellers" },
+      { id: "find_supplier",       title: "🔍 Browse & Shop" },
+      { id: "my_orders",           title: "📋 My Orders" },
+      { id: "find_school",         title: "🏫 Find a School" }
+    ];
+    // Owners also see My Store
+    if (isOwnerRole) {
+      items.push({ id: "my_supplier_account", title: "🏪 My Store" });
+    }
+    return sendList(to, "👋 *Welcome to ZimQuote!*\nZimbabwe's marketplace for products & services.", items);
+  }
+
+  // ── Case 4: Has a real biz (not pending) but no role and no supplier ──────
+  if (biz && !biz.name?.startsWith("pending_supplier_")) {
+    const items = [
+      { id: "biz_tools_menu",      title: "📊 Business Tools", section: "biz_tools" },
+      { id: "sup_request_sellers", title: "⚡ Request Sellers" },
+      { id: "find_supplier",       title: "🔍 Browse & Shop" },
+      { id: "my_orders",           title: "📋 My Orders" },
+      { id: "find_school",         title: "🏫 Find a School" },
+      { id: "my_supplier_account", title: "🏪 My Store", section: "owner_only" }
+    ];
+    const filtered = await filterMenuByRole({ from: to, biz, items });
+    return sendList(to, "👋 *Welcome to ZimQuote!*\nZimbabwe's marketplace for products & services.", filtered);
+  }
+
+  // ── Case 5: Brand new user — no biz, no supplier, no role ─────────────────
+  return sendList(to, "👋 *Welcome to ZimQuote!*\nZimbabwe's marketplace for products & services.", [
     { id: "sup_request_sellers", title: "⚡ Request Sellers" },
     { id: "find_supplier",       title: "🔍 Browse & Shop" },
     { id: "my_orders",           title: "📋 My Orders" },
     { id: "find_school",         title: "🏫 Find a School" },
-    { id: "my_supplier_account", title: "🏪 My Store", section: "owner_only" }
-  ];
-    const filtered = await filterMenuByRole({ from: to, biz, items });
-   return sendList(to, "👋 *Welcome to ZimQuote!*\nZimbabwe's marketplace for products & services.", filtered);
-}
-
-  // ── Case 4: Brand new user - no biz, no supplier ──────────────────────────
-return sendList(to, "👋 *Welcome to ZimQuote!*\nZimbabwe's marketplace for products & services.", [
-
-  { id: "sup_request_sellers", title: "⚡ Request Sellers" },
-    { id: "find_supplier",       title: "🔍 Browse & Shop" },
-    
-  { id: "my_orders",           title: "📋 My Orders" },
-  { id: "find_school",         title: "🏫 Find a School" },
-  { id: "register_supplier",   title: "🏪 List My Business" }
-]);
+    { id: "register_supplier",   title: "🏪 List My Business" }
+  ]);
 }
 
 

@@ -3752,49 +3752,13 @@ let _bizIsOwnedByUser = true;
 if (biz) {
   const _ownerRoleCheck = await UserRole.findOne({ phone, businessId: biz._id, pending: false }).lean();
   if (!_ownerRoleCheck) {
-    // Not on this biz - check if they have a role on ANY biz (e.g. clerk assigned via admin)
-    const _anyRoleCheck = await UserRole.findOne({ phone, pending: false }).sort({ updatedAt: -1 }).lean();
-    if (_anyRoleCheck?.businessId) {
-      // Switch biz to the one they actually belong to
-      const _assignedBiz = await Business.findById(_anyRoleCheck.businessId);
-      if (_assignedBiz) {
-        biz = _assignedBiz;
-        _bizIsOwnedByUser = true;
-        // Update session so next request is fast
-        await UserSession.findOneAndUpdate(
-          { phone },
-          { $set: { activeBusinessId: _assignedBiz._id } },
-          { upsert: true }
-        );
-        console.log("[OWNERSHIP] phone", phone, "role-switched to biz", _assignedBiz._id, "as", _anyRoleCheck.role);
-      } else {
-        _bizIsOwnedByUser = false;
-        console.log("[OWNERSHIP] phone", phone, "has no role on biz", biz._id, "- notification contact only");
-      }
-    } else {
-      _bizIsOwnedByUser = false;
-      console.log("[OWNERSHIP] phone", phone, "has no role on biz", biz._id, "- notification contact only");
-    }
+    _bizIsOwnedByUser = false;
+    console.log("[OWNERSHIP] phone", phone, "has no role on biz", biz._id, "- notification contact only");
   } else {
-    console.log("[OWNERSHIP] phone", phone, "owns biz", biz._id, "as", _ownerRoleCheck.role, "state:", biz.sessionState);
+    console.log("[OWNERSHIP] phone", phone, "owns biz", biz._id, "state:", biz.sessionState);
   }
 } else {
-  // No biz from session - try to find via UserRole
-  const _roleForNoBiz = await UserRole.findOne({ phone, pending: false }).sort({ updatedAt: -1 }).lean();
-  if (_roleForNoBiz?.businessId) {
-    const _roleBiz = await Business.findById(_roleForNoBiz.businessId);
-    if (_roleBiz) {
-      biz = _roleBiz;
-      _bizIsOwnedByUser = true;
-      await UserSession.findOneAndUpdate(
-        { phone },
-        { $set: { activeBusinessId: _roleBiz._id } },
-        { upsert: true }
-      );
-      console.log("[OWNERSHIP] phone", phone, "found via role →", _roleBiz._id, "as", _roleForNoBiz.role);
-    }
-  }
-  if (!biz) console.log("[OWNERSHIP] phone", phone, "has NO biz");
+  console.log("[OWNERSHIP] phone", phone, "has NO biz");
 }
 
 // ── ZQ TEXT DEEP LINK HANDLER (TOP LEVEL - runs for ALL users, any session state) ─
