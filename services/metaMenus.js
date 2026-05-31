@@ -42,11 +42,20 @@ async function filterMenuByRole({ from, biz, items }) {
   if (phone.startsWith("0")) phone = "263" + phone.slice(1);
 
   if (!biz) {
-    // No biz: only show items with no section or items accessible by clerk
-    return items.filter(item =>
-      !item.section ||
-      (item.section !== "owner_only" && item.section !== "biz_tools" && canAccessSection("clerk", item.section))
-    );
+    // No biz in session - but still check if this phone has a role (e.g. supplier with stale session)
+    const _fallbackUser = await UserRole.findOne({ phone, pending: false }).sort({ updatedAt: -1 }).lean();
+    if (_fallbackUser) {
+      const _fbRole = _fallbackUser.role;
+      return items.filter(item => {
+        if (!item.section) return true;
+        if (item.section === "owner_only") return _fbRole === "owner";
+        if (item.section === "biz_tools") return true;
+        if (_fbRole === "owner") return true;
+        return canAccessSection(_fbRole, item.section);
+      });
+    }
+    // Truly no biz and no role: hide all sectioned items
+    return items.filter(item => !item.section);
   }
 
   // Look up by biz._id first; fall back to phone-only (handles UserRole businessId mismatch)
@@ -143,6 +152,19 @@ export async function sendMainMenu(to) {
 
   // ── Case 1: Active supplier (paid) ───────────────────────────────────────
   if (supplier?.active) {
+    // Ensure we have biz — supplier may have businessId even if session is stale
+    let supplierBiz = biz;
+    if (!supplierBiz && supplier.businessId) {
+      supplierBiz = await (await import("../models/business.js")).default.findById(supplier.businessId);
+      if (supplierBiz) {
+        // Fix stale session
+        await (await import("../models/userSession.js")).default.findOneAndUpdate(
+          { phone },
+          { $set: { phone, activeBusinessId: supplierBiz._id } },
+          { upsert: true }
+        );
+      }
+    }
     const items = [
       { id: "sup_request_sellers", title: "⚡ Request Sellers" },
       { id: "find_supplier",       title: "🔍 Browse & Shop" },
@@ -151,8 +173,8 @@ export async function sendMainMenu(to) {
       { id: "my_supplier_account", title: "🏪 My Store",        section: "owner_only" },
       { id: "biz_tools_menu",      title: "📊 Business Tools",  section: "biz_tools" }
     ];
-    const filtered = await filterMenuByRole({ from: to, biz, items });
-    const finalFiltered = (biz && biz.package === "trial" && !hasStaffRole)
+    const filtered = await filterMenuByRole({ from: to, biz: supplierBiz, items });
+    const finalFiltered = (supplierBiz && supplierBiz.package === "trial" && !hasStaffRole)
       ? filtered.filter(i => i.id !== "biz_tools_menu")
       : filtered;
     return sendList(to, "👋 *Welcome to ZimQuote!*\nZimbabwe's marketplace for products & services.", finalFiltered);
@@ -190,11 +212,11 @@ export async function sendMainMenu(to) {
     const isPendingRegistration = !staffBiz || staffBiz.name?.startsWith("pending_supplier_");
     if (isPendingRegistration) {
       return sendList(to, "👋 *Welcome to ZimQuote!*\nZimbabwe's marketplace for products & services.", [
+        { id: "register_supplier",   title: "🏪 List My Business" },
         { id: "sup_request_sellers", title: "⚡ Request Sellers" },
         { id: "find_supplier",       title: "🔍 Browse & Shop" },
         { id: "my_orders",           title: "📋 My Orders" },
-        { id: "find_school",         title: "🏫 Find a School" },
-        { id: "register_supplier",   title: "🏪 List My Business" }
+        { id: "find_school",         title: "🏫 Find a School" }
       ]);
     }
 
@@ -228,11 +250,11 @@ export async function sendMainMenu(to) {
 
   // ── Case 5: Brand new user — no biz, no supplier, no role ─────────────────
   return sendList(to, "👋 *Welcome to ZimQuote!*\nZimbabwe's marketplace for products & services.", [
+    { id: "register_supplier",   title: "🏪 List My Business" },
     { id: "sup_request_sellers", title: "⚡ Request Sellers" },
     { id: "find_supplier",       title: "🔍 Browse & Shop" },
     { id: "my_orders",           title: "📋 My Orders" },
-    { id: "find_school",         title: "🏫 Find a School" },
-    { id: "register_supplier",   title: "🏪 List My Business" }
+    { id: "find_school",         title: "🏫 Find a School" }
   ]);
 }
 
