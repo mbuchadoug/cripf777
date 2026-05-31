@@ -3661,7 +3661,49 @@ a.startsWith("sup_load_preset_") ||
       // zqsg_sch_<schoolId>      = visitor tapped a school in a school group list
       // zqsg_register_<slug>     = visitor tapped "Add My School Here" CTA
       a.startsWith("zqsg_sch_") ||
-      a.startsWith("zqsg_register_")
+      a.startsWith("zqsg_register_") ||
+      // ── Business tools dynamic actions ───────────────────────────────────
+      a.startsWith("inv_") ||
+      a.startsWith("payinv_") ||
+      a.startsWith("prod_") ||
+      a.startsWith("doc_") ||
+      a.startsWith("subpay_") ||
+      a.startsWith("stmt_client_") ||
+      a.startsWith("invite_branch_") ||
+      a.startsWith("assign_user_") ||
+      a.startsWith("assign_branch_") ||
+      a.startsWith("onb_") ||
+      a.startsWith("rate_") ||
+      a.startsWith("req_offer_confirm_") ||
+      a.startsWith("req_auto_") ||
+      a.startsWith("view_invoices_branch_") ||
+      a.startsWith("view_quotes_branch_") ||
+      a.startsWith("view_receipts_branch_") ||
+      a.startsWith("view_products_branch_") ||
+      a.startsWith("view_all_products_page_") ||
+      a.startsWith("view_all_invoices_page_") ||
+      a.startsWith("view_all_quotes_page_") ||
+      a.startsWith("view_all_receipts_page_") ||
+      a.startsWith("cashbal_branch_") ||
+      a.startsWith("new_doc_branch_") ||
+      a.startsWith("add_product_branch_") ||
+      a.startsWith("add_client_branch_") ||
+      a.startsWith("payment_in_branch_") ||
+      a.startsWith("expense_branch_") ||
+      a.startsWith("bulk_expense_branch_") ||
+      a.startsWith("view_expense_receipts_branch_") ||
+      a.startsWith("view_payment_history_branch_") ||
+      a.startsWith("view_clients_branch_") ||
+      a.startsWith("vdoc_") ||
+      a.startsWith("svc_rate_") ||
+      a === "add_another_expense" ||
+      a === "view_all_products" ||
+      a === "view_all_invoices" ||
+      a === "view_all_quotes" ||
+      a === "view_all_receipts" ||
+      a === "cashbal_branch_all" ||
+      a === "sup_search_type_product" ||
+      a === "__document_uploaded__"
     
     );
   // =========================
@@ -4219,7 +4261,50 @@ const isBuyerRequestMetaReply =
   a === "main_menu_back" ||
   a.startsWith("sc_") ||
   // ── All ACTIONS-constant menu taps must enter the mega-block ─────────────
-  Object.values(ACTIONS).some(v => (v || "").toLowerCase() === a);
+  Object.values(ACTIONS).some(v => (v || "").toLowerCase() === a) ||
+  // ── Business tools: invoice / quote / receipt flow buttons ───────────────
+  a.startsWith("inv_") ||
+  a.startsWith("payinv_") ||
+  a.startsWith("prod_") ||
+  a.startsWith("doc_") ||
+  a.startsWith("subpay_") ||
+  a.startsWith("stmt_client_") ||
+  a.startsWith("invite_branch_") ||
+  a.startsWith("assign_user_") ||
+  a.startsWith("assign_branch_") ||
+  a.startsWith("onb_") ||
+  a.startsWith("rate_") ||
+  a.startsWith("req_offer_confirm_") ||
+  a.startsWith("req_auto_") ||
+  a.startsWith("view_invoices_branch_") ||
+  a.startsWith("view_quotes_branch_") ||
+  a.startsWith("view_receipts_branch_") ||
+  a.startsWith("view_products_branch_") ||
+  a.startsWith("view_all_products_page_") ||
+  a.startsWith("view_all_invoices_page_") ||
+  a.startsWith("view_all_quotes_page_") ||
+  a.startsWith("view_all_receipts_page_") ||
+  a.startsWith("cashbal_branch_") ||
+  a.startsWith("new_doc_branch_") ||
+  a.startsWith("add_product_branch_") ||
+  a.startsWith("add_client_branch_") ||
+  a.startsWith("payment_in_branch_") ||
+  a.startsWith("expense_branch_") ||
+  a.startsWith("bulk_expense_branch_") ||
+  a.startsWith("view_expense_receipts_branch_") ||
+  a.startsWith("view_payment_history_branch_") ||
+  a.startsWith("view_clients_branch_") ||
+  a.startsWith("report_branch_") ||
+  a.startsWith("vdoc_") ||
+  a.startsWith("svc_rate_") ||
+  a === "add_another_expense" ||
+  a === "view_all_products" ||
+  a === "view_all_invoices" ||
+  a === "view_all_quotes" ||
+  a === "view_all_receipts" ||
+  a === "cashbal_branch_all" ||
+  a === "sup_search_type_product" ||
+  a === "__document_uploaded__";
 
 if (!isMetaAction || isBuyerRequestMetaReply) {
     const flowSess = await UserSession.findOne({ phone });
