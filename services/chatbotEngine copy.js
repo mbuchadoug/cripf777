@@ -10639,68 +10639,6 @@ if (shortcode.city) {
 }
 
 
-// ── TOP-LEVEL REGISTRATION STATE DISPATCHER ─────────────────────────────────
-// CRITICAL FIX: school text states (school_reg_name, school_reg_city_text, etc.)
-// are excluded from the block below by the !schoolTextStates condition. This means
-// handleSchoolRegistrationStates was NEVER reached for school text input states,
-// leaving school registrants stuck after entering their school name.
-// Supplier states (supplier_reg_name etc.) also need consistent saveBiz binding.
-// This top-level block fires BEFORE the gated block, catches ALL reg states.
-if (
-  biz &&
-  !isMetaAction &&
-  biz.sessionState &&
-  text.trim() &&
-  !escapeWords.includes(al) &&
-  !/^ZQ:/i.test(text.trim()) &&
-  !text.trim().toLowerCase().startsWith("zqg_")
-) {
-  // ── School text-input states (MUST be here - excluded from block below) ──────
-  if (schoolTextStates.includes(biz.sessionState)) {
-    console.log("[REG-DISPATCH-TOPLVL] school text state:", biz.sessionState, "from:", from);
-    const _schoolHandled = await handleSchoolRegistrationStates({
-      state: biz.sessionState, from, text, biz, saveBiz: saveBizSafe.bind(null, biz)
-    });
-    if (_schoolHandled) return;
-  }
-
-  // ── School admin text-input states ──────────────────────────────────────────
-  if (schoolAdminStates.includes(biz.sessionState)) {
-    console.log("[REG-DISPATCH-TOPLVL] school admin state:", biz.sessionState, "from:", from);
-    const _schoolAdminHandled = await handleSchoolAdminStates({
-      state: biz.sessionState, from, text, biz, saveBiz: saveBizSafe.bind(null, biz)
-    });
-    if (_schoolAdminHandled) return;
-  }
-
-  // ── Supplier registration text-input states ──────────────────────────────────
-  if (supplierStates.includes(biz.sessionState)) {
-    console.log("[REG-DISPATCH-TOPLVL] supplier reg state:", biz.sessionState, "from:", from);
-    const _supHandled = await handleSupplierRegistrationStates({
-      state: biz.sessionState, from, text, biz, saveBiz: saveBizSafe.bind(null, biz)
-    });
-    if (_supHandled) return;
-  }
-
-  // ── School FAQ text states ──────────────────────────────────────────────────
-  if (biz.sessionState?.startsWith("sfaq_")) {
-    console.log("[REG-DISPATCH-TOPLVL] sfaq text state:", biz.sessionState, "from:", from);
-    const _sfaqHandled = await handleSchoolFAQState({
-      state: biz.sessionState, from, text, biz, saveBiz: saveBizSafe.bind(null, biz)
-    });
-    if (_sfaqHandled) return;
-  }
-
-  // ── Seller chat text states ──────────────────────────────────────────────────
-  if (biz.sessionState?.startsWith("sc_")) {
-    const _scHandled = await handleSellerChatState({
-      state: biz.sessionState, from, text, biz, saveBiz: saveBizSafe.bind(null, biz)
-    });
-    if (_scHandled) return;
-  }
-}
-// ── END TOP-LEVEL REGISTRATION STATE DISPATCHER ──────────────────────────────
-
 if (!isMetaAction && biz && biz.sessionState && !escapeWords.includes(al) && !settingsStates.includes(biz.sessionState) && !schoolAdminStates.includes(biz.sessionState) && !schoolTextStates.includes(biz.sessionState) && !/^ZQ:/i.test(text.trim())) {
     if (al === "cancel" && supplierStates.includes(biz.sessionState)) {
       biz.sessionState = "ready";
@@ -10869,7 +10807,7 @@ if (biz.sessionState === "supplier_search_city" && !isMetaAction && !schoolAdmin
 
     if (schoolTextStates.includes(biz.sessionState)) {
       const handled = await handleSchoolRegistrationStates({
-        state: biz.sessionState, from, text, biz, saveBiz: saveBizSafe.bind(null, biz)
+        state: biz.sessionState, from, text, biz, saveBiz: saveBizSafe
       });
       if (handled) return;
     }
@@ -10894,7 +10832,7 @@ if (biz.sessionState === "supplier_search_city" && !isMetaAction && !schoolAdmin
     // ── Seller chatbot text states ────────────────────────────────────────────
     if (biz.sessionState?.startsWith("sc_")) {
       const handled = await handleSellerChatState({
-        state: biz.sessionState, from, text, biz, saveBiz: saveBizSafe.bind(null, biz)
+        state: biz.sessionState, from, text, biz, saveBiz: saveBizSafe
       });
       if (handled) return;
     }
@@ -10902,14 +10840,14 @@ if (biz.sessionState === "supplier_search_city" && !isMetaAction && !schoolAdmin
     // ── School admin text-input states (e.g. fee updates) ────────────────────
     if (schoolAdminStates.includes(biz.sessionState)) {
       const handled = await handleSchoolAdminStates({
-        state: biz.sessionState, from, text, biz, saveBiz: saveBizSafe.bind(null, biz)
+        state: biz.sessionState, from, text, biz, saveBiz: saveBizSafe
       });
       if (handled) return;
     }
  
     if (supplierStates.includes(biz.sessionState)) {
       const handled = await handleSupplierRegistrationStates({
-        state: biz.sessionState, from, text, biz, saveBiz: saveBizSafe.bind(null, biz)
+        state: biz.sessionState, from, text, biz, saveBiz: saveBizSafe
       });
       if (handled) return;
     }
@@ -12355,7 +12293,7 @@ if (
       text: "",
       action: a,
       biz,
-      saveBiz: saveBizSafe.bind(null, biz)
+      saveBiz: saveBizSafe
     });
     if (handled) return;
   }

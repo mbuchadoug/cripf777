@@ -239,47 +239,6 @@ export async function handleSupplierRegistrationStates({
 }) {
   const phone = from.replace(/\D+/g, "");
 
-  // ── Defensive guard: biz must exist and be a Mongoose document ───────────────
-  // If biz is null/undefined or a plain lean object (no .save method), bail out.
-  if (!biz) {
-    console.warn("[SUP_REG_STATES] called with null biz — state:", state, "from:", from);
-    return false;
-  }
-
-  // Ensure sessionData is always an object (never null/undefined)
-  if (!biz.sessionData || typeof biz.sessionData !== "object") {
-    biz.sessionData = {};
-  }
-  if (!biz.sessionData.supplierReg || typeof biz.sessionData.supplierReg !== "object") {
-    biz.sessionData.supplierReg = {};
-  }
-
-  // ── Wrap saveBiz so it always has a valid biz reference ─────────────────────
-  // chatbotEngine passes saveBiz as saveBizSafe.bind(null, biz) — which means
-  // saveBiz() (no args) or saveBiz(biz) both work. Normalize to always call
-  // with the biz object so Mongoose documents are saved correctly.
-  const _origSaveBiz = saveBiz;
-  const _safeSaveBiz = async (b) => {
-    try {
-      if (typeof _origSaveBiz === "function") {
-        // Works whether it's bound (no arg needed) or unbound (passes biz)
-        await _origSaveBiz(b || biz);
-      }
-    } catch (saveErr) {
-      console.error("[SUP_REG_STATES] saveBiz error:", saveErr.message, "state:", state);
-      // If Mongoose .save() fails, try a direct findByIdAndUpdate as fallback
-      try {
-        const Business = (await import("../models/business.js")).default;
-        await Business.findByIdAndUpdate(biz._id, {
-          sessionState: biz.sessionState,
-          sessionData: biz.sessionData
-        });
-      } catch (_) {}
-    }
-  };
-  // Replace saveBiz with the safe wrapper throughout this function
-  saveBiz = _safeSaveBiz;
-
   // ── Guard: reg_type_* are button action IDs, never free text ─────────────────
   // If the engine calls this function with a reg_type_ action as the "text",
   // it means the user tapped a registration type button while their biz sessionState

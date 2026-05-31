@@ -318,14 +318,6 @@ export async function handleGroupSellerTap({ from, action, biz, saveBiz }) {
       }
 
       console.log(`[GROUP SELLER TAP] from=${from} supplierId=${supplierId}`);
-
-      // Track profile view on the supplier (non-blocking)
-      import("../models/supplierProfile.js").then(({ default: SupplierProfile }) => {
-        SupplierProfile.findByIdAndUpdate(supplierId, {
-          $inc: { viewCount: 1, monthlyViews: 1 }
-        }).catch(() => {});
-      }).catch(() => {});
-
       await showSellerMenu(from, supplierId, biz, saveBiz, { source: "group" });
       return true;
 
