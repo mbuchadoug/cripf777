@@ -3947,7 +3947,6 @@ const isPresets     = t === "Presets" || t.startsWith("Preset:");
 { href: "/zq-admin/expiry",          label: "⏰ Subscriptions",       active: isExpiry },
     { href: "/zq-admin/broadcast-offer", label: "📣 Broadcast Offer",  active: isBroadcast },
     { href: "/zq-admin/broadcast",       label: "📡 Broadcast Hub",     active: isBroadcastHub },
-    { href: "/zq-admin/reports-hub",      label: "📊 Reports Hub",       active: t === "Reports Hub" },
     { href: "/zq-admin/presets",         label: "🗂️ Presets",             active: isPresets },
     { href: "/zq-admin/vip-sellers",      label: "🔒 VIP Sellers",         active: t === "VIP Sellers" },
   ];
@@ -7812,15 +7811,6 @@ router.get("/broadcast", requireSupplierAdmin, async (req, res) => {
         </summary>
         <div style="padding:0 16px 16px;font-size:12px;line-height:2;color:#334155;font-family:monospace;border-top:1px solid var(--border);margin-top:0">
 
-          <strong style="font-size:13px">0. zqm_broadcast_image</strong> &nbsp;<span style="background:#dcfce7;color:#15803d;padding:1px 7px;border-radius:4px;font-size:10px;font-family:sans-serif">UTILITY · APPROVED ✅</span><br>
-          <b>Type:</b> Image header + body text<br>
-          <b>Body:</b><br>
-          ZimQuote<br>
-          <b>{{1}}</b><br>
-          For queries, contact our team on 263789901058.<br>
-          <b>Usage:</b> Attach an image in Step 3, type your message in {{1}}<br>
-          <b>Example:</b> {{1}} = <code>Dear customer, please find attached our latest product list.</code><br><br>
-
           <strong style="font-size:13px">1. zqm_welcome_back</strong> &nbsp;<span style="background:#dbeafe;color:#1e40af;padding:1px 7px;border-radius:4px;font-size:10px;font-family:sans-serif">MARKETING</span><br>
           <b>Header:</b> Welcome Back to ZimQuote<br>
           <b>Body:</b><br>
@@ -8006,7 +7996,6 @@ router.get("/broadcast", requireSupplierAdmin, async (req, res) => {
               <select name="templateName" id="tplSelect"
                 style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px"
                 onchange="onTplChange(this.value)">
-                <option value="zqm_broadcast_image">📸 zqm_broadcast_image · Image Broadcast · {{1}}=message text (approved ✅)</option>
                 <option value="zqm_welcome_back">zqm_welcome_back · Welcome Back / Re-engagement · {{1}}=count</option>
                 <option value="zqm_add_your_business">zqm_add_your_business · Add Your Business · {{1}}=category</option>
                 <option value="zqm_news_update">zqm_news_update · News / Update · {{1}}=full text</option>
@@ -8028,11 +8017,16 @@ router.get("/broadcast", requireSupplierAdmin, async (req, res) => {
           </fieldset>
 
           <!-- Step 3: Optional media -->
-          <fieldset style="border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:16px" id="mediaFields">
+          <fieldset style="border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:16px;opacity:0.6">
             <legend style="font-size:11px;font-weight:700;color:var(--muted);padding:0 8px;text-transform:uppercase;letter-spacing:.5px">Step 3 · Media Attachment</legend>
-            <div id="mediaWarning" style="background:#fef9c3;border:1px solid #fde047;border-radius:6px;padding:10px 14px;font-size:12px;color:#854d0e;margin-bottom:12px">
-              ℹ️ Select <strong>zqm_broadcast_image</strong> in Step 2 to enable image attachment. For other templates, media is not supported.
+            <div style="background:#fef9c3;border:1px solid #fde047;border-radius:6px;padding:10px 14px;font-size:12px;color:#854d0e">
+              ⚠️ <strong>Current templates have no media header slot.</strong>
+              The 4 approved templates (zqm_welcome_back, zqm_add_your_business, zqm_news_update, zqm_suppliers_ready)
+              were created without image/PDF headers. Attaching media will be ignored.
+              To send messages with images or PDFs, edit the templates in Meta Business Manager
+              to add a media header, then set <code>hasMediaHeader: true</code> in BROADCAST_TEMPLATES.
             </div>
+            </p>
 
             <!-- Media source tabs -->
             <div style="display:flex;gap:8px;margin-bottom:14px">
@@ -8149,11 +8143,10 @@ router.get("/broadcast", requireSupplierAdmin, async (req, res) => {
       <script>
       // ── Template variable hints ──────────────────────────────────────────────
       const TPL_META = {
-        zqm_broadcast_image:   { v1: "{{1}} — Your message text (image must be attached via Step 3)  e.g. Dear customer, please find attached.", v2: false, hasMedia: true },
-        zqm_welcome_back:      { v1: "{{1}} — Total businesses listed  e.g. 47",                                               v2: false, hasMedia: false },
-        zqm_add_your_business: { v1: "{{1}} — Category buyers are searching  e.g. plumbers in Harare",                        v2: false, hasMedia: false },
-        zqm_news_update:       { v1: "{{1}} — Full update text  e.g. We have added new verified suppliers in Harare...",       v2: false, hasMedia: false },
-        zqm_suppliers_ready:   { v1: "{{1}} — Category name, capitalised (also goes in header)  e.g. Plumbing",               v2: "{{2}} — Number of suppliers  e.g. 4", hasMedia: false }
+        zqm_welcome_back:      { v1: "{{1}} — Total businesses listed  e.g. 47",                                               v2: false },
+        zqm_add_your_business: { v1: "{{1}} — Category buyers are searching  e.g. plumbers in Harare",                        v2: false },
+        zqm_news_update:       { v1: "{{1}} — Full update text  e.g. We have added new verified suppliers in Harare...",       v2: false },
+        zqm_suppliers_ready:   { v1: "{{1}} — Category name, capitalised (also goes in header)  e.g. Plumbing",               v2: "{{2}} — Number of suppliers  e.g. 4" }
       };
       function onTplChange(v) {
         const m = TPL_META[v] || {};
@@ -8161,18 +8154,6 @@ router.get("/broadcast", requireSupplierAdmin, async (req, res) => {
         const r2 = document.getElementById("var2Row");
         if (m.v2) { r2.style.display=""; document.getElementById("var2Label").textContent = m.v2; }
         else        r2.style.display = "none";
-        // Show/hide media warning based on template
-        const mediaWarn   = document.getElementById("mediaWarning");
-        const mediaFields = document.getElementById("mediaFields");
-        if (m.hasMedia) {
-          if (mediaWarn)   mediaWarn.style.display   = "none";
-          if (mediaFields) mediaFields.style.opacity = "1";
-          setMediaMode("upload"); // auto-select upload for image templates
-        } else {
-          if (mediaWarn)   mediaWarn.style.display   = "";
-          if (mediaFields) mediaFields.style.opacity = "0.6";
-          setMediaMode("none");
-        }
       }
       onTplChange(document.getElementById("tplSelect").value);
 
@@ -8551,311 +8532,6 @@ router.post("/broadcast", requireSupplierAdmin, async (req, res) => {
 
   } catch (err) {
     res.redirect(`/zq-admin/broadcast?error=${encodeURIComponent(err.message)}`);
-  }
-});
-
-// ══════════════════════════════════════════════════════════════════════════════
-// ── REPORTS HUB — admin view of business reports (daily/weekly/monthly/balance)
-// GET /zq-admin/reports-hub
-// ══════════════════════════════════════════════════════════════════════════════
-router.get("/reports-hub", requireSupplierAdmin, async (req, res) => {
-  try {
-    const Business   = (await import("../models/business.js")).default;
-    const Branch     = (await import("../models/branch.js")).default;
-    const Invoice    = (await import("../models/invoice.js")).default;
-    const Expense    = (await import("../models/expense.js")).default;
-    const InvoicePayment = (await import("../models/invoicePayment.js")).default;
-    const CashBalance    = (await import("../models/cashBalance.js")).default;
-    const CashPayout     = (await import("../models/cashPayout.js")).default.catch ? null
-      : (await import("../models/cashPayout.js")).default;
-
-    // Filters from query string
-    const selBizId    = req.query.biz    || "";
-    const selBranch   = req.query.branch || "";
-    const selPeriod   = req.query.period || "daily";  // daily|weekly|monthly
-    const selDate     = req.query.date   || new Date().toISOString().split("T")[0];
-
-    // Load all businesses for the filter dropdown
-    const businesses = await Business.find({}, { name: 1, _id: 1 }).sort({ name: 1 }).lean();
-
-    // Load branches for selected business
-    let branches = [];
-    if (selBizId) {
-      branches = await Branch.find({ businessId: selBizId }, { name: 1, _id: 1 }).lean();
-    }
-
-    // Build date range from period + date
-    const anchor   = new Date(selDate + "T00:00:00.000Z");
-    let   start    = new Date(anchor);
-    let   end      = new Date(anchor);
-    end.setHours(23, 59, 59, 999);
-
-    if (selPeriod === "weekly") {
-      start.setDate(start.getDate() - 6);
-    } else if (selPeriod === "monthly") {
-      start.setDate(1);
-    }
-
-    let reportHtml = "";
-    let reportData = null;
-
-    if (selBizId) {
-      const biz = await Business.findById(selBizId).lean();
-      if (biz) {
-        const baseQ = { businessId: biz._id };
-        if (selBranch) baseQ.branchId = selBranch;
-        const rangeQ = { ...baseQ, createdAt: { $gte: start, $lte: end } };
-
-        const [invoices, payments, expenses, balance, payouts] = await Promise.all([
-          Invoice.find(rangeQ).sort({ createdAt: -1 }).lean(),
-          InvoicePayment.find(rangeQ).sort({ createdAt: -1 }).lean(),
-          Expense.find(rangeQ).sort({ createdAt: -1 }).lean(),
-          CashBalance.findOne({ ...baseQ, date: { $gte: new Date(selDate + "T00:00:00.000Z"), $lte: new Date(selDate + "T23:59:59.999Z") } }).lean(),
-          CashPayout ? CashPayout.find(rangeQ).sort({ createdAt: -1 }).lean() : []
-        ]);
-
-        const fmt = (n) => `$${Number(n||0).toFixed(2)}`;
-        const totalInvoiced = invoices.reduce((s,i) => s + (i.total||0), 0);
-        const totalPayments = payments.reduce((s,p) => s + (p.amount||0), 0);
-        const totalExpenses = expenses.reduce((s,e) => s + (e.amount||0), 0);
-        const totalPayouts  = (payouts||[]).reduce((s,p) => s + (p.amount||0), 0);
-        const opening       = balance?.openingBalance || 0;
-        const cashAtHand    = opening + totalPayments - totalExpenses - totalPayouts;
-
-        const periodLabel = selPeriod === "daily" ? `Daily — ${selDate}`
-          : selPeriod === "weekly" ? `Weekly — ${start.toLocaleDateString("en-GB",{day:"numeric",month:"short"})} to ${end.toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"})}`
-          : `Monthly — ${start.toLocaleDateString("en-GB",{month:"long",year:"numeric"})}`;
-
-        const branchLabel = selBranch ? (branches.find(b => b._id.toString() === selBranch)?.name || selBranch) : "All Branches";
-
-        reportData = { biz, periodLabel, branchLabel, totalInvoiced, totalPayments, totalExpenses, totalPayouts, opening, cashAtHand, invoices, payments, expenses, payouts: payouts||[], fmt };
-
-        const invRows = invoices.map(i => `
-          <tr>
-            <td>${new Date(i.createdAt).toLocaleDateString("en-GB")}</td>
-            <td><code>${esc(i.number||"—")}</code></td>
-            <td>${esc(i.type||"invoice")}</td>
-            <td>${esc(i.billingTo||"Walk-in")}</td>
-            <td style="text-align:right;font-weight:600">${fmt(i.total)}</td>
-            <td><a href="/docs/generated/receipts/${esc(i.pdfFile||"")}" target="_blank" style="color:var(--blue);font-size:11px">${i.pdfFile?"📄 PDF":""}</a></td>
-          </tr>`).join("") || `<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:16px">No invoices in this period.</td></tr>`;
-
-        const expRows = expenses.map(e => `
-          <tr>
-            <td>${new Date(e.createdAt).toLocaleDateString("en-GB")}</td>
-            <td>${esc(e.description||"—")}</td>
-            <td>${esc(e.category||"Other")}</td>
-            <td>${esc(e.method||"Cash")}</td>
-            <td style="text-align:right;font-weight:600;color:#dc2626">${fmt(e.amount)}</td>
-          </tr>`).join("") || `<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:16px">No expenses in this period.</td></tr>`;
-
-        const payRows = payments.map(p => `
-          <tr>
-            <td>${new Date(p.createdAt).toLocaleDateString("en-GB")}</td>
-            <td>${esc(p.invoiceNumber||"—")}</td>
-            <td>${esc(p.method||"Cash")}</td>
-            <td style="text-align:right;font-weight:600;color:#16a34a">${fmt(p.amount)}</td>
-          </tr>`).join("") || `<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:16px">No payments in this period.</td></tr>`;
-
-        reportHtml = `
-          <div style="margin-top:24px">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
-              <div>
-                <h2 style="font-size:18px;font-weight:700;margin:0">${esc(biz.name)} — ${esc(periodLabel)}</h2>
-                <p style="font-size:12px;color:var(--muted);margin:2px 0">Branch: ${esc(branchLabel)}</p>
-              </div>
-              <a href="/zq-admin/reports-hub/pdf?biz=${selBizId}&branch=${selBranch}&period=${selPeriod}&date=${selDate}"
-                target="_blank"
-                style="background:#1e40af;color:white;padding:8px 18px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700">
-                📄 Download PDF
-              </a>
-            </div>
-
-            <!-- Summary cards -->
-            <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:20px">
-              ${stat(fmt(opening),       "Opening Balance", "")}
-              ${stat(fmt(totalPayments), "Cash In",         "green")}
-              ${stat(fmt(totalExpenses + totalPayouts), "Cash Out", "red" )}
-              ${stat(fmt(cashAtHand),    "Cash at Hand",    cashAtHand >= 0 ? "green" : "red")}
-              ${stat(fmt(totalInvoiced), "Invoiced",        "blue")}
-            </div>
-
-            <!-- Invoices table -->
-            <div style="background:white;border-radius:10px;border:1px solid var(--border);margin-bottom:16px;overflow:hidden">
-              <div style="background:#f8fafc;padding:12px 16px;border-bottom:1px solid var(--border);font-size:13px;font-weight:700">
-                📄 Invoices / Receipts / Quotes (${invoices.length})
-              </div>
-              <div style="overflow-x:auto">
-                <table style="width:100%;border-collapse:collapse;font-size:12px">
-                  <thead><tr style="background:#f8fafc">
-                    <th style="padding:8px 12px;text-align:left;color:var(--muted);border-bottom:1px solid var(--border)">Date</th>
-                    <th style="padding:8px 12px;text-align:left;color:var(--muted);border-bottom:1px solid var(--border)">Ref</th>
-                    <th style="padding:8px 12px;text-align:left;color:var(--muted);border-bottom:1px solid var(--border)">Type</th>
-                    <th style="padding:8px 12px;text-align:left;color:var(--muted);border-bottom:1px solid var(--border)">Client</th>
-                    <th style="padding:8px 12px;text-align:right;color:var(--muted);border-bottom:1px solid var(--border)">Amount</th>
-                    <th style="padding:8px 12px;text-align:left;color:var(--muted);border-bottom:1px solid var(--border)">PDF</th>
-                  </tr></thead>
-                  <tbody>${invRows}</tbody>
-                </table>
-              </div>
-            </div>
-
-            <!-- Payments table -->
-            <div style="background:white;border-radius:10px;border:1px solid var(--border);margin-bottom:16px;overflow:hidden">
-              <div style="background:#f8fafc;padding:12px 16px;border-bottom:1px solid var(--border);font-size:13px;font-weight:700">
-                💳 Payments Received (${payments.length})
-              </div>
-              <div style="overflow-x:auto">
-                <table style="width:100%;border-collapse:collapse;font-size:12px">
-                  <thead><tr style="background:#f8fafc">
-                    <th style="padding:8px 12px;text-align:left;color:var(--muted);border-bottom:1px solid var(--border)">Date</th>
-                    <th style="padding:8px 12px;text-align:left;color:var(--muted);border-bottom:1px solid var(--border)">Invoice</th>
-                    <th style="padding:8px 12px;text-align:left;color:var(--muted);border-bottom:1px solid var(--border)">Method</th>
-                    <th style="padding:8px 12px;text-align:right;color:var(--muted);border-bottom:1px solid var(--border)">Amount</th>
-                  </tr></thead>
-                  <tbody>${payRows}</tbody>
-                </table>
-              </div>
-            </div>
-
-            <!-- Expenses table -->
-            <div style="background:white;border-radius:10px;border:1px solid var(--border);overflow:hidden">
-              <div style="background:#f8fafc;padding:12px 16px;border-bottom:1px solid var(--border);font-size:13px;font-weight:700">
-                💸 Expenses (${expenses.length}) &nbsp;&nbsp;
-                ${(payouts||[]).length ? `+ Payouts (${payouts.length})` : ""}
-              </div>
-              <div style="overflow-x:auto">
-                <table style="width:100%;border-collapse:collapse;font-size:12px">
-                  <thead><tr style="background:#f8fafc">
-                    <th style="padding:8px 12px;text-align:left;color:var(--muted);border-bottom:1px solid var(--border)">Date</th>
-                    <th style="padding:8px 12px;text-align:left;color:var(--muted);border-bottom:1px solid var(--border)">Description</th>
-                    <th style="padding:8px 12px;text-align:left;color:var(--muted);border-bottom:1px solid var(--border)">Category</th>
-                    <th style="padding:8px 12px;text-align:left;color:var(--muted);border-bottom:1px solid var(--border)">Method</th>
-                    <th style="padding:8px 12px;text-align:right;color:var(--muted);border-bottom:1px solid var(--border)">Amount</th>
-                  </tr></thead>
-                  <tbody>${expRows}</tbody>
-                </table>
-              </div>
-            </div>
-          </div>`;
-      }
-    }
-
-    // Build business select
-    const bizOptions = businesses.map(b =>
-      `<option value="${b._id}" ${b._id.toString() === selBizId ? "selected" : ""}>${esc(b.name)}</option>`
-    ).join("");
-
-    const branchOptions = `<option value="">All Branches</option>` +
-      branches.map(b =>
-        `<option value="${b._id}" ${b._id.toString() === selBranch ? "selected" : ""}>${esc(b.name)}</option>`
-      ).join("");
-
-    res.send(layout("Reports Hub", `
-      <form method="GET" action="/zq-admin/reports-hub" style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.08);margin-bottom:24px">
-        <h2 style="font-size:16px;font-weight:700;margin-bottom:16px">📊 Reports Hub — Browse Business Reports</h2>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:12px;align-items:end">
-          <div>
-            <label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px;text-transform:uppercase">Business</label>
-            <select name="biz" onchange="this.form.submit()"
-              style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px">
-              <option value="">— Select business —</option>
-              ${bizOptions}
-            </select>
-          </div>
-          <div>
-            <label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px;text-transform:uppercase">Branch</label>
-            <select name="branch" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px">
-              ${branchOptions}
-            </select>
-          </div>
-          <div>
-            <label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px;text-transform:uppercase">Period</label>
-            <select name="period" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px">
-              <option value="daily"   ${selPeriod==="daily"   ?"selected":""}>📅 Daily</option>
-              <option value="weekly"  ${selPeriod==="weekly"  ?"selected":""}>📊 Weekly</option>
-              <option value="monthly" ${selPeriod==="monthly" ?"selected":""}>📆 Monthly</option>
-            </select>
-          </div>
-          <div>
-            <label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px;text-transform:uppercase">Date</label>
-            <input type="date" name="date" value="${selDate}"
-              style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px" />
-          </div>
-          <div>
-            <button type="submit" class="btn btn-blue" style="white-space:nowrap">🔍 View Report</button>
-          </div>
-        </div>
-      </form>
-
-      ${reportHtml || (selBizId ? "<p style='color:var(--muted);text-align:center;padding:40px'>No data found for this selection.</p>" : "<p style='color:var(--muted);text-align:center;padding:40px'>Select a business above to view its report.</p>")}
-    `));
-  } catch (err) {
-    res.send(layout("Reports Hub", `<div class="alert red">Error: ${esc(err.message)}</div>`));
-  }
-});
-
-// GET /zq-admin/reports-hub/pdf  — PDF download of the same report
-router.get("/reports-hub/pdf", requireSupplierAdmin, async (req, res) => {
-  try {
-    const { selBizId, selBranch, selPeriod, selDate } = {
-      selBizId:   req.query.biz    || "",
-      selBranch:  req.query.branch || "",
-      selPeriod:  req.query.period || "daily",
-      selDate:    req.query.date   || new Date().toISOString().split("T")[0]
-    };
-    if (!selBizId) return res.status(400).send("Business ID required.");
-
-    const Business       = (await import("../models/business.js")).default;
-    const Branch         = (await import("../models/branch.js")).default;
-    const Invoice        = (await import("../models/invoice.js")).default;
-    const Expense        = (await import("../models/expense.js")).default;
-    const InvoicePayment = (await import("../models/invoicePayment.js")).default;
-    const CashBalance    = (await import("../models/cashBalance.js")).default;
-
-    const biz    = await Business.findById(selBizId).lean();
-    if (!biz) return res.status(404).send("Business not found.");
-
-    const anchor = new Date(selDate + "T00:00:00.000Z");
-    let start = new Date(anchor), end = new Date(anchor);
-    end.setHours(23, 59, 59, 999);
-    if (selPeriod === "weekly")  start.setDate(start.getDate() - 6);
-    if (selPeriod === "monthly") start.setDate(1);
-
-    const baseQ  = { businessId: biz._id };
-    if (selBranch) baseQ.branchId = selBranch;
-    const rangeQ = { ...baseQ, createdAt: { $gte: start, $lte: end } };
-
-    const [invoices, payments, expenses, balance] = await Promise.all([
-      Invoice.find(rangeQ).sort({ createdAt: 1 }).lean(),
-      InvoicePayment.find(rangeQ).sort({ createdAt: 1 }).lean(),
-      Expense.find(rangeQ).sort({ createdAt: 1 }).lean(),
-      CashBalance.findOne({ ...baseQ, date: { $gte: new Date(selDate + "T00:00:00.000Z"), $lte: new Date(selDate + "T23:59:59.999Z") } }).lean()
-    ]);
-
-    const branchDoc = selBranch ? await Branch.findById(selBranch).lean() : null;
-    const branchName = branchDoc?.name || "All Branches";
-    const totalPayments = payments.reduce((s,p) => s + (p.amount||0), 0);
-    const totalExpenses = expenses.reduce((s,e) => s + (e.amount||0), 0);
-    const opening       = balance?.openingBalance || 0;
-    const cashAtHand    = opening + totalPayments - totalExpenses;
-
-    const { generateReportPDF } = await import("../services/reportPDF.js");
-    const periodLabel = selPeriod === "daily"   ? `Daily Report — ${selDate}`
-                      : selPeriod === "weekly"  ? `Weekly Report — w/e ${end.toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"})}`
-                      : `Monthly Report — ${start.toLocaleDateString("en-GB",{month:"long",year:"numeric"})}`;
-
-    const { filename } = await generateReportPDF({
-      biz, reportType: periodLabel, periodLabel, branchName,
-      data: { invoices, payments, expenses },
-      totals: { moneyIn: totalPayments, moneyOut: totalExpenses, profit: totalPayments - totalExpenses, openingBalance: opening, cashAtHand },
-      prevTotals: null, weeks: null
-    });
-
-    const site = (process.env.SITE_URL || "").replace(/\/$/, "");
-    res.redirect(`${site}/docs/generated/reports/${filename}`);
-  } catch (err) {
-    res.status(500).send(`PDF generation error: ${err.message}`);
   }
 });
 
