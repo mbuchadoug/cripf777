@@ -2385,50 +2385,46 @@ console.log("INVOICE BRANCH DEBUG", {
       `_Prices not set - use_ *Update ${label.charAt(0).toUpperCase() + label.slice(1)} ${isService ? "Rates" : "Prices"}* _to add them._`
     );
 
-    // ── FIX D: Sync BEFORE session reset so we don't lose context ───────────────
-    // Sync all saved items to SupplierProfile.listedProducts AND Product model.
-    // This covers: new products added via chatbot dashboard AND pure biz-tools users.
-    const _bizId  = biz._id;
-    const _isServiceSaved = isService || false;
-    const _effectiveBranch = effectiveBranchId || null;
-    try {
-      const SupplierProfile = (await import("../models/supplierProfile.js")).default;
-      const _newNames = saved.map(p => p.name);
-
-      // 1. Always upsert into Product model — works for both supplier and non-supplier users
-      for (const _itemName of _newNames) {
-        await Product.findOneAndUpdate(
-          { businessId: _bizId, name: _itemName },
-          { $set: {
-              businessId: _bizId,
-              branchId:   _effectiveBranch,
-              unitPrice:  saved.find(p => p.name === _itemName)?.unitPrice || 0,
-              isService:  _isServiceSaved,
-              isActive:   true
-            }
-          },
-          { upsert: true }
-        );
-      }
-
-      // 2. If this business has a linked SupplierProfile, keep it in sync too
-      const _supplier = await SupplierProfile.findOne({ businessId: _bizId });
-      if (_supplier) {
-        const _existing = [...new Set([
-          ...(_supplier.listedProducts || []),
-          ...(_supplier.products       || [])
-        ])];
-        _supplier.listedProducts = [...new Set([..._existing, ..._newNames])];
-        _supplier.markModified("listedProducts");
-        await _supplier.save();
-      }
-      console.log(`[SYNC-PROD] ${_newNames.length} items synced to Product model${_supplier ? " + SupplierProfile" : ""} for biz ${_bizId}`);
-    } catch (_syncErr) {
-      console.error("[SYNC-PROD] sync error:", _syncErr.message);
-    }
-
     biz.sessionState = "ready"; biz.sessionData = {};
     await saveBizSafe(biz);
+
+    // ── Sync to SupplierProfile AND Product model (business tools catalogue) ──
+    try {
+      const SupplierProfile = (await import("../models/supplierProfile.js")).default;
+      const Product         = (await import("../models/product.js")).default;
+      const supplier = await SupplierProfile.findOne({ businessId: biz._id });
+      if (supplier) {
+        const newNames = saved.map(p => p.name);
+        // 1. Merge into SupplierProfile.listedProducts
+        const existing = [...new Set([
+          ...(supplier.listedProducts || []),
+          ...(supplier.products       || [])
+        ])];
+        const merged = [...new Set([...existing, ...newNames])];
+        supplier.listedProducts = merged;
+        await supplier.save();
+        // 2. Upsert each into Product model so invoice/quote/receipt catalogue stays current
+        for (const itemName of newNames) {
+          const priceEntry = (supplier.prices || []).find(p => p.product?.toLowerCase() === itemName.toLowerCase());
+          const rateEntry  = (supplier.rates  || []).find(r => r.service?.toLowerCase() === itemName.toLowerCase());
+          await Product.findOneAndUpdate(
+            { businessId: biz._id, name: itemName },
+            { $set: {
+                businessId:  biz._id,
+                branchId:    supplier.mainBranchId || null,
+                unitPrice:   priceEntry?.amount || 0,
+                description: rateEntry?.rate    || null,
+                isService:   supplier.profileType === "service",
+                isActive:    true
+              }
+            },
+            { upsert: true }
+          );
+        }
+        console.log(`[SYNC] ${newNames.length} products synced to SupplierProfile + Product model`);
+      }
+    } catch (_syncErr) { console.error("[SYNC] product sync error:", _syncErr.message); }
+
     const { sendProductsMenu } = await import("./metaMenus.js");
     return sendProductsMenu(from);
   }
@@ -2579,31 +2575,6 @@ console.log("INVOICE BRANCH DEBUG", {
 
     const lines = updates.map(u => `✅ ${u.name} → ${formatMoney(u.price, biz.currency)}`).join("\n");
     await sendText(from, `✅ *${updates.length} price${updates.length === 1 ? "" : "s"} updated!*\n\n${lines}`);
-
-    // ── FIX B: Sync updated prices back to SupplierProfile.prices ────────────
-    try {
-      const SupplierProfile = (await import("../models/supplierProfile.js")).default;
-      const _sup = await SupplierProfile.findOne({ businessId: biz._id });
-      if (_sup) {
-        for (const u of updates) {
-          const existing = (_sup.prices || []).find(
-            p => p.product?.toLowerCase() === u.name.toLowerCase()
-          );
-          if (existing) {
-            existing.amount = u.price;
-          } else {
-            _sup.prices.push({ product: u.name, amount: u.price, currency: biz.currency || "USD" });
-          }
-        }
-        _sup.priceUpdatedAt = new Date();
-        _sup.markModified("prices");
-        await _sup.save();
-        console.log(`[SYNC-PRICES] ${updates.length} prices synced to SupplierProfile for biz ${biz._id}`);
-      }
-    } catch (_priceSyncErr) {
-      console.error("[SYNC-PRICES]", _priceSyncErr.message);
-    }
-
     biz.sessionState = "ready"; biz.sessionData = {};
     await saveBizSafe(biz);
     const { sendProductsMenu } = await import("./metaMenus.js");
@@ -2803,32 +2774,6 @@ console.log("INVOICE BRANCH DEBUG", {
       return `✅ ${u.name} → ${display}`;
     }).join("\n");
     await sendText(from, `✅ *${updates.length} rate${updates.length === 1 ? "" : "s"} updated!*\n\n${lines}`);
-
-    // ── FIX C: Sync updated rates back to SupplierProfile.rates ─────────────
-    try {
-      const SupplierProfile = (await import("../models/supplierProfile.js")).default;
-      const _sup2 = await SupplierProfile.findOne({ businessId: biz._id });
-      if (_sup2) {
-        for (const u of updates) {
-          const rateStr = u.rateUnit ? `${u.price}/${u.rateUnit}` : String(u.price);
-          const existing = (_sup2.rates || []).find(
-            r => r.service?.toLowerCase() === u.name.toLowerCase()
-          );
-          if (existing) {
-            existing.rate = rateStr;
-          } else {
-            _sup2.rates.push({ service: u.name, rate: rateStr });
-          }
-        }
-        _sup2.priceUpdatedAt = new Date();
-        _sup2.markModified("rates");
-        await _sup2.save();
-        console.log(`[SYNC-RATES] ${updates.length} rates synced to SupplierProfile for biz ${biz._id}`);
-      }
-    } catch (_rateSyncErr) {
-      console.error("[SYNC-RATES]", _rateSyncErr.message);
-    }
-
     biz.sessionState = "ready"; biz.sessionData = {};
     await saveBizSafe(biz);
     const { sendProductsMenu } = await import("./metaMenus.js");

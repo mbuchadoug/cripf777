@@ -14584,40 +14584,6 @@ const supplier = await SupplierProfile.create({
     biz.sessionState = "supplier_reg_choose_plan";
     await saveBizSafe(biz);
 
-    // ── FIX A: Sync supplier products/services → Product model immediately ──────
-    // This ensures Business Tools → Products & Services shows items right away,
-    // even before payment is confirmed. Payment sync will upsert again with prices.
-    try {
-      const _itemsToSync = [
-        ...(reg.products || []),
-        ...(reg.listedProducts || [])
-      ].filter(Boolean);
-      const _uniqueItems = [...new Set(_itemsToSync.map(n => n.trim()).filter(Boolean))];
-
-      for (const _itemName of _uniqueItems) {
-        const _price = (reg.prices || []).find(p => p.product?.toLowerCase() === _itemName.toLowerCase());
-        const _rate  = (reg.rates  || []).find(r => r.service?.toLowerCase() === _itemName.toLowerCase());
-        await Product.findOneAndUpdate(
-          { businessId: biz._id, name: _itemName },
-          { $set: {
-              businessId: biz._id,
-              branchId:   null,
-              unitPrice:  _price?.amount || 0,
-              description:_rate?.rate    || null,
-              isService:  (reg.profileType === "service"),
-              isActive:   true
-            }
-          },
-          { upsert: true }
-        );
-      }
-      if (_uniqueItems.length) {
-        console.log(`[SYNC-REG] ${_uniqueItems.length} items synced to Product model for biz ${biz._id}`);
-      }
-    } catch (_syncRegErr) {
-      console.error("[SYNC-REG] Initial product sync failed:", _syncRegErr.message);
-    }
-
     // Non-blocking: notify this new supplier of any unmatched open requests
     // that match their categories. This turns onboarding into instant value.
     notifyNewSellerOfUnmatchedRequests(supplier).catch(err =>
