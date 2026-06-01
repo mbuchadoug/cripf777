@@ -7508,8 +7508,12 @@ if (a.startsWith("zqg_sel_") || a.startsWith("zqg_register_")) {
 }
 
  if (!supplierExists && al !== "join" && !allowedWithoutBiz && !hasActiveBuyerFlow) {
-  // Delegate to sendMainMenu which handles all cases correctly (new user, staff, supplier, etc.)
-  return sendMainMenu(from);
+  return sendList(from, "👋 *Welcome to ZimQuote!*\n\nZimbabwe's marketplace for products & services.", [
+    { id: "find_supplier",    title: "🔍 Browse & Shop" },
+    { id: "find_school",      title: "🏫 Find a School" },
+    { id: "my_orders",        title: "📋 My Orders" },
+    { id: "register_supplier",title: "📦 List My Business" },
+  ]);
 }
 
 

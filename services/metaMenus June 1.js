@@ -152,11 +152,12 @@ export async function sendMainMenu(to) {
 
   // ── Case 1: Active supplier (paid) ───────────────────────────────────────
   if (supplier?.active) {
-    // Ensure we have biz — load from supplier.businessId if session is stale
+    // Ensure we have biz — supplier may have businessId even if session is stale
     let supplierBiz = biz;
     if (!supplierBiz && supplier.businessId) {
       supplierBiz = await (await import("../models/business.js")).default.findById(supplier.businessId);
       if (supplierBiz) {
+        // Fix stale session
         await (await import("../models/userSession.js")).default.findOneAndUpdate(
           { phone },
           { $set: { phone, activeBusinessId: supplierBiz._id } },
@@ -164,17 +165,19 @@ export async function sendMainMenu(to) {
         );
       }
     }
-    // Active supplier = owner. Show all items directly — no role filtering needed.
-    // filterMenuByRole was stripping My Store and Business Tools when biz=null.
-    const isTrial = supplierBiz?.package === "trial";
-    return sendList(to, "👋 *Welcome to ZimQuote!*\nZimbabwe's marketplace for products & services.", [
+    const items = [
       { id: "sup_request_sellers", title: "⚡ Request Sellers" },
       { id: "find_supplier",       title: "🔍 Browse & Shop" },
-      { id: "my_orders",           title: "📋 My Orders" },
+      { id: "my_orders",           title: "📋 My Orders (Buyer)" },
       { id: "find_school",         title: "🏫 Find a School" },
-      { id: "my_supplier_account", title: "🏪 My Store" },
-      ...(!isTrial ? [{ id: "biz_tools_menu", title: "📊 Business Tools" }] : [])
-    ]);
+      { id: "my_supplier_account", title: "🏪 My Store",        section: "owner_only" },
+      { id: "biz_tools_menu",      title: "📊 Business Tools",  section: "biz_tools" }
+    ];
+    const filtered = await filterMenuByRole({ from: to, biz: supplierBiz, items });
+    const finalFiltered = (supplierBiz && supplierBiz.package === "trial" && !hasStaffRole)
+      ? filtered.filter(i => i.id !== "biz_tools_menu")
+      : filtered;
+    return sendList(to, "👋 *Welcome to ZimQuote!*\nZimbabwe's marketplace for products & services.", finalFiltered);
   }
 
   // ── Case 2: Supplier registered but not yet paid ──────────────────────────
