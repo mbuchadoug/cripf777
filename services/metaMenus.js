@@ -229,25 +229,25 @@ export async function sendMainMenu(to) {
   // ── Case 1: Active paid supplier ─────────────────────────────────────────
   if (supplier?.active) {
     return sendList(to, MENU_MSG, [
+      ...(!isTrial ? [{ id: "biz_tools_menu",      title: "📊 Business Tools" }] : []),
       { id: "sup_request_sellers", title: "⚡ Request Sellers" },
       { id: "find_supplier",       title: "🔍 Browse & Shop" },
       { id: "my_orders",           title: "📋 My Orders" },
       { id: "find_school",         title: "🏫 Find a School" },
-      { id: "my_supplier_account", title: "🏪 My Store" },
-      ...(!isTrial ? [{ id: "biz_tools_menu", title: "📊 Business Tools" }] : [])
+      { id: "my_supplier_account", title: "🏪 My Store" }
     ]);
   }
 
   // ── Case 2: Inactive/unpaid supplier ─────────────────────────────────────
   if (supplier && !supplier.active) {
     return sendList(to, MENU_MSG + "\n\n⚠️ Your listing is saved but not yet live.", [
+      ...(hasStaffRole && isRealBiz ? [{ id: "biz_tools_menu", title: "📊 Business Tools" }] : []),
       { id: "sup_request_sellers", title: "⚡ Request Sellers" },
       { id: "find_supplier",       title: "🔍 Browse & Shop" },
       { id: "my_orders",           title: "📋 My Orders" },
       { id: "find_school",         title: "🏫 Find a School" },
       { id: "my_supplier_account", title: "🏪 My Store" },
-      { id: "sup_upgrade_plan",    title: "💳 Activate Listing" },
-      ...(hasStaffRole && isRealBiz ? [{ id: "biz_tools_menu", title: "📊 Business Tools" }] : [])
+      { id: "sup_upgrade_plan",    title: "💳 Activate Listing" }
     ]);
   }
 
