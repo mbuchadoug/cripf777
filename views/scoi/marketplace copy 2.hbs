@@ -233,6 +233,33 @@
 <body>
 
 <!-- ── NAVBAR ──────────────────────────────────────────────────────── -->
+<nav class="navbar">
+  <div class="nav-inner">
+    <a href="/" class="nav-brand">
+      <div class="brand-mark">C</div>
+      <span class="brand-name">CRIPFCnt</span>
+      <span class="nav-pill desktop-only">Intelligence</span>
+    </a>
+
+    <div class="nav-right">
+      <a href="/" class="nav-link">Home</a>
+      <a href="/scoi" class="nav-link active">Marketplace</a>
+      {{#if user}}
+        <a href="/scoi/purchased" class="nav-link">My Reports</a>
+        <div class="user-pill">
+          {{#if user.photo}}<img src="{{user.photo}}" alt="Profile">{{/if}}
+          <span class="u-email">{{#if user.email}}{{user.email}}{{else}}{{user.displayName}}{{/if}}</span>
+        </div>
+        <a href="/auth/logout" class="nav-btn">Sign out</a>
+      {{else}}
+        <a href="/auth/google" class="nav-btn">Sign In</a>
+      {{/if}}
+      <button class="mob-toggle" id="mobToggle" aria-label="Toggle menu">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </div>
+</nav>
 
 <!-- Mobile nav -->
 <div class="mob-nav" id="mobNav">
