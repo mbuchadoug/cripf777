@@ -116,7 +116,8 @@
     /* Meta grid on cover */
     .cover-meta {
       display:grid;
-      grid-template-columns:repeat(4, 1fr);
+      /* minmax(0,1fr) prevents any column from exceeding its equal share */
+      grid-template-columns:repeat(4, minmax(0, 1fr));
       gap:1.5px;
       margin-top:1.75rem;
       background:rgba(255,255,255,0.08);
@@ -124,6 +125,9 @@
     .cm-item {
       padding:0.875rem 1.25rem;
       background:rgba(15,28,46,0.4);
+      /* prevent the cell itself from overflowing the grid track */
+      min-width:0;
+      overflow:hidden;
     }
     .cm-label {
       font-family:var(--sans);
@@ -133,13 +137,19 @@
       letter-spacing:1.5px;
       color:rgba(255,255,255,0.45);
       margin-bottom:0.35rem;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
     }
     .cm-value {
       font-family:var(--sans);
       font-size:0.8rem;
       font-weight:600;
       color:rgba(255,255,255,0.9);
-      line-height:1.3;
+      line-height:1.4;
+      /* long underscore-slug values wrap cleanly */
+      word-break:break-word;
+      overflow-wrap:anywhere;
     }
 
     /* ── BODY CONTENT ──────────────────────────────── */
@@ -223,6 +233,8 @@
       color:var(--g700);
       line-height:1.75;
       margin-bottom:0.4rem;
+      word-break:break-word;
+      overflow-wrap:anywhere;
     }
     li strong { color:var(--navy); font-weight:700; }
 
@@ -255,10 +267,10 @@
       padding:1rem 1.5rem 0.875rem;
       border-bottom:1px solid var(--g100);
       background:var(--g50);
+      /* Stack label → value → range vertically so long values never overflow */
       display:flex;
-      align-items:baseline;
-      gap:1.25rem;
-      flex-wrap:wrap;
+      flex-direction:column;
+      gap:0.35rem;
     }
     .sp-label {
       font-family:var(--sans);
@@ -270,18 +282,20 @@
     }
     .sp-value {
       font-family:var(--serif);
-      font-size:2.25rem;
+      /* clamp: shrinks gracefully for long strings, caps at 2rem */
+      font-size:clamp(1.1rem, 3vw, 2rem);
       font-weight:700;
       color:var(--navy);
-      line-height:1;
+      line-height:1.2;
+      /* allow underscore-slug strings to break across lines */
+      word-break:break-word;
+      overflow-wrap:anywhere;
     }
     .sp-range {
       font-family:var(--sans);
       font-size:0.78rem;
       color:var(--g500);
       font-weight:600;
-      align-self:flex-end;
-      padding-bottom:0.25rem;
     }
     .sp-body {
       padding:1.25rem 1.5rem;
@@ -306,6 +320,10 @@
       letter-spacing:1px;
       border-radius:2px;
       margin-top:0.5rem;
+      /* long placement slugs wrap instead of overflow */
+      word-break:break-word;
+      overflow-wrap:anywhere;
+      max-width:100%;
     }
 
     /* ── CALCULATIONS ──────────────────────────────── */
@@ -474,6 +492,8 @@
       padding:0.28rem 0.8rem;
       border:1px solid var(--g300);
       color:var(--g500);
+      word-break:break-word;
+      overflow-wrap:anywhere;
     }
 
     /* ── DISCLAIMERS ───────────────────────────────── */
@@ -560,7 +580,7 @@
       .cover-title { font-size:1.65rem; }
       .cover-meta { grid-template-columns:1fr 1fr; }
       .body { padding:2rem 1.25rem; }
-      .sp-head { flex-direction:column; gap:0.25rem; }
+      .sp-value { font-size:1rem; }
       .doc-footer { padding:1.5rem 1.25rem; }
       .page { margin:0; }
       .finding-core { padding:1.5rem 1.25rem; }
