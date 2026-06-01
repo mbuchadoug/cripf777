@@ -7881,15 +7881,7 @@ router.get("/broadcast", requireSupplierAdmin, async (req, res) => {
           Rate: 1 message / 3 seconds. Enquiries: <a href="${_ENQUIRIES_LINK}" target="_blank" style="color:var(--blue)">wa.me/263789901058</a>
         </p>
 
-        <form method="POST" action="/zq-admin/broadcast" onsubmit="
-          var ta=document.getElementById('var1Textarea');
-          var inp=document.getElementById('var1Input');
-          if(ta && !ta.disabled && ta.value.trim()){
-            inp.value=ta.value;
-            inp.disabled=false;
-          }
-          return true;
-        ">
+        <form method="POST" action="/zq-admin/broadcast">
 
           <!-- Step 1: Audience -->
           <fieldset style="border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:16px">
@@ -8029,16 +8021,8 @@ router.get("/broadcast", requireSupplierAdmin, async (req, res) => {
 
             <div style="margin-bottom:10px">
               <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px" id="var1Label">{{1}} - Total businesses listed</label>
-              <!-- Single-line input for short variables (default templates) -->
               <input name="var1" id="var1Input" placeholder="e.g. 47"
-                style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;display:block" />
-              <!-- Multi-line textarea for zqm_broadcast_image (long message text) -->
-              <textarea name="var1_multi" id="var1Textarea"
-                placeholder="Type your full message here. Line breaks and paragraphs will be preserved."
-                style="display:none;width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;min-height:180px;resize:vertical;font-family:inherit;line-height:1.5"></textarea>
-              <p id="var1MultiHint" style="display:none;font-size:11px;color:var(--muted);margin:4px 0 0">
-                ✅ Line breaks and paragraphs are preserved in delivery.
-              </p>
+                style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px" />
             </div>
 
             <div id="var2Row" style="display:none;margin-bottom:10px">
@@ -8185,34 +8169,13 @@ router.get("/broadcast", requireSupplierAdmin, async (req, res) => {
         const r2 = document.getElementById("var2Row");
         if (m.v2) { r2.style.display=""; document.getElementById("var2Label").textContent = m.v2; }
         else        r2.style.display = "none";
-
-        // Toggle between single-line input and multi-line textarea
-        const inp  = document.getElementById("var1Input");
-        const ta   = document.getElementById("var1Textarea");
-        const hint = document.getElementById("var1MultiHint");
-        if (m.hasMedia) {
-          // Multi-line textarea for image broadcast
-          inp.style.display  = "none";
-          inp.disabled       = true;
-          ta.style.display   = "block";
-          ta.disabled        = false;
-          if (hint) hint.style.display = "block";
-        } else {
-          // Single-line input for other templates
-          ta.style.display   = "none";
-          ta.disabled        = true;
-          inp.style.display  = "block";
-          inp.disabled       = false;
-          if (hint) hint.style.display = "none";
-        }
-
         // Show/hide media warning based on template
         const mediaWarn   = document.getElementById("mediaWarning");
         const mediaFields = document.getElementById("mediaFields");
         if (m.hasMedia) {
           if (mediaWarn)   mediaWarn.style.display   = "none";
           if (mediaFields) mediaFields.style.opacity = "1";
-          setMediaMode("upload");
+          setMediaMode("upload"); // auto-select upload for image templates
         } else {
           if (mediaWarn)   mediaWarn.style.display   = "";
           if (mediaFields) mediaFields.style.opacity = "0.6";
