@@ -59,6 +59,7 @@
       padding:3rem 4rem 2.5rem;
       position:relative;
       overflow:hidden;
+      /* FIX: force cover onto its own page in PDF so body text never overlaps */
       page-break-after: always;
       break-after: page;
     }
@@ -145,6 +146,7 @@
     /* ── BODY CONTENT ──────────────────────────────── */
     .body {
       padding:3.5rem 4rem;
+      /* FIX: CSS counter for auto-sequential section numbers */
       counter-reset: section-counter;
     }
 
@@ -172,6 +174,7 @@
       margin-bottom:1.5rem;
     }
 
+    /* FIX: auto-increment section numbers with CSS counter */
     .section-num {
       font-family:var(--sans);
       font-size:0.62rem;
@@ -182,9 +185,11 @@
       flex-shrink:0;
       counter-increment: section-counter;
     }
+    /* Override the hardcoded text with the CSS counter value */
     .section-num::before {
       content: counter(section-counter, decimal-leading-zero);
     }
+    /* Hide the original static text inside .section-num spans */
     .section-num > * { display:none; }
 
     .section-title {
@@ -632,7 +637,7 @@
 
     {{#if audit.definitions}}
     <hr class="rule">
-    <!-- Section N - Definitions -->
+    <!-- Section 02 - Definitions -->
     <div class="section">
       <div class="section-head">
         <span class="section-num"></span>
@@ -652,7 +657,7 @@
 
     {{#if audit.method}}
     <hr class="rule">
-    <!-- Section N - Method -->
+    <!-- Section 03 - Method -->
     <div class="section">
       <div class="section-head">
         <span class="section-num"></span>
@@ -687,7 +692,7 @@
 
     {{#if audit.context}}
     <hr class="rule">
-    <!-- Section N - Context -->
+    <!-- Section 04 - Context -->
     <div class="section">
       <div class="section-head">
         <span class="section-num"></span>
@@ -739,7 +744,7 @@
         {{/if}}
       {{/if}}
 
-      {{!-- fallback: coreDoctrine stored at top level (new schema field) --}}
+      {{!-- fallback: coreDoctrine stored at top level (older records) --}}
       {{#unless audit.context.doctrine}}
         {{#if audit.coreDoctrine.primaryEquilibrium}}
           <p style="margin-top:1.25rem;">
@@ -896,18 +901,10 @@
         <span class="section-title-line"></span>
       </div>
 
-      {{!-- ─────────────────────────────────────────────────────────────────
-           Core finding priority order:
-             1. findings.coreFinding          (explicit coreFinding key)
-             2. findings.primaryFinding       (Goldman Sachs JSON uses this key)
-             3. CRIPFCntInterpretation.summary (top-level interpretation block)
-             4. Fallback empty state
-           ───────────────────────────────────────────────────────────────── --}}
+      {{!-- Core finding: try findings.coreFinding first, then CRIPFCntInterpretation.summary --}}
       <div class="finding-core">
         {{#if audit.findings.coreFinding}}
           <p>{{audit.findings.coreFinding}}</p>
-        {{else if audit.findings.primaryFinding}}
-          <p>{{audit.findings.primaryFinding}}</p>
         {{else if audit.CRIPFCntInterpretation.summary}}
           <p>{{audit.CRIPFCntInterpretation.summary}}</p>
         {{else}}

@@ -20,39 +20,53 @@ const SpecialScoiAuditSchema = new mongoose.Schema({
   subject: {
     name: String,
     entityType: String,
+    entityScope: String,       // ← added (present in JSON, was silently dropped)
     sectorContext: String,
     jurisdiction: String
   },
 
- assessmentWindow: {
-  label: {
-    type: String
+  assessmentWindow: {
+    label: {
+      type: String
+    },
+    phase: {
+      type: String             // ← renamed from "type" (kept as-is)
+    },
+    durationYears: Number,     // ← added (present in JSON, was silently dropped)
+    type: String               // ← keep for backward-compat with older records
   },
-  phase: {
-    type: String   // ← renamed from "type"
-  }
-}
-,
 
   author: String,
   purpose: String,
   status: String,
   revisionPolicy: String,
 
- matrix: mongoose.Schema.Types.Mixed,
+  matrix: mongoose.Schema.Types.Mixed,
 
-definitions: mongoose.Schema.Types.Mixed,
-method: mongoose.Schema.Types.Mixed,
-context: mongoose.Schema.Types.Mixed,
+  // ── Core doctrine (top-level key in the JSON) ──────────────────────────────
+  // Previously missing from schema → was silently dropped on Model.create()
+  // This is what the Findings section falls back to when
+  // findings.coreFinding is absent.
+  coreDoctrine: mongoose.Schema.Types.Mixed,
 
-scores: mongoose.Schema.Types.Mixed,
-calculations: mongoose.Schema.Types.Mixed,
-findings: mongoose.Schema.Types.Mixed,
-civilizationRiskSignals: mongoose.Schema.Types.Mixed,
+  // ── CRIPFCnt interpretation block ─────────────────────────────────────────
+  // Previously missing from schema → was silently dropped on Model.create()
+  // The template uses audit.CRIPFCntInterpretation.summary as the second
+  // fallback for the core finding box.
+  CRIPFCntInterpretation: mongoose.Schema.Types.Mixed,
 
-counterfactual: mongoose.Schema.Types.Mixed,
-disclaimers: mongoose.Schema.Types.Mixed,
-tags: [String],
+  definitions: mongoose.Schema.Types.Mixed,
+  method: mongoose.Schema.Types.Mixed,
+  context: mongoose.Schema.Types.Mixed,
+
+  scores: mongoose.Schema.Types.Mixed,
+  calculations: mongoose.Schema.Types.Mixed,
+  findings: mongoose.Schema.Types.Mixed,
+  civilizationRiskSignals: mongoose.Schema.Types.Mixed,
+
+  counterfactual: mongoose.Schema.Types.Mixed,
+  disclaimers: mongoose.Schema.Types.Mixed,
+  tags: [String],
 
   price: {
     type: Number,
