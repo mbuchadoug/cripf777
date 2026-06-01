@@ -123,23 +123,64 @@ const { branches } = await ensureDefaultBranch(biz._id);
    MAIN MENU
 ============================================================================= */
 export async function sendMainMenu(to) {
-  const biz = await (await import("./bizHelpers.js")).getBizForPhone(to);
-  const SupplierProfile = (await import("../models/supplierProfile.js")).default;
-  const SchoolProfile   = (await import("../models/schoolProfile.js")).default;
-  const UserRole        = (await import("../models/userRole.js")).default;
   const phone = to.replace(/\D+/g, "");
-  const supplier = await SupplierProfile.findOne({ phone });
 
-  // ── Case 0: School admin ───────────────────────────────────────────────────
-  const school = await SchoolProfile.findOne({ phone });
-  if (school) {
-    const { sendSchoolAccountMenu: _schoolMenu } = await import("./metaMenus.js");
-    return _schoolMenu(to, school);
+  // Load models fresh every time — no module-level caching issues
+  const Business       = (await import("../models/business.js")).default;
+  const UserSession    = (await import("../models/userSession.js")).default;
+  const UserRole       = (await import("../models/userRole.js")).default;
+  const SupplierProfile = (await import("../models/supplierProfile.js")).default;
+  const SchoolProfile  = (await import("../models/schoolProfile.js")).default;
+
+  const MENU_MSG = "👋 *Welcome to ZimQuote!*\nZimbabwe's marketplace for products & services.";
+
+  // ── Step 1: Resolve business for this phone ──────────────────────────────
+  // Priority: UserSession → UserRole → SupplierProfile.businessId
+  let biz = null;
+  const session = await UserSession.findOne({ phone }).lean();
+  if (session?.activeBusinessId) {
+    biz = await Business.findById(session.activeBusinessId);
+  }
+  if (!biz) {
+    const roleDoc = await UserRole.findOne({ phone, pending: false }).sort({ updatedAt: -1 }).lean();
+    if (roleDoc?.businessId) {
+      biz = await Business.findById(roleDoc.businessId);
+      if (biz) {
+        await UserSession.findOneAndUpdate(
+          { phone }, { $set: { phone, activeBusinessId: biz._id } }, { upsert: true }
+        );
+      }
+    }
   }
 
-  // ── Resolve staff role for this phone ─────────────────────────────────────
-  // Check BEFORE branching so clerks/managers always reach Business Tools.
-  // We look up by biz._id if biz is known, otherwise by phone alone.
+  // ── Step 2: Load supplier and school profiles ─────────────────────────────
+  const supplier = await SupplierProfile.findOne({ phone });
+  const school   = await SchoolProfile.findOne({ phone });
+
+  // ── Step 3: If no biz yet, try supplier.businessId ───────────────────────
+  if (!biz && supplier?.businessId) {
+    biz = await Business.findById(supplier.businessId);
+    if (biz) {
+      await UserSession.findOneAndUpdate(
+        { phone }, { $set: { phone, activeBusinessId: biz._id } }, { upsert: true }
+      );
+    }
+  }
+
+  // ── Step 4: Repair missing UserRole for active suppliers ─────────────────
+  if (supplier?.active && biz) {
+    const hasRole = await UserRole.findOne({ phone, businessId: biz._id, pending: false }).lean();
+    if (!hasRole) {
+      await UserRole.findOneAndUpdate(
+        { phone, businessId: biz._id },
+        { $setOnInsert: { phone, businessId: biz._id, role: "owner", pending: false } },
+        { upsert: true }
+      );
+      console.log("[sendMainMenu] Auto-created owner UserRole for", phone);
+    }
+  }
+
+  // ── Step 5: Determine role ────────────────────────────────────────────────
   let staffRole = null;
   if (biz) {
     staffRole = await UserRole.findOne({ businessId: biz._id, phone, pending: false }).lean();
@@ -147,39 +188,26 @@ export async function sendMainMenu(to) {
   if (!staffRole) {
     staffRole = await UserRole.findOne({ phone, pending: false }).sort({ updatedAt: -1 }).lean();
   }
-  const hasStaffRole = !!staffRole;
-  const isOwnerRole  = staffRole?.role === "owner";
+  const hasStaffRole   = !!staffRole;
+  const isOwner        = staffRole?.role === "owner";
+  const isTrial        = biz?.package === "trial";
+  const isRealBiz      = biz && !biz.name?.startsWith("pending_supplier_");
+  const isPendingBiz   = biz && biz.name?.startsWith("pending_supplier_");
 
-  // ── Case 1: Active supplier (paid) ───────────────────────────────────────
+  console.log("[sendMainMenu]", phone, {
+    hasBiz: !!biz, bizName: biz?.name, hasSupplier: !!supplier,
+    supplierActive: supplier?.active, hasRole: hasStaffRole, role: staffRole?.role
+  });
+
+  // ── Case 0: School admin ──────────────────────────────────────────────────
+  if (school) {
+    const { sendSchoolAccountMenu: _sm } = await import("./metaMenus.js");
+    return _sm(to, school);
+  }
+
+  // ── Case 1: Active paid supplier ─────────────────────────────────────────
   if (supplier?.active) {
-    // Ensure we have biz — load from supplier.businessId if session is stale
-    let supplierBiz = biz;
-    if (!supplierBiz && supplier.businessId) {
-      supplierBiz = await (await import("../models/business.js")).default.findById(supplier.businessId);
-    }
-    if (supplierBiz) {
-      // Repair stale session — point activeBusinessId at the supplier's real biz
-      const UserSession2 = (await import("../models/userSession.js")).default;
-      await UserSession2.findOneAndUpdate(
-        { phone },
-        { $set: { phone, activeBusinessId: supplierBiz._id } },
-        { upsert: true }
-      );
-      // Repair missing UserRole — active supplier must have owner role on their biz
-      const UserRole2 = (await import("../models/userRole.js")).default;
-      const _existingRole = await UserRole2.findOne({ phone, businessId: supplierBiz._id, pending: false }).lean();
-      if (!_existingRole) {
-        await UserRole2.findOneAndUpdate(
-          { phone, businessId: supplierBiz._id },
-          { $setOnInsert: { phone, businessId: supplierBiz._id, role: "owner", pending: false } },
-          { upsert: true }
-        );
-        console.log("[sendMainMenu] Auto-created missing owner UserRole for supplier", phone);
-      }
-    }
-    // Active supplier = owner. Show all items directly — no role filtering needed.
-    const isTrial = supplierBiz?.package === "trial";
-    return sendList(to, "👋 *Welcome to ZimQuote!*\nZimbabwe's marketplace for products & services.", [
+    return sendList(to, MENU_MSG, [
       { id: "sup_request_sellers", title: "⚡ Request Sellers" },
       { id: "find_supplier",       title: "🔍 Browse & Shop" },
       { id: "my_orders",           title: "📋 My Orders" },
@@ -189,46 +217,21 @@ export async function sendMainMenu(to) {
     ]);
   }
 
-  // ── Case 2: Supplier registered but not yet paid ──────────────────────────
+  // ── Case 2: Inactive/unpaid supplier ─────────────────────────────────────
   if (supplier && !supplier.active) {
-    const items = [
+    return sendList(to, MENU_MSG + "\n\n⚠️ Your listing is saved but not yet live.", [
       { id: "sup_request_sellers", title: "⚡ Request Sellers" },
       { id: "find_supplier",       title: "🔍 Browse & Shop" },
       { id: "my_orders",           title: "📋 My Orders" },
       { id: "find_school",         title: "🏫 Find a School" },
       { id: "my_supplier_account", title: "🏪 My Store" },
-      { id: "sup_upgrade_plan",    title: "💳 Activate Listing" }
-    ];
-    // Even unactivated suppliers might be assigned as staff in a biz
-    if (hasStaffRole) {
-      items.unshift({ id: "biz_tools_menu", title: "📊 Business Tools", section: "biz_tools" });
-    }
-    const filtered = await filterMenuByRole({ from: to, biz, items });
-    return sendList(to, "👋 *Welcome to ZimQuote!*\n\nYour listing is saved but not yet live.", filtered);
+      { id: "sup_upgrade_plan",    title: "💳 Activate Listing" },
+      ...(hasStaffRole && isRealBiz ? [{ id: "biz_tools_menu", title: "📊 Business Tools" }] : [])
+    ]);
   }
 
-  // ── Case 3: Has a staff role (clerk/manager/owner) — the key fix ──────────
-  // A clerk or manager has a UserRole but NO SupplierProfile of their own.
-  // They must see Business Tools regardless of whether biz.name is "pending_supplier_".
-  // EXCEPTION: if the biz is still "pending_supplier_" registration in progress,
-  // show "List My Business" so they can complete registration.
-  if (hasStaffRole) {
-    const staffBiz = biz || (staffRole.businessId
-      ? await (await import("../models/business.js")).default.findById(staffRole.businessId)
-      : null);
-
-    // If their only biz is a pending supplier registration, treat as new user
-    const isPendingRegistration = !staffBiz || staffBiz.name?.startsWith("pending_supplier_");
-    if (isPendingRegistration) {
-      return sendList(to, "👋 *Welcome to ZimQuote!*\nZimbabwe's marketplace for products & services.", [
-        { id: "register_supplier",   title: "🏪 List My Business" },
-        { id: "sup_request_sellers", title: "⚡ Request Sellers" },
-        { id: "find_supplier",       title: "🔍 Browse & Shop" },
-        { id: "my_orders",           title: "📋 My Orders" },
-        { id: "find_school",         title: "🏫 Find a School" }
-      ]);
-    }
-
+  // ── Case 3: Staff member (clerk/manager/owner) with a real business ───────
+  if (hasStaffRole && isRealBiz) {
     const items = [
       { id: "biz_tools_menu",      title: "📊 Business Tools" },
       { id: "sup_request_sellers", title: "⚡ Request Sellers" },
@@ -236,29 +239,14 @@ export async function sendMainMenu(to) {
       { id: "my_orders",           title: "📋 My Orders" },
       { id: "find_school",         title: "🏫 Find a School" }
     ];
-    // Owners also see My Store
-    if (isOwnerRole) {
-      items.push({ id: "my_supplier_account", title: "🏪 My Store" });
-    }
-    return sendList(to, "👋 *Welcome to ZimQuote!*\nZimbabwe's marketplace for products & services.", items);
+    if (isOwner) items.push({ id: "my_supplier_account", title: "🏪 My Store" });
+    return sendList(to, MENU_MSG, items);
   }
 
-  // ── Case 4: Has a real biz (not pending) but no role and no supplier ──────
-  if (biz && !biz.name?.startsWith("pending_supplier_")) {
-    const items = [
-      { id: "biz_tools_menu",      title: "📊 Business Tools", section: "biz_tools" },
-      { id: "sup_request_sellers", title: "⚡ Request Sellers" },
-      { id: "find_supplier",       title: "🔍 Browse & Shop" },
-      { id: "my_orders",           title: "📋 My Orders" },
-      { id: "find_school",         title: "🏫 Find a School" },
-      { id: "my_supplier_account", title: "🏪 My Store", section: "owner_only" }
-    ];
-    const filtered = await filterMenuByRole({ from: to, biz, items });
-    return sendList(to, "👋 *Welcome to ZimQuote!*\nZimbabwe's marketplace for products & services.", filtered);
-  }
-
+  // ── Case 4: Has a biz but it's a pending registration OR has no staff role
+  //    → show List My Business so they can complete/start registration ────────
   // ── Case 5: Brand new user — no biz, no supplier, no role ─────────────────
-  return sendList(to, "👋 *Welcome to ZimQuote!*\nZimbabwe's marketplace for products & services.", [
+  return sendList(to, MENU_MSG, [
     { id: "register_supplier",   title: "🏪 List My Business" },
     { id: "sup_request_sellers", title: "⚡ Request Sellers" },
     { id: "find_supplier",       title: "🔍 Browse & Shop" },

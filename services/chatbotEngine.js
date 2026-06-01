@@ -3772,18 +3772,10 @@ if (biz) {
         console.log("[OWNERSHIP] phone", phone, "has no role on biz", biz._id, "- notification contact only");
       }
     } else {
-      // No UserRole at all for this phone on any biz.
-      // Check if phone has an active SupplierProfile — if so, treat as owner.
-      const _suppCheck = await SupplierProfile.findOne({ phone, active: true }).lean();
-      if (_suppCheck) {
-        // Supplier owner with missing UserRole — session will auto-repair in sendMainMenu.
-        // Keep _bizIsOwnedByUser=true so greeting/menu flow works normally.
-        console.log("[OWNERSHIP] phone", phone, "is active supplier — treating as owner despite missing UserRole");
-      } else {
-        _bizIsOwnedByUser = false;
-        biz = null; // Clear stale biz so sendMainMenu picks the right path
-        console.log("[OWNERSHIP] phone", phone, "has no role on biz", biz?._id, "- treating as new user");
-      }
+      // No UserRole for this phone on any biz — notification contact or new user.
+      // Do NOT null out biz here; let sendMainMenu handle routing correctly.
+      _bizIsOwnedByUser = false;
+      console.log("[OWNERSHIP] phone", phone, "has no role on any biz — notification contact or new user");
     }
   } else {
     console.log("[OWNERSHIP] phone", phone, "owns biz", biz._id, "as", _ownerRoleCheck.role, "state:", biz.sessionState);
