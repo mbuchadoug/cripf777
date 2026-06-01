@@ -135,22 +135,39 @@ export async function sendMainMenu(to) {
   const MENU_MSG = "👋 *Welcome to ZimQuote!*\nZimbabwe's marketplace for products & services.";
 
   // ── Step 1: Resolve business for this phone ──────────────────────────────
-  // Priority: UserSession → UserRole → SupplierProfile.businessId
+  // Priority: real (non-pending) biz from UserRole > session > pending_supplier_ biz
+  // A phone may have multiple UserRoles: one on a pending_supplier_ biz (as owner from
+  // registration) and one on a real biz (as clerk/manager assigned by admin).
+  // Always prefer the real biz.
   let biz = null;
-  const session = await UserSession.findOne({ phone }).lean();
-  if (session?.activeBusinessId) {
-    biz = await Business.findById(session.activeBusinessId);
-  }
-  if (!biz) {
-    const roleDoc = await UserRole.findOne({ phone, pending: false }).sort({ updatedAt: -1 }).lean();
-    if (roleDoc?.businessId) {
-      biz = await Business.findById(roleDoc.businessId);
-      if (biz) {
-        await UserSession.findOneAndUpdate(
-          { phone }, { $set: { phone, activeBusinessId: biz._id } }, { upsert: true }
-        );
-      }
+
+  // First: scan ALL UserRoles for this phone and prefer a real (non-pending) biz
+  const allRoles = await UserRole.find({ phone, pending: false }).sort({ updatedAt: -1 }).lean();
+  let preferredRoleDoc = null;
+  for (const r of allRoles) {
+    const candidate = await Business.findById(r.businessId).lean();
+    if (candidate && !candidate.name?.startsWith("pending_supplier_")) {
+      preferredRoleDoc = r;
+      biz = await Business.findById(r.businessId); // full doc (not lean) for session ops
+      break;
     }
+  }
+  // If no real biz found via role, fall back to session
+  if (!biz) {
+    const session = await UserSession.findOne({ phone }).lean();
+    if (session?.activeBusinessId) {
+      biz = await Business.findById(session.activeBusinessId);
+    }
+  }
+  // If still no biz, take whatever role exists (pending_supplier_ or nothing)
+  if (!biz && allRoles.length > 0) {
+    biz = await Business.findById(allRoles[0].businessId);
+  }
+  // Update session to point to the best biz we found
+  if (biz) {
+    await UserSession.findOneAndUpdate(
+      { phone }, { $set: { phone, activeBusinessId: biz._id } }, { upsert: true }
+    );
   }
 
   // ── Step 2: Load supplier and school profiles ─────────────────────────────
@@ -180,10 +197,14 @@ export async function sendMainMenu(to) {
     }
   }
 
-  // ── Step 5: Determine role ────────────────────────────────────────────────
+  // ── Step 5: Determine role — use the role on the resolved biz ───────────
   let staffRole = null;
   if (biz) {
     staffRole = await UserRole.findOne({ businessId: biz._id, phone, pending: false }).lean();
+  }
+  // If no role on this specific biz, check if preferredRoleDoc was already found in Step 1
+  if (!staffRole && preferredRoleDoc) {
+    staffRole = preferredRoleDoc;
   }
   if (!staffRole) {
     staffRole = await UserRole.findOne({ phone, pending: false }).sort({ updatedAt: -1 }).lean();

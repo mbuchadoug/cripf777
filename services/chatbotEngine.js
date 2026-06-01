@@ -3753,7 +3753,19 @@ if (biz) {
   const _ownerRoleCheck = await UserRole.findOne({ phone, businessId: biz._id, pending: false }).lean();
   if (!_ownerRoleCheck) {
     // Not on this biz - check if they have a role on ANY biz (e.g. clerk assigned via admin)
-    const _anyRoleCheck = await UserRole.findOne({ phone, pending: false }).sort({ updatedAt: -1 }).lean();
+    // Prefer a role on a real (non-pending_supplier_) biz over a pending registration biz
+    const _allRoleChecks = await UserRole.find({ phone, pending: false }).sort({ updatedAt: -1 }).lean();
+    let _anyRoleCheck = null;
+    for (const _rc of _allRoleChecks) {
+      const _rcBiz = await Business.findById(_rc.businessId).lean();
+      if (_rcBiz && !_rcBiz.name?.startsWith("pending_supplier_")) {
+        _anyRoleCheck = _rc;
+        break;
+      }
+    }
+    // Fall back to any role if no real-biz role found
+    if (!_anyRoleCheck && _allRoleChecks.length > 0) _anyRoleCheck = _allRoleChecks[0];
+
     if (_anyRoleCheck?.businessId) {
       // Switch biz to the one they actually belong to
       const _assignedBiz = await Business.findById(_anyRoleCheck.businessId);
@@ -3773,7 +3785,6 @@ if (biz) {
       }
     } else {
       // No UserRole for this phone on any biz — notification contact or new user.
-      // Do NOT null out biz here; let sendMainMenu handle routing correctly.
       _bizIsOwnedByUser = false;
       console.log("[OWNERSHIP] phone", phone, "has no role on any biz — notification contact or new user");
     }
