@@ -4181,9 +4181,20 @@ try {
           "tempData.scSellerQuoteState":      "",
           // Browse-and-shop quote reply
           "tempData.pendingQuoteReply":       "",
+          // Clear activeBusinessId if current biz is a pending_supplier_ registration
+          // so sendMainMenu re-resolves to the user's real biz via UserRole scan
+          ...(biz?.name?.startsWith("pending_supplier_") ? { activeBusinessId: "" } : {})
       }},
       { upsert: true }
     );
+    // If biz is a pending registration, force sendMainMenu to resolve fresh
+    if (biz?.name?.startsWith("pending_supplier_")) {
+      await UserSession.findOneAndUpdate(
+        { phone },
+        { $unset: { activeBusinessId: "" } },
+        { upsert: true }
+      );
+    }
     return sendMainMenu(from);
   }
 
@@ -10913,6 +10924,12 @@ if (!isMetaAction && biz && biz.sessionState && !escapeWords.includes(al) && !se
       biz.sessionState = "ready";
       biz.sessionData = {};
       await saveBizSafe(biz);
+      // Clear stale session so sendMainMenu resolves to real biz via UserRole scan
+      if (biz.name?.startsWith("pending_supplier_")) {
+        await UserSession.findOneAndUpdate(
+          { phone }, { $unset: { activeBusinessId: "" } }, { upsert: true }
+        );
+      }
       await sendText(from, "❌ Registration cancelled. Sending you back to the main menu.");
       return sendMainMenu(from);
     }
