@@ -156,16 +156,28 @@ export async function sendMainMenu(to) {
     let supplierBiz = biz;
     if (!supplierBiz && supplier.businessId) {
       supplierBiz = await (await import("../models/business.js")).default.findById(supplier.businessId);
-      if (supplierBiz) {
-        await (await import("../models/userSession.js")).default.findOneAndUpdate(
-          { phone },
-          { $set: { phone, activeBusinessId: supplierBiz._id } },
+    }
+    if (supplierBiz) {
+      // Repair stale session — point activeBusinessId at the supplier's real biz
+      const UserSession2 = (await import("../models/userSession.js")).default;
+      await UserSession2.findOneAndUpdate(
+        { phone },
+        { $set: { phone, activeBusinessId: supplierBiz._id } },
+        { upsert: true }
+      );
+      // Repair missing UserRole — active supplier must have owner role on their biz
+      const UserRole2 = (await import("../models/userRole.js")).default;
+      const _existingRole = await UserRole2.findOne({ phone, businessId: supplierBiz._id, pending: false }).lean();
+      if (!_existingRole) {
+        await UserRole2.findOneAndUpdate(
+          { phone, businessId: supplierBiz._id },
+          { $setOnInsert: { phone, businessId: supplierBiz._id, role: "owner", pending: false } },
           { upsert: true }
         );
+        console.log("[sendMainMenu] Auto-created missing owner UserRole for supplier", phone);
       }
     }
     // Active supplier = owner. Show all items directly — no role filtering needed.
-    // filterMenuByRole was stripping My Store and Business Tools when biz=null.
     const isTrial = supplierBiz?.package === "trial";
     return sendList(to, "👋 *Welcome to ZimQuote!*\nZimbabwe's marketplace for products & services.", [
       { id: "sup_request_sellers", title: "⚡ Request Sellers" },
