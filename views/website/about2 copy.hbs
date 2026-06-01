@@ -1,0 +1,1304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+   
+    <!-- Metas -->
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>CRIPFCnt - ABOUT</title>
+<meta name="description" content="CRIPFCnt | a framework  for recalibrating society and intelligence. Explore SCOI audits, the CRIPFCnt life manual, leadership tools, and the book 'CRIPFCnt: Taking Psychology to the People'." />
+<link rel="canonical" href="{{siteUrl}}{{canonicalPath}}" />
+
+<!-- Open Graph -->
+<meta property="og:site_name" content="CRIPFCnt" />
+<meta property="og:type" content="website" />
+<meta property="og:title" content="CRIPFCnt | Recalibrating Intelligence & Society" />
+<meta property="og:description" content="CRIPFCnt : an eight-pillar framework and life manual redefining consciousness, responsibility and interpretation for the AI age." />
+<meta property="og:url" content="{{siteUrl}}{{canonicalPath}}" />
+<meta property="og:image" content="{{siteUrl}}/static/img/logo.png" />
+<meta property="og:image:alt" content="CRIPFCnt |" />
+
+<!-- Twitter -->
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="CRIPFCnt | Recalibrating Intelligence & Society" />
+<meta name="twitter:description" content="CRIPFCnt | an eight-pillar framework and life manual for society, leadership and AI-era intelligence." />
+<meta name="twitter:image" content="{{siteUrl}}/static/img/logo.png" />
+
+<!-- Structured Data: Organization + WebSite + Breadcrumb + SocialProfile (adjust URLs) -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  "name": "CRIPFCnt",
+  "url": "{{siteUrl}}",
+  "logo": "{{siteUrl}}/static/img/logo.png",
+  "sameAs": [
+    "https://www.facebook.com/your-page",
+    "https://twitter.com/your-handle",
+    "https://www.linkedin.com/company/your-page"
+  ]
+}
+</script>
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  "url": "{{siteUrl}}",
+  "potentialAction": {
+    "@type": "SearchAction",
+    "target": "{{siteUrl}}/search?q={search_term_string}",
+    "query-input": "required name=search_term_string"
+  }
+}
+</script>
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --navy: #1E3A5F;
+            --navy-dark: #0F1C2E;
+            --gold: #C9A961;
+            --gold-light: #E5D4A6;
+            --white: #FFFFFF;
+            --light-gray: #F8F9FA;
+            --medium-gray: #E9ECEF;
+            --dark-gray: #495057;
+            --text-primary: #212529;
+            
+            --font-serif: 'Crimson Pro', serif;
+            --font-sans: 'Inter', sans-serif;
+            
+            --shadow-sm: 0 2px 8px rgba(30, 58, 95, 0.08);
+            --shadow-md: 0 4px 16px rgba(30, 58, 95, 0.12);
+            --shadow-lg: 0 8px 32px rgba(30, 58, 95, 0.16);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: var(--font-sans);
+            color: var(--text-primary);
+            line-height: 1.7;
+            background: var(--white);
+            -webkit-font-smoothing: antialiased;
+        }
+        
+        /* Navigation (same as homepage) */
+        .navbar {
+            background: var(--white);
+            border-bottom: 1px solid var(--medium-gray);
+            padding: 1.5rem 5%;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            box-shadow: var(--shadow-sm);
+        }
+        
+        .nav-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            text-decoration: none;
+        }
+        
+        .logo-icon {
+            width: 48px;
+            height: 48px;
+            background: var(--navy);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: var(--font-serif);
+            font-weight: 700;
+            font-size: 1.4rem;
+            color: var(--gold);
+            border: 2px solid var(--gold);
+        }
+        
+        .logo-text {
+            font-family: var(--font-serif);
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: var(--navy);
+            letter-spacing: -0.5px;
+        }
+        
+        .nav-links {
+            display: flex;
+            gap: 3rem;
+            list-style: none;
+            align-items: center;
+        }
+        
+        .nav-links a {
+            font-size: 0.95rem;
+            font-weight: 500;
+            color: var(--text-primary);
+            text-decoration: none;
+            transition: color 0.3s;
+        }
+        
+        .nav-links a:hover {
+            color: var(--navy);
+        }
+        
+      .nav-cta {
+            background: var(--navy);
+            color: var(--white);
+            padding: 0.75rem 1.75rem;
+            border-radius: 4px;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+        
+        .nav-cta:hover {
+            background: var(--navy-dark);
+            color: var(--white);
+        }
+        
+        /* Page Header */
+        .page-header {
+            background: linear-gradient(135deg, var(--navy-dark), var(--navy));
+            padding: 6rem 5%;
+            text-align: center;
+        }
+        
+        .page-header-content {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        
+        .page-badge {
+            display: inline-block;
+            background: rgba(201, 169, 97, 0.15);
+            color: var(--gold-light);
+            padding: 0.5rem 1.25rem;
+            border-radius: 30px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            margin-bottom: 2rem;
+            border: 1px solid rgba(201, 169, 97, 0.3);
+        }
+        
+        .page-header h1 {
+            font-family: var(--font-serif);
+            font-size: clamp(2.5rem, 5vw, 4rem);
+            font-weight: 700;
+            color: var(--white);
+            margin-bottom: 1.5rem;
+            line-height: 1.2;
+        }
+        
+        .page-header p {
+            font-size: 1.25rem;
+            color: rgba(255, 255, 255, 0.85);
+            line-height: 1.6;
+        }
+        
+        /* Content Sections */
+        .content-section {
+            padding: 6rem 5%;
+        }
+        
+        .content-container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .section-title {
+            font-family: var(--font-serif);
+            font-size: clamp(2rem, 3vw, 2.75rem);
+            font-weight: 700;
+            color: var(--navy);
+            margin-bottom: 2rem;
+        }
+        
+        .section-text {
+            font-size: 1.1rem;
+            color: var(--dark-gray);
+            line-height: 1.8;
+            margin-bottom: 1.5rem;
+        }
+        
+        .highlight-quote {
+            background: var(--light-gray);
+            border-left: 4px solid var(--gold);
+            padding: 2.5rem;
+            margin: 3rem 0;
+        }
+        
+        .highlight-quote p {
+            font-family: var(--font-serif);
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--navy);
+            line-height: 1.6;
+            margin: 0;
+        }
+        
+        /* Pillars Detailed */
+        .pillars-detailed {
+            background: var(--light-gray);
+            padding: 6rem 5%;
+        }
+        
+        .pillar-detailed-card {
+            background: var(--white);
+            border: 1px solid var(--medium-gray);
+            padding: 3.5rem 3rem;
+            margin-bottom: 2.5rem;
+            box-shadow: var(--shadow-sm);
+        }
+        
+        .pillar-detailed-header {
+            display: flex;
+            align-items: center;
+            gap: 2rem;
+            margin-bottom: 2rem;
+            padding-bottom: 2rem;
+            border-bottom: 2px solid var(--gold);
+        }
+        
+        .pillar-number-large {
+            font-family: var(--font-serif);
+            font-size: 4rem;
+            font-weight: 700;
+            color: var(--gold);
+            opacity: 0.6;
+            line-height: 1;
+        }
+        
+        .pillar-detailed-title {
+            font-family: var(--font-serif);
+            font-size: 2.25rem;
+            font-weight: 700;
+            color: var(--navy);
+            line-height: 1.2;
+        }
+        
+        .pillar-detailed-text {
+            font-size: 1.1rem;
+            color: var(--dark-gray);
+            line-height: 1.8;
+        }
+        
+        .pillar-applications {
+            margin-top: 2rem;
+            padding-top: 2rem;
+            border-top: 1px solid var(--medium-gray);
+        }
+        
+        .applications-subtitle {
+            font-weight: 700;
+            color: var(--navy);
+            margin-bottom: 1rem;
+            font-size: 1.05rem;
+        }
+        
+        .applications-list {
+            list-style: none;
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+        }
+        
+        .applications-list li {
+            padding-left: 1.5rem;
+            position: relative;
+            color: var(--dark-gray);
+        }
+        
+        .applications-list li::before {
+            content: '→';
+            position: absolute;
+            left: 0;
+            color: var(--gold);
+            font-weight: 700;
+        }
+        
+        /* Founder Section */
+        .founder-section {
+            background: var(--white);
+            padding: 6rem 5%;
+        }
+        
+        .founder-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            gap: 5rem;
+            align-items: start;
+        }
+        
+        .founder-image-placeholder {
+            width: 100%;
+            aspect-ratio: 3/4;
+            background: linear-gradient(135deg, var(--navy), var(--navy-dark));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 3px solid var(--gold);
+        }
+        
+        .founder-initials {
+            font-family: var(--font-serif);
+            font-size: 8rem;
+            font-weight: 700;
+            color: var(--gold);
+        }
+        
+        .founder-info h2 {
+            font-family: var(--font-serif);
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: var(--navy);
+            margin-bottom: 0.5rem;
+        }
+        
+        .founder-title {
+            font-size: 1.2rem;
+            color: var(--gold);
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+        
+        .founder-credentials {
+            font-size: 0.95rem;
+            color: var(--dark-gray);
+            margin-bottom: 2rem;
+        }
+        
+        .founder-bio {
+            font-size: 1.05rem;
+            color: var(--dark-gray);
+            line-height: 1.8;
+            margin-bottom: 1.5rem;
+        }
+        
+        /* Methodology Section */
+        .methodology-section {
+            background: var(--navy);
+            color: var(--white);
+            padding: 6rem 5%;
+        }
+        
+        .methodology-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 3rem;
+            margin-top: 3rem;
+        }
+        
+        .methodology-card {
+            text-align: center;
+        }
+        
+        .methodology-icon {
+            width: 80px;
+            height: 80px;
+            background: rgba(201, 169, 97, 0.15);
+            border: 2px solid var(--gold);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            margin: 0 auto 1.5rem;
+        }
+        
+        .methodology-title {
+            font-family: var(--font-serif);
+            font-size: 1.4rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+        }
+        
+        .methodology-text {
+            color: rgba(255, 255, 255, 0.85);
+            line-height: 1.7;
+        }
+        
+        /* CTA */
+        .cta-section {
+            padding: 5rem 5%;
+            text-align: center;
+        }
+        
+        .btn {
+            padding: 1rem 2.5rem;
+            font-family: var(--font-sans);
+            font-size: 1rem;
+            font-weight: 600;
+            border-radius: 4px;
+            text-decoration: none;
+            transition: all 0.3s;
+            display: inline-block;
+        }
+        
+        .btn-primary {
+            background: var(--navy);
+            color: var(--white);
+            border: 2px solid var(--navy);
+        }
+        
+        .btn-primary:hover {
+            background: var(--navy-dark);
+        }
+        
+        /* Footer */
+        footer {
+            background: var(--navy-dark);
+            color: rgba(255, 255, 255, 0.8);
+            padding: 5rem 5% 3rem;
+        }
+        
+        .footer-container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .footer-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr 1fr;
+            gap: 4rem;
+            margin-bottom: 4rem;
+        }
+        
+        .footer-brand {
+            font-family: var(--font-serif);
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--gold);
+            margin-bottom: 1.5rem;
+        }
+        
+        .footer-description {
+            color: rgba(255, 255, 255, 0.7);
+            line-height: 1.7;
+            margin-bottom: 2rem;
+        }
+        
+        .footer-title {
+            font-family: var(--font-serif);
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--white);
+            margin-bottom: 1.5rem;
+        }
+        
+        .footer-links {
+            list-style: none;
+        }
+        
+        .footer-links li {
+            margin-bottom: 0.75rem;
+        }
+        
+        .footer-links a {
+            color: rgba(255, 255, 255, 0.7);
+            text-decoration: none;
+            font-size: 0.95rem;
+            transition: color 0.3s;
+        }
+        
+        .footer-links a:hover {
+            color: var(--gold);
+        }
+        
+        .footer-bottom {
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            padding-top: 2rem;
+            text-align: center;
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 0.9rem;
+        }
+        
+        /* Mobile Menu Toggle */
+        .mobile-menu-toggle {
+            display: none;
+            flex-direction: column;
+            gap: 5px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 0.5rem;
+            z-index: 1001;
+        }
+        
+        .mobile-menu-toggle span {
+            width: 28px;
+            height: 3px;
+            background: var(--navy);
+            transition: all 0.3s;
+            border-radius: 2px;
+        }
+        
+        .mobile-menu-toggle.active span:nth-child(1) {
+            transform: rotate(45deg) translate(8px, 8px);
+        }
+        
+        .mobile-menu-toggle.active span:nth-child(2) {
+            opacity: 0;
+        }
+        
+        .mobile-menu-toggle.active span:nth-child(3) {
+            transform: rotate(-45deg) translate(7px, -7px);
+        }
+        
+        .logo {
+            z-index: 1001;
+        }
+        /* ============================================
+           DROPDOWN STYLES (DESKTOP)
+        ============================================ */
+        .nav-item.dropdown {
+            position: relative;
+        }
+
+        .dropdown-toggle {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            cursor: pointer;
+        }
+
+        .caret {
+            font-size: 0.75rem;
+            opacity: 0.8;
+            transition: transform 0.2s;
+        }
+
+        .nav-item.dropdown:hover .caret {
+            transform: rotate(180deg);
+        }
+
+        .dropdown-menu {
+            position: absolute;
+            top: calc(100% + 8px);
+            left: 0;
+            min-width: 320px;
+            background: var(--white);
+            border: 1px solid var(--medium-gray);
+            box-shadow: var(--shadow-md);
+            padding: 0.6rem;
+            border-radius: 10px;
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(-10px);
+            transition: all 0.2s ease;
+            z-index: 2000;
+            pointer-events: none;
+        }
+
+        .nav-item.dropdown::after {
+            content: '';
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            height: 12px;
+            display: none;
+        }
+
+        .nav-item.dropdown:hover::after,
+        .nav-item.dropdown:focus-within::after {
+            display: block;
+        }
+
+        .nav-item.dropdown:hover .dropdown-menu,
+        .nav-item.dropdown:focus-within .dropdown-menu {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+            pointer-events: auto;
+        }
+
+        .dropdown-link {
+            display: block;
+            text-decoration: none;
+            padding: 0.85rem 0.9rem;
+            border-radius: 8px;
+            transition: background 0.2s, transform 0.2s;
+            color: var(--text-primary);
+        }
+
+        .dropdown-link:hover {
+            background: var(--light-gray);
+            transform: translateY(-1px);
+        }
+
+        .dd-title {
+            font-weight: 700;
+            color: var(--navy);
+            font-size: 0.95rem;
+            line-height: 1.25;
+        }
+
+        .dd-sub {
+            margin-top: 0.25rem;
+            font-size: 0.82rem;
+            color: #6b7280;
+            line-height: 1.3;
+        }
+
+        /* ============================================
+           MOBILE-SPECIFIC LMS STYLES
+        ============================================ */
+        .mobile-only {
+            display: none;
+        }
+
+        .desktop-only {
+            display: block;
+        }
+
+        /* Responsive */
+        @media (max-width: 1024px) {
+            .founder-container {
+                grid-template-columns: 1fr;
+                text-align: center;
+            }
+            
+            .methodology-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .applications-list {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+  @media (max-width: 768px) {
+            /* ✅ PREVENT HORIZONTAL SCROLL ON BODY */
+            html, body {
+                overflow-x: hidden;
+                width: 100%;
+                position: relative;
+            }
+
+            /* Show hamburger menu */
+            .mobile-menu-toggle {
+                display: flex;
+            }
+
+            /* Hide nav links by default on mobile */
+            .nav-links {
+                position: fixed;
+                top: 0;
+                right: -85%;
+                width: 85%;
+                max-width: 320px;
+                height: 100vh;
+                background: var(--white);
+                flex-direction: column;
+                align-items: flex-start;
+                padding: 5rem 1.5rem 2rem;
+                gap: 0;
+                box-shadow: -4px 0 20px rgba(0, 0, 0, 0.1);
+                transition: right 0.3s ease;
+                overflow-y: auto;
+                overflow-x: hidden;
+                z-index: 1000;
+                box-sizing: border-box;
+            }
+
+            /* Show nav when active */
+            .nav-links.active {
+                right: 0;
+            }
+
+            /* ✅ ADDED: Prevent body scroll when menu open */
+            body.menu-open {
+                overflow: hidden;
+                position: fixed;
+                width: 100%;
+            }
+
+            /* Stack nav items vertically */
+            .nav-links li {
+                width: 100%;
+                border-bottom: 1px solid var(--medium-gray);
+                box-sizing: border-box;
+            }
+
+            .nav-links li:last-child {
+                border-bottom: none;
+            }
+
+            .nav-links a {
+                display: block;
+                padding: 1.1rem 0;
+                width: 100%;
+                font-size: 1rem;
+                box-sizing: border-box;
+            }
+
+            /* Mobile CTA button */
+            .nav-cta {
+                width: 100%;
+                text-align: center;
+                margin-top: 1rem;
+                padding: 1rem 1.5rem !important;
+                box-sizing: border-box;
+                background: var(--navy) !important;
+                color: var(--white) !important;
+                border-radius: 8px;
+                font-size: 1rem;
+                font-weight: 600;
+                display: block;
+            }
+            
+            .nav-cta:hover {
+                background: var(--navy-dark) !important;
+                transform: none;
+            }
+
+            /* ✅ MOBILE LMS STYLES */
+            .desktop-only {
+                display: none !important;
+            }
+            
+            .mobile-only {
+                display: block !important;
+            }
+            
+            .mobile-lms-section {
+                width: 100%;
+                padding: 0;
+                border: none;
+            }
+            
+            .mobile-section-header {
+                font-size: 0.75rem;
+                font-weight: 700;
+                text-transform: uppercase;
+                letter-spacing: 1.5px;
+                color: var(--dark-gray);
+                padding: 1.5rem 0 0.75rem;
+                border-top: 2px solid var(--medium-gray);
+                margin-top: 1rem;
+            }
+            
+            .mobile-lms-links {
+                list-style: none;
+                padding: 0;
+                margin: 0;
+                width: 100%;
+                box-sizing: border-box;
+            }
+            
+            .mobile-lms-links li {
+                border-bottom: none;
+                width: 100%;
+                box-sizing: border-box;
+            }
+            
+            .mobile-lms-links a {
+                display: block;
+                padding: 0.9rem 0.75rem;
+                font-size: 0.9rem;
+                color: var(--text-primary);
+                background: var(--light-gray);
+                margin: 0.25rem 0;
+                border-radius: 8px;
+                transition: background 0.2s;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                box-sizing: border-box;
+            }
+            
+            .mobile-lms-links a:hover {
+                background: rgba(201, 169, 97, 0.15);
+            }
+
+            /* ✅ BACKDROP */
+            body::after {
+                content: '';
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0, 0, 0, 0.5);
+                opacity: 0;
+                visibility: hidden;
+                transition: all 0.3s;
+                z-index: 999;
+            }
+
+            body.menu-open::after {
+                opacity: 1;
+                visibility: visible;
+            }
+            
+            .footer-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+<!-- Navigation -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="/" class="logo">
+                <div class="logo-icon">C</div>
+                <span class="logo-text">CRIPFCnt</span>
+            </a>
+            
+            <button class="mobile-menu-toggle" id="mobileMenuToggle" aria-label="Toggle menu">
+                <span></span>
+                <span></span>
+                <span></span>
+            </button>
+            
+            <ul class="nav-links" id="navLinks">
+                <li><a href="/">Home</a></li>
+                <li><a href="/about">Framework</a></li>
+                <li><a href="/scoi">Audits</a></li>
+
+                <!-- LMS DESKTOP: Dropdown -->
+                <li class="nav-item dropdown desktop-only" id="lmsDropdown">
+                    <a href="/lms" class="dropdown-toggle">
+                        LMS <span class="caret">▾</span>
+                    </a>
+                    <div class="dropdown-menu">
+                        <a class="dropdown-link" href="/auth/parent">
+                            <div class="dd-title">Parents & Guardians</div>
+                            <div class="dd-sub">Manage kids • Grades 1–7 + High School</div>
+                        </a>
+                        <a class="dropdown-link" href="/auth/teacher">
+                            <div class="dd-title">Private Teachers</div>
+                            <div class="dd-sub">Up to 15/40 learners</div>
+                        </a>
+                        <a class="dropdown-link" href="/org/cripfcnt-school/dashboard">
+                            <div class="dd-title">Professionals</div>
+                            <div class="dd-sub">8 modules • audits • certification</div>
+                        </a>
+                    </div>
+                </li>
+
+                <!-- LMS MOBILE: Expanded Links -->
+                <li class="mobile-only mobile-lms-section">
+                    <div class="mobile-section-header">LMS Options</div>
+                    <ul class="mobile-lms-links">
+                        <li><a href="/auth/parent">👨‍👩‍👧 Parents & Guardians</a></li>
+                        <li><a href="/auth/teacher">👨‍🏫 Private Teachers</a></li>
+                        <li><a href="/org/cripfcnt-school/dashboard">🏛️ Professionals</a></li>
+                    </ul>
+                </li>
+
+                <!--<li><a href="/auth/arena">Arena</a></li>-->
+                <li><a href="/auth/school">Student Portal</a></li>
+                
+            </ul>
+        </div>
+    </nav>
+
+    <!-- Page Header -->
+    <section class="page-header">
+        <div class="page-header-content">
+            <div class="page-badge">Framework Overview</div>
+            <h1>CRIPFCnt: A Comprehensive Intelligence Structuring Framework</h1>
+            <p>Systematic approach to institutional transformation, governance reform, and organizational intelligence development for the AI age.</p>
+        </div>
+    </section>
+
+    <!-- Introduction -->
+    <section class="content-section">
+        <div class="content-container">
+            <h2 class="section-title">Framework Foundation</h2>
+            <p class="section-text">
+                <strong>CRIPFCnt</strong> represents a paradigm shift in how institutions approach intelligence structuring, governance, and organizational development. Standing for <strong>Consciousness, Responsibility, Interpretation, Purpose, Frequencies, Civilization, Negotiation, and Technology</strong>, this framework provides a comprehensive methodology for institutional transformation.
+            </p>
+            <p class="section-text">
+                Introduced in 2025 by Donald Mataranyika, Chartered Secretary and Governance Specialist, CRIPFCnt addresses the critical need for evidence-based frameworks that bridge traditional governance structures with the demands of the AI era. The framework has been designed specifically for application across government agencies, international organizations, think tanks, and public sector entities.
+            </p>
+            
+            <div class="highlight-quote">
+                <p>"Consciousness serves as the institutional asset. Responsibility functions as the currency of organizational evolution. Together, they drive sustainable transformation."</p>
+            </div>
+            
+            <p class="section-text">
+                Unlike conventional leadership or governance models, CRIPFCnt provides an integrated system that addresses intelligence structuring at both individual and institutional levels. It serves simultaneously as a strategic planning tool, leadership development framework, and governance reform methodology.
+            </p>
+        </div>
+    </section>
+
+    <!-- Eight Pillars Detailed -->
+    <section class="pillars-detailed" id="pillars">
+        <div class="content-container">
+            <h2 class="section-title" style="text-align: center; margin-bottom: 4rem;">The Eight Pillars: Detailed Analysis</h2>
+            
+            <div class="pillar-detailed-card">
+                <div class="pillar-detailed-header">
+                    <div class="pillar-number-large">01</div>
+                    <h3 class="pillar-detailed-title">Consciousness</h3>
+                </div>
+                <p class="pillar-detailed-text">
+                    Institutional consciousness represents the collective awareness and strategic foresight capacity of an organization. This pillar examines how institutions develop, maintain, and leverage awareness as a strategic asset. It encompasses organizational self-knowledge, environmental scanning capabilities, and the ability to anticipate and respond to emerging challenges.
+                </p>
+                <p class="pillar-detailed-text">
+                    At the institutional level, consciousness manifests through robust information systems, strategic intelligence capabilities, and organizational learning mechanisms. It requires systematic attention to both internal operations and external dynamics, creating a foundation for informed decision-making and adaptive capacity.
+                </p>
+                <div class="pillar-applications">
+                    <div class="applications-subtitle">Institutional Applications:</div>
+                    <ul class="applications-list">
+                        <li>Strategic intelligence systems development</li>
+                        <li>Organizational learning frameworks</li>
+                        <li>Environmental scanning protocols</li>
+                        <li>Institutional self-assessment mechanisms</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="pillar-detailed-card">
+                <div class="pillar-detailed-header">
+                    <div class="pillar-number-large">02</div>
+                    <h3 class="pillar-detailed-title">Responsibility</h3>
+                </div>
+                <p class="pillar-detailed-text">
+                    Responsibility constitutes the accountability infrastructure that transforms institutional potential into measurable outcomes. This pillar addresses the systems, processes, and cultural elements that ensure organizations fulfill their mandates effectively while maintaining transparency and accountability to stakeholders.
+                </p>
+                <p class="pillar-detailed-text">
+                    The responsibility framework encompasses performance measurement systems, accountability mechanisms, and governance structures that ensure organizational actions align with stated objectives. It provides the "currency" through which institutions demonstrate value and justify continued support and resources.
+                </p>
+                <div class="pillar-applications">
+                    <div class="applications-subtitle">Institutional Applications:</div>
+                    <ul class="applications-list">
+                        <li>Accountability framework development</li>
+                        <li>Performance measurement systems</li>
+                        <li>Governance structure optimization</li>
+                        <li>Stakeholder engagement protocols</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="pillar-detailed-card">
+                <div class="pillar-detailed-header">
+                    <div class="pillar-number-large">03</div>
+                    <h3 class="pillar-detailed-title">Interpretation</h3>
+                </div>
+                <p class="pillar-detailed-text">
+                    Interpretation addresses the analytical frameworks and methodologies institutions employ to understand complex environments and make evidence-based decisions. This pillar recognizes that organizational effectiveness depends not just on information availability, but on the capacity to derive actionable insights from data and context.
+                </p>
+                <p class="pillar-detailed-text">
+                    Institutional interpretation requires sophisticated analytical capabilities, diverse perspectives, and systematic approaches to sense-making. It involves developing shared frameworks for understanding challenges, opportunities, and appropriate responses while acknowledging the validity of multiple viewpoints.
+                </p>
+                <div class="pillar-applications">
+                    <div class="applications-subtitle">Institutional Applications:</div>
+                    <ul class="applications-list">
+                        <li>Evidence-based decision-making systems</li>
+                        <li>Multi-perspective analysis protocols</li>
+                        <li>Data analytics capacity building</li>
+                        <li>Policy development methodologies</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="pillar-detailed-card">
+                <div class="pillar-detailed-header">
+                    <div class="pillar-number-large">04</div>
+                    <h3 class="pillar-detailed-title">Purpose</h3>
+                </div>
+                <p class="pillar-detailed-text">
+                    Purpose provides the directional clarity that aligns institutional activities with overarching objectives and societal needs. This pillar addresses mission definition, strategic alignment, and the mechanisms through which organizations maintain focus on core mandates while adapting to changing circumstances.
+                </p>
+                <p class="pillar-detailed-text">
+                    Institutional purpose goes beyond mission statements to encompass the deeper rationale for organizational existence and the value proposition offered to stakeholders. It serves as the north star guiding resource allocation, priority setting, and strategic decision-making across all organizational levels.
+                </p>
+                <div class="pillar-applications">
+                    <div class="applications-subtitle">Institutional Applications:</div>
+                    <ul class="applications-list">
+                        <li>Mission clarity and articulation</li>
+                        <li>Strategic planning frameworks</li>
+                        <li>Priority-setting methodologies</li>
+                        <li>Organizational alignment systems</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="pillar-detailed-card">
+                <div class="pillar-detailed-header">
+                    <div class="pillar-number-large">05</div>
+                    <h3 class="pillar-detailed-title">Frequencies</h3>
+                </div>
+                <p class="pillar-detailed-text">
+                    Frequencies represent the communication patterns, engagement modalities, and relationship dynamics that shape institutional effectiveness. This pillar recognizes that different contexts, stakeholders, and objectives require different approaches to communication and engagement.
+                </p>
+                <p class="pillar-detailed-text">
+                    Institutional frequency management involves developing sophisticated communication strategies, stakeholder engagement protocols, and the ability to modulate organizational messaging and interaction patterns based on context. It addresses both internal communications and external relationship management.
+                </p>
+                <div class="pillar-applications">
+                    <div class="applications-subtitle">Institutional Applications:</div>
+                    <ul class="applications-list">
+                        <li>Stakeholder communication strategies</li>
+                        <li>Internal communication optimization</li>
+                        <li>Multi-channel engagement frameworks</li>
+                        <li>Relationship management systems</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="pillar-detailed-card">
+                <div class="pillar-detailed-header">
+                    <div class="pillar-number-large">06</div>
+                    <h3 class="pillar-detailed-title">Civilization</h3>
+                </div>
+                <p class="pillar-detailed-text">
+                    Civilization addresses the broader societal infrastructure, systems, and frameworks within which institutions operate and to which they contribute. This pillar examines how organizations interact with and shape the collective structures that enable human progress and societal advancement.
+                </p>
+                <p class="pillar-detailed-text">
+                    At the institutional level, this involves understanding systemic interdependencies, contributing to public goods, and operating in ways that strengthen rather than undermine social capital and institutional legitimacy. It encompasses both compliance with existing frameworks and active participation in their evolution.
+                </p>
+                <div class="pillar-applications">
+                    <div class="applications-subtitle">Institutional Applications:</div>
+                    <ul class="applications-list">
+                        <li>Societal impact assessment</li>
+                        <li>Public goods contribution</li>
+                        <li>Systemic collaboration frameworks</li>
+                        <li>Institutional legitimacy building</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="pillar-detailed-card">
+                <div class="pillar-detailed-header">
+                    <div class="pillar-number-large">07</div>
+                    <h3 class="pillar-detailed-title">Negotiation</h3>
+                </div>
+                <p class="pillar-detailed-text">
+                    Negotiation encompasses the strategic dialogue and consensus-building processes essential to multi-stakeholder environments. This pillar provides frameworks for navigating competing interests, building coalitions, and creating mutually beneficial outcomes in complex institutional settings.
+                </p>
+                <p class="pillar-detailed-text">
+                    Institutional negotiation goes beyond dispute resolution to encompass proactive relationship building, coalition formation, and the creation of shared value across organizational boundaries. It recognizes that in interconnected environments, institutional success increasingly depends on collaborative capacity.
+                </p>
+                <div class="pillar-applications">
+                    <div class="applications-subtitle">Institutional Applications:</div>
+                    <ul class="applications-list">
+                        <li>Multi-stakeholder dialogue facilitation</li>
+                        <li>Coalition building methodologies</li>
+                        <li>Conflict resolution systems</li>
+                        <li>Partnership development frameworks</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="pillar-detailed-card">
+                <div class="pillar-detailed-header">
+                    <div class="pillar-number-large">08</div>
+                    <h3 class="pillar-detailed-title">Technology</h3>
+                </div>
+                <p class="pillar-detailed-text">
+                    Technology addresses the tools, systems, and digital infrastructure that enable institutional effectiveness in the AI age. This pillar encompasses both the adoption of technological capabilities and the organizational changes required to leverage them effectively.
+                </p>
+                <p class="pillar-detailed-text">
+                    In the context of CRIPFCnt, technology is understood not merely as IT systems but as a strategic enabler of organizational transformation. This includes artificial intelligence, data analytics, digital governance platforms, and the integration of technological capabilities into core institutional processes.
+                </p>
+                <div class="pillar-applications">
+                    <div class="applications-subtitle">Institutional Applications:</div>
+                    <ul class="applications-list">
+                        <li>Digital transformation strategies</li>
+                        <li>AI integration frameworks</li>
+                        <li>Data governance systems</li>
+                        <li>Technology-enabled service delivery</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Founder Section -->
+    <section class="founder-section">
+        <div class="founder-container">
+            <div>
+                <div class="founder-image-placeholder">
+                    <div class="founder-initials">DM</div>
+                </div>
+            </div>
+            <div class="founder-info">
+                <h2>Donald Mataranyika</h2>
+                <p class="founder-title">Framework Developer</p>
+                <p class="founder-credentials">Chartered Secretary • Governance Specialist</p>
+                
+                <p class="founder-bio">
+                    Donald Mataranyika is a Chartered Secretary and Governance Specialist with extensive experience in institutional development, corporate governance, and organizational transformation. His work focuses on creating evidence-based frameworks that address contemporary governance challenges while remaining grounded in established professional practice.
+                </p>
+                
+                <p class="founder-bio">
+                    Beyond developing the CRIPFCnt framework, Mr. Mataranyika has created the Social Contract Obligation Index (SCOI), demonstrating a consistent commitment to developing tools that enhance institutional accountability and effectiveness. His approach combines academic rigor with practical application, resulting in frameworks designed for real-world institutional implementation.
+                </p>
+                
+                <p class="founder-bio">
+                    Through the book "CRIPFCnt: Taking Psychology to the People" and associated professional certification programs, he has created accessible pathways for institutional leaders and governance professionals to engage with sophisticated frameworks for organizational transformation.
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Methodology -->
+    <section class="methodology-section">
+        <div class="content-container">
+            <h2 class="section-title" style="text-align: center; color: white; margin-bottom: 3rem;">Implementation Methodology</h2>
+            
+            <div class="methodology-grid">
+                <div class="methodology-card">
+                    <div class="methodology-icon">📊</div>
+                    <h3 class="methodology-title">Assessment</h3>
+                    <p class="methodology-text">Comprehensive organizational intelligence audit using the eight-pillar framework to establish baseline capabilities and identify development priorities.</p>
+                </div>
+                
+                <div class="methodology-card">
+                    <div class="methodology-icon">🎯</div>
+                    <h3 class="methodology-title">Design</h3>
+                    <p class="methodology-text">Customized intervention strategies aligned with institutional context, stakeholder needs, and strategic objectives.</p>
+                </div>
+                
+                <div class="methodology-card">
+                    <div class="methodology-icon">⚡</div>
+                    <h3 class="methodology-title">Implementation</h3>
+                    <p class="methodology-text">Systematic deployment of framework principles through capacity building, systems development, and organizational change management.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA -->
+    <section class="cta-section" id="contact">
+        <div class="content-container" style="text-align: center;">
+            <h2 class="section-title">Explore Framework Implementation</h2>
+            <p class="section-text" style="max-width: 700px; margin: 0 auto 2rem;">
+                Contact our team to discuss how the CRIPFCnt framework can support your organization's transformation objectives.
+            </p>
+            <a href="/cdn-cgi/l/email-protection#e78e898188a784958e9781848993c984888a" class="btn btn-primary">Request Consultation</a>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+        <div class="footer-container">
+            <div class="footer-grid">
+                <div>
+                    <div class="footer-brand">CRIPFCnt</div>
+                    <p class="footer-description">
+                        A comprehensive framework for institutional intelligence restructuring, governance reform, and leadership development in the AI age.
+                    </p>
+                    <p class="footer-description">
+                        <strong style="color: var(--gold);">Donald Mataranyika</strong><br>
+                        Chartered Secretary & Governance Specialist<br>
+                        Framework Developer
+                    </p>
+                </div>
+                
+                <div>
+                    <h4 class="footer-title">Framework</h4>
+                    <ul class="footer-links">
+                        <li><a href="/about">About CRIPFCnt</a></li>
+                        <li><a href="#pillars">Eight Pillars</a></li>
+                        <li><a href="#">Methodology</a></li>
+                        <li><a href="#">Research Papers</a></li>
+                    </ul>
+                </div>
+                
+                <div>
+                    <h4 class="footer-title">Services</h4>
+                    <ul class="footer-links">
+                        <li><a href="#">Institutional Consulting</a></li>
+                        <li><a href="#">Leadership Development</a></li>
+                        <li><a href="#">Professional Certification</a></li>
+                        <li><a href="#">SCOI Assessment</a></li>
+                    </ul>
+                </div>
+                
+                <div>
+                    <h4 class="footer-title">Contact</h4>
+                    <ul class="footer-links">
+                        <li>5 Walford Avenue</li>
+                        <li>Wolverhampton, WV3 7AZ</li>
+                        <li>United Kingdom</li>
+                        <li style="margin-top: 1rem;"><a href="tel:+447940298087">+44 7940 298087</a></li>
+                        <li><a href="/cdn-cgi/l/email-protection#1d74737b725d7e6f746d7b7e7369337e7270"><span class="__cf_email__" data-cfemail="bdd4d3dbd2fddecfd4cddbded3c993ded2d0">[email&#160;protected]</span></a></li>
+                    </ul>
+                </div>
+            </div>
+                    
+            <div class="footer-bottom">
+                <p>&copy; 2025 CRIPFCnt. All rights reserved. Intelligence Structuring Framework.</p>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Mobile Menu Script -->
+ 
+<!-- Mobile Menu Script -->
+    <script>
+        const mobileMenuToggle = document.getElementById('mobileMenuToggle');
+        const navLinks = document.getElementById('navLinks');
+
+        // Toggle mobile menu
+        mobileMenuToggle?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            mobileMenuToggle.classList.toggle('active');
+            navLinks.classList.toggle('active');
+            document.body.classList.toggle('menu-open');
+        });
+
+        // Close menu when clicking any link
+        navLinks?.querySelectorAll('a').forEach(link => {
+            link.addEventListener('click', () => {
+                mobileMenuToggle.classList.remove('active');
+                navLinks.classList.remove('active');
+                document.body.classList.remove('menu-open');
+            });
+        });
+
+        // Close menu when clicking outside
+        document.addEventListener('click', (e) => {
+            if (window.innerWidth <= 768) {
+                const isClickInsideMenu = navLinks?.contains(e.target);
+                const isClickOnToggle = mobileMenuToggle?.contains(e.target);
+                
+                if (!isClickInsideMenu && !isClickOnToggle && navLinks?.classList.contains('active')) {
+                    mobileMenuToggle.classList.remove('active');
+                    navLinks.classList.remove('active');
+                    document.body.classList.remove('menu-open');
+                }
+            }
+        });
+
+        // Reset on resize
+        window.addEventListener('resize', () => {
+            if (window.innerWidth > 768) {
+                mobileMenuToggle?.classList.remove('active');
+                navLinks?.classList.remove('active');
+                document.body.classList.remove('menu-open');
+            }
+        });
+    </script>
+
+
+</body>
+</html>
