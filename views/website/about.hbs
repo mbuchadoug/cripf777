@@ -214,6 +214,53 @@
 <body>
 
 <!-- ── NAVBAR ─────────────────────────────────────────────────────────── -->
+<nav class="navbar">
+  <div class="nav-container">
+    <a href="/" class="logo">
+      <div class="logo-icon">C</div>
+      <span class="logo-text">CRIPFCnt</span>
+    </a>
+    <button class="mobile-menu-toggle" id="mobileMenuToggle" aria-label="Toggle menu">
+      <span></span><span></span><span></span>
+    </button>
+    <ul class="nav-links" id="navLinks">
+      <li><a href="/">Home</a></li>
+      <li><a href="/about" class="active">Framework</a></li>
+      <li><a href="/services">Services</a></li>
+      <li><a href="/scoi">Audits</a></li>
+      <li class="nav-item dropdown desktop-only" id="lmsDropdown">
+        <a href="/lms" class="dropdown-toggle">LMS <span class="caret">▾</span></a>
+        <div class="dropdown-menu">
+          <a class="dropdown-link" href="/auth/parent"><div class="dd-title">Parents &amp; Guardians</div><div class="dd-sub">Manage kids · Grades 1–7 + High School</div></a>
+          <a class="dropdown-link" href="/auth/teacher"><div class="dd-title">Private Teachers</div><div class="dd-sub">Up to 15/40 learners</div></a>
+          <a class="dropdown-link" href="/auth/google?returnTo=%2Forg%2Fcripfcnt-school%2Fdashboard&force=1"><div class="dd-title">Professionals</div><div class="dd-sub">8 modules · audits · certification</div></a>
+        </div>
+      </li>
+      <li class="mobile-only mobile-lms-section">
+        <div class="mobile-section-header">LMS Options</div>
+        <ul class="mobile-lms-links">
+          <li><a href="/auth/parent">👨‍👩‍👧 Parents &amp; Guardians</a></li>
+          <li><a href="/auth/teacher">👨‍🏫 Private Teachers</a></li>
+          <li><a href="/auth/google?returnTo=%2Forg%2Fcripfcnt-school%2Fdashboard&force=1">🏛️ Professionals</a></li>
+        </ul>
+      </li>
+      <li><a href="/auth/school">Student Portal</a></li>
+      <li><a href="/contact">Contact</a></li>
+      <li class="nav-auth">
+        {{#if user}}
+          <div class="user-pill" title="{{user.email}}">
+            {{#if user.photo}}<img class="user-photo" src="{{user.photo}}" alt="Profile" />{{/if}}
+            <span class="user-email">{{#if user.email}}{{user.email}}{{else}}{{user.displayName}}{{/if}}</span>
+          </div>
+          <a href="/auth/logout" class="nav-signout">Sign out</a>
+        {{else}}
+          <a href="mailto:info@cripfcnt.com" class="nav-cta">Get Started</a>
+        {{/if}}
+      </li>
+    </ul>
+  </div>
+</nav>
+
 <!-- ── PAGE HEADER ────────────────────────────────────────────────────── -->
 <header class="page-header">
   <div class="page-header-content">
@@ -402,5 +449,15 @@
 </footer>
 
 <script>
+  const toggle = document.getElementById('mobileMenuToggle');
+  const navLinks = document.getElementById('navLinks');
+  toggle?.addEventListener('click', e => { e.stopPropagation(); toggle.classList.toggle('active'); navLinks.classList.toggle('active'); document.body.classList.toggle('menu-open'); });
+  navLinks?.querySelectorAll('a').forEach(link => { link.addEventListener('click', () => { toggle.classList.remove('active'); navLinks.classList.remove('active'); document.body.classList.remove('menu-open'); }); });
+  document.addEventListener('click', e => { if (window.innerWidth <= 768 && !navLinks?.contains(e.target) && !toggle?.contains(e.target) && navLinks?.classList.contains('active')) { toggle.classList.remove('active'); navLinks.classList.remove('active'); document.body.classList.remove('menu-open'); } });
+  window.addEventListener('resize', () => { if (window.innerWidth > 768) { toggle?.classList.remove('active'); navLinks?.classList.remove('active'); document.body.classList.remove('menu-open'); } });
+  document.getElementById('lmsDropdown')?.addEventListener('click', function(e) { if (window.innerWidth <= 768) { e.preventDefault(); this.classList.toggle('open'); } });
+  const observer = new IntersectionObserver(entries => { entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); observer.unobserve(e.target); } }); }, { threshold: 0.1 });
+  document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+</script>
 </body>
 </html>
