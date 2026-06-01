@@ -14,77 +14,83 @@ const SpecialScoiAuditSchema = new mongoose.Schema({
 
   auditType: {
     type: String,
-    required: true // e.g. placement_event, crisis, exit, restructuring
+    required: true
   },
 
   subject: {
-    name: String,
-    entityType: String,
-    entityScope: String,
-    sectorContext: String,
-    jurisdiction: String
+    name:         String,
+    entityType:   String,
+    entityScope:  String,     // ← full scope description
+    sectorContext: String,    // ← sector / industry context
+    jurisdiction: String      // ← geographic jurisdiction
   },
 
   // ── assessmentWindow ──────────────────────────────────────────────────────
-  // MUST be Mixed, not a typed sub-document.
-  //
-  // Why: the JSON contains a "type" key inside assessmentWindow:
-  //   { label: "1904_1939", durationYears: 35, type: "institutional_..." }
-  //
-  // When Mongoose sees a nested object that has a "type" key, it treats that
-  // key as a schema-type directive and tries to cast the whole field to that
-  // type (String in this case). This produces:
-  //   "Cast to string failed for value {...} at path assessmentWindow"
-  //
-  // Using Mixed bypasses all casting and stores whatever arrives as-is.
+  // Must be Mixed because the JSON embeds a "type" key which Mongoose
+  // misreads as a schema-type directive, causing cast errors.
   assessmentWindow: mongoose.Schema.Types.Mixed,
 
-  author: String,
-  purpose: String,
-  status: String,
+  // ── assessmentDate ────────────────────────────────────────────────────────
+  // Used by cumulative audits (Lawyer-style) instead of assessmentWindow.
+  assessmentDate: mongoose.Schema.Types.Mixed,
+
+  author:         String,
+  purpose:        String,
+  status:         String,
   revisionPolicy: String,
 
-  matrix: mongoose.Schema.Types.Mixed,
+  // ── matrix ────────────────────────────────────────────────────────────────
+  // e.g. "dual" — analytical matrix descriptor shown on cover and in profile
+  matrix: String,
 
-  // ── Core doctrine (top-level key in the JSON) ──────────────────────────────
-  // Previously missing from schema → was silently dropped on Model.create()
-  // This is what the Findings section falls back to when
-  // findings.coreFinding is absent.
+  // ── Core doctrine ─────────────────────────────────────────────────────────
   coreDoctrine: mongoose.Schema.Types.Mixed,
 
+  // ── Top-level coreFinding ─────────────────────────────────────────────────
+  // Lawyer-style audits place the core finding at root level.
+  coreFinding: String,
+
   // ── CRIPFCnt interpretation block ─────────────────────────────────────────
-  // Previously missing from schema → was silently dropped on Model.create()
-  // The template uses audit.CRIPFCntInterpretation.summary as the second
-  // fallback for the core finding box.
+  // Includes: summary, keyDoctrine, structuralLesson[]
   CRIPFCntInterpretation: mongoose.Schema.Types.Mixed,
 
-  definitions: mongoose.Schema.Types.Mixed,
-  method: mongoose.Schema.Types.Mixed,
-  context: mongoose.Schema.Types.Mixed,
+  // ── Temporal / cumulative fields ──────────────────────────────────────────
+  // Used by Lawyer-style cumulative audits
+  temporalLayers:              mongoose.Schema.Types.Mixed,
+  currentCumulativeAssessment: mongoose.Schema.Types.Mixed,
+  majorStructuralTransitions:  mongoose.Schema.Types.Mixed,
 
-  scores: mongoose.Schema.Types.Mixed,
-  calculations: mongoose.Schema.Types.Mixed,
-  findings: mongoose.Schema.Types.Mixed,
+  // ── Historical context ────────────────────────────────────────────────────
+  // Used by GS-style historical audits: { summary, conditions[] }
+  historicalContext: mongoose.Schema.Types.Mixed,
+
+  definitions:           mongoose.Schema.Types.Mixed,
+  method:                mongoose.Schema.Types.Mixed,
+  context:               mongoose.Schema.Types.Mixed,
+
+  scores:                mongoose.Schema.Types.Mixed,
+  calculations:          mongoose.Schema.Types.Mixed,
+  findings:              mongoose.Schema.Types.Mixed,
   civilizationRiskSignals: mongoose.Schema.Types.Mixed,
 
-  counterfactual: mongoose.Schema.Types.Mixed,
-  disclaimers: mongoose.Schema.Types.Mixed,
-  tags: [String],
+  counterfactual:        mongoose.Schema.Types.Mixed,
+  disclaimers:           mongoose.Schema.Types.Mixed,
+  tags:                  [String],
 
   price: {
-    type: Number,
+    type:    Number,
     default: 29900
   },
 
   isPaid: {
-    type: Boolean,
+    type:    Boolean,
     default: false
   },
 
   pdfUrl: String,
 
   createdAt: {
-    type: Date,
+    type:    Date,
     default: Date.now
   }
 }, {

@@ -516,6 +516,119 @@
       margin-right:0.4rem;
     }
 
+    /* ── SUBJECT INTELLIGENCE TABLE ───────────────── */
+    .kv-table td:first-child {
+      font-weight:700;
+      color:var(--navy);
+      width:35%;
+      white-space:nowrap;
+    }
+
+    /* ── TEMPORAL LAYERS ──────────────────────────── */
+    .temporal-grid {
+      display:grid;
+      grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));
+      gap:1px;
+      background:var(--g200);
+      border:1px solid var(--g200);
+      margin-top:0.5rem;
+    }
+    .tl-cell {
+      background:var(--white);
+      padding:1.25rem 1.5rem;
+    }
+    .tl-period {
+      font-family:var(--sans);
+      font-size:0.68rem;
+      font-weight:800;
+      text-transform:uppercase;
+      letter-spacing:1.5px;
+      color:var(--gold);
+      margin-bottom:0.3rem;
+    }
+    .tl-phase {
+      font-family:var(--sans);
+      font-size:0.72rem;
+      font-weight:600;
+      color:var(--navy-light);
+      margin-bottom:0.5rem;
+      word-break:break-word;
+    }
+    .tl-range {
+      font-family:var(--serif);
+      font-size:1.35rem;
+      font-weight:700;
+      color:var(--navy);
+      line-height:1;
+      margin-bottom:0.4rem;
+    }
+    .tl-interp {
+      font-family:var(--serif);
+      font-size:0.88rem;
+      color:var(--g500);
+      line-height:1.6;
+      font-style:italic;
+    }
+
+    /* ── MAJOR TRANSITIONS ─────────────────────────── */
+    .transition-list {
+      border:1px solid var(--g200);
+    }
+    .transition-item {
+      display:flex;
+      gap:1.25rem;
+      padding:1rem 1.5rem;
+      border-bottom:1px solid var(--g100);
+      align-items:flex-start;
+    }
+    .transition-item:last-child { border-bottom:none; }
+    .transition-num {
+      font-family:var(--sans);
+      font-size:0.65rem;
+      font-weight:800;
+      color:var(--white);
+      background:var(--navy-mid);
+      min-width:1.5rem;
+      height:1.5rem;
+      border-radius:50%;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      flex-shrink:0;
+      margin-top:0.15rem;
+    }
+    .transition-label {
+      font-family:var(--sans);
+      font-size:0.78rem;
+      font-weight:700;
+      color:var(--navy);
+      text-transform:uppercase;
+      letter-spacing:0.5px;
+      margin-bottom:0.25rem;
+    }
+    .transition-meaning {
+      font-family:var(--serif);
+      font-size:0.95rem;
+      color:var(--g700);
+      line-height:1.65;
+    }
+
+    /* ── STRUCTURAL LESSON ─────────────────────────── */
+    .lesson-box {
+      background:var(--g50);
+      border:1px solid var(--g200);
+      border-left:4px solid var(--gold-rule);
+      padding:1.5rem 1.75rem;
+      margin-top:1.25rem;
+    }
+    .lesson-box ul { margin:0; padding-left:1.25rem; }
+    .lesson-box li {
+      font-size:0.95rem;
+      color:var(--g700);
+      line-height:1.7;
+      margin-bottom:0.35rem;
+    }
+
     /* ── FOOTER ────────────────────────────────────── */
     .doc-footer {
       background:var(--navy);
@@ -608,13 +721,24 @@
       </div>
       <div class="cm-item">
         <div class="cm-label">Framework</div>
-        <div class="cm-value">{{audit.framework}}</div>
+        <div class="cm-value">
+          {{audit.framework}}
+          {{#if audit.matrix}}<span style="opacity:0.6;font-size:0.72rem;"> · {{audit.matrix}} matrix</span>{{/if}}
+        </div>
       </div>
       <div class="cm-item">
         <div class="cm-label">Assessment Window</div>
         <div class="cm-value">
-          {{#if audit.assessmentWindow.label}}{{audit.assessmentWindow.label}}
-          {{else if audit.assessmentDate.label}}{{audit.assessmentDate.label}}
+          {{#if audit.assessmentWindow.label}}
+            {{audit.assessmentWindow.label}}
+            {{#if audit.assessmentWindow.durationYears}}
+              <span style="opacity:0.65;font-size:0.72rem;display:block;">({{audit.assessmentWindow.durationYears}} years)</span>
+            {{/if}}
+          {{else if audit.assessmentDate.label}}
+            {{audit.assessmentDate.label}}
+            {{#if audit.assessmentDate.type}}
+              <span style="opacity:0.65;font-size:0.72rem;display:block;">{{audit.assessmentDate.type}}</span>
+            {{/if}}
           {{else}}N/A{{/if}}
         </div>
       </div>
@@ -623,8 +747,8 @@
         <div class="cm-value">{{audit.status}}</div>
       </div>
       <div class="cm-item">
-        <div class="cm-label">Revision Policy</div>
-        <div class="cm-value">{{audit.revisionPolicy}}</div>
+        <div class="cm-label">Jurisdiction</div>
+        <div class="cm-value">{{#if audit.subject.jurisdiction}}{{audit.subject.jurisdiction}}{{else}}—{{/if}}</div>
       </div>
       <div class="cm-item">
         <div class="cm-label">Author</div>
@@ -649,6 +773,62 @@
       </div>
       <p>{{audit.purpose}}</p>
     </div>
+
+    {{!-- ── Subject Intelligence (always rendered when any sub-field present) ── --}}
+    {{#if audit.subject.entityScope}}
+    <hr class="rule">
+    <div class="section">
+      <div class="section-head">
+        <span class="section-num"></span>
+        <h2 class="section-title">Subject Intelligence Profile</h2>
+        <span class="section-title-line"></span>
+      </div>
+      <table class="kv-table">
+        {{#if audit.subject.entityScope}}
+        <tr>
+          <td>Entity Scope</td>
+          <td>{{audit.subject.entityScope}}</td>
+        </tr>
+        {{/if}}
+        {{#if audit.subject.sectorContext}}
+        <tr>
+          <td>Sector Context</td>
+          <td>{{audit.subject.sectorContext}}</td>
+        </tr>
+        {{/if}}
+        {{#if audit.subject.jurisdiction}}
+        <tr>
+          <td>Jurisdiction</td>
+          <td>{{audit.subject.jurisdiction}}</td>
+        </tr>
+        {{/if}}
+        {{#if audit.assessmentWindow.type}}
+        <tr>
+          <td>Phase Classification</td>
+          <td>{{audit.assessmentWindow.type}}</td>
+        </tr>
+        {{/if}}
+        {{#if audit.assessmentDate.type}}
+        <tr>
+          <td>Assessment Type</td>
+          <td>{{audit.assessmentDate.type}}</td>
+        </tr>
+        {{/if}}
+        {{#if audit.matrix}}
+        <tr>
+          <td>Analytical Matrix</td>
+          <td>{{audit.matrix}}</td>
+        </tr>
+        {{/if}}
+        {{#if audit.revisionPolicy}}
+        <tr>
+          <td>Revision Policy</td>
+          <td>{{audit.revisionPolicy}}</td>
+        </tr>
+        {{/if}}
+      </table>
+    </div>
+    {{/if}}
 
     {{#if audit.definitions}}
     <hr class="rule">
@@ -785,6 +965,74 @@
     </div>
     {{/if}}
 
+    {{!-- ── Historical Context (GS-style audits) ──────────────────────────── --}}
+    {{#if audit.historicalContext}}
+    <hr class="rule">
+    <div class="section">
+      <div class="section-head">
+        <span class="section-num"></span>
+        <h2 class="section-title">Historical Context</h2>
+        <span class="section-title-line"></span>
+      </div>
+      {{#if audit.historicalContext.summary}}
+        <p>{{audit.historicalContext.summary}}</p>
+      {{/if}}
+      {{#if audit.historicalContext.conditions}}
+        <p style="margin-top:1rem;"><strong>Prevailing Conditions:</strong></p>
+        <ul>
+          {{#each audit.historicalContext.conditions}}
+            <li>{{this}}</li>
+          {{/each}}
+        </ul>
+      {{/if}}
+    </div>
+    {{/if}}
+
+    {{!-- ── Temporal Layers (Lawyer cumulative audits) ─────────────────────── --}}
+    {{#if audit.temporalLayers}}
+    <hr class="rule">
+    <div class="section">
+      <div class="section-head">
+        <span class="section-num"></span>
+        <h2 class="section-title">Temporal SCOI Layers</h2>
+        <span class="section-title-line"></span>
+      </div>
+      <div class="temporal-grid">
+        {{#each audit.temporalLayers}}
+        <div class="tl-cell">
+          <div class="tl-period">{{@key}}</div>
+          <div class="tl-phase">{{this.phase}}</div>
+          <div class="tl-range">{{this.SCOIRange.[0]}} – {{this.SCOIRange.[1]}}</div>
+          <div class="tl-interp">{{this.interpretation}}</div>
+        </div>
+        {{/each}}
+      </div>
+    </div>
+    {{/if}}
+
+    {{!-- ── Major Structural Transitions (Lawyer cumulative audits) ───────── --}}
+    {{#if audit.majorStructuralTransitions}}
+    <hr class="rule">
+    <div class="section">
+      <div class="section-head">
+        <span class="section-num"></span>
+        <h2 class="section-title">Major Structural Transitions</h2>
+        <span class="section-title-line"></span>
+      </div>
+      <div class="transition-list">
+        {{#each audit.majorStructuralTransitions}}
+        <div class="transition-item">
+          <div class="transition-num">{{@key}}</div>
+          <div>
+            <div class="transition-label">{{this.label}}</div>
+            <div class="transition-meaning">{{this.meaning}}</div>
+          </div>
+        </div>
+        {{/each}}
+      </div>
+    </div>
+    {{/if}}
+
     <hr class="rule rule-gold">
     <!-- Section N - SCOI Metrics (always present) -->
     <div class="section">
@@ -794,84 +1042,185 @@
         <span class="section-title-line"></span>
       </div>
 
-      <!-- Visibility -->
-      <div class="score-panel">
-        <div class="sp-head">
-          <div class="sp-label">Visibility / Systemic Exposure</div>
-          <div class="sp-value">{{audit.scores.visibility_denominator.rating}}</div>
-          <div class="sp-range">
-            Normalised Range:
-            {{audit.scores.visibility_denominator.normalizedRange.[0]}}
-            –
-            {{audit.scores.visibility_denominator.normalizedRange.[1]}}
+      {{!-- ───────────────────────────────────────────────────────────────────
+           Score source priority:
+             1. audit.scores                        (GS-style audits)
+             2. audit.currentCumulativeAssessment   (Lawyer cumulative audits)
+           ─────────────────────────────────────────────────────────────────── --}}
+
+      {{#if audit.scores}}
+
+        <!-- Visibility -->
+        <div class="score-panel">
+          <div class="sp-head">
+            <div class="sp-label">Visibility / Systemic Exposure</div>
+            <div class="sp-value">{{audit.scores.visibility_denominator.rating}}</div>
+            <div class="sp-range">
+              Normalised Range:
+              {{audit.scores.visibility_denominator.normalizedRange.[0]}}
+              –
+              {{audit.scores.visibility_denominator.normalizedRange.[1]}}
+            </div>
           </div>
+          {{#if audit.scores.visibility_denominator.drivers}}
+          <div class="sp-body">
+            <p><strong>Drivers:</strong></p>
+            <ul>
+              {{#each audit.scores.visibility_denominator.drivers}}
+                <li>{{this}}</li>
+              {{/each}}
+            </ul>
+          </div>
+          {{/if}}
         </div>
-        {{#if audit.scores.visibility_denominator.drivers}}
-        <div class="sp-body">
-          <p><strong>Drivers:</strong></p>
-          <ul>
-            {{#each audit.scores.visibility_denominator.drivers}}
-              <li>{{this}}</li>
-            {{/each}}
-          </ul>
+
+        <!-- Responsibility -->
+        <div class="score-panel">
+          <div class="sp-head">
+            <div class="sp-label">Responsibility / Contribution Alignment</div>
+            <div class="sp-value">{{audit.scores.responsibility_numerator.rating}}</div>
+            <div class="sp-range">
+              Normalised Range:
+              {{audit.scores.responsibility_numerator.normalizedRange.[0]}}
+              –
+              {{audit.scores.responsibility_numerator.normalizedRange.[1]}}
+            </div>
+          </div>
+          {{#if audit.scores.responsibility_numerator.observedSignals}}
+          <div class="sp-body">
+            <p><strong>Observed Signals:</strong></p>
+            <ul>
+              {{#each audit.scores.responsibility_numerator.observedSignals}}
+                <li>{{this}}</li>
+              {{/each}}
+            </ul>
+          </div>
+          {{/if}}
+        </div>
+
+        <!-- Negative Externalities (GS 1974-2009 and similar) -->
+        {{#if audit.scores.negative_externalities}}
+        <div class="score-panel" style="border-left-color:#B45309;">
+          <div class="sp-head">
+            <div class="sp-label" style="color:#B45309;">Negative Externalities / Risk Signals</div>
+            <div class="sp-range">
+              Normalised Range:
+              {{audit.scores.negative_externalities.normalizedRange.[0]}}
+              –
+              {{audit.scores.negative_externalities.normalizedRange.[1]}}
+            </div>
+          </div>
+          {{#if audit.scores.negative_externalities.observedSignals}}
+          <div class="sp-body">
+            <p><strong>Observed Signals:</strong></p>
+            <ul>
+              {{#each audit.scores.negative_externalities.observedSignals}}
+                <li>{{this}}</li>
+              {{/each}}
+            </ul>
+          </div>
+          {{/if}}
         </div>
         {{/if}}
-      </div>
 
-      <!-- Responsibility -->
-      <div class="score-panel">
-        <div class="sp-head">
-          <div class="sp-label">Responsibility / Contribution Alignment</div>
-          <div class="sp-value">{{audit.scores.responsibility_numerator.rating}}</div>
-          <div class="sp-range">
-            Normalised Range:
-            {{audit.scores.responsibility_numerator.normalizedRange.[0]}}
-            –
-            {{audit.scores.responsibility_numerator.normalizedRange.[1]}}
+        <!-- Framework Result -->
+        {{#if audit.scores.SCOI_framework_result}}
+        <div class="score-panel" style="border-left-color:var(--gold-rule);">
+          <div class="sp-head">
+            <div class="sp-label">SCOI Framework Result</div>
+            <div class="sp-value">
+              {{audit.scores.SCOI_framework_result.rangeEstimate.[0]}}–{{audit.scores.SCOI_framework_result.rangeEstimate.[1]}}
+            </div>
           </div>
-        </div>
-        {{#if audit.scores.responsibility_numerator.observedSignals}}
-        <div class="sp-body">
-          <p><strong>Observed Signals:</strong></p>
-          <ul>
-            {{#each audit.scores.responsibility_numerator.observedSignals}}
-              <li>{{this}}</li>
-            {{/each}}
-          </ul>
+          <div class="sp-body">
+            <div class="placement-tag">{{audit.scores.SCOI_framework_result.placement}}</div>
+            <p style="margin-top:1rem;font-style:italic;color:var(--g500);">{{audit.scores.SCOI_framework_result.interpretation}}</p>
+          </div>
         </div>
         {{/if}}
-      </div>
 
-      <!-- Framework Result -->
-      {{#if audit.scores.SCOI_framework_result}}
-      <div class="score-panel" style="border-left-color:var(--gold-rule);">
-        <div class="sp-head">
-          <div class="sp-label">SCOI Framework Result</div>
-          <div class="sp-value">
-            {{audit.scores.SCOI_framework_result.rangeEstimate.[0]}}–{{audit.scores.SCOI_framework_result.rangeEstimate.[1]}}
+        <!-- Event Result -->
+        {{#if audit.scores.SCOI_event_result}}
+        <div class="score-panel" style="border-left-color:var(--gold-rule);">
+          <div class="sp-head">
+            <div class="sp-label">SCOI Event Result</div>
+            <div class="sp-value">
+              {{audit.scores.SCOI_event_result.rangeEstimate.[0]}}–{{audit.scores.SCOI_event_result.rangeEstimate.[1]}}
+            </div>
+          </div>
+          <div class="sp-body">
+            <div class="placement-tag">{{audit.scores.SCOI_event_result.placement}}</div>
+            <p style="margin-top:1rem;font-style:italic;color:var(--g500);">{{audit.scores.SCOI_event_result.interpretation}}</p>
           </div>
         </div>
-        <div class="sp-body">
-          <div class="placement-tag">{{audit.scores.SCOI_framework_result.placement}}</div>
-          <p style="margin-top:1rem;font-style:italic;color:var(--g500);">{{audit.scores.SCOI_framework_result.interpretation}}</p>
-        </div>
-      </div>
-      {{/if}}
+        {{/if}}
 
-      <!-- Event Result -->
-      {{#if audit.scores.SCOI_event_result}}
-      <div class="score-panel" style="border-left-color:var(--gold-rule);">
-        <div class="sp-head">
-          <div class="sp-label">SCOI Event Result</div>
-          <div class="sp-value">
-            {{audit.scores.SCOI_event_result.rangeEstimate.[0]}}–{{audit.scores.SCOI_event_result.rangeEstimate.[1]}}
+      {{else if audit.currentCumulativeAssessment}}
+
+        <!-- Visibility (cumulative format) -->
+        <div class="score-panel">
+          <div class="sp-head">
+            <div class="sp-label">Visibility / Systemic Exposure</div>
+            <div class="sp-value">{{audit.currentCumulativeAssessment.visibility_denominator.rating}}</div>
+            <div class="sp-range">
+              Normalised Range:
+              {{audit.currentCumulativeAssessment.visibility_denominator.normalizedRange.[0]}}
+              –
+              {{audit.currentCumulativeAssessment.visibility_denominator.normalizedRange.[1]}}
+            </div>
+          </div>
+          {{#if audit.currentCumulativeAssessment.visibility_denominator.drivers}}
+          <div class="sp-body">
+            <p><strong>Drivers:</strong></p>
+            <ul>
+              {{#each audit.currentCumulativeAssessment.visibility_denominator.drivers}}
+                <li>{{this}}</li>
+              {{/each}}
+            </ul>
+          </div>
+          {{/if}}
+        </div>
+
+        <!-- Responsibility (cumulative format) -->
+        <div class="score-panel">
+          <div class="sp-head">
+            <div class="sp-label">Responsibility / Contribution Alignment</div>
+            <div class="sp-value">{{audit.currentCumulativeAssessment.responsibility_numerator.rating}}</div>
+            <div class="sp-range">
+              Normalised Range:
+              {{audit.currentCumulativeAssessment.responsibility_numerator.normalizedRange.[0]}}
+              –
+              {{audit.currentCumulativeAssessment.responsibility_numerator.normalizedRange.[1]}}
+            </div>
+          </div>
+          {{#if audit.currentCumulativeAssessment.responsibility_numerator.observedSignals}}
+          <div class="sp-body">
+            <p><strong>Observed Signals:</strong></p>
+            <ul>
+              {{#each audit.currentCumulativeAssessment.responsibility_numerator.observedSignals}}
+                <li>{{this}}</li>
+              {{/each}}
+            </ul>
+          </div>
+          {{/if}}
+        </div>
+
+        <!-- Framework Result (cumulative format) -->
+        {{#if audit.currentCumulativeAssessment.SCOI_framework_result}}
+        <div class="score-panel" style="border-left-color:var(--gold-rule);">
+          <div class="sp-head">
+            <div class="sp-label">SCOI Framework Result</div>
+            <div class="sp-value">
+              {{audit.currentCumulativeAssessment.SCOI_framework_result.rangeEstimate.[0]}}–{{audit.currentCumulativeAssessment.SCOI_framework_result.rangeEstimate.[1]}}
+            </div>
+          </div>
+          <div class="sp-body">
+            <div class="placement-tag">{{audit.currentCumulativeAssessment.SCOI_framework_result.placement}}</div>
+            <p style="margin-top:1rem;font-style:italic;color:var(--g500);">{{audit.currentCumulativeAssessment.SCOI_framework_result.interpretation}}</p>
           </div>
         </div>
-        <div class="sp-body">
-          <div class="placement-tag">{{audit.scores.SCOI_event_result.placement}}</div>
-          <p style="margin-top:1rem;font-style:italic;color:var(--g500);">{{audit.scores.SCOI_event_result.interpretation}}</p>
-        </div>
-      </div>
+        {{/if}}
+
       {{/if}}
     </div>
 
@@ -916,15 +1265,17 @@
         <span class="section-title-line"></span>
       </div>
 
-      {{!-- ─────────────────────────────────────────────────────────────────
-           Core finding priority order:
-             1. findings.coreFinding          (explicit coreFinding key)
-             2. findings.primaryFinding       (Goldman Sachs JSON uses this key)
-             3. CRIPFCntInterpretation.summary (top-level interpretation block)
-             4. Fallback empty state
-           ───────────────────────────────────────────────────────────────── --}}
+      {{!-- ───────────────────────────────────────────────────────────────────
+           Core finding priority:
+             1. audit.coreFinding          (Lawyer JSON: top-level key)
+             2. findings.coreFinding       (nested key)
+             3. findings.primaryFinding    (GS-style key)
+             4. CRIPFCntInterpretation.summary (interpretation fallback)
+           ─────────────────────────────────────────────────────────────────── --}}
       <div class="finding-core">
-        {{#if audit.findings.coreFinding}}
+        {{#if audit.coreFinding}}
+          <p>{{audit.coreFinding}}</p>
+        {{else if audit.findings.coreFinding}}
           <p>{{audit.findings.coreFinding}}</p>
         {{else if audit.findings.primaryFinding}}
           <p>{{audit.findings.primaryFinding}}</p>
@@ -942,13 +1293,9 @@
             <li>{{this}}</li>
           {{/each}}
         </ul>
-      {{else if audit.CRIPFCntInterpretation.keyDoctrine}}
-        <ul style="margin-top:1.25rem;">
-          <li>{{audit.CRIPFCntInterpretation.keyDoctrine}}</li>
-        </ul>
       {{/if}}
 
-      {{!-- Classification: try findings.classification, then top-level classification --}}
+      {{!-- Classification block --}}
       {{#if audit.findings.classification}}
         <div class="classification-block">
           <div class="class-label">{{audit.findings.classification.label}}</div>
@@ -961,6 +1308,40 @@
         </div>
       {{/if}}
     </div>
+
+    {{!-- ── CRIPFCnt Interpretation (always its own section when present) ─── --}}
+    {{#if audit.CRIPFCntInterpretation}}
+    <hr class="rule">
+    <div class="section">
+      <div class="section-head">
+        <span class="section-num"></span>
+        <h2 class="section-title">CRIPFCnt Interpretation</h2>
+        <span class="section-title-line"></span>
+      </div>
+
+      {{#if audit.CRIPFCntInterpretation.summary}}
+        <p>{{audit.CRIPFCntInterpretation.summary}}</p>
+      {{/if}}
+
+      {{#if audit.CRIPFCntInterpretation.keyDoctrine}}
+        <div class="classification-block" style="margin-top:1.25rem;">
+          <div class="class-label">Key Doctrine</div>
+          <div class="class-def">{{audit.CRIPFCntInterpretation.keyDoctrine}}</div>
+        </div>
+      {{/if}}
+
+      {{#if audit.CRIPFCntInterpretation.structuralLesson}}
+        <div class="lesson-box">
+          <p style="font-family:var(--sans);font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--navy-light);margin-bottom:0.75rem;">Structural Lesson</p>
+          <ul>
+            {{#each audit.CRIPFCntInterpretation.structuralLesson}}
+              <li>{{this}}</li>
+            {{/each}}
+          </ul>
+        </div>
+      {{/if}}
+    </div>
+    {{/if}}
 
     {{#if audit.civilizationRiskSignals}}
     <hr class="rule">
