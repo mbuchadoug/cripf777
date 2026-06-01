@@ -20,21 +20,24 @@ const SpecialScoiAuditSchema = new mongoose.Schema({
   subject: {
     name: String,
     entityType: String,
-    entityScope: String,       // ← added (present in JSON, was silently dropped)
+    entityScope: String,
     sectorContext: String,
     jurisdiction: String
   },
 
-  assessmentWindow: {
-    label: {
-      type: String
-    },
-    phase: {
-      type: String             // ← renamed from "type" (kept as-is)
-    },
-    durationYears: Number,     // ← added (present in JSON, was silently dropped)
-    type: String               // ← keep for backward-compat with older records
-  },
+  // ── assessmentWindow ──────────────────────────────────────────────────────
+  // MUST be Mixed, not a typed sub-document.
+  //
+  // Why: the JSON contains a "type" key inside assessmentWindow:
+  //   { label: "1904_1939", durationYears: 35, type: "institutional_..." }
+  //
+  // When Mongoose sees a nested object that has a "type" key, it treats that
+  // key as a schema-type directive and tries to cast the whole field to that
+  // type (String in this case). This produces:
+  //   "Cast to string failed for value {...} at path assessmentWindow"
+  //
+  // Using Mixed bypasses all casting and stores whatever arrives as-is.
+  assessmentWindow: mongoose.Schema.Types.Mixed,
 
   author: String,
   purpose: String,
