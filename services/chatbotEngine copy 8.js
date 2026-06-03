@@ -154,7 +154,6 @@ import {
   handleSellerPriceReply
 } from "./sellerChat.js";
 import { handleGroupSmartLink, handleGroupSellerTap, handleGroupAdminCommand } from "./groupSmartLink.js";
-import { handleStaffDeepLink, handleStaffCardSelfMenu, handleStaffCardAction } from "./staffSmartLink.js";
  
 
 import {
@@ -6634,11 +6633,6 @@ if (!isMetaAction && /^ZQ:GROUP:[a-z0-9_-]{1,60}$/i.test(text.trim())) {
     if (_handled) return;
   }
 }
-// ── ZQ:STAFF:<id> early intercept - must run before searchMode/state logic ───
-if (!isMetaAction && /ZQ:STAFF:/i.test(text.trim())) {
-  const _handled = await handleStaffDeepLink({ from, text: text.trim(), biz, saveBiz: saveBizSafe.bind(null, biz) });
-  if (_handled) return;
-}
 
 if (
   searchMode === "product" &&
@@ -12138,14 +12132,6 @@ if (!isMetaAction && /ZQ:(SCHOOL|SUPPLIER):[a-f0-9]{24}/i.test(text)) {
   if (_handled) return;
 }
 
-// ── ZQ:STAFF:<id> deep link intercept ────────────────────────────────────────
-// Handles ZQ:STAFF:<24-hex>[:SRC:<src>] and ZQ:STAFF:SLUG:<slug>[:SRC:<src>]
-// MUST run before ZQ:S: slug check so staff IDs are never misrouted.
-if (!isMetaAction && /ZQ:STAFF:/i.test(text)) {
-  const _handled = await handleStaffDeepLink({ from, text, biz, saveBiz: saveBizSafe.bind(null, biz) });
-  if (_handled) return;
-}
-
 // ── ZQ:S:<slug> - human-readable named supplier link ─────────────────────────
 if (!isMetaAction && /^ZQ:S:[a-z0-9_-]{1,60}$/i.test(text.trim())) {
   const _handled = await handleZqDeepLink({ from, text: text.trim(), biz, saveBiz: saveBizSafe.bind(null, biz) });
@@ -12177,14 +12163,6 @@ if (!isMetaAction && /^zq /i.test(text) && text.trim().length > 4) {
   if (_handled) return;
 }
 
-// ── Staff card self-service: salesperson types "my card" / "staff card" ───────
-// Lets any registered salesperson check their own card stats + get share captions
-// without needing access to the admin panel.
-if (!isMetaAction && /^(my card|staff card|my link|my qr)$/i.test(text.trim())) {
-  const _handled = await handleStaffCardSelfMenu({ from });
-  if (_handled) return;
-}
-
 // ── School FAQ chatbot (sfaq_ actions) ───────────────────────────────────────
 if (a.startsWith("sfaq_")) {
   const handled = await handleSchoolFAQAction({
@@ -12204,14 +12182,6 @@ if (a.startsWith("zqg_sel_")) {
 
 // ── Seller chatbot (sc_ actions) ─────────────────────────────────────────────
 if (a.startsWith("sc_")) {
-  // ── Staff card actions (sc_staff_share_ / sc_staff_stats_) ───────────────
-  // These must be checked BEFORE the main sc_ router because they don't follow
-  // the standard sc_<topic>_<supplierId> pattern — they use a staffCardId.
-  if (a.startsWith("sc_staff_")) {
-    const _staffHandled = await handleStaffCardAction({ from, action: a });
-    if (_staffHandled) return;
-  }
-
   // FIX: for no-biz users mid-sc_ flow (e.g. sc_quote_done_ after typing items),
   // reconstruct the virtual biz from UserSession so _scQuoteDone etc. can read
   // scQuoteItems / scRFQ / scSellerId - otherwise biz=null and items=[].

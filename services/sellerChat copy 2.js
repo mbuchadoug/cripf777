@@ -280,7 +280,7 @@ const uniqueNotifyPhones = [...new Set(notifyPhones)];
   }
 }
 
-export async function showSellerMenu(from, supplierId, biz, saveBiz, { source = "direct", parentName = "", staffCardId = null } = {}) {
+export async function showSellerMenu(from, supplierId, biz, saveBiz, { source = "direct", parentName = "" } = {}) {
   const seller = await SupplierProfile.findById(supplierId).lean();
   if (!seller) return sendText(from, "❌ Seller profile not found. Please try again.");
 
@@ -414,14 +414,7 @@ export async function showSellerMenu(from, supplierId, biz, saveBiz, { source = 
       scIsHospitality: isHospitality,
       scHasPrices:     hasPrices,
       scSource:    source,
-      scBuyerName: parentName,
-      // ── Staff card attribution ────────────────────────────────────────────
-      // Preserved across the full buyer flow so enquiries/quotes know to also
-      // notify the salesperson whose card the buyer used to enter the store.
-      // staffCardId is passed from handleStaffDeepLink → showSellerMenu → here.
-      // If the buyer navigates within the store (back, catalogue, etc.) the
-      // existing scStaffCardId is preserved via spread so it is never lost.
-      scStaffCardId: staffCardId || biz?.sessionData?.scStaffCardId || null,
+      scBuyerName: parentName
     };
     if (saveBiz) await saveBiz(biz);
   }
@@ -1374,29 +1367,6 @@ async function _scQuoteDone(from, supplierId, biz, saveBiz) {
       isRFQ:        true,
     });
 
-    // ── Also notify the salesperson whose card the buyer used ─────────────
-    const _rfqStaffCardId = biz?.sessionData?.scStaffCardId;
-    if (_rfqStaffCardId) {
-      try {
-        const { notifyStaffEnquiry, trackStaffLinkEvent } = await import("./staffSmartLink.js");
-        const StaffCardModel = (await import("../models/staffCard.js")).default;
-        const _rfqStaffCard  = await StaffCardModel.findById(_rfqStaffCardId).lean();
-        if (_rfqStaffCard) {
-          const _rfqItemSummary = items.slice(0, 3).map(i => i.name || i.product).filter(Boolean).join(", ");
-          notifyStaffEnquiry({
-            card:       _rfqStaffCard,
-            supplier:   seller,
-            buyerPhone: from,
-            message:    `RFQ: ${_rfqItemSummary}${items.length > 3 ? ` + ${items.length - 3} more` : ""}`,
-            refNum
-          }).catch(() => {});
-          trackStaffLinkEvent(_rfqStaffCardId, { source: "direct", isConversion: true }).catch(() => {});
-        }
-      } catch (_rfqStaffErr) {
-        console.warn("[SC RFQ] staff card notify failed:", _rfqStaffErr.message);
-      }
-    }
-
     // ── Write the RFQ draft directly into the seller's UserSession NOW ──────────
     // Critical: must include the real buyerPhone (the buyer who made the request,
     // NOT the seller). This prevents stale drafts from previous sessions bleeding in
@@ -1609,29 +1579,6 @@ The seller will review and price your request.
     total,
     isRFQ:        false,
   });
-
-  // ── Also notify the salesperson whose card the buyer used ─────────────────
-  const _qtStaffCardId = biz?.sessionData?.scStaffCardId;
-  if (_qtStaffCardId) {
-    try {
-      const { notifyStaffEnquiry, trackStaffLinkEvent } = await import("./staffSmartLink.js");
-      const StaffCardModel = (await import("../models/staffCard.js")).default;
-      const _qtStaffCard   = await StaffCardModel.findById(_qtStaffCardId).lean();
-      if (_qtStaffCard) {
-        const _qtItemSummary = lineItems.slice(0, 3).map(l => l.name).filter(Boolean).join(", ");
-        notifyStaffEnquiry({
-          card:       _qtStaffCard,
-          supplier:   seller,
-          buyerPhone: from,
-          message:    `Quote: ${_qtItemSummary}${lineItems.length > 3 ? ` + ${lineItems.length - 3} more` : ""} — Total: $${total.toFixed(2)}`,
-          refNum
-        }).catch(() => {});
-        trackStaffLinkEvent(_qtStaffCardId, { source: "direct", isConversion: true }).catch(() => {});
-      }
-    } catch (_qtStaffErr) {
-      console.warn("[SC QUOTE] staff card notify failed:", _qtStaffErr.message);
-    }
-  }
 
   _trackConversion(biz);
 
@@ -2622,84 +2569,48 @@ async function _scProcessEnquiry(from, supplierId, raw, biz, saveBiz) {
   const sellerPhone  = _normPhone(seller.phone);
   const refNum       = "ENQ-" + Date.now().toString(36).toUpperCase().slice(-5);
 
-  // ── Build notify list: seller + all notification contacts ─────────────────
-  const _enqNotifyPhones = [
-    sellerPhone,
-    ...(seller.notificationContacts || []).map(_normPhone)
-  ].filter(Boolean);
-  const _enqUniquePhones = [...new Set(_enqNotifyPhones)];
-
   // ── Notify seller - try sendButtons (within 24hr), then template ─────────
   try {
-    for (const targetPhone of _enqUniquePhones) {
-      await sendButtons(targetPhone, {
-        text:
-          `💬 *New enquiry via ZimQuote!*\n\n` +
-          `📱 From: ${buyerDisplay}\n\n` +
-          `_"${raw.slice(0, 400)}"_\n\n` +
-          `Reply directly on WhatsApp to respond.`,
-        buttons: [{ id: "my_supplier_account", title: "🏪 My Store" }]
-      });
-    }
+   for (const targetPhone of uniqueNotifyPhones) {
+  await sendButtons(targetPhone, {
+      text:
+        `💬 *New enquiry via ZimQuote!*\n\n` +
+        `📱 From: ${buyerDisplay}\n\n` +
+        `_"${raw.slice(0, 400)}"_\n\n` +
+        `Reply directly on WhatsApp to respond.`,
+      buttons: [{ id: "my_supplier_account", title: "🏪 My Store" }]
+    });
+  }
   } catch (_) {
     // Outside 24hr - use utility template
-    for (const targetPhone of _enqUniquePhones) {
-      try {
-        const axios  = (await import("axios")).default;
-        const PID    = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.META_PHONE_NUMBER_ID || process.env.PHONE_NUMBER_ID;
-        const TOKEN  = process.env.META_ACCESS_TOKEN || process.env.WHATSAPP_ACCESS_TOKEN;
-        await axios.post(
-          `https://graph.facebook.com/v24.0/${PID}/messages`,
-          {
-            messaging_product: "whatsapp",
-            to:   targetPhone,
-            type: "template",
-            template: {
-              name: "supplier_new_buyer_request",
-              language: { code: "en" },
-              components: [{
-                type: "body",
-                parameters: [
-                  { type: "text", text: refNum },
-                  { type: "text", text: buyerDisplay },
-                  { type: "text", text: String(raw).slice(0, 200) },
-                  { type: "text", text: "Buyer enquiry via ZimQuote Smart Link" }
-                ]
-              }]
-            }
-          },
-          { headers: { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json" } }
-        );
-      } catch (tplErr) {
-        console.warn(`[SC ENQUIRY] template failed for ${targetPhone}: ${tplErr.message}`);
-      }
-    }
-  }
-
-  // ── Notify salesperson if buyer came via a staff card ─────────────────────
-  // The scStaffCardId is stored in biz.sessionData when the buyer entered via
-  // handleStaffDeepLink → showSellerMenu. It is preserved through the full flow.
-  const _scStaffCardId = biz?.sessionData?.scStaffCardId;
-  if (_scStaffCardId) {
     try {
-      const { notifyStaffEnquiry, trackStaffLinkEvent } = await import("./staffSmartLink.js");
-      const StaffCardModel = (await import("../models/staffCard.js")).default;
-      const _staffCard = await StaffCardModel.findById(_scStaffCardId).lean();
-      if (_staffCard) {
-        // Notify the salesperson on their own phone (outside 24hr via Meta template)
-        notifyStaffEnquiry({
-          card:       _staffCard,
-          supplier:   seller,
-          buyerPhone: from,
-          message:    raw,
-          refNum
-        }).catch(() => {});
-        // Count this as a conversion on their card analytics
-        trackStaffLinkEvent(_scStaffCardId, { source: "direct", isConversion: true }).catch(() => {});
-      }
-    } catch (_staffErr) {
-      // Non-critical - never let this break the main enquiry flow
-      console.warn("[SC ENQUIRY] staff card notify failed:", _staffErr.message);
+      const axios  = (await import("axios")).default;
+      const PID    = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.META_PHONE_NUMBER_ID || process.env.PHONE_NUMBER_ID;
+      const TOKEN  = process.env.META_ACCESS_TOKEN || process.env.WHATSAPP_ACCESS_TOKEN;
+      await axios.post(
+        `https://graph.facebook.com/v24.0/${PID}/messages`,
+        {
+          messaging_product: "whatsapp",
+        to:   targetPhone,
+          type: "template",
+          template: {
+            name: "supplier_new_buyer_request",
+            language: { code: "en" },
+            components: [{
+              type: "body",
+              parameters: [
+                { type: "text", text: refNum },
+                { type: "text", text: buyerDisplay },
+                { type: "text", text: String(raw).slice(0, 200) },
+                { type: "text", text: "Buyer enquiry via ZimQuote Smart Link" }
+              ]
+            }]
+          }
+        },
+        { headers: { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json" } }
+      );
+    } catch (tplErr) {
+      console.warn(`[SC ENQUIRY] template failed for ${sellerPhone}: ${tplErr.message}`);
     }
   }
 
