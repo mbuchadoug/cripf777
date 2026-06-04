@@ -116,7 +116,8 @@ async function _clearSellerDraft(phone, refNum) {
 //   scCatalogue    - JSON string of full catalogue (same as biz.sessionData.scCatalogue)
 //   scCatalogueType- "service" | "product"
 //   scTouristNote  - optional buyer note
-//   scPeopleCount  - optional people/scope count
+//   scPeopleCount  - optional people/scope count (hospitality + tourism)
+//   scScopeNote    - scope of work note for service quotes (e.g. "3-bed house", "2 floors")
 
 async function _getScNoBizSession(phone) {
   const UserSession = (await import("../models/userSession.js")).default;
@@ -153,7 +154,8 @@ async function _clearScNoBizSession(phone) {
         "tempData.scCatalogue":     "",
         "tempData.scCatalogueType": "",
         "tempData.scTouristNote":   "",
-        "tempData.scPeopleCount":   ""
+        "tempData.scPeopleCount":   "",
+        "tempData.scScopeNote":     ""
       }
     },
     { upsert: true }
@@ -596,6 +598,16 @@ export async function handleSellerChatAction({ from, action: a, biz, saveBiz }) 
     case "quote_item":      return _scQuoteAddItem(from, supplierId, biz, saveBiz);
     case "quote_done":      return _scQuoteDone(from, supplierId, biz, saveBiz);
     case "quote_clear":     return _scQuoteClear(from, supplierId, biz, saveBiz);
+    // ── Scope skip: buyer tapped "⏩ Skip — send as is" on the scope prompt ──
+    // Set scScopeNote to empty string (truthy-enough to pass the gate) and proceed
+    case "scope_skip": {
+      if (biz) {
+        biz.sessionData  = { ...(biz.sessionData || {}), scScopeNote: "skip" };
+        biz.sessionState = "sc_awaiting_items";
+        await saveBiz(biz);
+      }
+      return _scQuoteDone(from, supplierId, biz, saveBiz);
+    }
     case "order":           return _scOrder(from, supplierId, biz, saveBiz);
     case "order_deliver":   return _scOrderDeliver(from, supplierId, biz, saveBiz);
     case "order_collect":   return _scOrderCollect(from, supplierId, biz, saveBiz);
@@ -647,7 +659,8 @@ export async function handleSellerChatState({ state, from, text, biz, saveBiz })
       scCatalogue:     _sess.scCatalogue || "",
       scCatalogueType: _sess.scCatalogueType || "product",
       scTouristNote:   _sess.scTouristNote || "",
-      scPeopleCount:   _sess.scPeopleCount || ""
+      scPeopleCount:   _sess.scPeopleCount || "",
+      scScopeNote:     _sess.scScopeNote   || ""
     };
     const _virtualBiz = {
       sessionState: state,
@@ -665,7 +678,8 @@ export async function handleSellerChatState({ state, from, text, biz, saveBiz })
         scCatalogue:     sd.scCatalogue     || "",
         scCatalogueType: sd.scCatalogueType || "product",
         scTouristNote:   sd.scTouristNote   || "",
-        scPeopleCount:   sd.scPeopleCount   || ""
+        scPeopleCount:   sd.scPeopleCount   || "",
+        scScopeNote:     sd.scScopeNote     || ""
       });
     };
     // Clear no-biz session when returning to "ready"
@@ -694,6 +708,19 @@ export async function handleSellerChatState({ state, from, text, biz, saveBiz })
     if (_sess?.tempData?.scSellerQuoteState === "awaiting_seller_price_edit") {
       return _scProcessSellerPriceEdit(from, raw, biz, saveBiz);
     }
+  }
+
+  // ── Quote: scope of work for service quotes ──────────────────────────────
+  // Fires for ALL service quotes (priced and RFQ) when buyer taps "Get Quote"
+  // without having provided scope. Captures e.g. "3-bed house", "5 rooms", etc.
+  if (state === "sc_awaiting_scope") {
+    const scopeText = raw.toLowerCase() === "skip" ? "" : raw.trim().slice(0, 300);
+    if (biz) {
+      if (scopeText) biz.sessionData = { ...(biz.sessionData || {}), scScopeNote: scopeText };
+      biz.sessionState = "sc_awaiting_items"; // return to items state so _scQuoteDone works
+      await saveBiz(biz);
+    }
+    return _scQuoteDone(from, supplierId, biz, saveBiz);
   }
 
   // ── Quote: people count for RFQ services ───────────────────────────────
@@ -1054,81 +1081,132 @@ async function _scQuote(from, supplierId, biz, saveBiz) {
   const _quickRef = `📌 *Quick reference:*\n${_qrLines}${_qrSuffix}\n\n`;
 
   if (hasPrices) {
-    // Priced: show "number × qty" examples using real item numbers
-    const ex1 = allItems[0] ? `1×1` : "1×1";
-    const ex2 = allItems[2] ? `, 3×2` : (allItems[1] ? `, 2×1` : "");
-    const exampleLine = `_e.g. ${ex1}${ex2}_`;
+    // Priced: build rich examples using actual item names from the catalogue
+    // Show BOTH number-selection AND free-text so buyer knows either works
+    const item1  = allItems[0];
+    const item2  = allItems[1];
+    const item3  = allItems[2];
+    const name1  = item1 ? (isService ? item1.service : item1.product) : null;
+    const name2  = item2 ? (isService ? item2.service : item2.product) : null;
 
-    const singleHint = allItems[0]
-      ? `_${_ex(0, allItems[0])}_ → type *1×1*`
-      : "";
-    const multiHint = allItems[1]
-      ? `_${_ex(0, allItems[0])} + ${_ex(1, allItems[1])}_ → type *1×1, 2×1*`
-      : "";
+    // Price display for examples
+    const price1 = item1?.rate || (item1?.amount ? `$${Number(item1.amount).toFixed(0)}` : null);
+    const price2 = item2?.rate || (item2?.amount ? `$${Number(item2.amount).toFixed(0)}` : null);
+
+    // Scope hints for this type of service
+    const scopeEx = name1 ? _guessServiceScopeHint(name1) : ["3-bed house", "office block"];
+
+    const numExamples = [
+      name1 ? `_1_ → selects *${name1}*${price1 ? ` (${price1})` : ""}` : null,
+      name2 ? `_2_ → selects *${name2}*${price2 ? ` (${price2})` : ""}` : null,
+      name1 && name2 ? `_1, 2_ → selects both` : null,
+      name1 ? `_1×2_ → ${name1} × 2 jobs` : null,
+    ].filter(Boolean).join("\n");
+
+    const freeTextExamples = isService ? [
+      `_${name1 || "electrical wiring"}_ → type the service name`,
+      `_${name1 || "electrical wiring"}: ${scopeEx[0]}_ → add scope detail`,
+      `_I need ${name1 || "electrical wiring"} for a ${scopeEx[0]}_ → or just describe it`,
+    ].join("\n") : [
+      name1 ? `_${name1}_ → type the product name` : null,
+      name1 ? `_${name1} ×5_ → name + quantity` : null,
+      `_10 bags of cement, 5 sheets IBR_ → just describe what you need`,
+    ].filter(Boolean).join("\n");
 
     return sendText(from,
-`📝 *Select what you need:*
+`📝 *What do you need? — ${seller.businessName}*
 
-${_quickRef}Type *item number × quantity*, e.g:
-${exampleLine}
-${singleHint ? "\n" + singleHint : ""}${multiHint ? "\n" + multiHint : ""}
+${_quickRef}─────────────────
+*Option 1 — Pick by number:*
+${numExamples}
+
+*Option 2 — Just type your request:*
+${freeTextExamples}
 
 ${isService
-  ? "Qty = number of times / jobs needed."
-  : "Qty = how many units you need."}
+  ? "💡 _You can add details like size, location, or scope after selecting._"
+  : "💡 _Include size, brand, or quantity if relevant._"}
 
 Type *done* when finished, or *cancel* to go back.`
     );
 
   } else if (isService) {
-    // RFQ service - buyer picks by number, optionally adds scope
-    // Build examples using the seller's actual service names
+    // RFQ service - no prices set, maximum flexibility
+    // Buyer can: pick numbers, type names, write full descriptions, or mix all three
     const name1 = allItems[0] ? _ex(0, allItems[0]) : null;
     const name2 = allItems[1] ? _ex(1, allItems[1]) : null;
+    const name3 = allItems[2] ? _ex(2, allItems[2]) : null;
 
-    // Pick 1-2 realistic scope hints based on what the service is
-    // (e.g. a cleaner gets "3-bed house", a plumber gets "blocked drain")
-    const scopeHints = _guessServiceScopeHint(name1);
+    // Generate realistic scope hints for this specific service type
+    const scopeHints1 = _guessServiceScopeHint(name1 || "");
+    const scopeHints2 = _guessServiceScopeHint(name2 || "");
 
-    const ex_single  = `_1_ - just pick service 1`;
-    const ex_multi   = name2 ? `_1, 2_ - pick services 1 & 2` : null;
-    const ex_scope1  = name1 ? `_1: ${scopeHints[0]}_ - service 1 + detail` : null;
-    const ex_scope2  = name1 && name2 && scopeHints[1]
-      ? `_1: ${scopeHints[0]}, 2: ${scopeHints[1]}_ - multiple with detail`
-      : null;
+    // ── Build examples tailored to the actual services on this seller's profile ──
+    // Show the buyer 3 ways to request, from simplest to most detailed
+    const numExamples = [
+      name1 ? `_1_ → just pick *${name1}*` : null,
+      name2 ? `_2_ → just pick *${name2}*` : null,
+      name1 && name2 ? `_1, 2_ → pick both` : null,
+    ].filter(Boolean).join("\n");
 
-    const examples = [ex_single, ex_multi, ex_scope1, ex_scope2]
-      .filter(Boolean).join("\n");
+    const scopeExamples = [
+      name1 ? `_1: ${scopeHints1[0]}_ → ${name1} + scope detail` : null,
+      name2 && scopeHints2[0] ? `_2: ${scopeHints2[0]}_ → ${name2} + scope detail` : null,
+      name1 && name2 ? `_1: ${scopeHints1[0]}, 2: ${scopeHints2[0]}_ → both with detail` : null,
+    ].filter(Boolean).join("\n");
+
+    // Free-text examples that closely match Zimbabwean real-world requests
+    const freeExamples = [
+      name1 ? `_I need ${name1} for a ${scopeHints1[0]}_ → full sentence` : null,
+      name2 ? `_${name2} for a ${scopeHints2[0] || "3-bed house"}_ → or shorter` : null,
+    ].filter(Boolean).join("\n");
 
     return sendText(from,
-`📝 *Which services do you need?*
+`📝 *What do you need? — ${seller.businessName}*
 
-${_quickRef}Type the *number(s)* from the list above.
-Add details after a colon if needed.
+${_quickRef}─────────────────
+*You can request in any of these ways:*
 
-${examples}
+*1️⃣ Pick by number:*
+${numExamples || `_1_ → service 1\n_1, 2_ → services 1 & 2`}
 
-Type *done* when finished, or *cancel* to go back.`
+*2️⃣ Pick number + add scope detail:*
+${scopeExamples || `_1: 3-bed house_ → service 1 with details`}
+
+*3️⃣ Just describe what you need (free text):*
+${freeExamples || `_I need electrical wiring for a 3-bedroom house in Ruwa_`}
+
+💡 _The more detail you give, the more accurate the quote._
+_E.g. size, location, number of rooms, special requirements._
+
+Type *done* when ready, or *cancel* to go back.`
     );
 
   } else {
-    // RFQ product - numbers work, free text also accepted
+    // RFQ product - numbers, names, and full free text all work
     const name1 = allItems[0] ? _ex(0, allItems[0]) : null;
     const name2 = allItems[1] ? _ex(1, allItems[1]) : null;
 
-    const ex_num  = name1 && name2 ? `_1, 3_ - pick by number` : `_1_ - pick by number`;
-    const ex_text = name1 ? `_${name1} ×5_ - or type name + qty` : null;
-
-    const examples = [ex_num, ex_text].filter(Boolean).join("\n");
-
     return sendText(from,
-`📝 *Which products do you need?*
+`📝 *What do you need? — ${seller.businessName}*
 
-${_quickRef}Type item *number(s)* from the list, or type the name + quantity.
+${_quickRef}─────────────────
+*You can request in any of these ways:*
 
-${examples}
+*1️⃣ Pick by number:*
+${name1 ? `_1_ → *${name1}*` : "_1_ → item 1"}
+${name2 ? `_1, 2_ → *${name1}* and *${name2}*` : "_1, 2_ → items 1 and 2"}
 
-Include size or brand if needed.
+*2️⃣ Type name + quantity:*
+${name1 ? `_${name1} ×5_` : "_product name ×5_"}
+_10 bags of cement, 5 sheets IBR_ → comma-separated list
+
+*3️⃣ Just describe what you need:*
+_I need 50kg bags of cement x20 and 3 loads of river sand_
+_roofing materials for a 3-bedroom house_
+
+💡 _Include brand, size, grade, or quantity if you know it._
+
 Type *done* when finished, or *cancel* to go back.`
     );
   }
@@ -1304,7 +1382,9 @@ async function _scProcessItemList(from, supplierId, raw, biz, saveBiz) {
     ? "📤 Send Request"
     : (isHospitality ? "✅ Get Service Quote" : (isService ? "✅ Get Service Quote" : "✅ Get Quote"));
 
-  const editHint = `\n\n_Type *note: your details* to add info (e.g. dates, group size)._\n_Type *edit: 1: new name* to rename an item._`;
+  const editHint = isService
+    ? `\n\n💡 _Add more by number, name, or free text._\n_Type *note: your detail* to add size/location/scope._\n_Type *edit: 1: new name* to rename an item._`
+    : `\n\n💡 _Add more items, or tap the button to request your quote._\n_Type *note: your detail* to add context._`;
 
   return sendButtons(from, {
     text:
@@ -1329,15 +1409,66 @@ async function _scQuoteDone(from, supplierId, biz, saveBiz) {
   const seller    = await SupplierProfile.findById(supplierId).lean();
   if (!seller) return false;
 
-  const isService = seller.profileType === "service";
-  const items        = biz?.sessionData?.scQuoteItems || [];
-  const isRFQ        = biz?.sessionData?.scRFQ;
-  const buyerName    = biz?.sessionData?.scBuyerName || "";
-  const buyerPhone   = from;
-  const touristNote  = biz?.sessionData?.scTouristNote || "";
+  const isService     = seller.profileType === "service";
+  const isHospitality = seller.profileType === "hospitality";
+  const items         = biz?.sessionData?.scQuoteItems || [];
+  const isRFQ         = biz?.sessionData?.scRFQ;
+  const buyerName     = biz?.sessionData?.scBuyerName || "";
+  const buyerPhone    = from;
+  const touristNote   = biz?.sessionData?.scTouristNote || "";
 
   if (!items.length) {
     return sendText(from, "❌ No items added. Please list the items you need first.");
+  }
+
+  // ── Scope of work gate (service quotes only) ──────────────────────────────
+  // For ALL service quotes (both priced and RFQ), we ask for scope before sending
+  // to the seller. This gives the seller the information they need to quote accurately.
+  // Hospitality already captures scope via scPeopleCount — skip for hospitality.
+  // We only ask ONCE — skip if scScopeNote already set.
+  //
+  // Why this matters: "House wiring ×1" tells an electrician nothing.
+  // "House wiring ×1 (3-bedroom house, Borrowdale)" lets them price immediately.
+  if (isService && !isHospitality && !biz?.sessionData?.scScopeNote) {
+    // Build a tailored prompt using the first selected service's name
+    const firstServiceName = items[0]?.name || "";
+    const scopeHints       = _guessServiceScopeHint(firstServiceName);
+    const hasMultiple      = items.length > 1;
+
+    // Build service summary so buyer sees what they selected
+    const selectedSummary = items.map((it, i) =>
+      `${i + 1}. ${it.qty > 1 ? it.qty + "× " : ""}${it.name}`
+    ).join("\n");
+
+    // Build tailored examples from the selected service hints
+    const hint1 = scopeHints[0] ? `_e.g. "${scopeHints[0]}"_` : `_e.g. "3-bed house"_`;
+    const hint2 = scopeHints[1] ? `_e.g. "${scopeHints[1]}"_` : `_e.g. "office block"_`;
+    const genericHints = [
+      `_e.g. "3-bedroom house in Borrowdale"_`,
+      `_e.g. "2-storey office block, Harare CBD"_`,
+      `_e.g. "5 rooms, new installation"_`,
+      `_e.g. "single garage, repair only"_`,
+    ];
+
+    if (biz) {
+      biz.sessionState = "sc_awaiting_scope";
+      await saveBiz(biz);
+    }
+
+    return sendButtons(from, {
+      text:
+        `📋 *Almost done! One more detail needed:*\n\n` +
+        `*Your selected service${items.length > 1 ? "s" : ""}:*\n${selectedSummary}\n\n` +
+        `📐 *What is the scope of work?*\n\n` +
+        `Tell the seller what they'll be working on so they can give you an accurate quote.\n\n` +
+        `${hint1}\n${hint2}\n` +
+        (hasMultiple ? genericHints[2] + "\n" + genericHints[3] + "\n" : "") +
+        `\nYou can describe size, location, number of rooms/floors, condition, etc.\n\n` +
+        `Type *skip* to send your request without this detail _(seller may need to call you for more info)_.`,
+      buttons: [
+        { id: `sc_scope_skip_${supplierId}`, title: "⏩ Skip — send as is" },
+      ]
+    });
   }
 
   // ── RFQ path - seller has no prices set ──────────────────────────────────
@@ -1357,8 +1488,11 @@ async function _scQuoteDone(from, supplierId, biz, saveBiz) {
 
     // Include people/scope count in notification if captured
     const _rfqPeople     = biz?.sessionData?.scPeopleCount;
+    const _rfqScopeNote  = biz?.sessionData?.scScopeNote;
+    const _rfqScopeClean = _rfqScopeNote && _rfqScopeNote !== "skip" ? _rfqScopeNote : "";
     const itemListFull   = [
       itemList,
+      _rfqScopeClean ? "Scope of work: " + _rfqScopeClean : "",
       _rfqPeople  ? "People / scope: " + _rfqPeople : "",
       touristNote ? "Tourist note: " + touristNote  : ""
     ].filter(Boolean).join("\n");
@@ -1459,13 +1593,14 @@ async function _scQuoteDone(from, supplierId, biz, saveBiz) {
     _trackConversion(biz);
 
     const _rfqPeopleSummary = _rfqPeople ? `\n👥 People / scope: ${_rfqPeople}` : "";
+    const _rfqScopeSummary  = _rfqScopeClean ? `\n📐 Scope: ${_rfqScopeClean}` : "";
     const _noteSummary = touristNote ? `\n📝 Your note: _${touristNote}_` : "";
     return sendButtons(from, {
       text:
 `✅ *Quote request sent to ${seller.businessName}!*
 
 Reference: *${refNum}*
-${isService ? "Services" : "Items"}: ${items.length} ${isService ? "service" : "item"}${items.length > 1 ? "s" : ""}${_rfqPeopleSummary}${_noteSummary}
+${isService ? "Services" : "Items"}: ${items.length} ${isService ? "service" : "item"}${items.length > 1 ? "s" : ""}${_rfqScopeSummary}${_rfqPeopleSummary}${_noteSummary}
 
 ${itemList}
 
@@ -1481,7 +1616,7 @@ The seller will review and price your request.
   }
 
   // ── Priced path - calculate draft, send to seller for confirmation ────────
-  const isHospitality = seller.profileType === "hospitality";
+  // isHospitality already declared at top of function
   const priceMap = {};
 
   if (isHospitality) {
@@ -1512,7 +1647,11 @@ The seller will review and price your request.
   }
 
   let total = 0;
-  const lineItems = items.map(it => {
+  // Pull scope note — append to first item's name so seller sees it on the draft
+  const _pricedScopeNote  = biz?.sessionData?.scScopeNote;
+  const _pricedScopeClean = _pricedScopeNote && _pricedScopeNote !== "skip" ? _pricedScopeNote : "";
+
+  const lineItems = items.map((it, idx) => {
     const key = it.name.toLowerCase().trim();
     const rateInfo = priceMap[key] || { amount: it.price || 0, unit: isService ? "job" : "each" };
 
@@ -1523,8 +1662,14 @@ The seller will review and price your request.
 
     total += lineTotal;
 
+    // For the FIRST item in a service quote, append scope note so seller sees it
+    // e.g. "House Wiring (3-bedroom house, Borrowdale)" — this appears on the PDF
+    const nameWithScope = (isService && !isHospitality && _pricedScopeClean && idx === 0)
+      ? `${it.name} (${_pricedScopeClean})`
+      : it.name;
+
     return {
-      name: it.name,
+      name: nameWithScope,
       qty,
       unit,
       unitPrice,
@@ -1636,11 +1781,12 @@ The seller will review and price your request.
   _trackConversion(biz);
 
   // Tell buyer we've sent the draft to the seller for confirmation
+  const _pricedScopeLine = _pricedScopeClean ? `\n📐 Scope: ${_pricedScopeClean}` : "";
   return sendButtons(from, {
     text:
 `⏳ *${isService ? "Service quote" : "Quote"} sent to ${seller.businessName} for approval*
 
-Reference: *${refNum}*
+Reference: *${refNum}*${_pricedScopeLine}
 
 ${itemRows}
 ${"─".repeat(28)}
@@ -1660,8 +1806,8 @@ The seller will approve or adjust prices.
 
 async function _scQuoteClear(from, supplierId, biz, saveBiz) {
   if (biz) {
-    // Clear items but keep catalogue cache so we don't re-read DB
-    biz.sessionData = { ...(biz.sessionData || {}), scQuoteItems: [], scRFQ: false };
+    // Clear items AND scope note so the scope prompt fires again on the next request
+    biz.sessionData = { ...(biz.sessionData || {}), scQuoteItems: [], scRFQ: false, scScopeNote: "" };
     await saveBiz(biz);
   }
   return _scQuote(from, supplierId, biz, saveBiz);
@@ -1766,6 +1912,7 @@ Valid until: ${_expiryDisplay}`,
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SELLER EDITS DRAFT PRICES → shows numbered list → waits for typed reply
+// Seller can also rename items using: rename 1: Professional service name
 // ─────────────────────────────────────────────────────────────────────────────
 async function _scHandleQuoteEdit(from, refNum, biz, saveBiz) {
   // FIX: use map-aware lookup so correct draft is found for this specific refNum
@@ -1784,23 +1931,79 @@ async function _scHandleQuoteEdit(from, refNum, biz, saveBiz) {
   );
 
   const numbered = draft.lineItems.map((l, i) =>
-    `${i + 1}. ${l.name} × ${l.qty} - current: $${l.unitPrice.toFixed(2)}`
+    `${i + 1}. ${l.name} × ${l.qty} - current: $${Number(l.unitPrice || 0).toFixed(2)}`
   ).join("\n");
 
   return sendText(from,
-`✏️ *Edit prices - ${refNum}*
+`✏️ *Edit quote - ${refNum}*
 
 ${numbered}
 
-Type updated prices (only items you want to change):
-_1=12.50, 3=8.00_
+*Set prices:*
+_1×350_ or _1=350_ → set item 1 price to $350
+_1×350, 2×120_ → price multiple items
+
+*Rename a long or unclear item:*
+_rename 1: Bill of Quantities - 4-bed house_
+_rename 2: Electrical installation, 3-bed_
+
+*Set price AND rename in one line:*
+_1×350 Bill of Quantities (4-bed, 280m², Ruwa)_
 
 Type *confirm* to send as-is, or *cancel* to discard.`
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PROCESS SELLER'S TYPED PRICE EDITS
+// HELPER: save an updated draft to both the map and legacy scalar in UserSession
+// ─────────────────────────────────────────────────────────────────────────────
+async function _saveUpdatedDraft(from, updatedDraft, _tmpSess, UserSession) {
+  let _dm = {};
+  try {
+    const _r = _tmpSess?.tempData?.scPendingDrafts;
+    _dm = _r ? (typeof _r === "string" ? JSON.parse(_r) : _r) : {};
+  } catch (_) {}
+  const _updRef = (updatedDraft.refNum || "").toUpperCase();
+  if (_updRef) _dm[_updRef] = updatedDraft;
+  await UserSession.findOneAndUpdate(
+    { phone: _normPhone(from) },
+    { $set: {
+        "tempData.scPendingDrafts":      JSON.stringify(_dm),
+        "tempData.scPendingSellerQuote": JSON.stringify(updatedDraft),
+        "tempData.scLastNotifiedRef":    _updRef,
+        "tempData.scSellerQuoteState":   "awaiting_seller_price_edit"
+    }},
+    { upsert: true }
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PROCESS SELLER'S TYPED PRICE EDITS + ITEM RENAMES
+//
+// Supported formats:
+//   PRICE ONLY:
+//     1×350          → set item 1 to $350
+//     1=350          → same
+//     1×350, 2×120   → price two items
+//
+//   RENAME ONLY:
+//     rename 1: Bill of Quantities (4-bed house, 280m², Ruwa)
+//     r 1: BOQ - 4 bed house
+//
+//   PRICE + RENAME IN ONE LINE:
+//     1×350 Bill of Quantities (4-bed house, Ruwa)
+//     → sets price to $350 AND renames item 1
+//
+//   CONTROLS:
+//     confirm / send   → approve and send PDF to buyer
+//     cancel           → discard quote
+//
+// WHY THIS EXISTS:
+//   Buyers often send long natural-language requests:
+//   "I need a BOQ for a 4-bed house in Ruwa, approximately 280m²"
+//   That full sentence becomes the line item name on the PDF.
+//   The seller must be able to refactor it to a clean professional description
+//   before the quotation PDF is sent to the buyer.
 // ─────────────────────────────────────────────────────────────────────────────
 async function _scProcessSellerPriceEdit(from, text, biz, saveBiz) {
   const UserSession = (await import("../models/userSession.js")).default;
@@ -1817,7 +2020,6 @@ async function _scProcessSellerPriceEdit(from, text, biz, saveBiz) {
   }
 
   // Fallback 2: scLastRFQ in biz session (RFQ drafts are stored there)
-  // This kicks in when the draft was not yet written to UserSession (first price entry after view_and_quote)
   if (!draft && biz?.sessionData?.scLastRFQ) {
     const _rq = biz.sessionData.scLastRFQ;
     if (_rq && (_rq.timestamp || 0) > Date.now() - 48 * 60 * 60 * 1000) {
@@ -1845,7 +2047,6 @@ async function _scProcessSellerPriceEdit(from, text, biz, saveBiz) {
 
   if (al === "cancel") {
     await _clearSellerDraft(from, draft.refNum);
-    // Also clear the scSellerQuoteState
     await UserSession.findOneAndUpdate(
       { phone: _normPhone(from) },
       { $unset: { "tempData.scSellerQuoteState": "" } },
@@ -1858,80 +2059,208 @@ async function _scProcessSellerPriceEdit(from, text, biz, saveBiz) {
     return _scHandleQuoteConfirm(from, draft.refNum, biz, saveBiz);
   }
 
-  // Parse prices: "1×50, 2×3" or "1x50 2x3" or "1=50, 2=3" - all formats accepted
-  const edits = {};
-  const matches = text.matchAll(/(\d+)\s*[=×xX@:]\s*(\d+(?:\.\d+)?)(?:\s*\/\s*([a-zA-Z]+))?/g);
+  // ── Handle add: command ───────────────────────────────────────────────────
+  // Seller can add items outside their catalogue:
+  //   add: Disbursements - $50
+  //   add: Turnaround time: 5 working days
+  //   add: Travel to site - $30
+  //   add: Site visit $80
+  // Format: "add: <name> [- | @ | :] [optional price]"
+  const addMatch = text.trim().match(/^(?:add|new)[:\s]+(.+)$/i);
+  if (addMatch) {
+    const addText = addMatch[1].trim().slice(0, 150);
+    // Try to extract a price from the add text: "$350", "350", "- $80", "@ $50"
+    const priceInAddText = addText.match(/[-@$:]\s*\$?\s*(\d+(?:\.\d+)?)/);
+    const addPrice = priceInAddText ? parseFloat(priceInAddText[1]) : 0;
+    // Clean name: remove the price part
+    const addName  = addText.replace(/[-@$:]\s*\$?\s*\d+(?:\.\d+)?/, "").trim()
+                             .replace(/\s+/g, " ")
+                             .replace(/[-:@]\s*$/, "").trim();
 
-  for (const m of matches) {
+    if (!addName) {
+      return sendText(from, `❌ Could not read the item. Try:\n_add: Disbursements - $50_\n_add: Turnaround time: 5 working days_`);
+    }
+
+    const newLineItem = {
+      name:      addName.charAt(0).toUpperCase() + addName.slice(1),
+      qty:       1,
+      unit:      "item",
+      unitPrice: addPrice,
+      lineTotal: addPrice,
+      _added:    true
+    };
+
+    const addedItems = [...draft.lineItems, newLineItem];
+    const newTotal   = addedItems.reduce((s, l) => s + (l.lineTotal || 0), 0);
+    const updatedDraft = { ...draft, lineItems: addedItems, total: newTotal };
+    const _addSess = await UserSession.findOne({ phone: _normPhone(from) }).lean();
+    await _saveUpdatedDraft(from, updatedDraft, _addSess, UserSession);
+
+    const numbered = addedItems.map((l, i) => {
+      const _ul = _formatRateUnit(l.unit) || "/unit";
+      if (!l.unitPrice || l.unitPrice === 0) return `${i + 1}. *${l.name}* × ${l.qty} - ❓ _price not set_`;
+      const _tag = l._added ? " ➕" : (l._edited ? " ✏️" : "");
+      return `${i + 1}. *${l.name}* × ${l.qty} @ $${Number(l.unitPrice).toFixed(2)}${_ul} = *$${Number(l.lineTotal).toFixed(2)}*${_tag}`;
+    }).join("\n");
+
+    const _unpriced3 = addedItems.filter(l => !l.unitPrice || l.unitPrice === 0);
+    const _warn3 = _unpriced3.length
+      ? `\n\n⚠️ *${_unpriced3.length} item${_unpriced3.length > 1 ? "s" : ""} still need a price.*`
+      : "";
+
+    return sendButtons(from, {
+      text:
+        `➕ *Added: ${newLineItem.name}*${addPrice > 0 ? ` @ $${addPrice.toFixed(2)}` : " (no price set)"}\n\n` +
+        `📋 *Updated quote - ${draft.refNum}*\n\n` +
+        `${numbered}\n${"─".repeat(28)}\n*Total: $${newTotal.toFixed(2)} USD*${_warn3}\n\n` +
+        `_➕ = item you added  ✏️ = price you set_\n\n` +
+        `To set/change a price: _1×350_\nTo add more: _add: item name - $price_`,
+      buttons: [
+        { id: `sc_quote_confirm_${draft.refNum}`, title: "✅ Send Quote" },
+        { id: `sc_quote_edit_${draft.refNum}`,    title: "✏️ Edit Prices" }
+      ]
+    });
+  }
+  // Format: "rename 1: Bill of Quantities (4-bed house)" or "r 1: BOQ 4-bed"
+  // Case-insensitive. Colon or dash after item number.
+  const renameMatch = text.trim().match(/^(?:rename|r)\s+(\d+)\s*[:\-]\s*(.+)$/i);
+  if (renameMatch) {
+    const idx     = parseInt(renameMatch[1]) - 1;
+    const newName = renameMatch[2].trim().slice(0, 150);
+    if (idx < 0 || idx >= draft.lineItems.length) {
+      return sendText(from,
+        `❌ Item ${idx + 1} doesn't exist. You have ${draft.lineItems.length} item${draft.lineItems.length > 1 ? "s" : ""}.\n\n` +
+        `Type _rename 1: New name_ to rename item 1.`
+      );
+    }
+    const renamedItems = draft.lineItems.map((l, i) =>
+      i === idx ? { ...l, name: newName } : l
+    );
+    const updatedDraft = { ...draft, lineItems: renamedItems };
+    await _saveUpdatedDraft(from, updatedDraft, _tmpSess, UserSession);
+
+    const numbered = renamedItems.map((l, i) => {
+      const _ul = _formatRateUnit(l.unit) || "/unit";
+      return l.unitPrice > 0
+        ? `${i + 1}. *${l.name}* × ${l.qty} @ $${Number(l.unitPrice).toFixed(2)}${_ul} = *$${Number(l.lineTotal).toFixed(2)}*`
+        : `${i + 1}. *${l.name}* × ${l.qty} - ❓ _price not set_`;
+    }).join("\n");
+
+    const _unpriced2 = renamedItems.filter(l => !l.unitPrice || l.unitPrice === 0);
+    const _warn2 = _unpriced2.length > 0
+      ? `\n\n⚠️ *${_unpriced2.length} item${_unpriced2.length > 1 ? "s" : ""} still need a price.*`
+      : "";
+
+    return sendButtons(from, {
+      text:
+`✅ *Item ${idx + 1} renamed:*
+_"${newName}"_
+
+📋 *Updated quote - ${draft.refNum}*
+
+${numbered}
+${"─".repeat(28)}
+*Total: $${Number(updatedDraft.total || 0).toFixed(2)} USD*${_warn2}
+
+To set a price: _1×350_
+To rename again: _rename 1: New name_
+To confirm and send: tap button below.`,
+      buttons: [
+        { id: `sc_quote_confirm_${draft.refNum}`, title: "✅ Send Quote" },
+        { id: `sc_quote_edit_${draft.refNum}`,    title: "✏️ Edit Prices" }
+      ]
+    });
+  }
+
+  // ── Parse prices: "1×350" or "1=350" or "1×350, 2×120" ──────────────────
+  // ALSO handles combined price+rename: "1×350 Bill of Quantities (4-bed house)"
+  // The name text comes AFTER the price value with a space.
+  const edits   = {};
+  const renames = {};
+
+  // Try combined price+rename first: "1×350 Some description here"
+  // Match: digit, sep, price, optional trailing description
+  const _combinedMatches = [...text.matchAll(/(\d+)\s*[=×xX@:]\s*(\d+(?:\.\d+)?)(?:\s*\/\s*([a-zA-Z]+))?\s+([A-Z].{3,})/g)];
+  for (const m of _combinedMatches) {
     const idx = parseInt(m[1]) - 1;
     if (idx >= 0 && idx < draft.lineItems.length) {
-      edits[idx] = {
-        amount: parseFloat(m[2]),
-        unit: m[3] ? m[3].toLowerCase() : draft.lineItems[idx].unit
-      };
+      edits[idx]   = { amount: parseFloat(m[2]), unit: m[3] ? m[3].toLowerCase() : draft.lineItems[idx].unit };
+      renames[idx] = m[4].trim().slice(0, 150); // description starts with capital letter, min 4 chars
     }
   }
 
-  if (!Object.keys(edits).length) {
+  // Standard price-only edits: "1×350, 2×120" (skip items already caught as combined)
+  const _priceOnlyMatches = [...text.matchAll(/(\d+)\s*[=×xX@:]\s*(\d+(?:\.\d+)?)(?:\s*\/\s*([a-zA-Z]+))?/g)];
+  for (const m of _priceOnlyMatches) {
+    const idx = parseInt(m[1]) - 1;
+    if (idx >= 0 && idx < draft.lineItems.length && !edits.hasOwnProperty(idx)) {
+      edits[idx] = { amount: parseFloat(m[2]), unit: m[3] ? m[3].toLowerCase() : draft.lineItems[idx].unit };
+    }
+  }
+
+  if (!Object.keys(edits).length && !Object.keys(renames).length) {
     // Build the item list so seller can see what they need to price
     const _currList = draft.lineItems.map((l, i) => `${i + 1}. *${l.name}* × ${l.qty}`).join("\n");
-    const _exParts  = draft.lineItems.slice(0, 3).map((_, i) => `${i + 1}×${[50, 25, 10][i] || 15}`).join("  ");
+    const _exParts  = draft.lineItems.slice(0, 3).map((_, i) => `${i + 1}×${[350, 120, 25][i] || 50}`).join("  ");
+    const _hasLong  = draft.lineItems.some(l => (l.name || "").length > 60);
+    const _renameHint = _hasLong
+      ? `\n\n💡 *Item names look long.* You can rename before sending:\n_rename 1: Short professional name_`
+      : "";
     return sendText(from,
-      `❌ Could not read your prices.\n\n` +
-      `*Items to price:*\n${_currList}\n\n` +
-      `Type *item number × price per unit*\n` +
-      `_e.g. ${_exParts}_\n\n` +
-      `Both × and = work: _1×50_ or _1=50_\n` +
-      `Type *cancel* to discard.`
+      `❌ Could not read your input.\n\n` +
+      `*Items:*\n${_currList}\n\n` +
+      `*Set a price:* _${_exParts}_\n` +
+      `*Rename an item:* _rename 1: Bill of Quantities - 4-bed house_\n` +
+      `*Price + rename:* _1×350 Bill of Quantities (4-bed house, Ruwa)_\n` +
+      `*Add extra item:* _add: Disbursements - $50_\n` +
+      `*Add note:* _add: Turnaround time: 5 working days_\n\n` +
+      `Both × and = work: _1×350_ or _1=350_\n` +
+      `Type *cancel* to discard.${_renameHint}`
     );
   }
 
-  // Apply edits to draft line items
+  // Apply price edits and renames to draft line items
   let newTotal = 0;
   const updatedItems = draft.lineItems.map((l, i) => {
-    const edit = edits.hasOwnProperty(i) ? edits[i] : null;
+    const edit   = edits.hasOwnProperty(i)   ? edits[i]   : null;
+    const rename = renames.hasOwnProperty(i)  ? renames[i] : null;
     const unitPrice = edit ? edit.amount : l.unitPrice;
-    const unit = edit?.unit || l.unit || "job";
+    const unit      = edit?.unit || l.unit || "job";
     const lineTotal = unitPrice * l.qty;
     newTotal += lineTotal;
-    return { ...l, unit, unitPrice, lineTotal, _edited: edits.hasOwnProperty(i) };
+    return {
+      ...l,
+      name:      rename || l.name,
+      unit,
+      unitPrice,
+      lineTotal,
+      _edited:   edits.hasOwnProperty(i),
+      _renamed:  renames.hasOwnProperty(i)
+    };
   });
 
   const updatedDraft = { ...draft, lineItems: updatedItems, total: newTotal };
+  await _saveUpdatedDraft(from, updatedDraft, _tmpSess, UserSession);
 
-  // Write updated draft to both map and legacy scalar
-  let _dm2 = {};
-  try {
-    const _r = _tmpSess?.tempData?.scPendingDrafts;
-    _dm2 = _r ? (typeof _r === "string" ? JSON.parse(_r) : _r) : {};
-  } catch (_) {}
-  const _updRef = (updatedDraft.refNum || "").toUpperCase();
-  if (_updRef) _dm2[_updRef] = updatedDraft;
-
-  await UserSession.findOneAndUpdate(
-    { phone: _normPhone(from) },
-    { $set: {
-        "tempData.scPendingDrafts":      JSON.stringify(_dm2),
-        "tempData.scPendingSellerQuote": JSON.stringify(updatedDraft),
-        "tempData.scLastNotifiedRef":    _updRef,
-        "tempData.scSellerQuoteState":   "awaiting_seller_price_edit"
-    }},
-    { upsert: true }
-  );
-
-  // Build review lines - show clearly: item name, qty, unit price, total per line
+  // Build review lines
   const _unpriced = updatedItems.filter(l => !l.unitPrice || l.unitPrice === 0);
   const numbered = updatedItems.map((l, i) => {
     const _unitLabel = _formatRateUnit(l.unit) || "/unit";
     if (!l.unitPrice || l.unitPrice === 0) {
       return `${i + 1}. *${l.name}* × ${l.qty} - ❓ _price not set_`;
     }
-    return `${i + 1}. *${l.name}* × ${l.qty} @ $${Number(l.unitPrice).toFixed(2)}${_unitLabel} = *$${Number(l.lineTotal).toFixed(2)}*${l._edited ? " ✏️" : ""}`;
+    const _tags = [l._edited ? "✏️" : "", l._renamed ? "🔤" : ""].filter(Boolean).join("");
+    return `${i + 1}. *${l.name}* × ${l.qty} @ $${Number(l.unitPrice).toFixed(2)}${_unitLabel} = *$${Number(l.lineTotal).toFixed(2)}*${_tags ? " " + _tags : ""}`;
   }).join("\n");
 
   const _editHint = _unpriced.length > 0
     ? `\n\n⚠️ *${_unpriced.length} item${_unpriced.length > 1 ? "s" : ""} still need${_unpriced.length === 1 ? "s" : ""} a price.* Add them before sending.`
     : "";
+
+  const _legend = [
+    Object.keys(edits).length   ? "✏️ = price you set" : "",
+    Object.keys(renames).length ? "🔤 = item you renamed" : ""
+  ].filter(Boolean).join("  ·  ");
 
   return sendButtons(from, {
     text:
@@ -1941,10 +2270,8 @@ ${numbered}
 ${"─".repeat(28)}
 *Total: $${newTotal.toFixed(2)} USD*${_editHint}
 
-_✏️ = price you just set_
-
-To change a price: _1×60, 2×5_
-To confirm and send to buyer, tap the button below.`,
+${_legend ? "_" + _legend + "_\n\n" : ""}To change a price: _1×60, 2×5_
+To rename: _rename 1: Professional description_`,
     buttons: [
       { id: `sc_quote_confirm_${draft.refNum}`, title: "✅ Send Quote" },
       { id: `sc_quote_edit_${draft.refNum}`,    title: "✏️ Edit Prices" }
@@ -3027,66 +3354,161 @@ function _isAccommodationSupplier(seller = {}) {
 function _guessServiceScopeHint(serviceName = "") {
   const s = serviceName.toLowerCase();
 
-  if (/plumb|pipe|drain|tap|geyser|borehole|water|leak/.test(s))
-    return ["blocked drain", "leaking pipe"];
-  if (/electr|wiring|install|panel|socket|switch|fault/.test(s))
-    return ["fault finding", "new socket"];
-  if (/car|vehicle|auto|tyre|wheel|brake|engine|gearbox|service|oil/.test(s))
-    return ["sedan", "oil change"];
+  // ── Construction & building ───────────────────────────────────────────────
+  if (/brick|block|mason|walling|wall/.test(s))
+    return ["3-bedroom house walls", "boundary wall 20m"];
+  if (/plain.*draw|drawing|architect|blueprint|plan/.test(s))
+    return ["3-bed residential house", "2-storey commercial building"];
+  if (/quantity.*surv|bill.*quant|boq/.test(s))
+    return ["3-bed house new build", "renovation project"];
+  if (/site.*surv|land.*surv|survey/.test(s))
+    return ["residential stand 500m²", "farm 50 hectares"];
+  if (/tile|pave|paving/.test(s))
+    return ["bathroom + kitchen", "driveway 100m²"];
   if (/roof|tile|ceiling|waterproof|gutter/.test(s))
-    return ["leaking roof", "flat roof"];
-  if (/paint|wall|interior|exterior|plaster/.test(s))
-    return ["2-room interior", "full exterior"];
-  if (/garden|lawn|grass|landscap|trim|hedge|tree/.test(s))
-    return ["small yard", "large garden"];
-  if (/pest|termite|mosquito|rodent|fumigat/.test(s))
-    return ["3-bed house", "office block"];
-  if (/weld|fabricat|gate|fence|steel|metal/.test(s))
-    return ["burglar bars", "driveway gate"];
-  if (/move|relocat|transport|deliver|truck/.test(s))
-    return ["2-bed house", "office move"];
-  if (/IT|computer|laptop|network|CCTV|camera|security/.test(s))
-    return ["home network", "CCTV setup"];
-  if (/tutor|lesson|teach|coach|train/.test(s))
-    return ["Grade 7", "A-Level"];
-  if (/cook|cater|food|meal|event/.test(s))
-    return ["50 guests", "wedding"];
-  if (/hair|salon|beauty|nail|makeup|spa/.test(s))
-    return ["relaxer", "braids"];
-  if (/sofa|upholster|furniture/.test(s))
-    return ["2-seater sofa", "dining chairs"];
+    return ["leaking roof, 3-bed house", "flat roof, office block"];
+  if (/plaster|render|screed/.test(s))
+    return ["interior 3 rooms", "full exterior"];
+  if (/alumi|alumin|glass|window|door/.test(s))
+    return ["3 windows + 2 doors", "shop front, 5m × 3m"];
 
-  // Hospitality services
+  // ── Electrical ────────────────────────────────────────────────────────────
+  if (/wiring|rewiring/.test(s))
+    return ["3-bedroom house", "2-bedroom cottage"];
+  if (/electr|install|panel|socket|switch|fault/.test(s))
+    return ["fault finding, single phase", "new 3-phase panel installation"];
+  if (/solar|inverter|battery/.test(s))
+    return ["5kW home system", "3kW backup only, no solar"];
+  if (/cctv|camera|security/.test(s))
+    return ["4-camera home system", "8-camera warehouse"];
+
+  // ── Plumbing ──────────────────────────────────────────────────────────────
+  if (/plumb|pipe|drain|tap|geyser|borehole|water|leak/.test(s))
+    return ["blocked drain, single storey", "leaking geyser, 3-bed house"];
+
+  // ── Carpentry & woodwork ──────────────────────────────────────────────────
+  if (/carpentr|joiner|cabinet|kitchen.*unit|wardrobe|built.*in|furniture/.test(s))
+    return ["kitchen with 6 base units", "2 built-in wardrobes"];
+  if (/door|frame/.test(s))
+    return ["3 internal doors + frames", "double front door"];
+
+  // ── Painting ──────────────────────────────────────────────────────────────
+  if (/paint|wall|interior|exterior|emulsion/.test(s))
+    return ["2-room interior", "full exterior, 3-bed house"];
+
+  // ── Automotive ────────────────────────────────────────────────────────────
+  if (/car|vehicle|auto|tyre|wheel|brake|engine|gearbox|service|oil/.test(s))
+    return ["Toyota Hilux, service", "Mazda 3, brake pads front + rear"];
+  if (/panel|beat|body|smash/.test(s))
+    return ["left front fender", "full side swipe"];
+
+  // ── Gardening & landscaping ───────────────────────────────────────────────
+  if (/garden|lawn|grass|landscap|trim|hedge|tree/.test(s))
+    return ["small yard, monthly", "large garden 1000m²"];
+
+  // ── Cleaning ─────────────────────────────────────────────────────────────
+  if (/pest|termite|mosquito|rodent|fumigat/.test(s))
+    return ["3-bed house", "office block, 2 floors"];
+  if (/clean|hygiene|sanitize/.test(s))
+    return ["3-bedroom house", "office, 20 staff workstations"];
+
+  // ── Welding & fabrication ─────────────────────────────────────────────────
+  if (/weld|fabricat|gate|fence|steel|metal|burglar/.test(s))
+    return ["driveway gate, 4m×2m", "burglar bars, 3 windows + 1 door"];
+
+  // ── Moving & transport ────────────────────────────────────────────────────
+  if (/move|relocat|transport|deliver|truck/.test(s))
+    return ["2-bed house, local Harare", "office move, 10 desks + equipment"];
+
+  // ── IT & tech ─────────────────────────────────────────────────────────────
+  if (/IT|computer|laptop|network/.test(s))
+    return ["home network setup", "office of 10 PCs"];
+
+  // ── Education & tutoring ──────────────────────────────────────────────────
+  if (/tutor|lesson|teach|coach|train/.test(s))
+    return ["Grade 7 Maths + Science", "A-Level Economics"];
+
+  // ── Catering & events ─────────────────────────────────────────────────────
+  if (/cook|cater|food|meal|event/.test(s))
+    return ["50 guests, sit-down dinner", "wedding, 150 pax"];
+
+  // ── Beauty & hair ─────────────────────────────────────────────────────────
+  if (/hair|salon|beauty|nail|makeup|spa|barber/.test(s))
+    return ["relaxer + blow dry", "full weave, shoulder length"];
+
+  // ── Upholstery ────────────────────────────────────────────────────────────
+  if (/sofa|upholster|furniture/.test(s))
+    return ["2-seater sofa + 1 chair", "full lounge suite 3-piece"];
+
+  // ── Hospitality ───────────────────────────────────────────────────────────
   if (/room|double|twin|suite|chalet|cottage|cabin|unit/.test(s))
     return ["1 night", "2 nights"];
   if (/conference|meeting|board|function|venue/.test(s))
-    return ["half day", "full day"];
-  if (/pool|swim|braai|lapa|garden/.test(s))
-    return ["half day access", "full day access"];
-  if (/breakfast|dinner|lunch|meal|restaurant/.test(s))
-    return ["per person", "group of 4"];
+    return ["half day, 20 people", "full day, 50 delegates"];
   if (/airport|transfer|pickup|shuttle|taxi/.test(s))
-    return ["airport to town", "return trip"];
+    return ["airport to Harare CBD", "return trip, 2 passengers"];
   if (/laundry|wash/.test(s))
     return ["per load", "per kg"];
 
-  // Default: cleaning (most common in ZW smart links)
-  return ["3-bed house", "office block"];
+  // ── Default (most common in ZW) ───────────────────────────────────────────
+  return ["3-bedroom house", "office block, single floor"];
 }
 
-// ─── Parse service RFQ input: "1, 3: 3-bed house, 5: office block" ──────────
-// Supports:
-//   "1"            → service 1, qty 1, no scope
-//   "1, 3"         → services 1 and 3
-//   "1: 3-bed house"  → service 1 with scope detail
-//   "2: sofa, 4: carpet 3 rooms"  → multiple with scopes
-//   Falls back gracefully to comma-split names if no numbers found
+// ─── Parse service RFQ input ─────────────────────────────────────────────────
+// Supports ALL input styles — buyer can use any of these:
+//
+//   NUMBER SELECTION:
+//     "1"                    → service 1
+//     "1, 2"                 → services 1 and 2
+//     "1, 3"                 → services 1 and 3
+//
+//   NUMBER + SCOPE:
+//     "1: 3-bed house"       → service 1 with scope detail
+//     "2: office block"      → service 2 with scope
+//     "1: 3-bed, 2: survey"  → two services with different scopes
+//
+//   FREE TEXT (typed service name):
+//     "quantity survey"           → matches catalogue by name (case insensitive)
+//     "plain drawing, site survey" → comma-separated names
+//
+//   FULL NATURAL LANGUAGE (most common for professional services):
+//     "I need a BOQ for a 4-bed house in Ruwa, 280m², drawings available"
+//     → stored as ONE item with full description — seller will see and refactor
+//     "Plain drawing and quantity survey for a 3-bed house"
+//     → stored as single descriptive item
+//
+//   MIXED:
+//     "1, quantity survey for the same house"
+//     → item 1 by number + a free-text service
+//
+// WHY FULL SENTENCES ARE STORED AS ONE ITEM:
+//   When buyer writes "I need a BOQ for a 4-bed house 280m² in Ruwa", that is
+//   a valid complete request. The seller sees it, renames it to the professional
+//   service name, and prices it. This matches how real-world professional service
+//   requests work in Zimbabwe — clients describe what they need, not pick from menus.
+//
 function _parseServiceRFQInput(raw, knownItems = []) {
   const results = [];
 
-  // Split by comma, but not commas inside a scope clause (after the colon)
-  // Strategy: split on ", " only when followed by a digit (next item number)
-  const parts = raw.split(/,\s*(?=\d)/).map(s => s.trim()).filter(Boolean);
+  // ── Step 1: Check if this is a PURE natural-language sentence ──────────────
+  // Detect: starts with "I need", "Please", "Can you", or is a long sentence
+  // with no leading digits. Store as a single descriptive item.
+  const _trimmed = raw.trim();
+  const _isNaturalSentence =
+    /^(i need|i want|please|can you|could you|we need|we want|kindly|hi|hello|good morning|good afternoon)/i.test(_trimmed) ||
+    (_trimmed.length > 80 && !/^\d/.test(_trimmed) && !_trimmed.match(/^\d+\s*[:–\-,]/));
+
+  if (_isNaturalSentence) {
+    // Store the whole sentence as the request description.
+    // Seller will see it, rename to professional service name, and price it.
+    return [{ name: _trimmed, qty: 1, price: 0 }];
+  }
+
+  // ── Step 2: Try to detect mixed number + name entries ─────────────────────
+  // Split on ", " only when followed by a digit (item number) to keep scope
+  // clauses like "1: 3-bed house, Ruwa" intact.
+  // A simpler split avoids the VS Code TS false-positive on complex regex literals.
+  const parts = _trimmed.split(/,\s*(?=\d)/).map(s => s.trim()).filter(Boolean);
 
   for (const part of parts) {
     // Match: number optionally followed by colon + scope
@@ -3102,17 +3524,29 @@ function _parseServiceRFQInput(raw, knownItems = []) {
           qty:   1,
           price: parseFloat(item.rate) || 0
         });
+      } else {
+        // Number out of range — keep as typed
+        results.push({ name: part, qty: 1, price: 0 });
       }
     } else {
-      // Not a number - treat as typed service name
-      results.push({ name: part, qty: 1, price: 0 });
+      // Not a number — try exact name match in catalogue first
+      const lc = part.toLowerCase().trim();
+      const found = knownItems.find(i =>
+        (i.service || "").toLowerCase().trim() === lc ||
+        (i.service || "").toLowerCase().trim().startsWith(lc.slice(0, 8))
+      );
+      if (found) {
+        results.push({ name: found.service, qty: 1, price: parseFloat(found.rate) || 0 });
+      } else {
+        // Free text service description — store as-is
+        results.push({ name: part, qty: 1, price: 0 });
+      }
     }
   }
 
-  // If nothing resolved (e.g. buyer typed only names), fall back to name splitting
+  // If nothing resolved at all, store the whole raw input as one item
   if (!results.length) {
-    return raw.split(/[,\n]+/).map(s => s.trim()).filter(Boolean)
-      .map(name => ({ name, qty: 1, price: 0 }));
+    return [{ name: _trimmed, qty: 1, price: 0 }];
   }
 
   return results;
