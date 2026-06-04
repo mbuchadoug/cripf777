@@ -116,8 +116,7 @@ async function _clearSellerDraft(phone, refNum) {
 //   scCatalogue    - JSON string of full catalogue (same as biz.sessionData.scCatalogue)
 //   scCatalogueType- "service" | "product"
 //   scTouristNote  - optional buyer note
-//   scPeopleCount  - optional people/scope count (hospitality + tourism)
-//   scScopeNote    - scope of work note for service quotes (e.g. "3-bed house", "2 floors")
+//   scPeopleCount  - optional people/scope count
 
 async function _getScNoBizSession(phone) {
   const UserSession = (await import("../models/userSession.js")).default;
@@ -154,8 +153,7 @@ async function _clearScNoBizSession(phone) {
         "tempData.scCatalogue":     "",
         "tempData.scCatalogueType": "",
         "tempData.scTouristNote":   "",
-        "tempData.scPeopleCount":   "",
-        "tempData.scScopeNote":     ""
+        "tempData.scPeopleCount":   ""
       }
     },
     { upsert: true }
@@ -598,16 +596,6 @@ export async function handleSellerChatAction({ from, action: a, biz, saveBiz }) 
     case "quote_item":      return _scQuoteAddItem(from, supplierId, biz, saveBiz);
     case "quote_done":      return _scQuoteDone(from, supplierId, biz, saveBiz);
     case "quote_clear":     return _scQuoteClear(from, supplierId, biz, saveBiz);
-    // ── Scope skip: buyer tapped "⏩ Skip — send as is" on the scope prompt ──
-    // Set scScopeNote to empty string (truthy-enough to pass the gate) and proceed
-    case "scope_skip": {
-      if (biz) {
-        biz.sessionData  = { ...(biz.sessionData || {}), scScopeNote: "skip" };
-        biz.sessionState = "sc_awaiting_items";
-        await saveBiz(biz);
-      }
-      return _scQuoteDone(from, supplierId, biz, saveBiz);
-    }
     case "order":           return _scOrder(from, supplierId, biz, saveBiz);
     case "order_deliver":   return _scOrderDeliver(from, supplierId, biz, saveBiz);
     case "order_collect":   return _scOrderCollect(from, supplierId, biz, saveBiz);
@@ -659,8 +647,7 @@ export async function handleSellerChatState({ state, from, text, biz, saveBiz })
       scCatalogue:     _sess.scCatalogue || "",
       scCatalogueType: _sess.scCatalogueType || "product",
       scTouristNote:   _sess.scTouristNote || "",
-      scPeopleCount:   _sess.scPeopleCount || "",
-      scScopeNote:     _sess.scScopeNote   || ""
+      scPeopleCount:   _sess.scPeopleCount || ""
     };
     const _virtualBiz = {
       sessionState: state,
@@ -678,8 +665,7 @@ export async function handleSellerChatState({ state, from, text, biz, saveBiz })
         scCatalogue:     sd.scCatalogue     || "",
         scCatalogueType: sd.scCatalogueType || "product",
         scTouristNote:   sd.scTouristNote   || "",
-        scPeopleCount:   sd.scPeopleCount   || "",
-        scScopeNote:     sd.scScopeNote     || ""
+        scPeopleCount:   sd.scPeopleCount   || ""
       });
     };
     // Clear no-biz session when returning to "ready"
@@ -708,19 +694,6 @@ export async function handleSellerChatState({ state, from, text, biz, saveBiz })
     if (_sess?.tempData?.scSellerQuoteState === "awaiting_seller_price_edit") {
       return _scProcessSellerPriceEdit(from, raw, biz, saveBiz);
     }
-  }
-
-  // ── Quote: scope of work for service quotes ──────────────────────────────
-  // Fires for ALL service quotes (priced and RFQ) when buyer taps "Get Quote"
-  // without having provided scope. Captures e.g. "3-bed house", "5 rooms", etc.
-  if (state === "sc_awaiting_scope") {
-    const scopeText = raw.toLowerCase() === "skip" ? "" : raw.trim().slice(0, 300);
-    if (biz) {
-      if (scopeText) biz.sessionData = { ...(biz.sessionData || {}), scScopeNote: scopeText };
-      biz.sessionState = "sc_awaiting_items"; // return to items state so _scQuoteDone works
-      await saveBiz(biz);
-    }
-    return _scQuoteDone(from, supplierId, biz, saveBiz);
   }
 
   // ── Quote: people count for RFQ services ───────────────────────────────
@@ -1356,66 +1329,15 @@ async function _scQuoteDone(from, supplierId, biz, saveBiz) {
   const seller    = await SupplierProfile.findById(supplierId).lean();
   if (!seller) return false;
 
-  const isService     = seller.profileType === "service";
-  const isHospitality = seller.profileType === "hospitality";
-  const items         = biz?.sessionData?.scQuoteItems || [];
-  const isRFQ         = biz?.sessionData?.scRFQ;
-  const buyerName     = biz?.sessionData?.scBuyerName || "";
-  const buyerPhone    = from;
-  const touristNote   = biz?.sessionData?.scTouristNote || "";
+  const isService = seller.profileType === "service";
+  const items        = biz?.sessionData?.scQuoteItems || [];
+  const isRFQ        = biz?.sessionData?.scRFQ;
+  const buyerName    = biz?.sessionData?.scBuyerName || "";
+  const buyerPhone   = from;
+  const touristNote  = biz?.sessionData?.scTouristNote || "";
 
   if (!items.length) {
     return sendText(from, "❌ No items added. Please list the items you need first.");
-  }
-
-  // ── Scope of work gate (service quotes only) ──────────────────────────────
-  // For ALL service quotes (both priced and RFQ), we ask for scope before sending
-  // to the seller. This gives the seller the information they need to quote accurately.
-  // Hospitality already captures scope via scPeopleCount — skip for hospitality.
-  // We only ask ONCE — skip if scScopeNote already set.
-  //
-  // Why this matters: "House wiring ×1" tells an electrician nothing.
-  // "House wiring ×1 (3-bedroom house, Borrowdale)" lets them price immediately.
-  if (isService && !isHospitality && !biz?.sessionData?.scScopeNote) {
-    // Build a tailored prompt using the first selected service's name
-    const firstServiceName = items[0]?.name || "";
-    const scopeHints       = _guessServiceScopeHint(firstServiceName);
-    const hasMultiple      = items.length > 1;
-
-    // Build service summary so buyer sees what they selected
-    const selectedSummary = items.map((it, i) =>
-      `${i + 1}. ${it.qty > 1 ? it.qty + "× " : ""}${it.name}`
-    ).join("\n");
-
-    // Build tailored examples from the selected service hints
-    const hint1 = scopeHints[0] ? `_e.g. "${scopeHints[0]}"_` : `_e.g. "3-bed house"_`;
-    const hint2 = scopeHints[1] ? `_e.g. "${scopeHints[1]}"_` : `_e.g. "office block"_`;
-    const genericHints = [
-      `_e.g. "3-bedroom house in Borrowdale"_`,
-      `_e.g. "2-storey office block, Harare CBD"_`,
-      `_e.g. "5 rooms, new installation"_`,
-      `_e.g. "single garage, repair only"_`,
-    ];
-
-    if (biz) {
-      biz.sessionState = "sc_awaiting_scope";
-      await saveBiz(biz);
-    }
-
-    return sendButtons(from, {
-      text:
-        `📋 *Almost done! One more detail needed:*\n\n` +
-        `*Your selected service${items.length > 1 ? "s" : ""}:*\n${selectedSummary}\n\n` +
-        `📐 *What is the scope of work?*\n\n` +
-        `Tell the seller what they'll be working on so they can give you an accurate quote.\n\n` +
-        `${hint1}\n${hint2}\n` +
-        (hasMultiple ? genericHints[2] + "\n" + genericHints[3] + "\n" : "") +
-        `\nYou can describe size, location, number of rooms/floors, condition, etc.\n\n` +
-        `Type *skip* to send your request without this detail _(seller may need to call you for more info)_.`,
-      buttons: [
-        { id: `sc_scope_skip_${supplierId}`, title: "⏩ Skip — send as is" },
-      ]
-    });
   }
 
   // ── RFQ path - seller has no prices set ──────────────────────────────────
@@ -1435,11 +1357,8 @@ async function _scQuoteDone(from, supplierId, biz, saveBiz) {
 
     // Include people/scope count in notification if captured
     const _rfqPeople     = biz?.sessionData?.scPeopleCount;
-    const _rfqScopeNote  = biz?.sessionData?.scScopeNote;
-    const _rfqScopeClean = _rfqScopeNote && _rfqScopeNote !== "skip" ? _rfqScopeNote : "";
     const itemListFull   = [
       itemList,
-      _rfqScopeClean ? "Scope of work: " + _rfqScopeClean : "",
       _rfqPeople  ? "People / scope: " + _rfqPeople : "",
       touristNote ? "Tourist note: " + touristNote  : ""
     ].filter(Boolean).join("\n");
@@ -1540,14 +1459,13 @@ async function _scQuoteDone(from, supplierId, biz, saveBiz) {
     _trackConversion(biz);
 
     const _rfqPeopleSummary = _rfqPeople ? `\n👥 People / scope: ${_rfqPeople}` : "";
-    const _rfqScopeSummary  = _rfqScopeClean ? `\n📐 Scope: ${_rfqScopeClean}` : "";
     const _noteSummary = touristNote ? `\n📝 Your note: _${touristNote}_` : "";
     return sendButtons(from, {
       text:
 `✅ *Quote request sent to ${seller.businessName}!*
 
 Reference: *${refNum}*
-${isService ? "Services" : "Items"}: ${items.length} ${isService ? "service" : "item"}${items.length > 1 ? "s" : ""}${_rfqScopeSummary}${_rfqPeopleSummary}${_noteSummary}
+${isService ? "Services" : "Items"}: ${items.length} ${isService ? "service" : "item"}${items.length > 1 ? "s" : ""}${_rfqPeopleSummary}${_noteSummary}
 
 ${itemList}
 
@@ -1594,11 +1512,7 @@ The seller will review and price your request.
   }
 
   let total = 0;
-  // Pull scope note — append to first item's name so seller sees it on the draft
-  const _pricedScopeNote  = biz?.sessionData?.scScopeNote;
-  const _pricedScopeClean = _pricedScopeNote && _pricedScopeNote !== "skip" ? _pricedScopeNote : "";
-
-  const lineItems = items.map((it, idx) => {
+  const lineItems = items.map(it => {
     const key = it.name.toLowerCase().trim();
     const rateInfo = priceMap[key] || { amount: it.price || 0, unit: isService ? "job" : "each" };
 
@@ -1609,14 +1523,8 @@ The seller will review and price your request.
 
     total += lineTotal;
 
-    // For the FIRST item in a service quote, append scope note so seller sees it
-    // e.g. "House Wiring (3-bedroom house, Borrowdale)" — this appears on the PDF
-    const nameWithScope = (isService && !isHospitality && _pricedScopeClean && idx === 0)
-      ? `${it.name} (${_pricedScopeClean})`
-      : it.name;
-
     return {
-      name: nameWithScope,
+      name: it.name,
       qty,
       unit,
       unitPrice,
@@ -1728,12 +1636,11 @@ The seller will review and price your request.
   _trackConversion(biz);
 
   // Tell buyer we've sent the draft to the seller for confirmation
-  const _pricedScopeLine = _pricedScopeClean ? `\n📐 Scope: ${_pricedScopeClean}` : "";
   return sendButtons(from, {
     text:
 `⏳ *${isService ? "Service quote" : "Quote"} sent to ${seller.businessName} for approval*
 
-Reference: *${refNum}*${_pricedScopeLine}
+Reference: *${refNum}*
 
 ${itemRows}
 ${"─".repeat(28)}
@@ -1753,8 +1660,8 @@ The seller will approve or adjust prices.
 
 async function _scQuoteClear(from, supplierId, biz, saveBiz) {
   if (biz) {
-    // Clear items AND scope note so the scope prompt fires again on the next request
-    biz.sessionData = { ...(biz.sessionData || {}), scQuoteItems: [], scRFQ: false, scScopeNote: "" };
+    // Clear items but keep catalogue cache so we don't re-read DB
+    biz.sessionData = { ...(biz.sessionData || {}), scQuoteItems: [], scRFQ: false };
     await saveBiz(biz);
   }
   return _scQuote(from, supplierId, biz, saveBiz);
@@ -3120,104 +3027,51 @@ function _isAccommodationSupplier(seller = {}) {
 function _guessServiceScopeHint(serviceName = "") {
   const s = serviceName.toLowerCase();
 
-  // ── Construction & building ───────────────────────────────────────────────
-  if (/brick|block|mason|walling|wall/.test(s))
-    return ["3-bedroom house walls", "boundary wall 20m"];
-  if (/plain.*draw|drawing|architect|blueprint|plan/.test(s))
-    return ["3-bed residential house", "2-storey commercial building"];
-  if (/quantity.*surv|bill.*quant|boq/.test(s))
-    return ["3-bed house new build", "renovation project"];
-  if (/site.*surv|land.*surv|survey/.test(s))
-    return ["residential stand 500m²", "farm 50 hectares"];
-  if (/tile|pave|paving/.test(s))
-    return ["bathroom + kitchen", "driveway 100m²"];
-  if (/roof|tile|ceiling|waterproof|gutter/.test(s))
-    return ["leaking roof, 3-bed house", "flat roof, office block"];
-  if (/plaster|render|screed/.test(s))
-    return ["interior 3 rooms", "full exterior"];
-  if (/alumi|alumin|glass|window|door/.test(s))
-    return ["3 windows + 2 doors", "shop front, 5m × 3m"];
-
-  // ── Electrical ────────────────────────────────────────────────────────────
-  if (/wiring|rewiring/.test(s))
-    return ["3-bedroom house", "2-bedroom cottage"];
-  if (/electr|install|panel|socket|switch|fault/.test(s))
-    return ["fault finding, single phase", "new 3-phase panel installation"];
-  if (/solar|inverter|battery/.test(s))
-    return ["5kW home system", "3kW backup only, no solar"];
-  if (/cctv|camera|security/.test(s))
-    return ["4-camera home system", "8-camera warehouse"];
-
-  // ── Plumbing ──────────────────────────────────────────────────────────────
   if (/plumb|pipe|drain|tap|geyser|borehole|water|leak/.test(s))
-    return ["blocked drain, single storey", "leaking geyser, 3-bed house"];
-
-  // ── Carpentry & woodwork ──────────────────────────────────────────────────
-  if (/carpentr|joiner|cabinet|kitchen.*unit|wardrobe|built.*in|furniture/.test(s))
-    return ["kitchen with 6 base units", "2 built-in wardrobes"];
-  if (/door|frame/.test(s))
-    return ["3 internal doors + frames", "double front door"];
-
-  // ── Painting ──────────────────────────────────────────────────────────────
-  if (/paint|wall|interior|exterior|emulsion/.test(s))
-    return ["2-room interior", "full exterior, 3-bed house"];
-
-  // ── Automotive ────────────────────────────────────────────────────────────
+    return ["blocked drain", "leaking pipe"];
+  if (/electr|wiring|install|panel|socket|switch|fault/.test(s))
+    return ["fault finding", "new socket"];
   if (/car|vehicle|auto|tyre|wheel|brake|engine|gearbox|service|oil/.test(s))
-    return ["Toyota Hilux, service", "Mazda 3, brake pads front + rear"];
-  if (/panel|beat|body|smash/.test(s))
-    return ["left front fender", "full side swipe"];
-
-  // ── Gardening & landscaping ───────────────────────────────────────────────
+    return ["sedan", "oil change"];
+  if (/roof|tile|ceiling|waterproof|gutter/.test(s))
+    return ["leaking roof", "flat roof"];
+  if (/paint|wall|interior|exterior|plaster/.test(s))
+    return ["2-room interior", "full exterior"];
   if (/garden|lawn|grass|landscap|trim|hedge|tree/.test(s))
-    return ["small yard, monthly", "large garden 1000m²"];
-
-  // ── Cleaning ─────────────────────────────────────────────────────────────
+    return ["small yard", "large garden"];
   if (/pest|termite|mosquito|rodent|fumigat/.test(s))
-    return ["3-bed house", "office block, 2 floors"];
-  if (/clean|hygiene|sanitize/.test(s))
-    return ["3-bedroom house", "office, 20 staff workstations"];
-
-  // ── Welding & fabrication ─────────────────────────────────────────────────
-  if (/weld|fabricat|gate|fence|steel|metal|burglar/.test(s))
-    return ["driveway gate, 4m×2m", "burglar bars, 3 windows + 1 door"];
-
-  // ── Moving & transport ────────────────────────────────────────────────────
+    return ["3-bed house", "office block"];
+  if (/weld|fabricat|gate|fence|steel|metal/.test(s))
+    return ["burglar bars", "driveway gate"];
   if (/move|relocat|transport|deliver|truck/.test(s))
-    return ["2-bed house, local Harare", "office move, 10 desks + equipment"];
-
-  // ── IT & tech ─────────────────────────────────────────────────────────────
-  if (/IT|computer|laptop|network/.test(s))
-    return ["home network setup", "office of 10 PCs"];
-
-  // ── Education & tutoring ──────────────────────────────────────────────────
+    return ["2-bed house", "office move"];
+  if (/IT|computer|laptop|network|CCTV|camera|security/.test(s))
+    return ["home network", "CCTV setup"];
   if (/tutor|lesson|teach|coach|train/.test(s))
-    return ["Grade 7 Maths + Science", "A-Level Economics"];
-
-  // ── Catering & events ─────────────────────────────────────────────────────
+    return ["Grade 7", "A-Level"];
   if (/cook|cater|food|meal|event/.test(s))
-    return ["50 guests, sit-down dinner", "wedding, 150 pax"];
-
-  // ── Beauty & hair ─────────────────────────────────────────────────────────
-  if (/hair|salon|beauty|nail|makeup|spa|barber/.test(s))
-    return ["relaxer + blow dry", "full weave, shoulder length"];
-
-  // ── Upholstery ────────────────────────────────────────────────────────────
+    return ["50 guests", "wedding"];
+  if (/hair|salon|beauty|nail|makeup|spa/.test(s))
+    return ["relaxer", "braids"];
   if (/sofa|upholster|furniture/.test(s))
-    return ["2-seater sofa + 1 chair", "full lounge suite 3-piece"];
+    return ["2-seater sofa", "dining chairs"];
 
-  // ── Hospitality ───────────────────────────────────────────────────────────
+  // Hospitality services
   if (/room|double|twin|suite|chalet|cottage|cabin|unit/.test(s))
     return ["1 night", "2 nights"];
   if (/conference|meeting|board|function|venue/.test(s))
-    return ["half day, 20 people", "full day, 50 delegates"];
+    return ["half day", "full day"];
+  if (/pool|swim|braai|lapa|garden/.test(s))
+    return ["half day access", "full day access"];
+  if (/breakfast|dinner|lunch|meal|restaurant/.test(s))
+    return ["per person", "group of 4"];
   if (/airport|transfer|pickup|shuttle|taxi/.test(s))
-    return ["airport to Harare CBD", "return trip, 2 passengers"];
+    return ["airport to town", "return trip"];
   if (/laundry|wash/.test(s))
     return ["per load", "per kg"];
 
-  // ── Default (most common in ZW) ───────────────────────────────────────────
-  return ["3-bedroom house", "office block, single floor"];
+  // Default: cleaning (most common in ZW smart links)
+  return ["3-bed house", "office block"];
 }
 
 // ─── Parse service RFQ input: "1, 3: 3-bed house, 5: office block" ──────────
