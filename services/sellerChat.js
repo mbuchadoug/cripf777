@@ -2059,7 +2059,68 @@ async function _scProcessSellerPriceEdit(from, text, biz, saveBiz) {
     return _scHandleQuoteConfirm(from, draft.refNum, biz, saveBiz);
   }
 
-  // ── Handle rename command ─────────────────────────────────────────────────
+  // ── Handle add: command ───────────────────────────────────────────────────
+  // Seller can add items outside their catalogue:
+  //   add: Disbursements - $50
+  //   add: Turnaround time: 5 working days
+  //   add: Travel to site - $30
+  //   add: Site visit $80
+  // Format: "add: <name> [- | @ | :] [optional price]"
+  const addMatch = text.trim().match(/^(?:add|new)[:\s]+(.+)$/i);
+  if (addMatch) {
+    const addText = addMatch[1].trim().slice(0, 150);
+    // Try to extract a price from the add text: "$350", "350", "- $80", "@ $50"
+    const priceInAddText = addText.match(/[-@$:]\s*\$?\s*(\d+(?:\.\d+)?)/);
+    const addPrice = priceInAddText ? parseFloat(priceInAddText[1]) : 0;
+    // Clean name: remove the price part
+    const addName  = addText.replace(/[-@$:]\s*\$?\s*\d+(?:\.\d+)?/, "").trim()
+                             .replace(/\s+/g, " ")
+                             .replace(/[-:@]\s*$/, "").trim();
+
+    if (!addName) {
+      return sendText(from, `❌ Could not read the item. Try:\n_add: Disbursements - $50_\n_add: Turnaround time: 5 working days_`);
+    }
+
+    const newLineItem = {
+      name:      addName.charAt(0).toUpperCase() + addName.slice(1),
+      qty:       1,
+      unit:      "item",
+      unitPrice: addPrice,
+      lineTotal: addPrice,
+      _added:    true
+    };
+
+    const addedItems = [...draft.lineItems, newLineItem];
+    const newTotal   = addedItems.reduce((s, l) => s + (l.lineTotal || 0), 0);
+    const updatedDraft = { ...draft, lineItems: addedItems, total: newTotal };
+    const _addSess = await UserSession.findOne({ phone: _normPhone(from) }).lean();
+    await _saveUpdatedDraft(from, updatedDraft, _addSess, UserSession);
+
+    const numbered = addedItems.map((l, i) => {
+      const _ul = _formatRateUnit(l.unit) || "/unit";
+      if (!l.unitPrice || l.unitPrice === 0) return `${i + 1}. *${l.name}* × ${l.qty} - ❓ _price not set_`;
+      const _tag = l._added ? " ➕" : (l._edited ? " ✏️" : "");
+      return `${i + 1}. *${l.name}* × ${l.qty} @ $${Number(l.unitPrice).toFixed(2)}${_ul} = *$${Number(l.lineTotal).toFixed(2)}*${_tag}`;
+    }).join("\n");
+
+    const _unpriced3 = addedItems.filter(l => !l.unitPrice || l.unitPrice === 0);
+    const _warn3 = _unpriced3.length
+      ? `\n\n⚠️ *${_unpriced3.length} item${_unpriced3.length > 1 ? "s" : ""} still need a price.*`
+      : "";
+
+    return sendButtons(from, {
+      text:
+        `➕ *Added: ${newLineItem.name}*${addPrice > 0 ? ` @ $${addPrice.toFixed(2)}` : " (no price set)"}\n\n` +
+        `📋 *Updated quote - ${draft.refNum}*\n\n` +
+        `${numbered}\n${"─".repeat(28)}\n*Total: $${newTotal.toFixed(2)} USD*${_warn3}\n\n` +
+        `_➕ = item you added  ✏️ = price you set_\n\n` +
+        `To set/change a price: _1×350_\nTo add more: _add: item name - $price_`,
+      buttons: [
+        { id: `sc_quote_confirm_${draft.refNum}`, title: "✅ Send Quote" },
+        { id: `sc_quote_edit_${draft.refNum}`,    title: "✏️ Edit Prices" }
+      ]
+    });
+  }
   // Format: "rename 1: Bill of Quantities (4-bed house)" or "r 1: BOQ 4-bed"
   // Case-insensitive. Colon or dash after item number.
   const renameMatch = text.trim().match(/^(?:rename|r)\s+(\d+)\s*[:\-]\s*(.+)$/i);
@@ -2150,7 +2211,9 @@ To confirm and send: tap button below.`,
       `*Items:*\n${_currList}\n\n` +
       `*Set a price:* _${_exParts}_\n` +
       `*Rename an item:* _rename 1: Bill of Quantities - 4-bed house_\n` +
-      `*Both at once:* _1×350 Bill of Quantities (4-bed house, Ruwa)_\n\n` +
+      `*Price + rename:* _1×350 Bill of Quantities (4-bed house, Ruwa)_\n` +
+      `*Add extra item:* _add: Disbursements - $50_\n` +
+      `*Add note:* _add: Turnaround time: 5 working days_\n\n` +
       `Both × and = work: _1×350_ or _1=350_\n` +
       `Type *cancel* to discard.${_renameHint}`
     );

@@ -1,4 +1,4 @@
-a// services/requestMatchEngine.js
+// services/requestMatchEngine.js
 //
 // Purpose-built matching engine for the ⚡ Request Sellers flow.
 // This module is SEPARATE from Browse & Shop (runSupplierSearch).
@@ -72,14 +72,6 @@ const INTENT_KEYWORD_MAP = [
 
   // ── CONSTRUCTION SERVICE ──────────────────────────────────────────────────
   { pattern: /\b(builder|contractor|construction work|house build|room add|extension|renovation|remodel|plastering|plaster work|tiling|tile laying|roofing work|roof repair|roof install|waterproof service|paint service|house paint|painting service|painter)\b/, intent: "construction_service" },
-  // ── PROFESSIONAL CONSTRUCTION & SURVEY SERVICES (BOQ, drawings, surveys) ──
-  // These are common in Zimbabwe for formal building projects and need their own
-  // strong intent signal so they route to construction_service professionals.
-  { pattern: /\b(bill of quantities|boq|quantity survey|quantity surveyor|qs service|qs fee|quantity surveyors)\b/, intent: "construction_service" },
-  { pattern: /\b(architectural drawing|plain drawing|architectural plan|house plan|building plan|floor plan|site plan|architectural design|architecture|architect service|architectural fee)\b/, intent: "construction_service" },
-  { pattern: /\b(site survey|land survey|topographic survey|survey peg|beacon survey|gps survey|engineering survey|survey fee)\b/, intent: "construction_service" },
-  { pattern: /\b(structural engineer|structural design|structural drawing|engineering drawing|civil engineer|civil engineering service)\b/, intent: "construction_service" },
-  { pattern: /\b(building inspection|council approval|building permit|approved drawing|eia|environmental impact|occupation certificate)\b/, intent: "construction_service" },
 
   // ── CAR SPARES (products) ─────────────────────────────────────────────────
   { pattern: /\b(brake pad|disc brake|drum brake|brake shoe|brake caliper|brake line|brake fluid|abs sensor|wheel bearing|hub bearing|cv joint|cv boot|drive shaft)\b/, intent: "car_spares" },
@@ -840,132 +832,6 @@ export async function findSuppliersForRequest({ items = [], city = null, area = 
   );
 
   return scored.slice(0, 12).map(e => e.supplier);
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// NATURAL LANGUAGE REQUEST EXTRACTOR
-// ─────────────────────────────────────────────────────────────────────────────
-// Converts a buyer's free-text sentence into a structured request item.
-//
-// Handles requests like:
-//   "I need a BOQ for a 4-bedroom house in Ruwa, approximately 280m²"
-//   "Need an electrician for DB board fault, Borrowdale"
-//   "ndoda bricklaying yemba yangu Mbare"     (Shona-English mix)
-//   "Please advise fees for architectural drawings, 3-bed house"
-//
-// Returns: { product, quantity, notes, city, area, isNaturalLanguage: true }
-//
-// The `product` field is trimmed to the SERVICE NAME only (what the buyer needs).
-// The `notes` field contains the full scope/detail for the seller to see.
-// The city/area are extracted if present so the routing step is skipped.
-//
-export function extractNaturalLanguageRequest(text = "") {
-  const raw = String(text || "").trim();
-  if (!raw) return null;
-
-  const norm = normalize(raw);
-
-  // ── Detect intent from the full text ─────────────────────────────────────
-  const intent = classifyItem(raw);
-
-  // ── Extract city / area ───────────────────────────────────────────────────
-  // Common Zimbabwean cities and suburbs embedded in the sentence
-  const ZW_CITIES = [
-    "harare","bulawayo","mutare","gweru","masvingo","kwekwe","kadoma","chinhoyi",
-    "bindura","victoria falls","hwange","kariba","nyanga","chitungwiza","epworth",
-    "ruwa","norton","chegutu","zvishavane","beitbridge","rusape","chipinge",
-    "redcliff","chiredzi","binga","chimanimani",
-    // Harare suburbs
-    "borrowdale","avondale","eastlea","hatfield","msasa","highlands","mabelreign",
-    "kuwadzana","budiriro","glen view","glen nora","waterfalls","sunningdale",
-    "mbare","highfield","warren park","greendale","mount pleasant","dzivarasekwa",
-    "kambuzuma","St marys","st marys","tafara","mabvuku","epworth",
-    // Bulawayo suburbs
-    "luveve","makokoba","nkulumane","lobengula","pelandaba","pumula","nketa",
-    "north end","parklands","famona","ascot","hillside",
-  ];
-  let foundCity = null, foundArea = null;
-  const normLower = norm.toLowerCase();
-  for (const city of ZW_CITIES) {
-    if (normLower.includes(city)) {
-      // Distinguish suburb from city
-      const mainCities = ["harare","bulawayo","mutare","gweru","masvingo","kwekwe","kadoma","chinhoyi","bindura","victoria falls","hwange","kariba","nyanga","chitungwiza","epworth","ruwa","norton","chegutu"];
-      if (mainCities.includes(city)) {
-        foundCity = city;
-      } else {
-        foundArea = city;
-        // Infer parent city for known suburbs
-        if (["borrowdale","avondale","eastlea","hatfield","msasa","highlands","mabelreign","kuwadzana","budiriro","glen view","glen nora","waterfalls","sunningdale","mbare","highfield","warren park","greendale","mount pleasant","dzivarasekwa","kambuzuma","st marys","tafara","mabvuku"].includes(city)) {
-          foundCity = "harare";
-        } else if (["luveve","makokoba","nkulumane","lobengula","pelandaba","pumula","nketa","north end","parklands","famona","ascot","hillside"].includes(city)) {
-          foundCity = "bulawayo";
-        }
-      }
-    }
-  }
-
-  // ── Extract service name (short clean label) ──────────────────────────────
-  // Remove leading connective phrases so the product field is clean
-  const STRIP_PREFIXES = [
-    /^i need (a |an |the |some )?(quotation for (a |an )?|quote for (a |an )?)?/i,
-    /^i want (a |an |the )?/i,
-    /^we need (a |an |the )?/i,
-    /^please (advise|quote|provide|send)(.*?fee(s)?)?(\s+for\s+)?/i,
-    /^can you (quote|provide|advise)(.*?for\s+)?/i,
-    /^could you (quote|provide|advise)(.*?for\s+)?/i,
-    /^kindly (quote|advise|provide)(.*?for\s+)?/i,
-    /^need (a |an |the )?/i,
-    /^looking for (a |an |the )?/i,
-    /^hi,?\s*/i,
-    /^hello,?\s*/i,
-    /^good morning,?\s*/i,
-    /^good afternoon,?\s*/i,
-    /^good evening,?\s*/i,
-  ];
-
-  let productText = raw;
-  for (const prefix of STRIP_PREFIXES) {
-    productText = productText.replace(prefix, "").trim();
-  }
-
-  // Trim trailing qualification phrases that aren't part of the service name
-  const STRIP_SUFFIXES = [
-    /\.\s*please advise.*$/i,
-    /\.\s*kindly advise.*$/i,
-    /\.\s*please provide.*$/i,
-    /\.\s*turnaround time.*$/i,
-    /,?\s*please advise.*$/i,
-    /,?\s*architectural drawings are available.*$/i,
-    /,?\s*drawings (are )?available.*$/i,
-    /,?\s*drawings ready.*$/i,
-  ];
-  for (const suffix of STRIP_SUFFIXES) {
-    productText = productText.replace(suffix, "").trim();
-  }
-
-  // If the product text is still very long (>80 chars), truncate at first natural boundary
-  // but keep the full text in notes so seller sees everything
-  let productLabel = productText;
-  if (productLabel.length > 80) {
-    // Find first comma, period, or "for a" as a cut point
-    const cutMatch = productLabel.match(/^(.{20,60}?)(?:,| for | - |\.)/);
-    if (cutMatch) productLabel = cutMatch[1].trim();
-    else productLabel = productLabel.slice(0, 70).trim() + "…";
-  }
-
-  // Capitalise first letter
-  productLabel = productLabel.charAt(0).toUpperCase() + productLabel.slice(1);
-
-  return {
-    product:           productLabel,
-    quantity:          1,
-    unitLabel:         "job",
-    notes:             raw,        // full original text as notes for seller
-    city:              foundCity,
-    area:              foundArea,
-    intent,
-    isNaturalLanguage: true
-  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

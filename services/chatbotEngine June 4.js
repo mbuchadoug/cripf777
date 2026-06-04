@@ -119,7 +119,7 @@ import {
   sendClarificationRequestToBuyer,
   sendClarificationReplyToSeller
 } from "./buyerRequestNotifications.js";
-import { findSuppliersForRequest, getVagueTermClarification, notifyNewSellerOfUnmatchedRequests, extractNaturalLanguageRequest } from "./requestMatchEngine.js";
+import { findSuppliersForRequest, getVagueTermClarification, notifyNewSellerOfUnmatchedRequests } from "./requestMatchEngine.js";
 import { sendRatingPrompt, updateSupplierCredibility } from "./supplierRatings.js";
 
 import SchoolProfile from "../models/schoolProfile.js";
@@ -2003,29 +2003,6 @@ function parseBuyerRequestItems(text = "") {
   const raw = String(text || "").trim();
   if (!raw) return [];
 
-  // ── NATURAL LANGUAGE SENTENCE DETECTION ──────────────────────────────────
-  // If the input is a full sentence (starts with conversational phrasing OR is
-  // > 80 chars with no newlines and no quantity pattern), use the NLP extractor.
-  // This handles professional requests like:
-  //   "I need a Bill of Quantities for a 4-bed house in Ruwa, 280m²"
-  //   "Please quote for architectural drawings, 3-bedroom residential"
-  //   "Need an electrician for DB board fault, Borrowdale Harare"
-  const _isLongSentence = raw.length > 60 && !raw.includes("\n") && !/\bx\s*\d+/i.test(raw);
-  const _startsNaturally = /^(i need|i want|we need|we want|please|can you|could you|kindly|need |looking for|good morning|good afternoon|good evening|hi |hello )/i.test(raw.trim());
-
-  if (_isLongSentence || _startsNaturally) {
-    const nlResult = extractNaturalLanguageRequest(raw);
-    if (nlResult) {
-      return [{
-        product:   nlResult.product,
-        quantity:  1,
-        unitLabel: "job",
-        notes:     nlResult.notes  // full original text kept as notes for seller
-      }];
-    }
-  }
-
-  // ── STRUCTURED ITEM LIST (existing parser) ────────────────────────────────
   const rawLines = raw
     .split(/\n+/)
     .map(line => normalizeBuyerRequestLine(line))
@@ -4572,17 +4549,9 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
             // Build the item list with qty shown so seller knows what they're pricing
             // Flag items with long names (likely buyer's full paragraph) so seller knows to rename
             const _rfqItemList = _rfqLineItems.map((it, i) => {
-              const _longFlag = (it.name || "").length > 60 ? " ⚠️ _rename this_" : "";
+              const _longFlag = (it.name || "").length > 60 ? " ⚠️ _long - consider renaming_" : "";
               return `${i + 1}. *${it.name}* × ${it.qty}${_longFlag}`;
             }).join("\n");
-
-            // Show buyer's full notes (scope of work) if present
-            const _rfqBuyerNotes = (_scDraft.items || [])
-              .map(it => it.notes || "").filter(n => n && n.length > 10)
-              .slice(0, 1)[0] || "";
-            const _buyerNotesSection = _rfqBuyerNotes
-              ? `\n📝 *Buyer's full request:*\n_"${_rfqBuyerNotes.slice(0, 400)}"_\n`
-              : "";
 
             // Build examples using × separator (clearer than = for prices)
             const _rfqEx = _rfqLineItems.slice(0, 3).map((it, i) => {
@@ -4592,31 +4561,24 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
 
             // Check if any item name is very long (buyer sent a paragraph)
             const _hasLongItems = _rfqLineItems.some(it => (it.name || "").length > 60);
-
-            const _howToSection =
-              `─────────────────\n` +
-              `*How to quote:*\n\n` +
-              `*1️⃣ Set price:*\n` +
-              `_1×350_ or _1=350_ → item 1 = $350\n` +
-              `_1×350, 2×120_ → price two items\n\n` +
-              (_hasLongItems
-                ? `*2️⃣ Rename the item* (buyer sent a long description — clean it up):\n` +
-                  `_rename 1: Bill of Quantities (4-bed house, 280m², Ruwa)_\n` +
-                  `_Or in one line: 1×350 Bill of Quantities (4-bed, Ruwa)_\n\n`
-                : `*2️⃣ Rename (optional):*\n` +
-                  `_rename 1: Short professional name_\n\n`) +
-              `*3️⃣ Add extra line items* (outside your catalogue):\n` +
-              `_add: Disbursements - $50_\n` +
-              `_add: Turnaround time: 5 working days_\n` +
-              `_add: Travel to site - $30_\n\n` +
-              `Type *confirm* to send · *cancel* to discard`;
+            const _renameHint = _hasLongItems
+              ? `\n\n🔤 *Item names look like buyer descriptions.* Rename before sending:\n` +
+                `_rename 1: Bill of Quantities (4-bed house, 280m², Ruwa)_\n` +
+                `_Or price+rename in one line: 1×350 Bill of Quantities (4-bed, Ruwa)_`
+              : `\n\nTo rename a long item: _rename 1: Short professional name_`;
 
             return sendText(from,
               `📋 *Quote Request - ${_scRefNum}*\n\n` +
-              `Buyer: *${_scDraft.buyerName || _scDraft.buyerPhone || "Buyer"}*\n` +
-              _buyerNotesSection + `\n` +
+              `Buyer: *${_scDraft.buyerName || _scDraft.buyerPhone || "Buyer"}*\n\n` +
               `*Items requested:*\n${_rfqItemList}\n\n` +
-              _howToSection
+              `─────────────────\n` +
+              `💰 *Enter your price per unit for each item:*\n\n` +
+              `Type: *item number × price per unit*\n` +
+              `_e.g. ${_rfqEx}_\n\n` +
+              `• Prices are *per unit/job/person* (not total)\n` +
+              `• You can price all items in one message\n` +
+              `• You will *review the quote before it is sent*${_renameHint}\n\n` +
+              `Type *cancel* to discard this request.`
             );
           }
  
@@ -5965,44 +5927,6 @@ if (al === "my requests" || al === "buyer_my_requests") {
     const vagueItems = getVagueBuyerRequestItems(parsedItems || []);
     if (vagueItems.length) {
       return sendText(from, buildBuyerSpecificityPrompt(vagueItems));
-    }
-
-    // ── Natural language: show what was understood + ask scope if very short ──
-    // If the item was extracted from a natural-language sentence, show the buyer
-    // a confirmation of what was understood before proceeding. This builds trust.
-    const _hasNLItem = parsedItems.some(it => it.notes && it.notes.length > 60);
-    if (_hasNLItem && parsedItems.length === 1) {
-      const _nlItem = parsedItems[0];
-      const _notesPreview = (_nlItem.notes || "").slice(0, 200);
-      // Store items in session, move to location step with a confirmation message
-      await UserSession.findOneAndUpdate(
-        { phone },
-        {
-          $set: {
-            "tempData.pendingBuyerRequest": {
-              ...(pendingBuyerRequest || {}),
-              requestType: "simple",
-              items: parsedItems,
-              isServiceRequest: _buyerRequestIsService(parsedItems)
-            },
-            "tempData.buyerRequestState": "awaiting_location"
-          }
-        },
-        { upsert: true }
-      );
-      return sendButtons(from, {
-        text:
-          `✅ *Got it!*\n\n` +
-          `📋 *Request:* ${_nlItem.product}\n` +
-          `📝 *Details sent to seller:*\n_"${_notesPreview}"_\n\n` +
-          `📍 *Where are you?* (suburb or city)\n\n` +
-          `_e.g. Borrowdale, Msasa Harare, Mbare, Chitungwiza_\n\n` +
-          `💡 _The full description above will be shown to matching sellers._\n` +
-          `Type *0* for main menu`,
-        buttons: [
-          { id: "sup_change_location", title: "📍 Change location" }
-        ]
-      });
     }
 
     // ── Auto-detect service request ────────────────────────────────────────
@@ -17791,24 +17715,19 @@ if (a === "sup_request_sellers") {
   return sendButtons(from, {
     text:
       `⚡ *Request Sellers*\n\n` +
-      `Type what you need — *any way you like.*\n` +
-      `You can write a full sentence, a short phrase, or a list.\n\n` +
-      `─────────────────\n` +
-      `*💬 Write naturally:*\n` +
-      `_I need a Bill of Quantities for a 4-bed house in Ruwa, 280m², drawings available_\n` +
-      `_Need an electrician for DB board fault in Borrowdale Harare_\n` +
-      `_Please quote for architectural drawings, 3-bedroom single storey, Greendale_\n\n` +
-      `*🔧 Short service request:*\n` +
-      `_house rewiring 4 bedroom 280sqm, Borrowdale_\n` +
-      `_plumber burst pipe Avondale Harare_\n` +
-      `_glass repair 600x900mm, Eastlea_\n\n` +
+      `What do you need? Type your items or describe the job.\n\n` +
       `*📦 Products:*\n` +
-      `_copper pipe 15mm x5 lengths, Msasa Harare_\n` +
+      `_copper pipe 15mm, 5 lengths, Msasa Harare_\n` +
       `_cement 50kg x20 bags, river sand 3m3, Mbare_\n` +
+      `_16mm2 x4 core cu pvc swa cable 200m, Hatfield_\n` +
       `_10kw growatt inverter x2, Glen View Harare_\n\n` +
-      `*📋 Big list?* Tap *Bulk List* below.\n\n` +
-      `💡 _Include your suburb/city so we can find nearby sellers._\n` +
-      `_Type *0* for main menu · *00* to cancel_`,
+      `*🔧 Services:*\n` +
+      `_need plumber, burst pipe, Avondale Harare_\n` +
+      `_house rewiring 4 bedroom 280sqm, Borrowdale_\n` +
+      `_glass repair 600x900mm, Eastlea_\n\n` +
+      `*Bulk list?* Use the button below.\n\n` +
+      `_Tip: put quantity last. Spec numbers like 15mm and 50kg stay part of the product name._\n\n` +
+      `*0 = Main menu · 00 = Cancel*`,
     buttons: [
       { id: "sup_request_mode_bulk", title: "📋 Bulk List" },
       { id: "find_supplier",         title: "🔍 Browse & Shop" }
