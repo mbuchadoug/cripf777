@@ -1,4 +1,4 @@
-a// services/requestMatchEngine.js
+// services/requestMatchEngine.js
 //
 // Purpose-built matching engine for the ⚡ Request Sellers flow.
 // This module is SEPARATE from Browse & Shop (runSupplierSearch).
