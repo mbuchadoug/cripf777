@@ -121,9 +121,14 @@ export function buildAllStaffLinks(cardId) {
 }
 
 export function buildStaffQrImageUrl(cardId, sizePx = 400) {
-  const link    = buildStaffDeepLink(cardId, "qr");
-  const encoded = encodeURIComponent(link);
-  return `https://chart.googleapis.com/chart?cht=qr&chs=${sizePx}x${sizePx}&chl=${encoded}&choe=UTF-8`;
+  // Build the raw WA link that the QR code should encode.
+  // IMPORTANT: pass the payload UNENCODED to encodeURIComponent exactly once.
+  // buildStaffDeepLink() already calls encodeURIComponent on the payload,
+  // so calling encodeURIComponent on the whole URL again produces %253A (double-encode)
+  // which breaks Google Charts. We build the raw URL ourselves here.
+  const rawPayload = `ZQ:STAFF:${cardId}:SRC:qr`;
+  const rawWaLink  = `${BOT_WA_URL}?text=${rawPayload}`;
+  return `https://chart.googleapis.com/chart?cht=qr&chs=${sizePx}x${sizePx}&chl=${encodeURIComponent(rawWaLink)}&choe=UTF-8`;
 }
 
 // ─── Analytics tracking ───────────────────────────────────────────────────────
@@ -239,19 +244,26 @@ export async function handleStaffDeepLink({ from, text, biz, saveBiz }) {
     return true;
   }
 
-  // Active card: show full seller menu with staffCardId injected into session
-  // The staffCardId is stored in biz.sessionData.scStaffCardId so that enquiries
-  // and quotes know to also notify the salesperson's phone.
+  // Active card: send the staff member's personal profile card to the buyer FIRST,
+  // so they see Muchaneta's name, title, phone and tagline before the catalogue menu.
+  // This is what differentiates a staff card link from a plain company smart link.
   try {
+    const { sendText }    = await import("./metaSender.js");
     const { showSellerMenu } = await import("./sellerChat.js");
+
+    // ── Show the salesperson's personal card header to the buyer ─────────────
+    const profileCardText = buildStaffProfileCard(card, supplier, source);
+    await sendText(from, profileCardText);
+
+    // ── Then load the full seller menu (catalogue, quote, book, enquire) ─────
     await showSellerMenu(from, String(supplier._id), biz, saveBiz, {
       source,
-      staffCardId: cardId,     // ← NEW: stored in session → used in enquiry/quote routing
-      parentName:  card.name,  // buyer sees "You're chatting via Muchaneta's link"
+      staffCardId: cardId,    // stored in session → enquiries/quotes notify salesperson
+      parentName:  card.name, // used in quote/enquiry attribution
     });
   } catch (err) {
     console.error("[STAFF DEEP LINK] showSellerMenu failed:", err.message);
-    // Fallback: show a simple profile card
+    // Fallback: show profile card + manual action buttons
     const { sendText, sendButtons } = await import("./metaSender.js");
     const profileCard = buildStaffProfileCard(card, supplier);
     await sendText(from, profileCard);
@@ -400,31 +412,15 @@ export function buildStaffAnalyticsSummary(card) {
 }
 
 // ─── Notify salesperson: someone opened their card ────────────────────────────
-// Template: staff_card_opened (UTILITY — works outside 24hr window)
+// Uses the ALREADY-APPROVED supplier_link_opened template (same one the company
+// smart link uses) so notifications work immediately without any new Meta approval.
+// The salesperson receives the SAME notification format as the business owner,
+// addressed to their own phone — no new template submission needed.
 //
-// Submit to Meta Business Manager:
-//   Name:      staff_card_opened
-//   Category:  UTILITY
-//   Language:  English
-//   Body text:
-//     👤 Someone just viewed your ZimQuote business card!
-//     
-//     Your card: {{1}}
-//     Business: {{2}}
-//     Via: {{3}}
-//     Time: {{4}}
-//     
-//     They can browse, get a quote, or send you an enquiry directly.
-//     Reply *menu* to check your store activity.
-//     
-//     This is an automated activity alert from ZimQuote.
-//   Header: none
-//   Footer: ZimQuote
-//
-// WHY UTILITY (not MARKETING):
-//   This notification is triggered by a user action on the staff member's own
-//   ZimQuote account - not promotional content. Meta classifies account-activity
-//   alerts as UTILITY. Examples: login alerts, transaction alerts, profile views.
+// supplier_link_opened template body (already approved):
+//   Business: {{1}}    ← we pass "Muchaneta Horinda (Zibugold Construction Group)"
+//   Via: {{2}}         ← source label e.g. "WhatsApp Status"
+//   Time: {{3}}        ← "08:15 4 Jun"
 //
 async function _notifyStaffCardOpened(card, supplier, source, visitorPhone) {
   try {
@@ -451,7 +447,12 @@ async function _notifyStaffCardOpened(card, supplier, source, visitorPhone) {
     const cardName = card.name || "Your card";
     const bizName  = supplier?.businessName || "Your business";
 
-    // ── Try staff_card_opened template (UTILITY - outside 24hr) ──────────────
+    // ── Use the ALREADY-APPROVED supplier_link_opened template ───────────────
+    // We pass the staff name + business as the first parameter so the notification
+    // clearly identifies it's a staff card view, not a company link view.
+    // Format: "Muchaneta Horinda · Zibugold Construction Group"
+    const businessParam = `${cardName} · ${bizName}`;
+
     try {
       await axios.post(
         `https://graph.facebook.com/v24.0/${PHONE_ID}/messages`,
@@ -460,13 +461,12 @@ async function _notifyStaffCardOpened(card, supplier, source, visitorPhone) {
           to:   targetPhone,
           type: "template",
           template: {
-            name:     "staff_card_opened",
+            name:     "supplier_link_opened",
             language: { code: "en" },
             components: [{
               type: "body",
               parameters: [
-                { type: "text", text: cardName },
-                { type: "text", text: bizName },
+                { type: "text", text: businessParam },
                 { type: "text", text: sourceLabel },
                 { type: "text", text: timeStr }
               ]
@@ -475,14 +475,13 @@ async function _notifyStaffCardOpened(card, supplier, source, visitorPhone) {
         },
         { headers: { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json" } }
       );
-      console.log(`[STAFF CARD NOTIFY] staff_card_opened → ${targetPhone} (${cardName} via ${sourceLabel})`);
-      return; // Template sent - done
+      console.log(`[STAFF CARD NOTIFY] supplier_link_opened (staff) → ${targetPhone} (${cardName} via ${sourceLabel})`);
+      return;
     } catch (tplErr) {
-      // Template not yet approved OR outside 24hr fallback
       console.warn(`[STAFF CARD NOTIFY] template failed for ${targetPhone}: ${tplErr.message}`);
     }
 
-    // ── Fallback: sendButtons (only works within 24hr session) ───────────────
+    // ── Fallback: sendButtons (within 24hr session only) ─────────────────────
     const { sendButtons } = await import("./metaSender.js");
     await sendButtons(targetPhone, {
       text:
@@ -494,37 +493,24 @@ async function _notifyStaffCardOpened(card, supplier, source, visitorPhone) {
         `They can browse your services, request a quote, or send an enquiry.\n\n` +
         `💡 _Tip: Respond quickly — buyers in Zimbabwe compare multiple suppliers._`,
       buttons: [
-        { id: "my_supplier_account", title: "🏪 My Store" },
-        { id: `sc_staff_stats_${String(card._id)}`, title: "📊 My Card Stats" }
+        { id: "my_supplier_account",                  title: "🏪 My Store" },
+        { id: `sc_staff_stats_${String(card._id)}`,   title: "📊 My Card Stats" }
       ]
     });
   } catch (err) {
-    // Non-critical - never rethrow
     console.warn("[STAFF CARD NOTIFY]", err.message);
   }
 }
 
 // ─── Notify salesperson: they received an enquiry via their card ──────────────
-// Template: staff_card_enquiry (UTILITY — works outside 24hr window)
+// Uses the ALREADY-APPROVED supplier_new_buyer_request template (same one used
+// for company enquiry notifications) — no new Meta template approval needed.
 //
-// Submit to Meta Business Manager:
-//   Name:      staff_card_enquiry
-//   Category:  UTILITY
-//   Language:  English
-//   Body text:
-//     💬 New enquiry via your ZimQuote card!
-//     
-//     Ref: {{1}}
-//     From: {{2}}
-//     Message: {{3}}
-//     Your card: {{4}}
-//     
-//     The buyer is on WhatsApp. Reply directly to follow up.
-//     Type *menu* to manage your store.
-//     
-//     This is an automated notification from ZimQuote.
-//   Header: none
-//   Footer: ZimQuote
+// supplier_new_buyer_request template body (already approved):
+//   Ref: {{1}}          ← enquiry reference number
+//   From: {{2}}         ← buyer's display phone
+//   Items: {{3}}        ← message preview
+//   {{4}}               ← "via Muchaneta Horinda's card"
 //
 export async function notifyStaffEnquiry({ card, supplier, buyerPhone, message, refNum }) {
   if (!card?.phone) return;
@@ -533,14 +519,17 @@ export async function notifyStaffEnquiry({ card, supplier, buyerPhone, message, 
     const TOKEN    = process.env.META_ACCESS_TOKEN || process.env.WHATSAPP_ACCESS_TOKEN;
     if (!PHONE_ID || !TOKEN) return;
 
-    const axios       = (await import("axios")).default;
-    const targetPhone = _normPhone(card.phone);
+    const axios        = (await import("axios")).default;
+    const targetPhone  = _normPhone(card.phone);
     if (!targetPhone || targetPhone.length < 10) return;
 
-    const cardName    = card.name || "Staff Card";
+    const cardName     = card.name || "Staff Card";
     const buyerDisplay = _formatPhoneDisplay(buyerPhone);
     const msgPreview   = String(message || "").slice(0, 200);
+    // The 4th parameter tells the salesperson which card/route brought this enquiry
+    const viaLabel     = `via ${cardName}'s ZimQuote card`;
 
+    // ── Use the ALREADY-APPROVED supplier_new_buyer_request template ─────────
     try {
       await axios.post(
         `https://graph.facebook.com/v24.0/${PHONE_ID}/messages`,
@@ -549,28 +538,28 @@ export async function notifyStaffEnquiry({ card, supplier, buyerPhone, message, 
           to:   targetPhone,
           type: "template",
           template: {
-            name:     "staff_card_enquiry",
+            name:     "supplier_new_buyer_request",
             language: { code: "en" },
             components: [{
               type: "body",
               parameters: [
-                { type: "text", text: refNum        },
-                { type: "text", text: buyerDisplay  },
-                { type: "text", text: msgPreview    },
-                { type: "text", text: cardName      }
+                { type: "text", text: refNum       },
+                { type: "text", text: buyerDisplay },
+                { type: "text", text: msgPreview   },
+                { type: "text", text: viaLabel     }
               ]
             }]
           }
         },
         { headers: { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json" } }
       );
-      console.log(`[STAFF ENQUIRY NOTIFY] staff_card_enquiry → ${targetPhone} (ref ${refNum})`);
+      console.log(`[STAFF ENQUIRY NOTIFY] supplier_new_buyer_request (staff) → ${targetPhone} (ref ${refNum})`);
       return;
     } catch (tplErr) {
       console.warn(`[STAFF ENQUIRY NOTIFY] template failed for ${targetPhone}: ${tplErr.message}`);
     }
 
-    // Fallback: sendButtons (within 24hr session only)
+    // ── Fallback: sendButtons (within 24hr session only) ─────────────────────
     const { sendButtons } = await import("./metaSender.js");
     await sendButtons(targetPhone, {
       text:
