@@ -1563,7 +1563,7 @@ The seller will review and price your request.
   }
 
   // ── Priced path - calculate draft, send to seller for confirmation ────────
-  const isHospitality = seller.profileType === "hospitality";
+  // isHospitality already declared at top of function
   const priceMap = {};
 
   if (isHospitality) {
