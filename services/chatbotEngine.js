@@ -3732,6 +3732,68 @@ a.startsWith("sup_load_preset_") ||
       a === "__document_uploaded__"
     
     );
+  // ── Parse skip / edit commands ────────────────────────────────────────────
+  // Supports: "skip 3,7,15"  "edit 1x5, 3x15"  "skip 3 edit 1x5"
+  function _parseEditSkip(inputText, draftItems) {
+    const raw = String(inputText || "").trim();
+    let editUpdates = {};   // { itemIndex(1-based): newPrice }
+    let skipIndices = new Set();
+    let hasEditCmd = false;
+    let hasSkipCmd = false;
+
+    // ── "have 3,7,15" - I ONLY have these items, skip all others ────────────
+    let haveMode = false;
+    const haveMatch = raw.match(/\bhave\s+([\d,\s]+)/i);
+    if (haveMatch) {
+      hasSkipCmd = true;
+      haveMode = true;
+      const haveSet = new Set();
+      haveMatch[1].split(/[,\s]+/).forEach(n => {
+        const idx = parseInt(n);
+        if (!isNaN(idx)) haveSet.add(idx);
+      });
+      // Skip everything NOT in the have list
+      for (let i = 1; i <= draftItems.length; i++) {
+        if (!haveSet.has(i)) skipIndices.add(i);
+      }
+    }
+
+    // ── "skip 3,7,15" - skip specific items ──────────────────────────────────
+    if (!haveMode) {
+      const skipMatch = raw.match(/\bskip\s+([\d,\s]+)/i);
+      if (skipMatch) {
+        hasSkipCmd = true;
+        skipMatch[1].split(/[,\s]+/).forEach(n => {
+          const idx = parseInt(n);
+          if (!isNaN(idx) && idx >= 1 && idx <= draftItems.length) skipIndices.add(idx);
+        });
+      }
+    }
+
+    // ── "edit 1x5 3x15" or "1x5, 3x15" or "1 5, 3 15" or "1:5" - edit specific prices ──
+    // Accepts: 1x12.50  1=12.50  1:12.50  1 12.50  — all map to item 1 @ $12.50
+    const editSection = raw
+      .replace(/\bhave\s+[\d,\s]+/i, "")
+      .replace(/\bskip\s+[\d,\s]+/i, "")
+      .replace(/^\bedit\b\s*/i, "").trim();
+    // Match: number followed by x/=/:/space then price
+    const pairPattern = /(\d+)\s*[x=:\s]\s*(\d+(?:\.\d+)?)/gi;
+    let m;
+    while ((m = pairPattern.exec(editSection)) !== null) {
+      // Skip if the separator is a space and both sides are just standalone numbers
+      // (could be "skip 3 7" which is skip, not edit)
+      const sep = editSection.slice(m.index + m[1].length, m.index + m[0].length - m[2].length).trim();
+      // Only skip if pure space separator AND no decimal in price (ambiguous)
+      if (sep === "" && !m[2].includes(".") && !hasSkipCmd) {
+        // Accept it anyway - context is price entry mode
+      }
+      hasEditCmd = true;
+      editUpdates[parseInt(m[1])] = parseFloat(m[2]);
+    }
+
+    return { editUpdates, skipIndices, hasEditCmd, hasSkipCmd, haveMode };
+  }
+
   // =========================
   // 🔑 JOIN INVITATION (ABSOLUTE PRIORITY)
   // =========================
@@ -5458,68 +5520,6 @@ await UserSession.findOneAndUpdate(
         { id: `req_offer_${reqId}`,         title: "Edit Prices"    }
       ]
     });
-  }
-
-  // ── Parse skip / edit commands ────────────────────────────────────────────
-  // Supports: "skip 3,7,15"  "edit 1x5, 3x15"  "skip 3 edit 1x5"
-  function _parseEditSkip(inputText, draftItems) {
-    const raw = String(inputText || "").trim();
-    let editUpdates = {};   // { itemIndex(1-based): newPrice }
-    let skipIndices = new Set();
-    let hasEditCmd = false;
-    let hasSkipCmd = false;
-
-    // ── "have 3,7,15" - I ONLY have these items, skip all others ────────────
-    let haveMode = false;
-    const haveMatch = raw.match(/\bhave\s+([\d,\s]+)/i);
-    if (haveMatch) {
-      hasSkipCmd = true;
-      haveMode = true;
-      const haveSet = new Set();
-      haveMatch[1].split(/[,\s]+/).forEach(n => {
-        const idx = parseInt(n);
-        if (!isNaN(idx)) haveSet.add(idx);
-      });
-      // Skip everything NOT in the have list
-      for (let i = 1; i <= draftItems.length; i++) {
-        if (!haveSet.has(i)) skipIndices.add(i);
-      }
-    }
-
-    // ── "skip 3,7,15" - skip specific items ──────────────────────────────────
-    if (!haveMode) {
-      const skipMatch = raw.match(/\bskip\s+([\d,\s]+)/i);
-      if (skipMatch) {
-        hasSkipCmd = true;
-        skipMatch[1].split(/[,\s]+/).forEach(n => {
-          const idx = parseInt(n);
-          if (!isNaN(idx) && idx >= 1 && idx <= draftItems.length) skipIndices.add(idx);
-        });
-      }
-    }
-
-    // ── "edit 1x5 3x15" or "1x5, 3x15" or "1 5, 3 15" or "1:5" - edit specific prices ──
-    // Accepts: 1x12.50  1=12.50  1:12.50  1 12.50  — all map to item 1 @ $12.50
-    const editSection = raw
-      .replace(/\bhave\s+[\d,\s]+/i, "")
-      .replace(/\bskip\s+[\d,\s]+/i, "")
-      .replace(/^\bedit\b\s*/i, "").trim();
-    // Match: number followed by x/=/:/space then price
-    const pairPattern = /(\d+)\s*[x=:\s]\s*(\d+(?:\.\d+)?)/gi;
-    let m;
-    while ((m = pairPattern.exec(editSection)) !== null) {
-      // Skip if the separator is a space and both sides are just standalone numbers
-      // (could be "skip 3 7" which is skip, not edit)
-      const sep = editSection.slice(m.index + m[1].length, m.index + m[0].length - m[2].length).trim();
-      // Only skip if pure space separator AND no decimal in price (ambiguous)
-      if (sep === "" && !m[2].includes(".") && !hasSkipCmd) {
-        // Accept it anyway - context is price entry mode
-      }
-      hasEditCmd = true;
-      editUpdates[parseInt(m[1])] = parseFloat(m[2]);
-    }
-
-    return { editUpdates, skipIndices, hasEditCmd, hasSkipCmd, haveMode };
   }
 
   // ── Parse "add [item description] [price]" command ────────────────────────
