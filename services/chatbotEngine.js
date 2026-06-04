@@ -5108,9 +5108,9 @@ if (_introRequest.status === "closed") {
         const _catalogueLines = _sellerCatItems.length
           ? "\n\n📋 *Your catalogue (pick by number):*\n" +
             _sellerCatItems.map((it, i) =>
-              `P${i+1}. ${it.name}${it.price ? ` - $${Number(it.price).toFixed ? Number(it.price).toFixed(2) : it.price}${it.unit ? "/"+it.unit : ""}` : ""}`
+              `${i+1}. ${it.name}${it.price ? ` - $${Number(it.price).toFixed ? Number(it.price).toFixed(2) : it.price}${it.unit ? "/"+it.unit : ""}` : ""}`
             ).join("\n") +
-            "\nType *pick P1 2* to add item P1 qty 2 to quote"
+            "\n_Type *pick 1* or *pick 2 qty 3* to add from catalogue_"
           : "";
 
         return sendText(from,
@@ -5127,6 +5127,7 @@ if (_introRequest.status === "closed") {
             : `Type each price:\n${_unitExamples}\n\n_(item number x price/unit)_`) +
           (_blankSingle ? "" : `\nCan't supply an item? Type *0* for it.`) +
           `\n\n➕ *Add a line:* _add labour 150_ or _add call-out fee 50/job_\n` +
+          `❓ *Ask buyer a detail:* _ask: what size PVC elbow?_ or _ask: interior or exterior?_\n` +
           `📝 *Add a note:* _note available Monday, deposit 50% required_\n` +
           `❌ *Cancel:* _cancel_` +
           _catalogueLines
@@ -5444,9 +5445,10 @@ await UserSession.findOneAndUpdate(
     return sendButtons(from, {
       text:
         `*What would you like to do?*\n\n` +
-        `✏️ *Edit a price:* _edit 1x12.50_ or _edit 1x5 3x8_\n` +
+        `✏️ *Edit a price:* _edit 1x12.50_  or  _1 12.50_  or  _1=12.50_\n` +
         `➕ *Add a line:* _add labour 150_ or _add call-out fee 50/job_\n` +
-        `📋 *Pick from catalogue:* _pick P1_ or _pick P2 3_\n` +
+        `❓ *Ask buyer a detail:* _ask: what size do you need?_\n` +
+        `📋 *Pick from catalogue:* _pick 1_ or _pick 2 qty 3_\n` +
         `📝 *Add a note:* _note deposit required, available Mon-Fri_\n` +
         `❌ *Skip items:* _skip 3_ or _skip 3,7,15_\n` +
         `⚡ *Only have some items:* _have 3,7_ (skips all others)\n` +
@@ -5496,14 +5498,23 @@ await UserSession.findOneAndUpdate(
       }
     }
 
-    // ── "edit 1x5 3x15" or "1x5, 3x15" - edit specific prices ───────────────
+    // ── "edit 1x5 3x15" or "1x5, 3x15" or "1 5, 3 15" or "1:5" - edit specific prices ──
+    // Accepts: 1x12.50  1=12.50  1:12.50  1 12.50  — all map to item 1 @ $12.50
     const editSection = raw
       .replace(/\bhave\s+[\d,\s]+/i, "")
       .replace(/\bskip\s+[\d,\s]+/i, "")
       .replace(/^\bedit\b\s*/i, "").trim();
-    const pairPattern = /(\d+)\s*x\s*(\d+(?:\.\d+)?)/gi;
+    // Match: number followed by x/=/:/space then price
+    const pairPattern = /(\d+)\s*[x=:\s]\s*(\d+(?:\.\d+)?)/gi;
     let m;
     while ((m = pairPattern.exec(editSection)) !== null) {
+      // Skip if the separator is a space and both sides are just standalone numbers
+      // (could be "skip 3 7" which is skip, not edit)
+      const sep = editSection.slice(m.index + m[1].length, m.index + m[0].length - m[2].length).trim();
+      // Only skip if pure space separator AND no decimal in price (ambiguous)
+      if (sep === "" && !m[2].includes(".") && !hasSkipCmd) {
+        // Accept it anyway - context is price entry mode
+      }
       hasEditCmd = true;
       editUpdates[parseInt(m[1])] = parseFloat(m[2]);
     }
@@ -5562,9 +5573,65 @@ await UserSession.findOneAndUpdate(
     return _sendDraftPreview(updatedItems, updatedDraft.skippedItems || [], _ref, newTotal, sellerRequestId);
   }
 
-  // ── "note [text]" - attach a note to the quote ───────────────────────────
-  const _noteText = _parseNoteCommand(text);
-  if (_noteText) {
+  // ── "ask [question]" - seller asks buyer for more detail before quoting ──────
+  // Real-world need: plumber receives "I need a PVC elbow" - doesn't know size.
+  // Builder receives "plastering" - doesn't know interior/exterior/sqm.
+  // This sends the seller's question to the buyer via the bot and waits for reply.
+  // The seller stays in awaiting_offer state so they can quote once buyer responds.
+  // Formats: "ask what size PVC elbow?" / "ask: is this interior or exterior?"
+  const _askMatch = text.match(/^ask[:\s]+(.+)$/i);
+  if (_askMatch) {
+    const _askQuestion = _askMatch[1].trim().slice(0, 300);
+    if (_askQuestion.length < 3) {
+      return sendText(from, `❌ Type your question after *ask:*\n_e.g. ask: what size PVC elbow do you need?_`);
+    }
+
+    // Get the buyer's phone from the request
+    const _askRequest = await BuyerRequest.findById(sellerRequestId).lean();
+    const _askBuyerPhone = _askRequest?.phone;
+
+    if (!_askBuyerPhone) {
+      return sendText(from, `❌ Could not find buyer's contact. The request may have expired.`);
+    }
+
+    // Save the pending question in session so we know to relay buyer's reply back
+    await UserSession.findOneAndUpdate(
+      { phone },
+      { $set: {
+          "tempData.sellerPendingQuestion": {
+            question:     _askQuestion,
+            buyerPhone:   _askBuyerPhone,
+            sellerPhone:  phone,
+            requestId:    sellerRequestId,
+            askedAt:      Date.now()
+          }
+      }},
+      { upsert: true }
+    );
+
+    // Send question to the buyer on behalf of the seller
+    const _askSupplierName = supplier.businessName || "The seller";
+    try {
+      const { sendButtons: _sendBuyerBtn } = await import("./metaSender.js");
+      await _sendBuyerBtn(_askBuyerPhone, {
+        text:
+          `❓ *${_askSupplierName} has a question before quoting:*\n\n` +
+          `_"${_askQuestion}"_\n\n` +
+          `Please reply to help them give you an accurate quote.`,
+        buttons: [{ id: `buyer_clarif_done_${sellerRequestId}`, title: "✅ I replied below" }]
+      });
+    } catch (_askErr) {
+      console.warn(`[ASK CMD] Could not send question to buyer ${_askBuyerPhone}: ${_askErr.message}`);
+    }
+
+    return sendText(from,
+      `✅ *Question sent to buyer!*\n\n` +
+      `_"${_askQuestion}"_\n\n` +
+      `The buyer will reply and you will be notified. You can still enter prices while waiting.\n\n` +
+      `When they reply, their answer will appear here.\n` +
+      `Type *confirm* when ready to send your quote, or keep editing.`
+    );
+  }
     const _noteDraft = pendingDraftQuote || { responseItems: [], skippedItems: [], totalAmount: 0 };
     const updatedDraft = { ..._noteDraft, sellerNote: _noteText };
     await UserSession.findOneAndUpdate(
@@ -5579,8 +5646,10 @@ await UserSession.findOneAndUpdate(
     );
   }
 
-  // pick P1 2 -- seller picks from their own catalogue (P1=item 1, qty 2)
-  const _pickMatch = text.match(/^pick\s+p(\d+)(?:\s+(\d+(?:\.\d+)?))?/i);
+
+  // pick 1 qty 2 or pick P1 2 -- seller picks from their own catalogue by number
+  // Accepts: "pick 1", "pick 1 qty 2", "pick P1 2", "pick 1 2"
+  const _pickMatch = text.match(/^pick\s+(?:p)?(\d+)(?:\s+(?:qty\s*)?(\d+(?:\.\d+)?))?/i);
   if (_pickMatch) {
     const _pickIdx  = parseInt(_pickMatch[1], 10) - 1;
     const _pickQty  = parseFloat(_pickMatch[2] || "1") || 1;
@@ -5590,7 +5659,7 @@ await UserSession.findOneAndUpdate(
       ...(supplier?.roomTypes || []).map(t => ({ name: t.roomType, price: Number(t.pricePerNight||0), unit: "night" }))
     ].filter(i => i.name).slice(0, 10);
     const _picked = _catItems[_pickIdx];
-    if (!_picked) return sendText(from, `Item P${_pickIdx+1} not found in your catalogue.`);
+    if (!_picked) return sendText(from, `Item ${_pickIdx+1} not found in your catalogue. You have ${_catItems.length} items (1–${_catItems.length}).`);
     const _pDraft  = pendingDraftQuote?.responseItems?.length ? pendingDraftQuote : { responseItems: [], skippedItems: [], totalAmount: 0 };
     const _pTotal  = Number((_picked.price * _pickQty).toFixed(2));
     const _pItem   = { product: _picked.name, quantity: _pickQty, unit: _picked.unit, pricePerUnit: _picked.price, total: _pTotal, _edited: true };
@@ -12298,6 +12367,34 @@ if (a.startsWith("sc_")) {
     if (_staffHandled) return;
   }
 
+  // ── FIX: clear stale sellerRequestReplyState when buyer taps sc_quote_ ───
+  // sc_quote_<supplierId> is ALWAYS a buyer-initiated smart-link quote action.
+  // If the same phone previously received a marketplace seller notification and
+  // still has sellerRequestReplyState in session, that stale state would cause
+  // the BuyerRequest intercept (lines ~4746-4880) to fire and return
+  // "That request has closed." — completely wrong for a smart-link buyer.
+  // Clearing the stale state here prevents the bleed-through entirely.
+  if (a.startsWith("sc_quote_") && !a.startsWith("sc_quote_confirm_") &&
+      !a.startsWith("sc_quote_edit_") && !a.startsWith("sc_quote_done_") &&
+      !a.startsWith("sc_quote_clear_") && !a.startsWith("sc_scope_skip_")) {
+    try {
+      const _sqCheck = await UserSession.findOne({ phone }).lean();
+      if (_sqCheck?.tempData?.sellerRequestReplyState || _sqCheck?.tempData?.sellerRequestId) {
+        await UserSession.findOneAndUpdate(
+          { phone },
+          { $unset: {
+              "tempData.sellerRequestReplyState": "",
+              "tempData.sellerRequestId":          "",
+              "tempData.pendingDraftQuote":        "",
+              "tempData.pendingOfferResponse":     ""
+          }},
+          { upsert: true }
+        );
+        console.log(`[SC_QUOTE_FIX] Cleared stale sellerRequestReplyState for ${phone} — smart-link quote wins`);
+      }
+    } catch (_sqErr) { /* non-critical */ }
+  }
+
   // FIX: for no-biz users mid-sc_ flow (e.g. sc_quote_done_ after typing items),
   // reconstruct the virtual biz from UserSession so _scQuoteDone etc. can read
   // scQuoteItems / scRFQ / scSellerId - otherwise biz=null and items=[].
@@ -17771,7 +17868,63 @@ isService
 
 
 // ── Buyer request lane: entry menu ───────────────────────────────────────────
-if (a === "sup_request_sellers") {
+// ── Buyer clarification reply — buyer tapped "I replied below" or typed response ──
+// When a seller typed "ask: what size PVC elbow?" the bot asked the buyer.
+// Now the buyer's next message (or button tap) is their answer.
+// We relay it back to the seller immediately so they can price accurately.
+if (a === "buyer_clarif_done" || a?.startsWith("buyer_clarif_done_")) {
+  return sendText(from,
+    `✅ Thanks! The seller will see your reply below and send you a quote shortly.\n\n` +
+    `Type your answer now and it will be sent to the seller:`
+  );
+}
+
+// ── Check if this message is a clarification reply to a seller ───────────────
+// Any buyer message could be a clarification reply if seller has a pendingQuestion for their phone
+if (!isMetaAction && text && text.trim().length > 1) {
+  const _pendingQuestions = await UserSession.find({
+    "tempData.sellerPendingQuestion.buyerPhone": phone
+  }).lean();
+
+  if (_pendingQuestions.length > 0) {
+    for (const _sellerSess of _pendingQuestions) {
+      const _pq = _sellerSess.tempData?.sellerPendingQuestion;
+      if (!_pq || Date.now() - (_pq.askedAt || 0) > 24 * 60 * 60 * 1000) continue; // expired
+
+      const _sellerPhone = _pq.sellerPhone;
+      const _buyerAnswer = text.trim().slice(0, 500);
+
+      // Clear the pending question
+      const _sellerPhoneNorm = _sellerPhone.replace(/\D+/g, "");
+      await UserSession.findOneAndUpdate(
+        { phone: _sellerPhoneNorm },
+        { $unset: { "tempData.sellerPendingQuestion": "" } },
+        { upsert: true }
+      );
+
+      // Relay buyer's answer to seller
+      try {
+        const { sendButtons: _relaySendBtn } = await import("./metaSender.js");
+        await _relaySendBtn(_sellerPhone, {
+          text:
+            `💬 *Buyer replied to your question:*\n\n` +
+            `_"${_buyerAnswer}"_\n\n` +
+            `You can now enter your price or continue editing the quote.`,
+          buttons: [
+            { id: `req_offer_${_pq.requestId}`, title: "📋 View Request" }
+          ]
+        });
+        console.log(`[CLARIF RELAY] Buyer ${phone} → seller ${_sellerPhone}: "${_buyerAnswer.slice(0,50)}"`);
+      } catch (_relayErr) {
+        console.warn(`[CLARIF RELAY] Could not send to seller ${_sellerPhone}: ${_relayErr.message}`);
+      }
+
+      // Confirm to buyer their reply was sent
+      return sendText(from,
+        `✅ Your answer has been sent to the seller. They will send you a quote shortly.`
+      );
+    }
+  }
   await UserSession.findOneAndUpdate(
     { phone },
     {
@@ -19728,8 +19881,8 @@ if (a === "view_all_products" || a.startsWith("view_all_products_page_")) {
       }
     }
   }
-}
 
+}
 // ─────────────────────────────────────────────────────────────────────────────
 // SHARED DISPLAY HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
@@ -20159,5 +20312,4 @@ async function showAllBranchesCashBalance(from, biz) {
   await sendText(from, msg);
   const { sendCashBalanceMenu } = await import("./metaMenus.js");
   return sendCashBalanceMenu(from);
-}
 }
