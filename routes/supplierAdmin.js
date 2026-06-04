@@ -1598,6 +1598,10 @@ const successMsg = req.query.success
     👥 Staff &amp; Branches
   </a>
 
+  <a href="/zq-admin/suppliers/${supplier._id}/staff-cards" class="btn" style="background:#7c3aed;color:white">
+    🪪 Staff E-Business Cards
+  </a>
+
   <form method="POST" action="/zq-admin/suppliers/${supplier._id}/delete" style="display:inline"
         onsubmit="return confirm('⚠️ PERMANENTLY DELETE ${esc(supplier.businessName)}?\n\nThis removes:\n• Supplier profile\n• Business account & branch\n• Products & prices\n• Subscription payments\n• Search logs\n\nThis cannot be undone.')">
     <button class="btn btn-red">🗑 Delete Supplier</button>

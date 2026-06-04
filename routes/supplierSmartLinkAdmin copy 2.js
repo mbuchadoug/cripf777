@@ -204,10 +204,7 @@ td{padding:9px 12px;border-bottom:1px solid #f1f5f9;vertical-align:middle}
   ${successMsg}${errorMsg}
 
   <h1>📲 Smart Link</h1>
-  <p class="sub">${esc(supplier.businessName)} · ${esc(supplier.location?.area || "")} ${esc(supplier.location?.city || "")} · ${supplier.profileType === "service" ? "Service Provider" : "Product Seller"}
-    &nbsp;·&nbsp;
-    <a href="/zq-admin/suppliers/${esc(supplierId)}/staff-cards" style="display:inline-block;padding:4px 12px;background:#7c3aed;color:#fff;border-radius:6px;font-size:12px;text-decoration:none;font-weight:700">🪪 Staff E-Business Cards</a>
-  </p>
+  <p class="sub">${esc(supplier.businessName)} · ${esc(supplier.location?.area || "")} ${esc(supplier.location?.city || "")} · ${supplier.profileType === "service" ? "Service Provider" : "Product Seller"}</p>
 
   <!-- ── Analytics summary ─────────────────────────────────────────── -->
   <div class="stat-row">
