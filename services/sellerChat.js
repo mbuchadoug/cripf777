@@ -1859,6 +1859,7 @@ Valid until: ${_expiryDisplay}`,
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SELLER EDITS DRAFT PRICES → shows numbered list → waits for typed reply
+// Seller can also rename items using: rename 1: Professional service name
 // ─────────────────────────────────────────────────────────────────────────────
 async function _scHandleQuoteEdit(from, refNum, biz, saveBiz) {
   // FIX: use map-aware lookup so correct draft is found for this specific refNum
@@ -1877,23 +1878,79 @@ async function _scHandleQuoteEdit(from, refNum, biz, saveBiz) {
   );
 
   const numbered = draft.lineItems.map((l, i) =>
-    `${i + 1}. ${l.name} × ${l.qty} - current: $${l.unitPrice.toFixed(2)}`
+    `${i + 1}. ${l.name} × ${l.qty} - current: $${Number(l.unitPrice || 0).toFixed(2)}`
   ).join("\n");
 
   return sendText(from,
-`✏️ *Edit prices - ${refNum}*
+`✏️ *Edit quote - ${refNum}*
 
 ${numbered}
 
-Type updated prices (only items you want to change):
-_1=12.50, 3=8.00_
+*Set prices:*
+_1×350_ or _1=350_ → set item 1 price to $350
+_1×350, 2×120_ → price multiple items
+
+*Rename a long or unclear item:*
+_rename 1: Bill of Quantities - 4-bed house_
+_rename 2: Electrical installation, 3-bed_
+
+*Set price AND rename in one line:*
+_1×350 Bill of Quantities (4-bed, 280m², Ruwa)_
 
 Type *confirm* to send as-is, or *cancel* to discard.`
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PROCESS SELLER'S TYPED PRICE EDITS
+// HELPER: save an updated draft to both the map and legacy scalar in UserSession
+// ─────────────────────────────────────────────────────────────────────────────
+async function _saveUpdatedDraft(from, updatedDraft, _tmpSess, UserSession) {
+  let _dm = {};
+  try {
+    const _r = _tmpSess?.tempData?.scPendingDrafts;
+    _dm = _r ? (typeof _r === "string" ? JSON.parse(_r) : _r) : {};
+  } catch (_) {}
+  const _updRef = (updatedDraft.refNum || "").toUpperCase();
+  if (_updRef) _dm[_updRef] = updatedDraft;
+  await UserSession.findOneAndUpdate(
+    { phone: _normPhone(from) },
+    { $set: {
+        "tempData.scPendingDrafts":      JSON.stringify(_dm),
+        "tempData.scPendingSellerQuote": JSON.stringify(updatedDraft),
+        "tempData.scLastNotifiedRef":    _updRef,
+        "tempData.scSellerQuoteState":   "awaiting_seller_price_edit"
+    }},
+    { upsert: true }
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PROCESS SELLER'S TYPED PRICE EDITS + ITEM RENAMES
+//
+// Supported formats:
+//   PRICE ONLY:
+//     1×350          → set item 1 to $350
+//     1=350          → same
+//     1×350, 2×120   → price two items
+//
+//   RENAME ONLY:
+//     rename 1: Bill of Quantities (4-bed house, 280m², Ruwa)
+//     r 1: BOQ - 4 bed house
+//
+//   PRICE + RENAME IN ONE LINE:
+//     1×350 Bill of Quantities (4-bed house, Ruwa)
+//     → sets price to $350 AND renames item 1
+//
+//   CONTROLS:
+//     confirm / send   → approve and send PDF to buyer
+//     cancel           → discard quote
+//
+// WHY THIS EXISTS:
+//   Buyers often send long natural-language requests:
+//   "I need a BOQ for a 4-bed house in Ruwa, approximately 280m²"
+//   That full sentence becomes the line item name on the PDF.
+//   The seller must be able to refactor it to a clean professional description
+//   before the quotation PDF is sent to the buyer.
 // ─────────────────────────────────────────────────────────────────────────────
 async function _scProcessSellerPriceEdit(from, text, biz, saveBiz) {
   const UserSession = (await import("../models/userSession.js")).default;
@@ -1910,7 +1967,6 @@ async function _scProcessSellerPriceEdit(from, text, biz, saveBiz) {
   }
 
   // Fallback 2: scLastRFQ in biz session (RFQ drafts are stored there)
-  // This kicks in when the draft was not yet written to UserSession (first price entry after view_and_quote)
   if (!draft && biz?.sessionData?.scLastRFQ) {
     const _rq = biz.sessionData.scLastRFQ;
     if (_rq && (_rq.timestamp || 0) > Date.now() - 48 * 60 * 60 * 1000) {
@@ -1938,7 +1994,6 @@ async function _scProcessSellerPriceEdit(from, text, biz, saveBiz) {
 
   if (al === "cancel") {
     await _clearSellerDraft(from, draft.refNum);
-    // Also clear the scSellerQuoteState
     await UserSession.findOneAndUpdate(
       { phone: _normPhone(from) },
       { $unset: { "tempData.scSellerQuoteState": "" } },
@@ -1951,80 +2006,145 @@ async function _scProcessSellerPriceEdit(from, text, biz, saveBiz) {
     return _scHandleQuoteConfirm(from, draft.refNum, biz, saveBiz);
   }
 
-  // Parse prices: "1×50, 2×3" or "1x50 2x3" or "1=50, 2=3" - all formats accepted
-  const edits = {};
-  const matches = text.matchAll(/(\d+)\s*[=×xX@:]\s*(\d+(?:\.\d+)?)(?:\s*\/\s*([a-zA-Z]+))?/g);
+  // ── Handle rename command ─────────────────────────────────────────────────
+  // Format: "rename 1: Bill of Quantities (4-bed house)" or "r 1: BOQ 4-bed"
+  // Case-insensitive. Colon or dash after item number.
+  const renameMatch = text.trim().match(/^(?:rename|r)\s+(\d+)\s*[:\-]\s*(.+)$/i);
+  if (renameMatch) {
+    const idx     = parseInt(renameMatch[1]) - 1;
+    const newName = renameMatch[2].trim().slice(0, 150);
+    if (idx < 0 || idx >= draft.lineItems.length) {
+      return sendText(from,
+        `❌ Item ${idx + 1} doesn't exist. You have ${draft.lineItems.length} item${draft.lineItems.length > 1 ? "s" : ""}.\n\n` +
+        `Type _rename 1: New name_ to rename item 1.`
+      );
+    }
+    const renamedItems = draft.lineItems.map((l, i) =>
+      i === idx ? { ...l, name: newName } : l
+    );
+    const updatedDraft = { ...draft, lineItems: renamedItems };
+    await _saveUpdatedDraft(from, updatedDraft, _tmpSess, UserSession);
 
-  for (const m of matches) {
+    const numbered = renamedItems.map((l, i) => {
+      const _ul = _formatRateUnit(l.unit) || "/unit";
+      return l.unitPrice > 0
+        ? `${i + 1}. *${l.name}* × ${l.qty} @ $${Number(l.unitPrice).toFixed(2)}${_ul} = *$${Number(l.lineTotal).toFixed(2)}*`
+        : `${i + 1}. *${l.name}* × ${l.qty} - ❓ _price not set_`;
+    }).join("\n");
+
+    const _unpriced2 = renamedItems.filter(l => !l.unitPrice || l.unitPrice === 0);
+    const _warn2 = _unpriced2.length > 0
+      ? `\n\n⚠️ *${_unpriced2.length} item${_unpriced2.length > 1 ? "s" : ""} still need a price.*`
+      : "";
+
+    return sendButtons(from, {
+      text:
+`✅ *Item ${idx + 1} renamed:*
+_"${newName}"_
+
+📋 *Updated quote - ${draft.refNum}*
+
+${numbered}
+${"─".repeat(28)}
+*Total: $${Number(updatedDraft.total || 0).toFixed(2)} USD*${_warn2}
+
+To set a price: _1×350_
+To rename again: _rename 1: New name_
+To confirm and send: tap button below.`,
+      buttons: [
+        { id: `sc_quote_confirm_${draft.refNum}`, title: "✅ Send Quote" },
+        { id: `sc_quote_edit_${draft.refNum}`,    title: "✏️ Edit Prices" }
+      ]
+    });
+  }
+
+  // ── Parse prices: "1×350" or "1=350" or "1×350, 2×120" ──────────────────
+  // ALSO handles combined price+rename: "1×350 Bill of Quantities (4-bed house)"
+  // The name text comes AFTER the price value with a space.
+  const edits   = {};
+  const renames = {};
+
+  // Try combined price+rename first: "1×350 Some description here"
+  // Match: digit, sep, price, optional trailing description
+  const _combinedMatches = [...text.matchAll(/(\d+)\s*[=×xX@:]\s*(\d+(?:\.\d+)?)(?:\s*\/\s*([a-zA-Z]+))?\s+([A-Z].{3,})/g)];
+  for (const m of _combinedMatches) {
     const idx = parseInt(m[1]) - 1;
     if (idx >= 0 && idx < draft.lineItems.length) {
-      edits[idx] = {
-        amount: parseFloat(m[2]),
-        unit: m[3] ? m[3].toLowerCase() : draft.lineItems[idx].unit
-      };
+      edits[idx]   = { amount: parseFloat(m[2]), unit: m[3] ? m[3].toLowerCase() : draft.lineItems[idx].unit };
+      renames[idx] = m[4].trim().slice(0, 150); // description starts with capital letter, min 4 chars
     }
   }
 
-  if (!Object.keys(edits).length) {
+  // Standard price-only edits: "1×350, 2×120" (skip items already caught as combined)
+  const _priceOnlyMatches = [...text.matchAll(/(\d+)\s*[=×xX@:]\s*(\d+(?:\.\d+)?)(?:\s*\/\s*([a-zA-Z]+))?/g)];
+  for (const m of _priceOnlyMatches) {
+    const idx = parseInt(m[1]) - 1;
+    if (idx >= 0 && idx < draft.lineItems.length && !edits.hasOwnProperty(idx)) {
+      edits[idx] = { amount: parseFloat(m[2]), unit: m[3] ? m[3].toLowerCase() : draft.lineItems[idx].unit };
+    }
+  }
+
+  if (!Object.keys(edits).length && !Object.keys(renames).length) {
     // Build the item list so seller can see what they need to price
     const _currList = draft.lineItems.map((l, i) => `${i + 1}. *${l.name}* × ${l.qty}`).join("\n");
-    const _exParts  = draft.lineItems.slice(0, 3).map((_, i) => `${i + 1}×${[50, 25, 10][i] || 15}`).join("  ");
+    const _exParts  = draft.lineItems.slice(0, 3).map((_, i) => `${i + 1}×${[350, 120, 25][i] || 50}`).join("  ");
+    const _hasLong  = draft.lineItems.some(l => (l.name || "").length > 60);
+    const _renameHint = _hasLong
+      ? `\n\n💡 *Item names look long.* You can rename before sending:\n_rename 1: Short professional name_`
+      : "";
     return sendText(from,
-      `❌ Could not read your prices.\n\n` +
-      `*Items to price:*\n${_currList}\n\n` +
-      `Type *item number × price per unit*\n` +
-      `_e.g. ${_exParts}_\n\n` +
-      `Both × and = work: _1×50_ or _1=50_\n` +
-      `Type *cancel* to discard.`
+      `❌ Could not read your input.\n\n` +
+      `*Items:*\n${_currList}\n\n` +
+      `*Set a price:* _${_exParts}_\n` +
+      `*Rename an item:* _rename 1: Bill of Quantities - 4-bed house_\n` +
+      `*Both at once:* _1×350 Bill of Quantities (4-bed house, Ruwa)_\n\n` +
+      `Both × and = work: _1×350_ or _1=350_\n` +
+      `Type *cancel* to discard.${_renameHint}`
     );
   }
 
-  // Apply edits to draft line items
+  // Apply price edits and renames to draft line items
   let newTotal = 0;
   const updatedItems = draft.lineItems.map((l, i) => {
-    const edit = edits.hasOwnProperty(i) ? edits[i] : null;
+    const edit   = edits.hasOwnProperty(i)   ? edits[i]   : null;
+    const rename = renames.hasOwnProperty(i)  ? renames[i] : null;
     const unitPrice = edit ? edit.amount : l.unitPrice;
-    const unit = edit?.unit || l.unit || "job";
+    const unit      = edit?.unit || l.unit || "job";
     const lineTotal = unitPrice * l.qty;
     newTotal += lineTotal;
-    return { ...l, unit, unitPrice, lineTotal, _edited: edits.hasOwnProperty(i) };
+    return {
+      ...l,
+      name:      rename || l.name,
+      unit,
+      unitPrice,
+      lineTotal,
+      _edited:   edits.hasOwnProperty(i),
+      _renamed:  renames.hasOwnProperty(i)
+    };
   });
 
   const updatedDraft = { ...draft, lineItems: updatedItems, total: newTotal };
+  await _saveUpdatedDraft(from, updatedDraft, _tmpSess, UserSession);
 
-  // Write updated draft to both map and legacy scalar
-  let _dm2 = {};
-  try {
-    const _r = _tmpSess?.tempData?.scPendingDrafts;
-    _dm2 = _r ? (typeof _r === "string" ? JSON.parse(_r) : _r) : {};
-  } catch (_) {}
-  const _updRef = (updatedDraft.refNum || "").toUpperCase();
-  if (_updRef) _dm2[_updRef] = updatedDraft;
-
-  await UserSession.findOneAndUpdate(
-    { phone: _normPhone(from) },
-    { $set: {
-        "tempData.scPendingDrafts":      JSON.stringify(_dm2),
-        "tempData.scPendingSellerQuote": JSON.stringify(updatedDraft),
-        "tempData.scLastNotifiedRef":    _updRef,
-        "tempData.scSellerQuoteState":   "awaiting_seller_price_edit"
-    }},
-    { upsert: true }
-  );
-
-  // Build review lines - show clearly: item name, qty, unit price, total per line
+  // Build review lines
   const _unpriced = updatedItems.filter(l => !l.unitPrice || l.unitPrice === 0);
   const numbered = updatedItems.map((l, i) => {
     const _unitLabel = _formatRateUnit(l.unit) || "/unit";
     if (!l.unitPrice || l.unitPrice === 0) {
       return `${i + 1}. *${l.name}* × ${l.qty} - ❓ _price not set_`;
     }
-    return `${i + 1}. *${l.name}* × ${l.qty} @ $${Number(l.unitPrice).toFixed(2)}${_unitLabel} = *$${Number(l.lineTotal).toFixed(2)}*${l._edited ? " ✏️" : ""}`;
+    const _tags = [l._edited ? "✏️" : "", l._renamed ? "🔤" : ""].filter(Boolean).join("");
+    return `${i + 1}. *${l.name}* × ${l.qty} @ $${Number(l.unitPrice).toFixed(2)}${_unitLabel} = *$${Number(l.lineTotal).toFixed(2)}*${_tags ? " " + _tags : ""}`;
   }).join("\n");
 
   const _editHint = _unpriced.length > 0
     ? `\n\n⚠️ *${_unpriced.length} item${_unpriced.length > 1 ? "s" : ""} still need${_unpriced.length === 1 ? "s" : ""} a price.* Add them before sending.`
     : "";
+
+  const _legend = [
+    Object.keys(edits).length   ? "✏️ = price you set" : "",
+    Object.keys(renames).length ? "🔤 = item you renamed" : ""
+  ].filter(Boolean).join("  ·  ");
 
   return sendButtons(from, {
     text:
@@ -2034,10 +2154,8 @@ ${numbered}
 ${"─".repeat(28)}
 *Total: $${newTotal.toFixed(2)} USD*${_editHint}
 
-_✏️ = price you just set_
-
-To change a price: _1×60, 2×5_
-To confirm and send to buyer, tap the button below.`,
+${_legend ? "_" + _legend + "_\n\n" : ""}To change a price: _1×60, 2×5_
+To rename: _rename 1: Professional description_`,
     buttons: [
       { id: `sc_quote_confirm_${draft.refNum}`, title: "✅ Send Quote" },
       { id: `sc_quote_edit_${draft.refNum}`,    title: "✏️ Edit Prices" }

@@ -4547,25 +4547,15 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
             );
 
             // Build the item list with qty shown so seller knows what they're pricing
-            // Flag items with long names (likely buyer's full paragraph) so seller knows to rename
-            const _rfqItemList = _rfqLineItems.map((it, i) => {
-              const _longFlag = (it.name || "").length > 60 ? " ⚠️ _long - consider renaming_" : "";
-              return `${i + 1}. *${it.name}* × ${it.qty}${_longFlag}`;
-            }).join("\n");
+            const _rfqItemList = _rfqLineItems.map((it, i) =>
+              `${i + 1}. *${it.name}* × ${it.qty}`
+            ).join("\n");
 
             // Build examples using × separator (clearer than = for prices)
             const _rfqEx = _rfqLineItems.slice(0, 3).map((it, i) => {
-              const exPrice = [350, 120, 25][i] || 50;
+              const exPrice = [50, 25, 10][i] || 15;
               return `${i + 1}×${exPrice}`;
             }).join("  ");
-
-            // Check if any item name is very long (buyer sent a paragraph)
-            const _hasLongItems = _rfqLineItems.some(it => (it.name || "").length > 60);
-            const _renameHint = _hasLongItems
-              ? `\n\n🔤 *Item names look like buyer descriptions.* Rename before sending:\n` +
-                `_rename 1: Bill of Quantities (4-bed house, 280m², Ruwa)_\n` +
-                `_Or price+rename in one line: 1×350 Bill of Quantities (4-bed, Ruwa)_`
-              : `\n\nTo rename a long item: _rename 1: Short professional name_`;
 
             return sendText(from,
               `📋 *Quote Request - ${_scRefNum}*\n\n` +
@@ -4575,9 +4565,9 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
               `💰 *Enter your price per unit for each item:*\n\n` +
               `Type: *item number × price per unit*\n` +
               `_e.g. ${_rfqEx}_\n\n` +
-              `• Prices are *per unit/job/person* (not total)\n` +
+              `• Prices are *per unit/night/person* (not total)\n` +
               `• You can price all items in one message\n` +
-              `• You will *review the quote before it is sent*${_renameHint}\n\n` +
+              `• You will *review the quote before it is sent*\n\n` +
               `Type *cancel* to discard this request.`
             );
           }
