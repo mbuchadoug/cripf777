@@ -5400,7 +5400,9 @@ if (_introRequest.status === "closed") {
    // typed input like "1x3,5" - if we let awaiting_offer run first it hijacks
    // the input and shows the wrong (old BuyerRequest) quote preview.
    if (sellerRequestReplyState === "awaiting_offer" && sellerRequestId && !isMetaAction &&
-       !biz?.sessionState?.startsWith("sc_")) {
+       !biz?.sessionState?.startsWith("sc_") &&
+       !/^ZQ:STAFF:/i.test(text.trim()) &&
+       !a.startsWith("sc_quote_")) {
 
   // ── cancel ───────────────────────────────────────────────────────────────
   if (al === "cancel") {
@@ -5644,7 +5646,6 @@ await UserSession.findOneAndUpdate(
       `Type *confirm* to send, or keep editing.\n` +
       `Type *note [new text]* to replace the note.`
     );
-  }
 
 
   // pick 1 qty 2 or pick P1 2 -- seller picks from their own catalogue by number
@@ -5913,6 +5914,7 @@ await UserSession.findOneAndUpdate(
         buttons: [{ id: "my_supplier_account", title: "🏪 My Store" }, { id: "suppliers_home", title: "🛒 Marketplace" }]
       });
     }
+  }
   }
 }
 
