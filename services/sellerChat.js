@@ -1081,81 +1081,132 @@ async function _scQuote(from, supplierId, biz, saveBiz) {
   const _quickRef = `📌 *Quick reference:*\n${_qrLines}${_qrSuffix}\n\n`;
 
   if (hasPrices) {
-    // Priced: show "number × qty" examples using real item numbers
-    const ex1 = allItems[0] ? `1×1` : "1×1";
-    const ex2 = allItems[2] ? `, 3×2` : (allItems[1] ? `, 2×1` : "");
-    const exampleLine = `_e.g. ${ex1}${ex2}_`;
+    // Priced: build rich examples using actual item names from the catalogue
+    // Show BOTH number-selection AND free-text so buyer knows either works
+    const item1  = allItems[0];
+    const item2  = allItems[1];
+    const item3  = allItems[2];
+    const name1  = item1 ? (isService ? item1.service : item1.product) : null;
+    const name2  = item2 ? (isService ? item2.service : item2.product) : null;
 
-    const singleHint = allItems[0]
-      ? `_${_ex(0, allItems[0])}_ → type *1×1*`
-      : "";
-    const multiHint = allItems[1]
-      ? `_${_ex(0, allItems[0])} + ${_ex(1, allItems[1])}_ → type *1×1, 2×1*`
-      : "";
+    // Price display for examples
+    const price1 = item1?.rate || (item1?.amount ? `$${Number(item1.amount).toFixed(0)}` : null);
+    const price2 = item2?.rate || (item2?.amount ? `$${Number(item2.amount).toFixed(0)}` : null);
+
+    // Scope hints for this type of service
+    const scopeEx = name1 ? _guessServiceScopeHint(name1) : ["3-bed house", "office block"];
+
+    const numExamples = [
+      name1 ? `_1_ → selects *${name1}*${price1 ? ` (${price1})` : ""}` : null,
+      name2 ? `_2_ → selects *${name2}*${price2 ? ` (${price2})` : ""}` : null,
+      name1 && name2 ? `_1, 2_ → selects both` : null,
+      name1 ? `_1×2_ → ${name1} × 2 jobs` : null,
+    ].filter(Boolean).join("\n");
+
+    const freeTextExamples = isService ? [
+      `_${name1 || "electrical wiring"}_ → type the service name`,
+      `_${name1 || "electrical wiring"}: ${scopeEx[0]}_ → add scope detail`,
+      `_I need ${name1 || "electrical wiring"} for a ${scopeEx[0]}_ → or just describe it`,
+    ].join("\n") : [
+      name1 ? `_${name1}_ → type the product name` : null,
+      name1 ? `_${name1} ×5_ → name + quantity` : null,
+      `_10 bags of cement, 5 sheets IBR_ → just describe what you need`,
+    ].filter(Boolean).join("\n");
 
     return sendText(from,
-`📝 *Select what you need:*
+`📝 *What do you need? — ${seller.businessName}*
 
-${_quickRef}Type *item number × quantity*, e.g:
-${exampleLine}
-${singleHint ? "\n" + singleHint : ""}${multiHint ? "\n" + multiHint : ""}
+${_quickRef}─────────────────
+*Option 1 — Pick by number:*
+${numExamples}
+
+*Option 2 — Just type your request:*
+${freeTextExamples}
 
 ${isService
-  ? "Qty = number of times / jobs needed."
-  : "Qty = how many units you need."}
+  ? "💡 _You can add details like size, location, or scope after selecting._"
+  : "💡 _Include size, brand, or quantity if relevant._"}
 
 Type *done* when finished, or *cancel* to go back.`
     );
 
   } else if (isService) {
-    // RFQ service - buyer picks by number, optionally adds scope
-    // Build examples using the seller's actual service names
+    // RFQ service - no prices set, maximum flexibility
+    // Buyer can: pick numbers, type names, write full descriptions, or mix all three
     const name1 = allItems[0] ? _ex(0, allItems[0]) : null;
     const name2 = allItems[1] ? _ex(1, allItems[1]) : null;
+    const name3 = allItems[2] ? _ex(2, allItems[2]) : null;
 
-    // Pick 1-2 realistic scope hints based on what the service is
-    // (e.g. a cleaner gets "3-bed house", a plumber gets "blocked drain")
-    const scopeHints = _guessServiceScopeHint(name1);
+    // Generate realistic scope hints for this specific service type
+    const scopeHints1 = _guessServiceScopeHint(name1 || "");
+    const scopeHints2 = _guessServiceScopeHint(name2 || "");
 
-    const ex_single  = `_1_ - just pick service 1`;
-    const ex_multi   = name2 ? `_1, 2_ - pick services 1 & 2` : null;
-    const ex_scope1  = name1 ? `_1: ${scopeHints[0]}_ - service 1 + detail` : null;
-    const ex_scope2  = name1 && name2 && scopeHints[1]
-      ? `_1: ${scopeHints[0]}, 2: ${scopeHints[1]}_ - multiple with detail`
-      : null;
+    // ── Build examples tailored to the actual services on this seller's profile ──
+    // Show the buyer 3 ways to request, from simplest to most detailed
+    const numExamples = [
+      name1 ? `_1_ → just pick *${name1}*` : null,
+      name2 ? `_2_ → just pick *${name2}*` : null,
+      name1 && name2 ? `_1, 2_ → pick both` : null,
+    ].filter(Boolean).join("\n");
 
-    const examples = [ex_single, ex_multi, ex_scope1, ex_scope2]
-      .filter(Boolean).join("\n");
+    const scopeExamples = [
+      name1 ? `_1: ${scopeHints1[0]}_ → ${name1} + scope detail` : null,
+      name2 && scopeHints2[0] ? `_2: ${scopeHints2[0]}_ → ${name2} + scope detail` : null,
+      name1 && name2 ? `_1: ${scopeHints1[0]}, 2: ${scopeHints2[0]}_ → both with detail` : null,
+    ].filter(Boolean).join("\n");
+
+    // Free-text examples that closely match Zimbabwean real-world requests
+    const freeExamples = [
+      name1 ? `_I need ${name1} for a ${scopeHints1[0]}_ → full sentence` : null,
+      name2 ? `_${name2} for a ${scopeHints2[0] || "3-bed house"}_ → or shorter` : null,
+    ].filter(Boolean).join("\n");
 
     return sendText(from,
-`📝 *Which services do you need?*
+`📝 *What do you need? — ${seller.businessName}*
 
-${_quickRef}Type the *number(s)* from the list above.
-Add details after a colon if needed.
+${_quickRef}─────────────────
+*You can request in any of these ways:*
 
-${examples}
+*1️⃣ Pick by number:*
+${numExamples || `_1_ → service 1\n_1, 2_ → services 1 & 2`}
 
-Type *done* when finished, or *cancel* to go back.`
+*2️⃣ Pick number + add scope detail:*
+${scopeExamples || `_1: 3-bed house_ → service 1 with details`}
+
+*3️⃣ Just describe what you need (free text):*
+${freeExamples || `_I need electrical wiring for a 3-bedroom house in Ruwa_`}
+
+💡 _The more detail you give, the more accurate the quote._
+_E.g. size, location, number of rooms, special requirements._
+
+Type *done* when ready, or *cancel* to go back.`
     );
 
   } else {
-    // RFQ product - numbers work, free text also accepted
+    // RFQ product - numbers, names, and full free text all work
     const name1 = allItems[0] ? _ex(0, allItems[0]) : null;
     const name2 = allItems[1] ? _ex(1, allItems[1]) : null;
 
-    const ex_num  = name1 && name2 ? `_1, 3_ - pick by number` : `_1_ - pick by number`;
-    const ex_text = name1 ? `_${name1} ×5_ - or type name + qty` : null;
-
-    const examples = [ex_num, ex_text].filter(Boolean).join("\n");
-
     return sendText(from,
-`📝 *Which products do you need?*
+`📝 *What do you need? — ${seller.businessName}*
 
-${_quickRef}Type item *number(s)* from the list, or type the name + quantity.
+${_quickRef}─────────────────
+*You can request in any of these ways:*
 
-${examples}
+*1️⃣ Pick by number:*
+${name1 ? `_1_ → *${name1}*` : "_1_ → item 1"}
+${name2 ? `_1, 2_ → *${name1}* and *${name2}*` : "_1, 2_ → items 1 and 2"}
 
-Include size or brand if needed.
+*2️⃣ Type name + quantity:*
+${name1 ? `_${name1} ×5_` : "_product name ×5_"}
+_10 bags of cement, 5 sheets IBR_ → comma-separated list
+
+*3️⃣ Just describe what you need:*
+_I need 50kg bags of cement x20 and 3 loads of river sand_
+_roofing materials for a 3-bedroom house_
+
+💡 _Include brand, size, grade, or quantity if you know it._
+
 Type *done* when finished, or *cancel* to go back.`
     );
   }
@@ -1331,7 +1382,9 @@ async function _scProcessItemList(from, supplierId, raw, biz, saveBiz) {
     ? "📤 Send Request"
     : (isHospitality ? "✅ Get Service Quote" : (isService ? "✅ Get Service Quote" : "✅ Get Quote"));
 
-  const editHint = `\n\n_Type *note: your details* to add info (e.g. dates, group size)._\n_Type *edit: 1: new name* to rename an item._`;
+  const editHint = isService
+    ? `\n\n💡 _Add more by number, name, or free text._\n_Type *note: your detail* to add size/location/scope._\n_Type *edit: 1: new name* to rename an item._`
+    : `\n\n💡 _Add more items, or tap the button to request your quote._\n_Type *note: your detail* to add context._`;
 
   return sendButtons(from, {
     text:
@@ -3338,19 +3391,61 @@ function _guessServiceScopeHint(serviceName = "") {
   return ["3-bedroom house", "office block, single floor"];
 }
 
-// ─── Parse service RFQ input: "1, 3: 3-bed house, 5: office block" ──────────
-// Supports:
-//   "1"            → service 1, qty 1, no scope
-//   "1, 3"         → services 1 and 3
-//   "1: 3-bed house"  → service 1 with scope detail
-//   "2: sofa, 4: carpet 3 rooms"  → multiple with scopes
-//   Falls back gracefully to comma-split names if no numbers found
+// ─── Parse service RFQ input ─────────────────────────────────────────────────
+// Supports ALL input styles — buyer can use any of these:
+//
+//   NUMBER SELECTION:
+//     "1"                    → service 1
+//     "1, 2"                 → services 1 and 2
+//     "1, 3"                 → services 1 and 3
+//
+//   NUMBER + SCOPE:
+//     "1: 3-bed house"       → service 1 with scope detail
+//     "2: office block"      → service 2 with scope
+//     "1: 3-bed, 2: survey"  → two services with different scopes
+//
+//   FREE TEXT (typed service name):
+//     "quantity survey"           → matches catalogue by name (case insensitive)
+//     "plain drawing, site survey" → comma-separated names
+//
+//   FULL NATURAL LANGUAGE (most common for professional services):
+//     "I need a BOQ for a 4-bed house in Ruwa, 280m², drawings available"
+//     → stored as ONE item with full description — seller will see and refactor
+//     "Plain drawing and quantity survey for a 3-bed house"
+//     → stored as single descriptive item
+//
+//   MIXED:
+//     "1, quantity survey for the same house"
+//     → item 1 by number + a free-text service
+//
+// WHY FULL SENTENCES ARE STORED AS ONE ITEM:
+//   When buyer writes "I need a BOQ for a 4-bed house 280m² in Ruwa", that is
+//   a valid complete request. The seller sees it, renames it to the professional
+//   service name, and prices it. This matches how real-world professional service
+//   requests work in Zimbabwe — clients describe what they need, not pick from menus.
+//
 function _parseServiceRFQInput(raw, knownItems = []) {
   const results = [];
 
-  // Split by comma, but not commas inside a scope clause (after the colon)
-  // Strategy: split on ", " only when followed by a digit (next item number)
-  const parts = raw.split(/,\s*(?=\d)/).map(s => s.trim()).filter(Boolean);
+  // ── Step 1: Check if this is a PURE natural-language sentence ──────────────
+  // Detect: starts with "I need", "Please", "Can you", or is a long sentence
+  // with no leading digits. Store as a single descriptive item.
+  const _trimmed = raw.trim();
+  const _isNaturalSentence =
+    /^(i need|i want|please|can you|could you|we need|we want|kindly|hi|hello|good morning|good afternoon)/i.test(_trimmed) ||
+    (_trimmed.length > 80 && !/^\d/.test(_trimmed) && !_trimmed.match(/^\d+\s*[:–\-,]/));
+
+  if (_isNaturalSentence) {
+    // Store the whole sentence as the request description.
+    // Seller will see it, rename to professional service name, and price it.
+    return [{ name: _trimmed, qty: 1, price: 0 }];
+  }
+
+  // ── Step 2: Try to detect mixed number + name entries ─────────────────────
+  // Split on ", " only when followed by a digit (item number) to keep scope
+  // clauses like "1: 3-bed house, Ruwa" intact.
+  // A simpler split avoids the VS Code TS false-positive on complex regex literals.
+  const parts = _trimmed.split(/,\s*(?=\d)/).map(s => s.trim()).filter(Boolean);
 
   for (const part of parts) {
     // Match: number optionally followed by colon + scope
@@ -3366,17 +3461,29 @@ function _parseServiceRFQInput(raw, knownItems = []) {
           qty:   1,
           price: parseFloat(item.rate) || 0
         });
+      } else {
+        // Number out of range — keep as typed
+        results.push({ name: part, qty: 1, price: 0 });
       }
     } else {
-      // Not a number - treat as typed service name
-      results.push({ name: part, qty: 1, price: 0 });
+      // Not a number — try exact name match in catalogue first
+      const lc = part.toLowerCase().trim();
+      const found = knownItems.find(i =>
+        (i.service || "").toLowerCase().trim() === lc ||
+        (i.service || "").toLowerCase().trim().startsWith(lc.slice(0, 8))
+      );
+      if (found) {
+        results.push({ name: found.service, qty: 1, price: parseFloat(found.rate) || 0 });
+      } else {
+        // Free text service description — store as-is
+        results.push({ name: part, qty: 1, price: 0 });
+      }
     }
   }
 
-  // If nothing resolved (e.g. buyer typed only names), fall back to name splitting
+  // If nothing resolved at all, store the whole raw input as one item
   if (!results.length) {
-    return raw.split(/[,\n]+/).map(s => s.trim()).filter(Boolean)
-      .map(name => ({ name, qty: 1, price: 0 }));
+    return [{ name: _trimmed, qty: 1, price: 0 }];
   }
 
   return results;
