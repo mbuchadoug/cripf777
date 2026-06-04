@@ -39,6 +39,34 @@ import {
 } from "../services/groupSmartLink.js";
 import { assignSlugToSupplier } from "../services/supplierSmartLink.js";
 
+// ── Staff E-Business Card imports ─────────────────────────────────────────────
+// staffCard.js and staffSmartLink.js are loaded lazily so the server starts
+// even if they are not yet on disk. Deploy both files then replace this block
+// with the static imports and restart.
+const STAFF_LINK_SOURCES = { fb:"Facebook", wa:"WhatsApp Status", tt:"TikTok", qr:"QR Scan", sms:"SMS / Flyer", ig:"Instagram", yt:"YouTube", direct:"Direct / Unknown" };
+
+let _staffModulesCache = null;
+async function _loadStaffModules() {
+  if (_staffModulesCache) return _staffModulesCache;
+  try {
+    const _sc  = await import("../models/staffCard.js");
+    const _ssl = await import("../services/staffSmartLink.js");
+    _staffModulesCache = {
+      StaffCard:              _sc.default,
+      assignSlugToStaffCard:  _ssl.assignSlugToStaffCard,
+      buildStaffDeepLink:     _ssl.buildStaffDeepLink,
+      buildAllStaffLinks:     _ssl.buildAllStaffLinks,
+      buildStaffQrImageUrl:   _ssl.buildStaffQrImageUrl,
+      buildStaffProfileCard:  _ssl.buildStaffProfileCard,
+      buildStaffSharableCaption:  _ssl.buildStaffSharableCaption,
+      buildStaffAnalyticsSummary: _ssl.buildStaffAnalyticsSummary,
+    };
+    return _staffModulesCache;
+  } catch (_err) {
+    return null; // files not deployed yet
+  }
+}
+
 
 const router = express.Router();
 
@@ -9450,6 +9478,363 @@ router.post("/suppliers/:id/users/:uid/remove", requireSupplierAdmin, async (req
     res.redirect(`/zq-admin/suppliers/${req.params.id}/staff?success=${encodeURIComponent(user.phone + " removed from business")}`);
   } catch (err) {
     res.redirect(`/zq-admin/suppliers/${req.params.id}/staff?error=${encodeURIComponent(err.message)}`);
+  }
+});
+
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+// STAFF E-BUSINESS CARDS
+// Routes: /zq-admin/suppliers/:id/staff-cards/...
+// All routes lazy-load staffCard + staffSmartLink so the server starts even
+// when those files are not yet on disk. Once deployed, replace the lazy-load
+// block above with the static imports and restart.
+// ══════════════════════════════════════════════════════════════════════════════
+
+const _NOT_DEPLOYED_HTML = (supplierId) => `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Staff Cards – Setup Required</title>
+<style>body{font-family:system-ui,sans-serif;background:#f8f9fa;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}
+.box{background:#fff;border-radius:12px;padding:40px;max-width:500px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.1)}
+h2{color:#dc2626;margin:0 0 12px}p{color:#555;font-size:14px;line-height:1.6}
+pre{background:#f5f5f5;padding:12px;border-radius:6px;font-size:12px;text-align:left;white-space:pre-wrap}
+a{color:#3b82f6;font-size:13px}</style></head>
+<body><div class="box">
+<h2>⚙️ Staff Cards Not Yet Active</h2>
+<p>The staff e-business card feature requires two files to be deployed to the server:</p>
+<pre>models/staffCard.js\nservices/staffSmartLink.js</pre>
+<p>Download them from the ZimQuote outputs, upload via SCP/SFTP, then restart PM2:</p>
+<pre>pm2 restart cripfcnt</pre>
+<a href="/zq-admin/suppliers/${supplierId}">← Back to Supplier</a>
+</div></body></html>`;
+
+router.get("/suppliers/:id/staff-cards", requireSupplierAdmin, async (req, res) => {
+  const m = await _loadStaffModules();
+  if (!m) return res.send(_NOT_DEPLOYED_HTML(req.params.id));
+  const { StaffCard, buildStaffQrImageUrl, buildStaffAnalyticsSummary, STAFF_LINK_SOURCES: SRC } = m;
+  try {
+    const supplier = await SupplierProfile.findById(req.params.id).lean();
+    if (!supplier) return res.redirect("/zq-admin/suppliers");
+    const cards = await StaffCard.find({ supplierId: req.params.id }).sort({ createdAt: -1 }).lean();
+    const successMsg = req.query.success ? `<div style="background:#dcfce7;color:#16a34a;padding:12px 16px;border-radius:8px;margin-bottom:16px;font-size:13px">✅ ${esc(req.query.success)}</div>` : "";
+    const errorMsg   = req.query.error   ? `<div style="background:#fee2e2;color:#dc2626;padding:12px 16px;border-radius:8px;margin-bottom:16px;font-size:13px">❌ ${esc(req.query.error)}</div>` : "";
+    const totalViews = cards.reduce((s,c) => s+(c.zqLinkViews||0), 0);
+    const totalConvs = cards.reduce((s,c) => s+(c.zqLinkConversions||0), 0);
+    const sortedByViews = [...cards].sort((a,b) => (b.zqLinkViews||0)-(a.zqLinkViews||0)).slice(0,3);
+    const sortedByConvs = [...cards].sort((a,b) => (b.zqLinkConversions||0)-(a.zqLinkConversions||0)).slice(0,3);
+    const leaderboardHtml = cards.length >= 2 ? `
+      <div style="background:linear-gradient(135deg,#1e3a5f 0%,#2563eb 100%);color:#fff;border-radius:8px;padding:20px;margin-bottom:20px;box-shadow:0 1px 4px rgba(0,0,0,.12)">
+        <h2 style="color:#fff;margin:0 0 16px;font-size:14px;letter-spacing:.05em;text-transform:uppercase">🏆 Staff Leaderboard</h2>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px">
+          <div style="flex:1;min-width:160px">
+            <div style="font-size:11px;opacity:.7;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">👁 Most Views</div>
+            ${sortedByViews.map((c,i) => `<div style="display:flex;justify-content:space-between;margin-bottom:5px;font-size:13px"><span>${["🥇","🥈","🥉"][i]} ${esc(c.name)}</span><span style="font-weight:700">${c.zqLinkViews||0}</span></div>`).join("")}
+          </div>
+          <div style="flex:1;min-width:160px">
+            <div style="font-size:11px;opacity:.7;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">✅ Most Enquiries</div>
+            ${sortedByConvs.map((c,i) => `<div style="display:flex;justify-content:space-between;margin-bottom:5px;font-size:13px"><span>${["🥇","🥈","🥉"][i]} ${esc(c.name)}</span><span style="font-weight:700">${c.zqLinkConversions||0}</span></div>`).join("")}
+          </div>
+        </div>
+        <div style="display:flex;gap:16px;border-top:1px solid rgba(255,255,255,.2);padding-top:12px;font-size:12px;opacity:.9;flex-wrap:wrap">
+          <span>📊 Team views: <strong>${totalViews}</strong></span>
+          <span>💬 Team enquiries: <strong>${totalConvs}</strong></span>
+          <span>👥 Active: <strong>${cards.filter(c=>c.active).length}/${cards.length}</strong></span>
+        </div>
+      </div>` : "";
+    const cardRows = cards.map(card => {
+      const stats = buildStaffAnalyticsSummary(card);
+      const qrUrl = buildStaffQrImageUrl(String(card._id), 80);
+      return `<tr style="border-bottom:1px solid #f0f0f0">
+        <td style="padding:12px 8px;vertical-align:middle">
+          <span style="display:inline-block;width:32px;height:32px;border-radius:50%;background:#e0e7ff;color:#4f46e5;text-align:center;line-height:32px;font-size:13px;font-weight:700;margin-right:8px;vertical-align:middle">${esc(card.name.charAt(0).toUpperCase())}</span>
+          <strong style="font-size:14px">${esc(card.name)}</strong><br>
+          <span style="font-size:11px;color:#888;margin-left:40px">${esc(card.title||"—")}</span>
+          ${card.locationLabel?`<br><span style="font-size:11px;color:#aaa;margin-left:40px">📍 ${esc(card.locationLabel)}</span>`:""}
+        </td>
+        <td style="padding:12px 8px;vertical-align:middle;font-size:13px">${esc(card.phone)}${card.email?`<br><span style="color:#888;font-size:11px">${esc(card.email)}</span>`:""}</td>
+        <td style="padding:12px 8px;vertical-align:middle;text-align:center"><img src="${esc(qrUrl)}" width="56" height="56" style="border:1px solid #eee;border-radius:4px" loading="lazy"></td>
+        <td style="padding:12px 8px;vertical-align:middle;font-size:12px"><strong>${stats.views}</strong> views<br><strong>${stats.converts}</strong> enquiries<br><span style="color:#888;font-size:11px">${esc(stats.topSource)}</span></td>
+        <td style="padding:12px 8px;vertical-align:middle"><span style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;background:${card.active?"#dcfce7":"#fee2e2"};color:${card.active?"#16a34a":"#dc2626"}">${card.active?"Active":"Inactive"}</span></td>
+        <td style="padding:12px 8px;vertical-align:middle;text-align:right;white-space:nowrap">
+          <a href="/zq-admin/suppliers/${esc(req.params.id)}/staff-cards/${esc(String(card._id))}/smart-link" style="display:inline-block;margin:2px;padding:5px 10px;background:#3b82f6;color:#fff;border-radius:5px;font-size:12px;text-decoration:none">🔗 Smart Link</a>
+          <a href="/zq-admin/suppliers/${esc(req.params.id)}/staff-cards/${esc(String(card._id))}/business-card" target="_blank" style="display:inline-block;margin:2px;padding:5px 10px;background:#8b5cf6;color:#fff;border-radius:5px;font-size:12px;text-decoration:none">🖨 Print</a>
+          <a href="/zq-admin/suppliers/${esc(req.params.id)}/staff-cards/${esc(String(card._id))}/edit" style="display:inline-block;margin:2px;padding:5px 10px;background:#f59e0b;color:#fff;border-radius:5px;font-size:12px;text-decoration:none">✏️ Edit</a>
+          <form method="POST" action="/zq-admin/suppliers/${esc(req.params.id)}/staff-cards/${esc(String(card._id))}/toggle-active" style="display:inline">
+            <button type="submit" style="margin:2px;padding:5px 10px;background:${card.active?"#6b7280":"#10b981"};color:#fff;border:none;border-radius:5px;font-size:12px;cursor:pointer">${card.active?"Deactivate":"Activate"}</button>
+          </form>
+          <form method="POST" action="/zq-admin/suppliers/${esc(req.params.id)}/staff-cards/${esc(String(card._id))}/delete" style="display:inline" onsubmit="return confirm('Delete card for ${esc(card.name).replace(/'/g,"\\'")}?')">
+            <button type="submit" style="margin:2px;padding:5px 10px;background:#ef4444;color:#fff;border:none;border-radius:5px;font-size:12px;cursor:pointer">🗑</button>
+          </form>
+        </td>
+      </tr>`;
+    }).join("");
+    res.send(`<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Staff E-Business Cards – ${esc(supplier.businessName)}</title>
+<style>body{font-family:system-ui,sans-serif;margin:0;background:#f8f9fa;color:#222}.wrap{max-width:1150px;margin:0 auto;padding:24px 16px}h1{font-size:20px;margin:0 0 4px}.sub{font-size:13px;color:#888;margin-bottom:20px}.back{font-size:13px;color:#3b82f6;text-decoration:none;margin-bottom:16px;display:inline-block}table{width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.08)}th{background:#f5f5f5;font-size:11px;text-transform:uppercase;padding:10px 8px;text-align:left;color:#888}.card{background:#fff;border-radius:8px;padding:20px;margin-bottom:20px;box-shadow:0 1px 4px rgba(0,0,0,.08)}.form-row{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px}.form-row label{display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:600;flex:1;min-width:160px}.form-row input,.form-row textarea{padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;font-family:inherit}.btn-primary{padding:10px 20px;background:#3b82f6;color:#fff;border:none;border-radius:6px;font-size:14px;cursor:pointer;font-weight:600}.empty{text-align:center;padding:40px;color:#aaa;font-size:14px}</style></head>
+<body><div class="wrap">
+  <a class="back" href="/zq-admin/suppliers/${esc(req.params.id)}">← Back to Supplier</a>
+  <h1>👥 Staff E-Business Cards</h1>
+  <p class="sub">${esc(supplier.businessName)} · ${cards.length} card${cards.length!==1?"s":""} issued</p>
+  ${successMsg}${errorMsg}${leaderboardHtml}
+  <div class="card">
+    <h2 style="font-size:16px;margin:0 0 16px">➕ Issue New E-Business Card</h2>
+    <form method="POST" action="/zq-admin/suppliers/${esc(req.params.id)}/staff-cards/add">
+      <div class="form-row">
+        <label>Full Name *<input name="name" required placeholder="e.g. Muchaneta Horinda" maxlength="60"></label>
+        <label>Job Title<input name="title" placeholder="e.g. Sales &amp; Marketing Consultant" maxlength="80"></label>
+      </div>
+      <div class="form-row">
+        <label>Phone * <span style="font-weight:400;color:#888">(07xxxxxxxx or 263xxxxxxxxx)</span><input name="phone" required placeholder="0772570345" maxlength="20"></label>
+        <label>Email (optional)<input name="email" type="email" placeholder="name@company.co.zw" maxlength="80"></label>
+      </div>
+      <div class="form-row">
+        <label>Location Label<input name="locationLabel" placeholder="e.g. Mutare Branch" maxlength="60"></label>
+        <label>Personal Tagline<input name="tagline" placeholder="e.g. For the golden finish you deserve" maxlength="100"></label>
+      </div>
+      <div class="form-row"><label>Admin Notes <span style="font-weight:400;color:#888">(never shown to buyers)</span><textarea name="adminNotes" rows="2" maxlength="300"></textarea></label></div>
+      <button type="submit" class="btn-primary">Issue Card &amp; Generate Smart Link →</button>
+    </form>
+  </div>
+  ${cards.length===0 ? `<div class="empty">No staff cards yet. Use the form above to issue the first one.</div>`
+    : `<table><thead><tr><th>Staff Member</th><th>Phone / Email</th><th>QR</th><th>Analytics</th><th>Status</th><th style="text-align:right">Actions</th></tr></thead><tbody>${cardRows}</tbody></table>`}
+</div></body></html>`);
+  } catch (err) {
+    res.redirect(`/zq-admin/suppliers/${req.params.id}?error=${encodeURIComponent(err.message)}`);
+  }
+});
+
+router.post("/suppliers/:id/staff-cards/add", requireSupplierAdmin, async (req, res) => {
+  const m = await _loadStaffModules();
+  if (!m) return res.send(_NOT_DEPLOYED_HTML(req.params.id));
+  const { StaffCard, assignSlugToStaffCard } = m;
+  try {
+    const supplier = await SupplierProfile.findById(req.params.id).lean();
+    if (!supplier) return res.redirect("/zq-admin/suppliers");
+    const { name, title, phone: rawPhone, email, locationLabel, tagline, adminNotes } = req.body;
+    if (!name?.trim()) return res.redirect(`/zq-admin/suppliers/${req.params.id}/staff-cards?error=Name+is+required`);
+    let phone = String(rawPhone||"").replace(/\D+/g,"");
+    if (phone.startsWith("0")&&phone.length===10) phone="263"+phone.slice(1);
+    if (!phone||phone.length<9) return res.redirect(`/zq-admin/suppliers/${req.params.id}/staff-cards?error=${encodeURIComponent("Invalid phone — use 07xxxxxxxx or 263xxxxxxxxx")}`);
+    const card = await StaffCard.create({
+      supplierId: req.params.id, name: name.trim(), title: (title||"").trim(), phone,
+      email: (email||"").trim(), locationLabel: (locationLabel||"").trim(),
+      tagline: (tagline||"").trim().slice(0,100), adminNotes: (adminNotes||"").trim().slice(0,300), active: true,
+    });
+    try { await assignSlugToStaffCard(String(card._id)); } catch(_){}
+    res.redirect(`/zq-admin/suppliers/${req.params.id}/staff-cards/${String(card._id)}/smart-link?success=${encodeURIComponent("Card issued! Share the smart link with "+card.name+".")}`);
+  } catch (err) {
+    res.redirect(`/zq-admin/suppliers/${req.params.id}/staff-cards?error=${encodeURIComponent(err.message)}`);
+  }
+});
+
+router.get("/suppliers/:id/staff-cards/:cid/edit", requireSupplierAdmin, async (req, res) => {
+  const m = await _loadStaffModules();
+  if (!m) return res.send(_NOT_DEPLOYED_HTML(req.params.id));
+  const { StaffCard } = m;
+  try {
+    const supplier = await SupplierProfile.findById(req.params.id).lean();
+    const card     = await StaffCard.findById(req.params.cid).lean();
+    if (!supplier||!card) return res.redirect(`/zq-admin/suppliers/${req.params.id}/staff-cards`);
+    const msg = req.query.success ? `<div style="background:#dcfce7;color:#16a34a;padding:12px 16px;border-radius:8px;margin-bottom:16px;font-size:13px">✅ ${esc(req.query.success)}</div>` : "";
+    res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Edit Card – ${esc(card.name)}</title>
+<style>body{font-family:system-ui,sans-serif;margin:0;background:#f8f9fa}.wrap{max-width:700px;margin:0 auto;padding:24px 16px}.back{font-size:13px;color:#3b82f6;text-decoration:none;margin-bottom:16px;display:inline-block}.card{background:#fff;border-radius:8px;padding:24px;box-shadow:0 1px 4px rgba(0,0,0,.08)}h1{font-size:18px;margin:0 0 20px}.form-row{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px}.form-row label{display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:600;flex:1;min-width:180px}.form-row input,.form-row textarea{padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;font-family:inherit}.btn-primary{padding:10px 20px;background:#3b82f6;color:#fff;border:none;border-radius:6px;font-size:14px;cursor:pointer;font-weight:600}</style></head>
+<body><div class="wrap"><a class="back" href="/zq-admin/suppliers/${esc(req.params.id)}/staff-cards">← Staff Cards</a>${msg}
+<div class="card"><h1>✏️ Edit – ${esc(card.name)}</h1>
+<form method="POST" action="/zq-admin/suppliers/${esc(req.params.id)}/staff-cards/${esc(req.params.cid)}/edit">
+<div class="form-row"><label>Full Name *<input name="name" required value="${esc(card.name)}" maxlength="60"></label><label>Job Title<input name="title" value="${esc(card.title||"")}" maxlength="80"></label></div>
+<div class="form-row"><label>Phone *<input name="phone" required value="${esc(card.phone)}" maxlength="20"></label><label>Email<input name="email" type="email" value="${esc(card.email||"")}" maxlength="80"></label></div>
+<div class="form-row"><label>Location Label<input name="locationLabel" value="${esc(card.locationLabel||"")}" maxlength="60"></label><label>Tagline<input name="tagline" value="${esc(card.tagline||"")}" maxlength="100"></label></div>
+<div class="form-row"><label>Admin Notes<textarea name="adminNotes" rows="2" maxlength="300">${esc(card.adminNotes||"")}</textarea></label></div>
+<div style="display:flex;gap:12px;align-items:center;margin-top:8px">
+  <button type="submit" class="btn-primary">Save Changes</button>
+  <a href="/zq-admin/suppliers/${esc(req.params.id)}/staff-cards/${esc(req.params.cid)}/smart-link" style="color:#3b82f6;font-size:13px;text-decoration:none">🔗 Smart Link →</a>
+</div></form></div></div></body></html>`);
+  } catch (err) {
+    res.redirect(`/zq-admin/suppliers/${req.params.id}/staff-cards?error=${encodeURIComponent(err.message)}`);
+  }
+});
+
+router.post("/suppliers/:id/staff-cards/:cid/edit", requireSupplierAdmin, async (req, res) => {
+  const m = await _loadStaffModules();
+  if (!m) return res.send(_NOT_DEPLOYED_HTML(req.params.id));
+  const { StaffCard, assignSlugToStaffCard } = m;
+  try {
+    const card = await StaffCard.findById(req.params.cid).lean();
+    if (!card) return res.redirect(`/zq-admin/suppliers/${req.params.id}/staff-cards?error=Card+not+found`);
+    const { name, title, phone: rawPhone, email, locationLabel, tagline, adminNotes } = req.body;
+    if (!name?.trim()) return res.redirect(`/zq-admin/suppliers/${req.params.id}/staff-cards/${req.params.cid}/edit?error=Name+required`);
+    let phone = String(rawPhone||"").replace(/\D+/g,"");
+    if (phone.startsWith("0")&&phone.length===10) phone="263"+phone.slice(1);
+    if (!phone||phone.length<9) return res.redirect(`/zq-admin/suppliers/${req.params.id}/staff-cards/${req.params.cid}/edit?error=${encodeURIComponent("Invalid phone number")}`);
+    const nameChanged = card.name.trim().toLowerCase()!==name.trim().toLowerCase();
+    await StaffCard.findByIdAndUpdate(req.params.cid,{$set:{name:name.trim(),title:(title||"").trim(),phone,email:(email||"").trim(),locationLabel:(locationLabel||"").trim(),tagline:(tagline||"").trim().slice(0,100),adminNotes:(adminNotes||"").trim().slice(0,300)}});
+    if (nameChanged){try{await assignSlugToStaffCard(req.params.cid,{force:true});}catch(_){}}
+    res.redirect(`/zq-admin/suppliers/${req.params.id}/staff-cards/${req.params.cid}/edit?success=${encodeURIComponent("Card updated")}`);
+  } catch (err) {
+    res.redirect(`/zq-admin/suppliers/${req.params.id}/staff-cards?error=${encodeURIComponent(err.message)}`);
+  }
+});
+
+router.post("/suppliers/:id/staff-cards/:cid/toggle-active", requireSupplierAdmin, async (req, res) => {
+  const m = await _loadStaffModules();
+  if (!m) return res.send(_NOT_DEPLOYED_HTML(req.params.id));
+  const { StaffCard } = m;
+  try {
+    const card = await StaffCard.findById(req.params.cid).lean();
+    if (!card) return res.redirect(`/zq-admin/suppliers/${req.params.id}/staff-cards?error=Card+not+found`);
+    await StaffCard.findByIdAndUpdate(req.params.cid,{$set:{active:!card.active}});
+    const msg = card.active?`${card.name}'s card deactivated`:`${card.name}'s card activated`;
+    res.redirect(`/zq-admin/suppliers/${req.params.id}/staff-cards?success=${encodeURIComponent(msg)}`);
+  } catch (err) {
+    res.redirect(`/zq-admin/suppliers/${req.params.id}/staff-cards?error=${encodeURIComponent(err.message)}`);
+  }
+});
+
+router.post("/suppliers/:id/staff-cards/:cid/delete", requireSupplierAdmin, async (req, res) => {
+  const m = await _loadStaffModules();
+  if (!m) return res.send(_NOT_DEPLOYED_HTML(req.params.id));
+  const { StaffCard } = m;
+  try {
+    const card = await StaffCard.findById(req.params.cid).lean();
+    if (!card) return res.redirect(`/zq-admin/suppliers/${req.params.id}/staff-cards?error=Card+not+found`);
+    await StaffCard.findByIdAndDelete(req.params.cid);
+    res.redirect(`/zq-admin/suppliers/${req.params.id}/staff-cards?success=${encodeURIComponent(card.name+"'s card deleted")}`);
+  } catch (err) {
+    res.redirect(`/zq-admin/suppliers/${req.params.id}/staff-cards?error=${encodeURIComponent(err.message)}`);
+  }
+});
+
+router.get("/suppliers/:id/staff-cards/:cid/smart-link", requireSupplierAdmin, async (req, res) => {
+  const m = await _loadStaffModules();
+  if (!m) return res.send(_NOT_DEPLOYED_HTML(req.params.id));
+  const { StaffCard, assignSlugToStaffCard, buildStaffDeepLink, buildAllStaffLinks, buildStaffQrImageUrl, buildStaffProfileCard, buildStaffSharableCaption, buildStaffAnalyticsSummary } = m;
+  try {
+    const supplier = await SupplierProfile.findById(req.params.id).lean();
+    let card       = await StaffCard.findById(req.params.cid).lean();
+    if (!supplier||!card) return res.redirect(`/zq-admin/suppliers/${req.params.id}/staff-cards`);
+    if (!card.zqSlug){try{await assignSlugToStaffCard(String(card._id));card=await StaffCard.findById(card._id).lean();}catch(_){}}
+    const cardId     = String(card._id);
+    const allLinks   = buildAllStaffLinks(cardId);
+    const directLink = buildStaffDeepLink(cardId, null);
+    const qrUrl400   = buildStaffQrImageUrl(cardId, 400);
+    const qrUrl600   = buildStaffQrImageUrl(cardId, 600);
+    const stats      = buildStaffAnalyticsSummary(card);
+    const srcViews   = card.zqSourceViews||{};
+    const srcConvs   = card.zqSourceConversions||{};
+    const preview    = buildStaffProfileCard(card, supplier);
+    const successMsg = req.query.success ? `<div style="background:#dcfce7;color:#16a34a;padding:12px 16px;border-radius:8px;margin-bottom:16px;font-size:13px">✅ ${esc(req.query.success)}</div>` : "";
+    const sourceRows = Object.entries(STAFF_LINK_SOURCES).map(([src, label]) => {
+      const link    = src==="direct"?directLink:allLinks[src];
+      const caption = buildStaffSharableCaption(card, supplier, src);
+      return `<tr style="border-bottom:1px solid #f5f5f5">
+        <td style="padding:10px 8px;font-size:13px;font-weight:600;white-space:nowrap">${esc(label)}</td>
+        <td style="padding:10px 8px;font-size:11px;max-width:240px;word-break:break-all">
+          <code style="background:#f5f5f5;padding:3px 6px;border-radius:4px;font-size:10px">${esc(link)}</code>
+          <button onclick="navigator.clipboard.writeText(${JSON.stringify(link)});this.textContent='✅'" style="margin-left:6px;padding:2px 8px;font-size:11px;border:1px solid #d1d5db;border-radius:4px;cursor:pointer;background:#fff">Copy</button>
+        </td>
+        <td style="padding:10px 8px;text-align:center;font-size:13px;font-weight:700">${srcViews[src]||0}</td>
+        <td style="padding:10px 8px;text-align:center;font-size:13px;font-weight:700">${srcConvs[src]||0}</td>
+        <td style="padding:10px 8px"><details><summary style="cursor:pointer;font-size:12px;color:#3b82f6">📋 Caption</summary>
+          <pre style="font-size:11px;background:#f9f9f9;padding:8px;border-radius:4px;white-space:pre-wrap;margin-top:6px;max-height:180px;overflow-y:auto">${esc(caption)}</pre>
+          <button onclick="navigator.clipboard.writeText(this.previousElementSibling.textContent.trim());this.textContent='✅'" style="margin-top:4px;padding:3px 10px;font-size:11px;border:1px solid #d1d5db;border-radius:4px;cursor:pointer;background:#fff">Copy Caption</button>
+        </details></td>
+      </tr>`;
+    }).join("");
+    res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Smart Link – ${esc(card.name)}</title>
+<style>body{font-family:system-ui,sans-serif;margin:0;background:#f8f9fa;color:#222}.wrap{max-width:1100px;margin:0 auto;padding:24px 16px}.back{font-size:13px;color:#3b82f6;text-decoration:none;margin-bottom:16px;display:inline-block}h1{font-size:20px;margin:0 0 4px}.sub{font-size:13px;color:#888;margin-bottom:16px}.cols{display:flex;gap:20px;flex-wrap:wrap}.col{flex:1;min-width:280px}.card{background:#fff;border-radius:8px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,.08);margin-bottom:20px}.card h2{font-size:12px;text-transform:uppercase;color:#888;margin:0 0 14px;letter-spacing:.05em}.stat-row{display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap}.stat{flex:1;min-width:80px;background:#f5f5f5;border-radius:8px;padding:12px 16px;text-align:center}.stat .n{font-size:26px;font-weight:700}.stat .l{font-size:11px;color:#888;margin-top:2px}table{width:100%;border-collapse:collapse}th{background:#f5f5f5;font-size:11px;text-transform:uppercase;padding:8px;text-align:left;color:#888}.preview{background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:16px;font-family:monospace;font-size:12px;white-space:pre-wrap;line-height:1.7}</style></head>
+<body><div class="wrap">
+<a class="back" href="/zq-admin/suppliers/${esc(req.params.id)}/staff-cards">← Staff Cards</a>
+${successMsg}
+<div style="display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:16px">
+  <div><h1>🔗 ${esc(card.name)}'s Smart Link</h1>
+  <p class="sub">${esc(card.title||supplier.businessName)} · <span style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;background:${card.active?"#dcfce7":"#fee2e2"};color:${card.active?"#16a34a":"#dc2626"}">${card.active?"Active":"Inactive"}</span>${card.zqSlug?`<span style="margin-left:8px;font-size:12px;color:#888">Slug: <code>${esc(card.zqSlug)}</code></span>`:""}</p></div>
+  <div style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">
+    <a href="/zq-admin/suppliers/${esc(req.params.id)}/staff-cards/${esc(cardId)}/business-card" target="_blank" style="padding:8px 14px;background:#8b5cf6;color:#fff;border-radius:6px;font-size:13px;text-decoration:none;font-weight:600">🖨 Print Card</a>
+    <a href="/zq-admin/suppliers/${esc(req.params.id)}/staff-cards/${esc(cardId)}/edit" style="padding:8px 14px;background:#f59e0b;color:#fff;border-radius:6px;font-size:13px;text-decoration:none;font-weight:600">✏️ Edit</a>
+    <form method="POST" action="/zq-admin/suppliers/${esc(req.params.id)}/staff-cards/${esc(cardId)}/toggle-active" style="display:inline">
+      <button type="submit" style="padding:8px 14px;background:${card.active?"#6b7280":"#10b981"};color:#fff;border:none;border-radius:6px;font-size:13px;cursor:pointer;font-weight:600">${card.active?"Deactivate":"Activate"}</button>
+    </form>
+  </div>
+</div>
+<div class="stat-row">
+  <div class="stat"><div class="n">${stats.views}</div><div class="l">Total Views</div></div>
+  <div class="stat"><div class="n">${stats.converts}</div><div class="l">Enquiries</div></div>
+  <div class="stat"><div class="n">${stats.convRate}%</div><div class="l">Conv. Rate</div></div>
+  <div class="stat"><div class="n" style="font-size:14px">${esc(stats.topSource)}</div><div class="l">Top Source</div></div>
+</div>
+<div class="cols">
+  <div class="col">
+    <div class="card"><h2>📱 QR Code</h2>
+      <div style="text-align:center;margin-bottom:12px"><img src="${esc(qrUrl400)}" width="200" height="200" style="border:1px solid #eee;border-radius:8px"></div>
+      <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+        <a href="${esc(qrUrl400)}" target="_blank" style="padding:7px 14px;background:#3b82f6;color:#fff;border-radius:6px;font-size:12px;text-decoration:none">Open QR</a>
+        <a href="${esc(qrUrl600)}" target="_blank" style="padding:7px 14px;background:#6b7280;color:#fff;border-radius:6px;font-size:12px;text-decoration:none">600px (Print)</a>
+      </div>
+    </div>
+    <div class="card"><h2>🔗 Direct WhatsApp Link</h2>
+      <code style="display:block;background:#f5f5f5;padding:10px;border-radius:6px;font-size:11px;word-break:break-all;margin-bottom:10px">${esc(directLink)}</code>
+      <button onclick="navigator.clipboard.writeText(${JSON.stringify(directLink)});this.textContent='✅ Copied'" style="padding:7px 14px;background:#fff;border:1px solid #d1d5db;border-radius:6px;font-size:12px;cursor:pointer">Copy Link</button>
+      <a href="${esc(directLink)}" target="_blank" style="margin-left:8px;padding:7px 14px;background:#25d366;color:#fff;border-radius:6px;font-size:12px;text-decoration:none">Test on WhatsApp</a>
+    </div>
+  </div>
+  <div class="col">
+    <div class="card"><h2>💬 What buyers see on WhatsApp</h2>
+      <div class="preview">${esc(preview)}</div>
+    </div>
+  </div>
+</div>
+<div class="card"><h2>📊 Source-Tracked Links &amp; Captions</h2>
+  <div style="overflow-x:auto"><table><thead><tr><th>Platform</th><th>Link</th><th>Views</th><th>Enquiries</th><th>Caption</th></tr></thead><tbody>${sourceRows}</tbody></table></div>
+</div>
+</div></body></html>`);
+  } catch (err) {
+    res.redirect(`/zq-admin/suppliers/${req.params.id}/staff-cards?error=${encodeURIComponent(err.message)}`);
+  }
+});
+
+router.post("/suppliers/:id/staff-cards/:cid/regenerate-slug", requireSupplierAdmin, async (req, res) => {
+  const m = await _loadStaffModules();
+  if (!m) return res.send(_NOT_DEPLOYED_HTML(req.params.id));
+  const { assignSlugToStaffCard } = m;
+  try {
+    const slug = await assignSlugToStaffCard(req.params.cid, { force: true });
+    res.redirect(`/zq-admin/suppliers/${req.params.id}/staff-cards/${req.params.cid}/smart-link?success=${encodeURIComponent("Slug regenerated: "+slug)}`);
+  } catch (err) {
+    res.redirect(`/zq-admin/suppliers/${req.params.id}/staff-cards/${req.params.cid}/smart-link?error=${encodeURIComponent(err.message)}`);
+  }
+});
+
+router.get("/suppliers/:id/staff-cards/:cid/business-card", requireSupplierAdmin, async (req, res) => {
+  const m = await _loadStaffModules();
+  if (!m) return res.send(_NOT_DEPLOYED_HTML(req.params.id));
+  const { StaffCard, buildStaffQrImageUrl } = m;
+  try {
+    const supplier = await SupplierProfile.findById(req.params.id).lean();
+    const card     = await StaffCard.findById(req.params.cid).lean();
+    if (!supplier||!card) return res.status(404).send("Not found");
+    const qrUrl    = buildStaffQrImageUrl(String(card._id), 300);
+    const location = card.locationLabel || [supplier.location?.area, supplier.location?.city].filter(Boolean).join(", ");
+    const phone    = (() => { const p=card.phone; return p.length>=11?`+${p.slice(0,3)} ${p.slice(3,5)} ${p.slice(5,8)} ${p.slice(8)}`:p; })();
+    const tagline  = card.tagline || supplier.businessName;
+    res.setHeader("Content-Type","text/html");
+    res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Business Card – ${esc(card.name)}</title>
+<style>@page{size:85mm 54mm;margin:0}*{box-sizing:border-box;margin:0;padding:0}body{width:85mm;height:54mm;font-family:Arial,sans-serif;overflow:hidden}.card{width:85mm;height:54mm;background:#0f1f3d;color:#fff;display:flex;position:relative;overflow:hidden}.accent{width:8mm;background:linear-gradient(180deg,#b8860b 0%,#ffd700 50%,#b8860b 100%);flex-shrink:0}.content{flex:1;padding:5mm 4mm 4mm 5mm;display:flex;flex-direction:column;justify-content:space-between}.top{display:flex;justify-content:space-between;align-items:flex-start}.name-block .name{font-size:11pt;font-weight:700;color:#ffd700;letter-spacing:.03em}.name-block .title{font-size:7pt;color:#cbd5e1;margin-top:1mm}.name-block .biz{font-size:8pt;font-weight:600;color:#fff;margin-top:2mm}.name-block .loc{font-size:6pt;color:#94a3b8;margin-top:0.5mm}.qr-block{display:flex;flex-direction:column;align-items:center;gap:1mm}.qr-block img{width:16mm;height:16mm;border:1px solid #ffd700;border-radius:2px}.qr-block .scan-text{font-size:5pt;color:#94a3b8;text-align:center;white-space:nowrap}.bottom{display:flex;flex-direction:column;gap:1mm}.contact-line{font-size:7pt;color:#e2e8f0;display:flex;align-items:center;gap:1.5mm}.contact-line .icon{color:#ffd700;font-size:7pt}.tagline{font-size:5.5pt;color:#ffd700;font-style:italic;margin-top:1mm;text-align:center;border-top:0.5px solid rgba(255,215,0,.3);padding-top:1.5mm}.zq-badge{position:absolute;bottom:2mm;right:3mm;font-size:5pt;color:rgba(255,255,255,.3)}@media screen{body{display:flex;align-items:center;justify-content:center;height:100vh;background:#555}.card{box-shadow:0 8px 32px rgba(0,0,0,.5);border-radius:3mm}.print-btn{position:fixed;top:20px;right:20px;padding:10px 20px;background:#3b82f6;color:#fff;border:none;border-radius:6px;font-size:14px;cursor:pointer;font-family:system-ui}}</style></head>
+<body><button class="print-btn" onclick="window.print()">🖨 Print / Save PDF</button>
+<div class="card"><div class="accent"></div><div class="content">
+<div class="top"><div class="name-block">
+  <div class="name">${esc(card.name)}</div>
+  ${card.title?`<div class="title">${esc(card.title)}</div>`:""}
+  <div class="biz">${esc(supplier.businessName)}</div>
+  ${location?`<div class="loc">📍 ${esc(location)}</div>`:""}
+</div><div class="qr-block"><img src="${esc(qrUrl)}" alt="QR"><div class="scan-text">Scan to quote</div></div></div>
+<div class="bottom">
+  ${phone?`<div class="contact-line"><span class="icon">📱</span><span>${esc(phone)}</span></div>`:""}
+  ${card.email?`<div class="contact-line"><span class="icon">✉</span><span>${esc(card.email)}</span></div>`:""}
+  ${supplier.website?`<div class="contact-line"><span class="icon">🌐</span><span>${esc(supplier.website.replace(/^https?:\/\//,""))}</span></div>`:""}
+  ${tagline?`<div class="tagline">"${esc(tagline)}"</div>`:""}
+</div></div><div class="zq-badge">ZimQuote</div></div></body></html>`);
+  } catch (err) {
+    res.status(500).send("Error: "+esc(err.message));
   }
 });
 
