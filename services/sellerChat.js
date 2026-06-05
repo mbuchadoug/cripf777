@@ -3617,6 +3617,27 @@ function _parseItemInput(raw, knownItems = [], isService = false) {
     if (results.length) return results;
   }
 
+  // ── Plain number list: "1,4,6" or "1 4 6" or "2, 5" → resolve by catalogue index ──
+  // Must check BEFORE free-text so bare numbers are looked up, not stored literally.
+  const _isPlainNumberList = /^[\d][\d,\s]*$/.test(raw.trim());
+  if (_isPlainNumberList) {
+    const _indices = raw.trim().split(/[,\s]+/).map(s => s.trim()).filter(Boolean);
+    const _resolved = [];
+    for (const _n of _indices) {
+      const _idx = parseInt(_n, 10) - 1;
+      const _item = knownItems[_idx];
+      if (_item) {
+        _resolved.push({
+          name:  isService ? _item.service : _item.product,
+          qty:   1,
+          price: isService ? (parseFloat(_item.rate) || 0) : (parseFloat(_item.amount) || 0)
+        });
+      }
+    }
+    if (_resolved.length) return _resolved;
+    // Fall through to free-text if no indices matched (e.g. numbers out of range)
+  }
+
   // Free text: split by comma or newline
   const parts = raw.split(/[,\n]+/).map(s => s.trim()).filter(Boolean);
   for (const part of parts) {
