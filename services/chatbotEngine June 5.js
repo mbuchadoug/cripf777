@@ -4673,30 +4673,12 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
               `_add: Travel to site - $30_\n\n` +
               `Type *confirm* to send · *cancel* to discard`;
 
-            // Short, clear guide — avoid wall-of-text
-            const _rfqGuide =
-              `*How to price:*\n` +
-              `_1×350_ → set item 1 to $350\n` +
-              `_1×350, 2×120_ → price multiple\n` +
-              `_pick 3_ → add your catalogue item 3\n` +
-              `_add: Site visit - $80_ → add custom item\n` +
-              `_rename 1: BOQ 4-bed house_ → shorten long name\n` +
-              `_note: 50% deposit required_ → add PDF note\n\n` +
-              `Type *confirm* to send  ·  *cancel* to discard`;
-
-            return sendButtons(from,
-              {
-                text:
-                  `📋 *Quote ${_scRefNum}* — price and send to buyer\n\n` +
-                  `Buyer: *${_scDraft.buyerName || _scDraft.buyerPhone || "Buyer"}*\n` +
-                  _buyerNotesSection +
-                  `*Requested:*\n${_rfqItemList}\n\n` +
-                  _rfqGuide,
-                buttons: [
-                  { id: `sc_quote_edit_${_scRefNum}`,    title: "✏️ Edit & Price" },
-                  { id: `sc_quote_preview_${_scRefNum}`, title: "👁 Preview PDF" }
-                ]
-              }
+            return sendText(from,
+              `📋 *Quote Request - ${_scRefNum}*\n\n` +
+              `Buyer: *${_scDraft.buyerName || _scDraft.buyerPhone || "Buyer"}*\n` +
+              _buyerNotesSection + `\n` +
+              `*Items requested:*\n${_rfqItemList}\n\n` +
+              _howToSection
             );
           }
  
@@ -4704,25 +4686,18 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
           const _itemRows = _scItems.map((l, i) =>
             `${i + 1}. ${l.name} × ${l.qty} - $${Number(l.unitPrice).toFixed(2)} = $${Number(l.lineTotal).toFixed(2)}`
           ).join("\n");
-
-          // If ALL items are $0, this is a natural-text request that needs pricing.
-          // Don't show "Confirm & Send" — route seller straight to the edit flow.
-          const _allZero = _scItems.every(l => !l.unitPrice || l.unitPrice === 0);
-
+ 
           return sendButtons(from, {
             text:
-              `📋 *Quote ${_scRefNum}*\n\n` +
+              `📋 *Quote to confirm - ${_scRefNum}*\n\n` +
               `Buyer: ${_scDraft.buyerName || _scDraft.buyerPhone || "Buyer"}\n\n` +
               `${_itemRows}\n` +
               `${"─".repeat(28)}\n` +
               `*Total: $${_scTotal.toFixed(2)} USD*\n\n` +
-              (_allZero
-                ? `⚠️ *Items need pricing before you can send.*\n` +
-                  `Tap *Edit & Price* to set prices, add items from your catalogue,\nor add custom items.`
-                : `Confirm to send the quote and PDF to the buyer, or edit the prices first.`),
+              `Confirm to send the quote and PDF to the buyer, or edit the prices first.`,
             buttons: [
-              ...(_allZero ? [] : [{ id: `sc_quote_confirm_${_scRefNum}`, title: "✅ Confirm & Send" }]),
-              { id: `sc_quote_edit_${_scRefNum}`, title: _allZero ? "✏️ Edit & Price" : "✏️ Edit Prices" }
+              { id: `sc_quote_confirm_${_scRefNum}`, title: "✅ Confirm & Send" },
+              { id: `sc_quote_edit_${_scRefNum}`,    title: "✏️ Edit Prices" }
             ]
           });
         }
