@@ -564,12 +564,14 @@ export async function handleSellerChatAction({ from, action: a, biz, saveBiz }) 
   // ── Special: refNum-based actions (not supplierId-based) ─────────────────
   // sc_quote_confirm_QT-XXXXXX  /  sc_quote_edit_QT-XXXXXX
   // sc_rfq_price_RFQ-XXXXXX
-   const _confirmMatch = a.match(/^sc_quote_confirm_(.+)$/);
-  const _editMatch    = a.match(/^sc_quote_edit_(.+)$/);
-  const _rfqMatch     = a.match(/^sc_rfq_price_(.+)$/);
+   const _confirmMatch  = a.match(/^sc_quote_confirm_(.+)$/);
+  const _editMatch     = a.match(/^sc_quote_edit_(.+)$/);
+  const _previewMatch  = a.match(/^sc_quote_preview_(.+)$/);
+  const _rfqMatch      = a.match(/^sc_rfq_price_(.+)$/);
 
     if (_confirmMatch) return _scHandleQuoteConfirm(from, _confirmMatch[1].toUpperCase(), biz, saveBiz);
   if (_editMatch)    return _scHandleQuoteEdit(from, _editMatch[1].toUpperCase(), biz, saveBiz);
+  if (_previewMatch) return _scHandleQuotePreview(from, _previewMatch[1].toUpperCase(), biz, saveBiz);
   if (_rfqMatch) {
     // Seller taps "Enter Prices" on RFQ template - set edit state and prompt
     const UserSession = (await import("../models/userSession.js")).default;
@@ -1430,6 +1432,17 @@ async function _scQuoteDone(from, supplierId, biz, saveBiz) {
   //
   // Why this matters: "House wiring ×1" tells an electrician nothing.
   // "House wiring ×1 (3-bedroom house, Borrowdale)" lets them price immediately.
+  // Auto-skip scope gate if the buyer's request is already a detailed natural-text description.
+  // Criteria: all items are long descriptive sentences (>= 40 chars, no structured price/number format).
+  // No point asking "what is the scope?" when they already wrote "Need BOQ for 4-bed house 220m²".
+  const _allItemsAreNaturalText = items.length > 0 && items.every(it => {
+    const n = (it.name || "").trim();
+    return n.length >= 40 && !(/^\d+[×x=@]/.test(n)) && (it.price === 0 || it.price == null);
+  });
+  if (_allItemsAreNaturalText && !biz?.sessionData?.scScopeNote) {
+    if (biz) { biz.sessionData = { ...(biz.sessionData || {}), scScopeNote: "skip" }; await saveBiz(biz); }
+  }
+
   if (isService && !isHospitality && !biz?.sessionData?.scScopeNote) {
     // Build a tailored prompt using the first selected service's name
     const firstServiceName = items[0]?.name || "";
@@ -1805,6 +1818,106 @@ The seller will approve or adjust prices.
   });
 }
 
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SELLER PDF PREVIEW - generates PDF → sends to SELLER → shows edit/send buttons
+// Triggered by sc_quote_preview_<refNum>
+// The seller sees exactly what the buyer will receive before committing.
+// After previewing they can: Edit Again (go back to edit flow) or Send Quote.
+// ─────────────────────────────────────────────────────────────────────────────
+async function _scHandleQuotePreview(from, refNum, biz, saveBiz) {
+  const draft = await _getSellerDraft(from, refNum);
+  if (!draft) {
+    return sendText(from, `❌ Quote ${refNum} not found or expired.`);
+  }
+
+  const seller   = await SupplierProfile.findById(draft.supplierId).lean();
+  if (!seller) return sendText(from, "❌ Seller profile not found.");
+
+  const { lineItems, total, buyerName, buyerPhone, sellerNote } = draft;
+  const expiry = new Date(Date.now() + 48 * 3600 * 1000)
+    .toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+
+  // Check all items are priced before allowing preview
+  const _unpricedItems = lineItems.filter(l => !l.unitPrice || l.unitPrice === 0);
+  if (_unpricedItems.length > 0) {
+    const _upList = _unpricedItems.map((l, i) => `• ${l.name}`).join("\n");
+    return sendText(from,
+      `⚠️ *Cannot preview — ${_unpricedItems.length} item${_unpricedItems.length > 1 ? "s" : ""} have no price:*\n${_upList}\n\n` +
+      `Set prices first: _1×350, 2×120_\nThen tap *👁 Preview PDF* again.`
+    );
+  }
+
+  let pdfSentToSeller = false;
+  let pdfLink = "";
+  try {
+    const { generatePDF } = await import("../routes/twilio_biz.js");
+    const site = (process.env.SITE_URL || "").replace(/\/$/, "");
+
+    // Build note footer if seller added one
+    const _noteItems = sellerNote
+      ? [...lineItems, { name: `📝 Note: ${sellerNote}`, qty: 1, unitPrice: 0, lineTotal: 0, unit: "" }]
+      : lineItems;
+
+    const { filename } = await generatePDF({
+      type:      "quote",
+      number:    refNum + "-PREVIEW",
+      date:      new Date(),
+      billingTo: buyerName || _normPhone(buyerPhone),
+      items: _noteItems.map(l => ({
+        item:  l.name,
+        qty:   Number(l.qty       || 1),
+        unit:  Number(l.unitPrice || 0),
+        total: Number(l.lineTotal || 0)
+      })),
+      bizMeta: {
+        name:    seller.businessName,
+        logoUrl: seller.logoUrl || "",
+        address: [
+          seller.address || "",
+          seller.location?.area || seller.area || "",
+          seller.location?.city || seller.city || ""
+        ].filter(Boolean).join(", "),
+        _id:    String(seller._id),
+        status: "quotation"
+      }
+    });
+
+    pdfLink = `${site}/docs/generated/quotes/${filename}`;
+    // Send preview PDF to the SELLER (from = seller's phone)
+    await sendDocument(_normPhone(from), { link: pdfLink, filename });
+    pdfSentToSeller = true;
+    console.log(`[SC PDF PREVIEW] ${filename} → seller ${from} (ref ${refNum})`);
+  } catch (pdfErr) {
+    console.warn(`[SC PDF PREVIEW] failed: ${pdfErr.message}`);
+  }
+
+  const itemRows = lineItems.map((l, i) =>
+    `${i + 1}. ${l.name} × ${l.qty} @ $${Number(l.unitPrice || 0).toFixed(2)} = $${Number(l.lineTotal || 0).toFixed(2)}`
+  ).join("\n");
+  const _noteDisplay = draft.sellerNote ? `\n📝 Note: _${draft.sellerNote}_` : "";
+
+  return sendButtons(from, {
+    text:
+`${pdfSentToSeller ? "👁 *PDF preview sent to you above* ↑" : "⚠️ Could not generate PDF preview — check format below"}
+
+📋 *Quote ${refNum} — ready to send*
+
+${itemRows}
+${"─".repeat(28)}
+*Total: $${Number(total || 0).toFixed(2)} USD*${_noteDisplay}
+Valid until: ${expiry}
+
+Buyer: ${buyerName || _normPhone(buyerPhone)}
+
+Tap *Send Quote* to deliver this to the buyer, or *Edit Again* to make changes.`,
+    buttons: [
+      { id: `sc_quote_confirm_${refNum}`, title: "✅ Send Quote" },
+      { id: `sc_quote_edit_${refNum}`,    title: "✏️ Edit Again" }
+    ]
+  });
+}
+
 async function _scQuoteClear(from, supplierId, biz, saveBiz) {
   if (biz) {
     // Clear items AND scope note so the scope prompt fires again on the next request
@@ -1842,12 +1955,18 @@ async function _scHandleQuoteConfirm(from, refNum, biz, saveBiz) {
       number:    refNum,
       date:      new Date(),
       billingTo: buyerName || _normPhone(buyerPhone),
-      items: lineItems.map(l => ({
-        item:  l.name,
-        qty:   Number(l.qty       || 1),
-        unit:  Number(l.unitPrice || 0),
-        total: Number(l.lineTotal || 0)
-      })),
+      items: (() => {
+        const _baseItems = lineItems.map(l => ({
+          item:  l.name,
+          qty:   Number(l.qty       || 1),
+          unit:  Number(l.unitPrice || 0),
+          total: Number(l.lineTotal || 0)
+        }));
+        if (draft.sellerNote) {
+          _baseItems.push({ item: `📝 Note: ${draft.sellerNote}`, qty: 1, unit: 0, total: 0 });
+        }
+        return _baseItems;
+      })(),
       bizMeta: {
         name:    seller.businessName,
         logoUrl: seller.logoUrl || "",
@@ -1935,24 +2054,57 @@ async function _scHandleQuoteEdit(from, refNum, biz, saveBiz) {
     `${i + 1}. ${l.name} × ${l.qty} - current: $${Number(l.unitPrice || 0).toFixed(2)}`
   ).join("\n");
 
-  return sendText(from,
-`✏️ *Edit quote - ${refNum}*
+  // Build catalogue quick-reference (up to 8 items from seller's price list)
+  let _catRef = "";
+  try {
+    const _editSeller   = await SupplierProfile.findById(draft.supplierId).lean();
+    const _isEditSvc    = _editSeller?.profileType === "service";
+    const _editCatRaw   = _isEditSvc ? (_editSeller?.rates || []) : (_editSeller?.prices || []).filter(p => p.inStock !== false);
+    const _editCatItems = _editCatRaw.slice(0, 8);
+    const _editCatTotal = _editCatRaw.length;
+    if (_editCatItems.length > 0) {
+      const _catLines = _editCatItems.map((it, i) => {
+        const name  = _isEditSvc ? it.service : it.product;
+        const price = _isEditSvc
+          ? (it.rate  ? `  ${it.rate}` : "")
+          : (it.amount ? `  $${Number(it.amount).toFixed(2)}/${it.unit || "each"}` : "");
+        return `${i + 1}. ${name}${price}`;
+      }).join("\n");
+      _catRef = "\n\n📌 *Your catalogue (type _pick N_ to add):*\n" + _catLines +
+        (_editCatTotal > 8 ? `\n_...${_editCatTotal - 8} more — type pick 9, pick 10 etc._` : "");
+    }
+  } catch (_ce) { /* catalogue ref is optional */ }
 
-${numbered}
+  return sendButtons(from, {
+    text:
+`✏️ *Build quote - ${refNum}*
 
-*Set prices:*
-_1×350_ or _1=350_ → set item 1 price to $350
-_1×350, 2×120_ → price multiple items
+${numbered}${_catRef}
 
-*Rename a long or unclear item:*
+*Set a price:*
+_1×350_ or _1=350_ → item 1 = $350
+_1×350, 2×120_ → price multiple at once
+
+*Add from your catalogue:*
+_pick 3_ → adds item 3 at its listed price
+_pick 3 qty 5_ → item 3, quantity 5
+
+*Add a custom item:*
+_add: Disbursements - $50_
+_add: Turnaround time: 5 working days_
+
+*Rename a long item:*
 _rename 1: Bill of Quantities - 4-bed house_
-_rename 2: Electrical installation, 3-bed_
 
-*Set price AND rename in one line:*
-_1×350 Bill of Quantities (4-bed, 280m², Ruwa)_
+*Add a note (shows on PDF):*
+_note: 50% deposit on acceptance_
 
-Type *confirm* to send as-is, or *cancel* to discard.`
-  );
+Type *confirm* to send, or *cancel* to discard.`,
+    buttons: [
+      { id: `sc_quote_preview_${refNum}`, title: "👁 Preview PDF" },
+      { id: `sc_quote_confirm_${refNum}`, title: "✅ Send Quote" }
+    ]
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2109,19 +2261,122 @@ async function _scProcessSellerPriceEdit(from, text, biz, saveBiz) {
       ? `\n\n⚠️ *${_unpriced3.length} item${_unpriced3.length > 1 ? "s" : ""} still need a price.*`
       : "";
 
+    const _addHasUnpriced = addedItems.some(l => !l.unitPrice || l.unitPrice === 0);
+    const _addPrevBtn = !_addHasUnpriced ? [{ id: `sc_quote_preview_${draft.refNum}`, title: "👁 Preview PDF" }] : [];
     return sendButtons(from, {
       text:
         `➕ *Added: ${newLineItem.name}*${addPrice > 0 ? ` @ $${addPrice.toFixed(2)}` : " (no price set)"}\n\n` +
         `📋 *Updated quote - ${draft.refNum}*\n\n` +
         `${numbered}\n${"─".repeat(28)}\n*Total: $${newTotal.toFixed(2)} USD*${_warn3}\n\n` +
         `_➕ = item you added  ✏️ = price you set_\n\n` +
-        `To set/change a price: _1×350_\nTo add more: _add: item name - $price_`,
+        `To set/change a price: _1×350_\nTo add more: _add: item name - $price_\nTo add note: _note: text_`,
       buttons: [
+        ..._addPrevBtn,
         { id: `sc_quote_confirm_${draft.refNum}`, title: "✅ Send Quote" },
-        { id: `sc_quote_edit_${draft.refNum}`,    title: "✏️ Edit Prices" }
-      ]
+        { id: `sc_quote_edit_${draft.refNum}`,    title: "✏️ Edit Again" }
+      ].slice(0, 3)
     });
   }
+  // ── Handle pick N [qty Q] command ──────────────────────────────────────────
+  // Seller picks item from their own catalogue by number, adds to draft
+  const _pickSellerCmd = text.trim().match(/^pick\s+(\d+)(?:\s+(?:qty\s*)?(\d+(?:\.\d+)?))?/i);
+  if (_pickSellerCmd) {
+    try {
+      const _pickSeller   = await SupplierProfile.findById(draft.supplierId).lean();
+      const _pickIsService = _pickSeller?.profileType === "service";
+      const _pickCatAll    = _pickIsService
+        ? (_pickSeller?.rates || [])
+        : (_pickSeller?.prices || []).filter(p => p.inStock !== false);
+      const _pickIdx  = parseInt(_pickSellerCmd[1], 10) - 1;
+      const _pickQty  = parseFloat(_pickSellerCmd[2] || "1") || 1;
+      const _pickItem = _pickCatAll[_pickIdx];
+      if (!_pickItem) {
+        return sendText(from,
+          `❌ Item ${_pickIdx + 1} not found in your catalogue (${_pickCatAll.length} items).\n\n` +
+          `Try _pick 1_ to _pick ${_pickCatAll.length}_.`
+        );
+      }
+      const _pickName  = _pickIsService ? _pickItem.service : _pickItem.product;
+      const _pickPrice = _pickIsService
+        ? _parseServiceRateValue(_pickItem.rate)
+        : (parseFloat(_pickItem.amount) || 0);
+      const _pickUnit  = _pickIsService
+        ? _parseServiceRateUnit(_pickItem.rate, _pickItem.service)
+        : (_pickItem.unit || "each");
+      const _pickTotal = _pickPrice * _pickQty;
+      const _newPickItem = {
+        name:      _pickName,
+        qty:       _pickQty,
+        unit:      _pickUnit,
+        unitPrice: _pickPrice,
+        lineTotal: _pickTotal,
+        _added:    true
+      };
+      const _pickItems   = [...draft.lineItems, _newPickItem];
+      const _pickNewTotal = _pickItems.reduce((s, l) => s + (l.lineTotal || 0), 0);
+      const _pickDraft   = { ...draft, lineItems: _pickItems, total: _pickNewTotal };
+      const _pickSess    = await UserSession.findOne({ phone: _normPhone(from) }).lean();
+      await _saveUpdatedDraft(from, _pickDraft, _pickSess, UserSession);
+
+      const _pickNumbered = _pickItems.map((l, i) => {
+        const _ul = _formatRateUnit(l.unit) || "/unit";
+        if (!l.unitPrice || l.unitPrice === 0) return `${i + 1}. *${l.name}* × ${l.qty} - ❓ _price not set_`;
+        const _tag = l._added ? " ➕" : (l._edited ? " ✏️" : "");
+        return `${i + 1}. *${l.name}* × ${l.qty} @ $${Number(l.unitPrice).toFixed(2)}${_ul} = *$${Number(l.lineTotal).toFixed(2)}*${_tag}`;
+      }).join("\n");
+      const _pickUnpriced = _pickItems.filter(l => !l.unitPrice || l.unitPrice === 0);
+      const _pickHasUnpriced = _pickUnpriced.length > 0;
+      const _pickPrevBtn = !_pickHasUnpriced ? [{ id: `sc_quote_preview_${draft.refNum}`, title: "👁 Preview PDF" }] : [];
+
+      return sendButtons(from, {
+        text:
+          `➕ *Added from catalogue: ${_pickName}* × ${_pickQty} @ $${_pickPrice.toFixed(2)} = $${_pickTotal.toFixed(2)}\n\n` +
+          `📋 *Quote - ${draft.refNum}*\n\n${_pickNumbered}\n${"─".repeat(28)}\n*Total: $${_pickNewTotal.toFixed(2)} USD*\n\n` +
+          `_pick N_ to add more  ·  _add: item - $price_ for custom  ·  _1×350_ to set price`,
+        buttons: [
+          ..._pickPrevBtn,
+          { id: `sc_quote_confirm_${draft.refNum}`, title: "✅ Send Quote" },
+          { id: `sc_quote_edit_${draft.refNum}`,    title: "✏️ Edit Again" }
+        ].slice(0, 3)
+      });
+    } catch (_pickErr) {
+      console.warn("[SC PICK] error:", _pickErr.message);
+      return sendText(from, "❌ Could not pick that item. Try again or use _add: item name - $price_.");
+    }
+  }
+
+  // ── Handle note: command ─────────────────────────────────────────────────
+  // Seller adds a footer note: "note: Turnaround time: 5 working days"
+  const _noteCmd = text.trim().match(/^note[:\s]+(.+)$/i);
+  if (_noteCmd) {
+    const noteText  = _noteCmd[1].trim().slice(0, 200);
+    const updatedDraftNote = { ...draft, sellerNote: noteText };
+    const _noteSess = await UserSession.findOne({ phone: _normPhone(from) }).lean();
+    await _saveUpdatedDraft(from, updatedDraftNote, _noteSess, UserSession);
+
+    const _noteNumbered = updatedDraftNote.lineItems.map((l, i) => {
+      const _ul = _formatRateUnit(l.unit) || "/unit";
+      return l.unitPrice > 0
+        ? `${i + 1}. *${l.name}* × ${l.qty} @ $${Number(l.unitPrice).toFixed(2)}${_ul} = *$${Number(l.lineTotal).toFixed(2)}*`
+        : `${i + 1}. *${l.name}* × ${l.qty} - ❓ _price not set_`;
+    }).join("\n");
+    const _noteUnpriced = updatedDraftNote.lineItems.filter(l => !l.unitPrice);
+    const _noteHasUnpriced = _noteUnpriced.length > 0;
+    const _notePrevBtn = !_noteHasUnpriced ? [{ id: `sc_quote_preview_${draft.refNum}`, title: "👁 Preview PDF" }] : [];
+
+    return sendButtons(from, {
+      text:
+        `📝 *Note added to quote ${draft.refNum}:*\n_"${noteText}"_\n\n` +
+        `📋 *Items:*\n${_noteNumbered}\n${"─".repeat(28)}\n*Total: $${Number(updatedDraftNote.total || 0).toFixed(2)} USD*\n\n` +
+        `To change: _note: new text_\nTo set a price: _1×350_`,
+      buttons: [
+        ..._notePrevBtn,
+        { id: `sc_quote_confirm_${draft.refNum}`, title: "✅ Send Quote" },
+        { id: `sc_quote_edit_${draft.refNum}`,    title: "✏️ Edit Again" }
+      ].slice(0, 3)
+    });
+  }
+
   // Format: "rename 1: Bill of Quantities (4-bed house)" or "r 1: BOQ 4-bed"
   // Case-insensitive. Colon or dash after item number.
   const renameMatch = text.trim().match(/^(?:rename|r)\s+(\d+)\s*[:\-]\s*(.+)$/i);
@@ -2263,6 +2518,9 @@ To confirm and send: tap button below.`,
     Object.keys(renames).length ? "🔤 = item you renamed" : ""
   ].filter(Boolean).join("  ·  ");
 
+  const _hasUnpriced = _unpriced.length > 0;
+  const _previewBtn  = !_hasUnpriced ? [{ id: `sc_quote_preview_${draft.refNum}`, title: "👁 Preview PDF" }] : [];
+
   return sendButtons(from, {
     text:
 `📋 *Quote Review - ${draft.refNum}*
@@ -2272,11 +2530,14 @@ ${"─".repeat(28)}
 *Total: $${newTotal.toFixed(2)} USD*${_editHint}
 
 ${_legend ? "_" + _legend + "_\n\n" : ""}To change a price: _1×60, 2×5_
-To rename: _rename 1: Professional description_`,
+To add an item: _add: item name - $price_
+To rename: _rename 1: Professional description_
+To add a note: _note: your note text_`,
     buttons: [
+      ..._previewBtn,
       { id: `sc_quote_confirm_${draft.refNum}`, title: "✅ Send Quote" },
-      { id: `sc_quote_edit_${draft.refNum}`,    title: "✏️ Edit Prices" }
-    ]
+      { id: `sc_quote_edit_${draft.refNum}`,    title: "✏️ Edit Again" }
+    ].slice(0, 3)
   });
 }
 
@@ -3495,9 +3756,15 @@ function _parseServiceRFQInput(raw, knownItems = []) {
   // Detect: starts with "I need", "Please", "Can you", or is a long sentence
   // with no leading digits. Store as a single descriptive item.
   const _trimmed = raw.trim();
+  // Detect natural-language requests: starts with conversational phrases,
+  // or is a single descriptive block (no item-number patterns, length >= 30).
+  // Treat the WHOLE input as one item so it reaches the seller intact.
+  const _startsNatural = /^(i need|i want|please|can you|could you|we need|we want|kindly|need|hi|hello|good morning|good afternoon|we would|we'd|i'd|i would|requesting|request for|quotation for|quote for|provide|kindly provide|please provide)/i.test(_trimmed);
+  const _hasNoItemNumbers = !/^\d/.test(_trimmed) && !_trimmed.match(/^\d+\s*[:–\-,]/);
+  const _hasNoCommaNumbers = !_trimmed.match(/,\s*\d+/);
   const _isNaturalSentence =
-    /^(i need|i want|please|can you|could you|we need|we want|kindly|hi|hello|good morning|good afternoon)/i.test(_trimmed) ||
-    (_trimmed.length > 80 && !/^\d/.test(_trimmed) && !_trimmed.match(/^\d+\s*[:–\-,]/));
+    _startsNatural ||
+    (_trimmed.length >= 30 && _hasNoItemNumbers && _hasNoCommaNumbers);
 
   if (_isNaturalSentence) {
     // Store the whole sentence as the request description.
