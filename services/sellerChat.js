@@ -1117,18 +1117,16 @@ async function _scQuote(from, supplierId, biz, saveBiz) {
     ].filter(Boolean).join("\n");
 
     return sendText(from,
-`📝 *What do you need? — ${seller.businessName}*
+`📋 *${seller.businessName}*
 
-${_quickRef}─────────────────
-*Option 1 — Pick by number:*
-${numExamples}
+${_quickRef}
+*Type the number(s) of what you need, or just describe your request.*
 
-*Option 2 — Just type your request:*
-${freeTextExamples}
+${numExamples.split("\n")[0] || ""}
+${name1 && name2 ? `_1, 2_ → both` : ""}${allItems.length >= 3 ? `  _1, 4, 6_ → pick any` : ""}
 
-${isService
-  ? "💡 _You can add details like size, location, or scope after selecting._"
-  : "💡 _Include size, brand, or quantity if relevant._"}
+Or just type what you need:
+_${name1 || "service name"}: 3-bed house, Borrowdale_ — or describe freely
 
 Type *done* when finished, or *cancel* to go back.`
     );
@@ -1165,24 +1163,18 @@ Type *done* when finished, or *cancel* to go back.`
     ].filter(Boolean).join("\n");
 
     return sendText(from,
-`📝 *What do you need? — ${seller.businessName}*
+`📋 *${seller.businessName}*
 
-${_quickRef}─────────────────
-*You can request in any of these ways:*
+${_quickRef}
+*Pick by number, or just describe what you need.*
 
-*1️⃣ Pick by number:*
-${numExamples || `_1_ → service 1\n_1, 2_ → services 1 & 2`}
+${numExamples.split("\n")[0] || (name1 ? `_1_ → ${name1}` : "")}
+${name1 && name2 ? `_1, 2_ → both` : ""}
 
-*2️⃣ Pick number + add scope detail:*
-${scopeExamples || `_1: 3-bed house_ → service 1 with details`}
+Or type freely:
+_${name1 ? `I need ${name1} for a ${scopeHints1[0]}` : "describe your job here"}_
 
-*3️⃣ Just describe what you need (free text):*
-${freeExamples || `_I need electrical wiring for a 3-bedroom house in Ruwa_`}
-
-💡 _The more detail you give, the more accurate the quote._
-_E.g. size, location, number of rooms, special requirements._
-
-Type *done* when ready, or *cancel* to go back.`
+Type *done* when finished, or *cancel* to go back.`
     );
 
   } else {
@@ -1191,24 +1183,15 @@ Type *done* when ready, or *cancel* to go back.`
     const name2 = allItems[1] ? _ex(1, allItems[1]) : null;
 
     return sendText(from,
-`📝 *What do you need? — ${seller.businessName}*
+`📋 *${seller.businessName}*
 
-${_quickRef}─────────────────
-*You can request in any of these ways:*
+${_quickRef}
+*Pick by number, or just tell us what you need.*
 
-*1️⃣ Pick by number:*
-${name1 ? `_1_ → *${name1}*` : "_1_ → item 1"}
-${name2 ? `_1, 2_ → *${name1}* and *${name2}*` : "_1, 2_ → items 1 and 2"}
+${name1 ? `_1_ → ${name1}` : "_1_ → item 1"}${name1 && name2 ? `   _1, 2_ → both` : ""}
 
-*2️⃣ Type name + quantity:*
-${name1 ? `_${name1} ×5_` : "_product name ×5_"}
-_10 bags of cement, 5 sheets IBR_ → comma-separated list
-
-*3️⃣ Just describe what you need:*
-_I need 50kg bags of cement x20 and 3 loads of river sand_
-_roofing materials for a 3-bedroom house_
-
-💡 _Include brand, size, grade, or quantity if you know it._
+Or type freely:
+_10 bags of cement, river sand 3m³_ or _roofing materials for 3-bed house_
 
 Type *done* when finished, or *cancel* to go back.`
     );
@@ -1356,6 +1339,18 @@ async function _scProcessItemList(from, supplierId, raw, biz, saveBiz) {
     await saveBiz(biz);
   }
 
+  // ── Auto-send natural-text single request without requiring "done" ─────
+  // If buyer sent ONE natural-text item (long sentence, no structured items),
+  // skip the cart confirmation step and go straight to sending the request.
+  // This avoids: type → cart preview → tap "Get Quote" → done.
+  const _autoSend = allItems.length === 1 &&
+    (allItems[0].name || "").length >= 30 &&
+    !(allItems[0].price > 0) &&
+    existingItems.length === 0; // only on first entry, not when adding to existing cart
+  if (_autoSend) {
+    return _scQuoteDone(from, supplierId, biz, saveBiz);
+  }
+
   // ── Cart summary ──────────────────────────────────────────────────────────
   // Build priceMap keyed on service/product name (lowercase) for display
   const priceMap = {};
@@ -1385,9 +1380,9 @@ async function _scProcessItemList(from, supplierId, raw, biz, saveBiz) {
     ? "📤 Send Request"
     : (isHospitality ? "✅ Get Service Quote" : (isService ? "✅ Get Service Quote" : "✅ Get Quote"));
 
-  const editHint = isService
-    ? `\n\n💡 _Add more by number, name, or free text._\n_Type *note: your detail* to add size/location/scope._\n_Type *edit: 1: new name* to rename an item._`
-    : `\n\n💡 _Type more numbers to add items (e.g. *2, 5, 8*), or tap *Get Quote* when ready._\n_Type *note: your detail* to add context._`;
+  const editHint = isHospitality
+    ? `\n\n_Type more numbers to add, or tap the button when ready._`
+    : `\n\n_Add more${isService ? " services" : " items"}, or tap the button when ready._`;
 
   return sendButtons(from, {
     text:
@@ -2077,29 +2072,19 @@ async function _scHandleQuoteEdit(from, refNum, biz, saveBiz) {
 
   return sendButtons(from, {
     text:
-`✏️ *Build quote - ${refNum}*
+`📋 *Quote ${refNum}* — price and send to buyer
 
 ${numbered}${_catRef}
 
-*Set a price:*
-_1×350_ or _1=350_ → item 1 = $350
-_1×350, 2×120_ → price multiple at once
+*How to price:*
+_1×350_ → set item 1 to $350
+_1×350, 2×120_ → price multiple items
+_pick 3_ → add your catalogue item 3 at listed price
+_add: Delivery - $30_ → add a custom item
+_rename 1: BOQ 4-bed house_ → shorten a long item name
+_note: 50% deposit required_ → adds note to PDF
 
-*Add from your catalogue:*
-_pick 3_ → adds item 3 at its listed price
-_pick 3 qty 5_ → item 3, quantity 5
-
-*Add a custom item:*
-_add: Disbursements - $50_
-_add: Turnaround time: 5 working days_
-
-*Rename a long item:*
-_rename 1: Bill of Quantities - 4-bed house_
-
-*Add a note (shows on PDF):*
-_note: 50% deposit on acceptance_
-
-Type *confirm* to send, or *cancel* to discard.`,
+Type *confirm* to send  ·  *cancel* to discard`,
     buttons: [
       { id: `sc_quote_preview_${refNum}`, title: "👁 Preview PDF" },
       { id: `sc_quote_confirm_${refNum}`, title: "✅ Send Quote" }
@@ -2107,7 +2092,7 @@ Type *confirm* to send, or *cancel* to discard.`,
   });
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────
 // HELPER: save an updated draft to both the map and legacy scalar in UserSession
 // ─────────────────────────────────────────────────────────────────────────────
 async function _saveUpdatedDraft(from, updatedDraft, _tmpSess, UserSession) {
@@ -2422,8 +2407,8 @@ To set a price: _1×350_
 To rename again: _rename 1: New name_
 To confirm and send: tap button below.`,
       buttons: [
-        { id: `sc_quote_confirm_${draft.refNum}`, title: "✅ Send Quote" },
-        { id: `sc_quote_edit_${draft.refNum}`,    title: "✏️ Edit Prices" }
+        { id: `sc_quote_preview_${draft.refNum}`, title: "👁 Preview PDF" },
+        { id: `sc_quote_confirm_${draft.refNum}`, title: "✅ Send Quote" }
       ]
     });
   }
@@ -2463,14 +2448,13 @@ To confirm and send: tap button below.`,
       ? `\n\n💡 *Item names look long.* You can rename before sending:\n_rename 1: Short professional name_`
       : "";
     return sendText(from,
-      `❌ Could not read your input.\n\n` +
-      `*Items:*\n${_currList}\n\n` +
-      `*Set a price:* _${_exParts}_\n` +
-      `*Rename an item:* _rename 1: Bill of Quantities - 4-bed house_\n` +
-      `*Price + rename:* _1×350 Bill of Quantities (4-bed house, Ruwa)_\n` +
-      `*Add extra item:* _add: Disbursements - $50_\n` +
-      `*Add note:* _add: Turnaround time: 5 working days_\n\n` +
-      `Both × and = work: _1×350_ or _1=350_\n` +
+      `❌ Could not read that. Try:\n\n` +
+      `${_currList}\n\n` +
+      `_${_exParts}_ → set prices\n` +
+      `_pick 3_ → add from catalogue\n` +
+      `_add: item - $price_ → add custom\n` +
+      `_rename 1: new name_ → rename item\n` +
+      `_note: text_ → add note to PDF\n\n` +
       `Type *cancel* to discard.${_renameHint}`
     );
   }
@@ -3866,6 +3850,19 @@ function _parseHospitalityInput(raw, knownItems = []) {
 
 function _parseItemInput(raw, knownItems = [], isService = false) {
   const results = [];
+  const _trimmed = raw.trim();
+
+  // ── Natural-text detection: treat the whole input as ONE item ──────────────
+  // Catches: "Need a quotation for...", "I need...", "Please provide...",
+  // or any long descriptive block that doesn't look like structured item input.
+  // This prevents comma-splitting a buyer's full-sentence request into fragments.
+  const _startsNatural = /^(i need|i want|please|can you|could you|we need|we want|kindly|need|hi|hello|good morning|good afternoon|we would|requesting|request for|quotation for|quote for|provide|kindly provide|please provide)/i.test(_trimmed);
+  const _hasNoItemNumbers = !/^\d/.test(_trimmed) && !_trimmed.match(/^\d+\s*[:–\-,]/);
+  const _hasNoCommaNumbers = !_trimmed.match(/,\s*\d+/);
+  const _looksNatural = _startsNatural || (_trimmed.length >= 30 && _hasNoItemNumbers && _hasNoCommaNumbers);
+  if (_looksNatural) {
+    return [{ name: _trimmed, qty: 1, price: 0 }];
+  }
 
   // Numbered format: "1×50, 2×10" or "1=50, 2=10"
   const numbered = [...raw.matchAll(/(\d+)\s*[×xX=@]\s*(\d+(?:\.\d+)?)/g)];
