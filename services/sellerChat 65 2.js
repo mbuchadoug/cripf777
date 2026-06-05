@@ -1819,109 +1819,50 @@ The seller will review and price your request.
     }
 
     const _primaryPhone = _normPhone(seller.phone);
-    const _notifPhones  = (seller.notificationContacts || []).map(_normPhone).filter(Boolean);
+    await _addDraftToSession(_primaryPhone);
 
-    // ── Determine if this quote came via a staff card ─────────────────────────
-    // If yes: store draft on staff member's session too (so they can View & Quote).
-    // If no: store on supplier + notif contacts as normal.
-    const _qtStaffCardId2 = biz?.sessionData?.scStaffCardId;
-    let   _staffPhone     = null;
-    let   _staffCard2     = null;
-
-    if (_qtStaffCardId2) {
-      try {
-        const StaffCardModel2 = (await import("../models/staffCard.js")).default;
-        _staffCard2 = await StaffCardModel2.findById(_qtStaffCardId2).lean();
-        if (_staffCard2?.phone) _staffPhone = _normPhone(_staffCard2.phone);
-      } catch (_se) {}
+    const _notifPhones = (seller.notificationContacts || []).map(_normPhone).filter(Boolean);
+    if (_notifPhones.length > 0) {
+      await Promise.allSettled(_notifPhones.map(nc => _addDraftToSession(nc)));
     }
-
-    if (_staffPhone) {
-      // Staff card quote: store draft on STAFF member's session (they get View & Quote)
-      // Supplier session also gets it as fallback, but supplier gets FYI-only notification
-      await _addDraftToSession(_staffPhone);
-      await _addDraftToSession(_primaryPhone); // supplier keeps access as fallback
-      console.log(`[SC QUOTE] Draft ${refNum} stored on staff (${_staffPhone}) + supplier (${_primaryPhone}) for ${seller.businessName}`);
-    } else {
-      // Business smart link: store on supplier + all notification contacts (existing behaviour)
-      await _addDraftToSession(_primaryPhone);
-      if (_notifPhones.length > 0) {
-        await Promise.allSettled(_notifPhones.map(nc => _addDraftToSession(nc)));
-      }
-      console.log(`[SC QUOTE] Draft ${refNum} stored on ${1 + _notifPhones.length} session(s) for ${seller.businessName}`);
-    }
+    console.log(`[SC QUOTE] Draft ${refNum} stored on ${1 + _notifPhones.length} session(s) for ${seller.businessName}`);
   } catch (err) {
     console.error("[SC QUOTE] Failed to store draft on seller session:", err.message);
   }
 
-  // ── Notifications — different paths for staff link vs business link ─────────
+  // Notify seller via Meta template - works outside 24hr window
+  await _sendSellerNotification({
+    sellerPhone:          seller.phone,
+    notificationContacts: seller.notificationContacts || [],
+    refNum,
+    buyerDisplay:         buyerName || _normPhone(buyerPhone),
+    itemList:             itemRows,
+    itemCount:            lineItems.length,
+    total,
+    isRFQ:        false,
+  });
+
+  // ── Also notify the salesperson whose card the buyer used ─────────────────
   const _qtStaffCardId = biz?.sessionData?.scStaffCardId;
-  let _resolvedStaffCard = null;
   if (_qtStaffCardId) {
     try {
+      const { notifyStaffEnquiry, trackStaffLinkEvent } = await import("./staffSmartLink.js");
       const StaffCardModel = (await import("../models/staffCard.js")).default;
-      _resolvedStaffCard = await StaffCardModel.findById(_qtStaffCardId).lean();
-    } catch (_se2) {}
-  }
-
-  if (_resolvedStaffCard?.phone) {
-    // ── STAFF CARD QUOTE: staff member gets "View & Quote", supplier gets FYI ──
-    const _staffMemberPhone = _normPhone(_resolvedStaffCard.phone);
-    const _staffName        = _resolvedStaffCard.name || "Staff member";
-    const _staffTitle       = _resolvedStaffCard.title ? ` (${_resolvedStaffCard.title})` : "";
-    const _itemSummaryShort = itemRows.split("\n").slice(0, 3).join("\n");
-    const _buyerDisplay     = buyerName || _normPhone(buyerPhone);
-
-    // Staff member gets the standard "View & Quote" seller notification
-    await _sendSellerNotification({
-      sellerPhone:          _resolvedStaffCard.phone,
-      notificationContacts: [],   // staff notification goes to staff only
-      refNum,
-      buyerDisplay:         _buyerDisplay,
-      itemList:             itemRows,
-      itemCount:            lineItems.length,
-      total,
-      isRFQ:                false,
-    });
-
-    // Supplier profile gets an FYI: "Quote requested via [Staff Name]'s card"
-    try {
-      const { sendButtons: _sendBtns } = await import("./metaSender.js");
-      await _sendBtns(_normPhone(seller.phone), {
-        text:
-          `📋 *New quote via ${_staffName}${_staffTitle}'s card*\n\n` +
-          `Ref: *${refNum}*\n` +
-          `Buyer: ${_buyerDisplay}\n\n` +
-          `Items:\n${_itemSummaryShort}${lineItems.length > 3 ? `\n_+ ${lineItems.length - 3} more_` : ""}\n` +
-          `${typeof total === "number" && total > 0 ? `Estimated total: *$${total.toFixed(2)} USD*\n` : ""}\n` +
-          `_${_staffName} has been notified and will handle this quote._`,
-        buttons: [
-          { id: "my_supplier_account", title: "🏪 My Account" }
-        ]
-      });
-      console.log(`[SC QUOTE] FYI sent to supplier ${seller.phone} (quote via ${_staffName})`);
-    } catch (_fiyErr) {
-      console.warn("[SC QUOTE] supplier FYI failed:", _fiyErr.message);
+      const _qtStaffCard   = await StaffCardModel.findById(_qtStaffCardId).lean();
+      if (_qtStaffCard) {
+        const _qtItemSummary = lineItems.slice(0, 3).map(l => l.name).filter(Boolean).join(", ");
+        notifyStaffEnquiry({
+          card:       _qtStaffCard,
+          supplier:   seller,
+          buyerPhone: from,
+          message:    `Quote: ${_qtItemSummary}${lineItems.length > 3 ? ` + ${lineItems.length - 3} more` : ""} — Total: $${total.toFixed(2)}`,
+          refNum
+        }).catch(() => {});
+        trackStaffLinkEvent(_qtStaffCardId, { source: "direct", isConversion: true }).catch(() => {});
+      }
+    } catch (_qtStaffErr) {
+      console.warn("[SC QUOTE] staff card notify failed:", _qtStaffErr.message);
     }
-
-    // Track staff conversion
-    try {
-      const { trackStaffLinkEvent } = await import("./staffSmartLink.js");
-      trackStaffLinkEvent(_qtStaffCardId, { source: "direct", isConversion: true }).catch(() => {});
-    } catch (_te) {}
-
-  } else {
-    // ── BUSINESS SMART LINK: existing behaviour — supplier + notif contacts get V&Q ──
-    await _sendSellerNotification({
-      sellerPhone:          seller.phone,
-      notificationContacts: seller.notificationContacts || [],
-      refNum,
-      buyerDisplay:         buyerName || _normPhone(buyerPhone),
-      itemList:             itemRows,
-      itemCount:            lineItems.length,
-      total,
-      isRFQ:                false,
-    });
   }
 
   _trackConversion(biz);
@@ -2255,16 +2196,19 @@ async function _scHandleQuoteEdit(from, refNum, biz, saveBiz) {
       ? `\n📝 *Buyer's request is in item 1 above (for reference — you can delete it after adding your items).*\n`
       : "");
 
-  // Simple, clear instructions — readable by anyone
-  const _guideText = `*Add your items and prices:*
+  // Concise, clear instructions for any seller
+  const _guideText = `*How to build your quote:*
 _BOQ 4-bed house $5000_ → add item + price
-_BOQ $5000, Survey $350, Soil test $120_ → add multiple at once
-_pick 3_ → add item 3 from your catalogue
-_rename 1: Short name_ → shorten a long item name
-_note: 50% deposit required_ → adds a note to the PDF
-_cat_ → see your full catalogue
+_BOQ $5000, Survey $350_ → add multiple, comma separated
+_1×350_ → set price on existing item 1
+_delete 1_ → remove item 1
+_pick 3_ → add item 3 from catalogue
+_rename 1: Short name_ → rename item 1
+_note: 50% deposit required_ → adds note to PDF
+_cat_ → view full catalogue
+_replace_ → clear and start fresh
 
-Type *confirm* when ready  ·  *cancel* to discard`;
+Type *confirm* to send  ·  *cancel* to discard`;
 
   return sendButtons(from, {
     text:
@@ -2757,14 +2701,16 @@ async function _scProcessSellerPriceEdit(from, text, biz, saveBiz) {
       return `_${shortName} $${[350, 120][i] || 50}_`;
     }).join("  or  ");
     return sendText(from,
-      `❌ *Not recognised. Try these formats:*\n\n` +
-      `_BOQ 4-bed house $5000_ → add item + price\n` +
-      `_BOQ $5000, Survey $350_ → add multiple\n` +
-      `_1×350_ → set price on item 1\n` +
+      `❌ *Could not read that. Try:*\n\n` +
+      `_BOQ 4-bed house $5000_ → item + price\n` +
+      `_BOQ $5000, Survey $350_ → comma separated\n` +
+      `_1×350_ → price item 1 to $350\n` +
+      `_delete 1_ → remove item 1\n` +
       `_pick 3_ → add catalogue item 3\n` +
       `_rename 1: Short name_ → rename item\n` +
-      `_note: 50% deposit_ → PDF note\n` +
-      `_cat_ → view full catalogue\n\n` +
+      `_note: 50% deposit_ → add note to PDF\n` +
+      `_cat_ → view your full catalogue\n` +
+      `_replace_ → clear all, start fresh\n\n` +
       `*Your items:*\n${_currList}\n\n` +
       `Type *cancel* to discard.`
     );
@@ -2853,7 +2799,7 @@ async function _scProcessSellerPriceEdit(from, text, biz, saveBiz) {
       `📋 *Quote ${draft.refNum}* — ${_actions || "updated"}${_reviewBuyerRef}\n` +
       `${_quoteLines}\n${"─".repeat(24)}\n` +
       `*Total: $${newTotal.toFixed(2)} USD*${_warnText}${_noteDisplay}\n\n` +
-      `_item $price · pick N · rename N: name · note: text · cat_`,
+      `_name $price · pick N · delete N · rename N: name · cat · note: text_`,
     buttons: [
       ..._prevBtn,
       { id: `sc_quote_confirm_${draft.refNum}`, title: "✅ Send Quote" },
