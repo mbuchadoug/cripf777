@@ -5916,7 +5916,6 @@ await UserSession.findOneAndUpdate(
     }
   }
   }
-}
 
 
 
@@ -19884,6 +19883,7 @@ if (a === "view_all_products" || a.startsWith("view_all_products_page_")) {
     }
   }
 
+}
 }
 // ─────────────────────────────────────────────────────────────────────────────
 // SHARED DISPLAY HELPERS
