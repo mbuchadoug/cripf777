@@ -2155,23 +2155,25 @@ async function _scHandleQuoteEdit(from, refNum, biz, saveBiz) {
     }
   } catch (_ce) {}
 
-  // Build the guide — shorter when buyer sent natural text (needs replace workflow)
-  const _guideText = _hasLongItems && _hasUnpricedAll
-    ? `💡 *Buyer sent a description — type your own items:*\n` +
-      `_BOQ 4-bed house $5000_ → add item with price\n` +
-      `_Site survey $350_ → another item\n` +
-      `_1. BOQ $5000\\n2. Survey $350_ → numbered list\n` +
-      `_replace_ → clear buyer text, start fresh\n` +
-      `_pick 3_ → add from catalogue\n` +
-      `_note: 50% deposit_ → add PDF note\n\n` +
-      `Type *confirm* when done  ·  *cancel* to discard`
-    : `*How to price:*\n` +
-      `_1×350_ → set item 1 = $350   _1×350, 2×120_ → multiple\n` +
-      `_BOQ $5000_ → add new item with price\n` +
-      `_pick 3_ → add catalogue item 3\n` +
-      `_rename 1: Short name_ → rename\n` +
-      `_note: 50% deposit_ → PDF note\n\n` +
-      `Type *confirm* when done  ·  *cancel* to discard`;
+  // Build context-aware instructions
+  // When buyer sent a long paragraph: focus on "delete it and add your own items"
+  // When items are already structured: focus on pricing/editing
+  const _naturalTextNote = _hasLongItems && _hasUnpricedAll
+    ? `\n💡 *Item 1 is the buyer's description.* Type _delete 1_ to remove it, then add your own items.`
+    : "";
+
+  const _guideText = `*What you can type:*
+_BOQ 4-bed house $5000_ → add item + price
+_BOQ $5000, Site survey $350_ → multiple items, comma separated
+_1×350_ → set item 1 price to $350
+_delete 1_ → remove item 1
+_pick 3_ → add item 3 from your catalogue
+_rename 1: Short name_ → rename item 1
+_note: 50% deposit required_ → add note to PDF
+_cat_ → view your full catalogue
+_replace_ → clear all, start fresh
+
+Type *confirm* to send  ·  *cancel* to discard${_naturalTextNote}`;
 
   return sendButtons(from, {
     text:
@@ -2366,6 +2368,56 @@ async function _scProcessSellerPriceEdit(from, text, biz, saveBiz) {
     });
   }
 
+  // ── Delete / Remove item command ──────────────────────────────────────────
+  // Seller types "delete 1" or "remove 2" or "del 1" to remove a line item.
+  // Most useful to remove the buyer's long natural-text paragraph (always item 1).
+  const _deleteMatch = text.trim().match(/^(?:delete|remove|del|rm)\s+(\d+)$/i);
+  if (_deleteMatch) {
+    const _delIdx = parseInt(_deleteMatch[1], 10) - 1;
+    if (_delIdx < 0 || _delIdx >= draft.lineItems.length) {
+      return sendText(from, `❌ Item ${_delIdx + 1} doesn't exist. You have ${draft.lineItems.length} item${draft.lineItems.length !== 1 ? "s" : ""}. Type _delete 1_ to remove item 1.`);
+    }
+    const _deletedName = draft.lineItems[_delIdx].name || "item";
+    const _remainingItems = draft.lineItems.filter((_, i) => i !== _delIdx);
+    const _newDelTotal = _remainingItems.reduce((s, l) => s + (l.lineTotal || 0), 0);
+    const _deletedDraft = { ...draft, lineItems: _remainingItems, total: _newDelTotal };
+    const _delSess = await UserSession.findOne({ phone: _normPhone(from) }).lean();
+    await _saveUpdatedDraft(from, _deletedDraft, _delSess, UserSession);
+
+    if (_remainingItems.length === 0) {
+      // All items deleted — prompt to add new ones
+      return sendButtons(from, {
+        text:
+          `🗑 *Item removed.* Quote ${draft.refNum} is now empty.\n\n` +
+          `Type your items to build the quote:\n` +
+          `_BOQ 4-bed house $5000_\n` +
+          `_Site survey $350_\n` +
+          `_pick 3_ → add from your catalogue`,
+        buttons: [
+          { id: `sc_quote_edit_${draft.refNum}`,    title: "✏️ View Catalogue" },
+          { id: `sc_quote_preview_${draft.refNum}`, title: "👁 Preview PDF" }
+        ]
+      });
+    }
+
+    const _delNumbered = _buildQuoteLines(_remainingItems);
+    const _delHasUnpriced = _remainingItems.some(l => !l.unitPrice || l.unitPrice === 0);
+    const _delPrevBtn = !_delHasUnpriced ? [{ id: `sc_quote_preview_${draft.refNum}`, title: "👁 Preview PDF" }] : [];
+    const _shortName = _deletedName.length > 40 ? _deletedName.slice(0, 40) + "..." : _deletedName;
+    return sendButtons(from, {
+      text:
+        `🗑 *Removed: "${_shortName}"*\n\n` +
+        `📋 *Quote ${draft.refNum}*\n${_delNumbered}\n${"─".repeat(24)}\n` +
+        `*Total: $${_newDelTotal.toFixed(2)} USD*\n\n` +
+        `_Add items: name $price  ·  pick N  ·  delete N to remove_`,
+      buttons: [
+        ..._delPrevBtn,
+        { id: `sc_quote_confirm_${draft.refNum}`, title: "✅ Send Quote" },
+        { id: `sc_quote_edit_${draft.refNum}`,    title: "✏️ Edit" }
+      ].slice(0, 3)
+    });
+  }
+
   // ── Rename command ────────────────────────────────────────────────────────
   const renameMatch = text.trim().match(/^(?:rename|r)\s+(\d+)\s*[:\-]\s*(.+)$/i);
   if (renameMatch) {
@@ -2391,6 +2443,52 @@ async function _scProcessSellerPriceEdit(from, text, biz, saveBiz) {
         { id: `sc_quote_edit_${draft.refNum}`,    title: "✏️ Edit" }
       ].slice(0, 3)
     });
+  }
+
+  // ── View full catalogue command ──────────────────────────────────────────
+  // Seller types "cat" or "catalogue" or "list" to see ALL their items numbered.
+  // Useful when they want to pick items but need to see the full list first.
+  if (/^(cat|catalogue|catalog|list|my items|my services|my products)$/i.test(al)) {
+    try {
+      const _catSeller   = await SupplierProfile.findById(draft.supplierId).lean();
+      const _catIsService = _catSeller?.profileType === "service";
+      const _catAll = _catIsService
+        ? (_catSeller?.rates || [])
+        : (_catSeller?.prices || []).filter(p => p.inStock !== false);
+      if (!_catAll.length) {
+        return sendText(from, "❌ No catalogue items found on your profile.");
+      }
+      // Show in chunks of 20
+      const CHUNK = 20;
+      for (let i = 0; i < _catAll.length; i += CHUNK) {
+        const _chunk = _catAll.slice(i, i + CHUNK);
+        const _catLines = _chunk.map((it, j) => {
+          const idx = i + j + 1;
+          const nm  = _catIsService ? it.service : it.product;
+          const pr  = _catIsService
+            ? (it.rate  ? `  ${it.rate}` : "")
+            : (it.amount ? `  $${Number(it.amount).toFixed(2)}/${it.unit || "each"}` : "");
+          return `${idx}. ${nm}${pr}`;
+        }).join("\n");
+        const isLast = i + CHUNK >= _catAll.length;
+        await sendText(from, (i === 0 ? `📋 *Your catalogue (${_catAll.length} items):*\n\n` : "") + _catLines);
+        if (!isLast) await new Promise(r => setTimeout(r, 300));
+      }
+      return sendButtons(from, {
+        text:
+          `👆 *Full catalogue shown above.*\n\n` +
+          `Type _pick N_ to add any item to the quote.\n` +
+          `e.g. _pick 1_, _pick 3_, _pick 7_\n\n` +
+          `Or type items with prices: _BOQ $5000_`,
+        buttons: [
+          { id: `sc_quote_edit_${draft.refNum}`,    title: "✏️ Back to Quote" },
+          { id: `sc_quote_preview_${draft.refNum}`, title: "👁 Preview PDF" }
+        ]
+      });
+    } catch (_catErr) {
+      console.warn("[SC CAT] error:", _catErr.message);
+      return sendText(from, "❌ Could not load catalogue. Try _pick 1_, _pick 2_ etc.");
+    }
   }
 
   // ── Pick from catalogue ───────────────────────────────────────────────────
@@ -2452,7 +2550,31 @@ async function _scProcessSellerPriceEdit(from, text, biz, saveBiz) {
   //   4. note: line
   //   5. Unpriced name:   "Soil tests" (added with $0, flagged)
   // ─────────────────────────────────────────────────────────────────────────
-  const lines = text.trim().split(/\n+/).map(l => l.trim()).filter(Boolean);
+  // Split input into lines — supports BOTH newline-separated AND comma-separated items.
+  // Comma-split only when input looks like multiple items (each has a price OR commas separate distinct items).
+  // This lets sellers type: "BOQ $5000, Site survey $350" or one per line.
+  const _rawText = text.trim();
+  let lines;
+  {
+    // First split by newlines
+    const _byNewline = _rawText.split(/\n+/).map(l => l.trim()).filter(Boolean);
+    if (_byNewline.length > 1) {
+      // Multi-line input — use as-is
+      lines = _byNewline;
+    } else {
+      // Single line — check if comma-separated items (each part has a price)
+      const _commaParts = _rawText.split(/,\s*/).map(l => l.trim()).filter(Boolean);
+      // Price detection: each part must end with a standalone price ($350, $5000, or just 350 at end)
+      // "4-bed house" has "4" but it's not a standalone price — require $ prefix OR number at end of string
+      const _hasStandalonePrice = (p) =>
+        /\$\d+(?:\.\d+)?/.test(p) ||          // explicit $price
+        /\s\d{2,}(?:\.\d+)?\s*$/.test(p) ||   // number >= 10 at end (prices are usually multi-digit)
+        /^\d+[.)]\s/.test(p) ||                   // "1. item name"
+        /^\d+\s*[×x=@:]/.test(p);                 // "1×350" pricing format
+      const _eachHasPrice = _commaParts.length > 1 && _commaParts.every(_hasStandalonePrice);
+      lines = _eachHasPrice ? _commaParts : _byNewline;
+    }
+  }
   const priceEdits  = {};   // idx → { amount, unit }  (for existing items)
   const renameEdits = {};   // idx → newName
   const newItems    = [];   // { name, price, qty, unit }
@@ -2545,15 +2667,17 @@ async function _scProcessSellerPriceEdit(from, text, biz, saveBiz) {
       return `_${shortName} $${[350, 120][i] || 50}_`;
     }).join("  or  ");
     return sendText(from,
-      `❌ *Could not read that.*\n\n` +
-      `*Your items:*\n${_currList}\n\n` +
-      `*Try these formats:*\n` +
-      `${_exParts}\n` +
-      `_1×350_ → set item 1 to $350\n` +
-      `_pick 3_ → add from catalogue\n` +
+      `❌ *Could not read that. Try:*\n\n` +
+      `_BOQ 4-bed house $5000_ → item + price\n` +
+      `_BOQ $5000, Survey $350_ → comma separated\n` +
+      `_1×350_ → price item 1 to $350\n` +
+      `_delete 1_ → remove item 1\n` +
+      `_pick 3_ → add catalogue item 3\n` +
       `_rename 1: Short name_ → rename item\n` +
-      `_note: 50% deposit_ → add PDF note\n` +
-      `_replace_ → clear and start fresh\n\n` +
+      `_note: 50% deposit_ → add note to PDF\n` +
+      `_cat_ → view your full catalogue\n` +
+      `_replace_ → clear all, start fresh\n\n` +
+      `*Your items:*\n${_currList}\n\n` +
       `Type *cancel* to discard.`
     );
   }
@@ -2608,8 +2732,15 @@ async function _scProcessSellerPriceEdit(from, text, biz, saveBiz) {
   const _quoteLines = _buildQuoteLines(updatedLineItems);
 
   const _warnText = _hasUnpriced
-    ? `\n\n⚠️ *${_unpriced.length} item${_unpriced.length > 1 ? "s" : ""} still need a price:*\n` +
-      _unpriced.map(l => `• ${l.name} → type _${l.name.split(" ").slice(0,2).join(" ")} $price_`).join("\n")
+    ? `\n\n⚠️ *${_unpriced.length} item${_unpriced.length > 1 ? "s" : ""} still need${_unpriced.length === 1 ? "s" : ""} a price.*\n` +
+      _unpriced.map(l => {
+        const _itemNum = updatedLineItems.indexOf(l) + 1;
+        const _shortName = (l.name || "item").length > 35 ? (l.name || "item").slice(0, 35) + "..." : l.name;
+        const _hint = l._noPrice || !l.unitPrice
+          ? `→ _${_itemNum}×price_ or _delete ${_itemNum}_ to remove`
+          : "";
+        return `• Item ${_itemNum}: ${_shortName} ${_hint}`;
+      }).join("\n")
     : "";
 
   const _noteDisplay = finalDraft.sellerNote ? `\n📝 _Note: ${finalDraft.sellerNote}_` : "";
@@ -2629,7 +2760,7 @@ async function _scProcessSellerPriceEdit(from, text, biz, saveBiz) {
       `📋 *Quote ${draft.refNum}* — ${_actions || "updated"}\n\n` +
       `${_quoteLines}\n${"─".repeat(24)}\n` +
       `*Total: $${newTotal.toFixed(2)} USD*${_warnText}${_noteDisplay}\n\n` +
-      `_Add more: name $price  ·  pick N  ·  rename N: name_`,
+      `_name $price · pick N · delete N · rename N: name · cat · note: text_`,
     buttons: [
       ..._prevBtn,
       { id: `sc_quote_confirm_${draft.refNum}`, title: "✅ Send Quote" },
