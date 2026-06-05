@@ -4705,26 +4705,21 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
             `${i + 1}. ${l.name} × ${l.qty} - $${Number(l.unitPrice).toFixed(2)} = $${Number(l.lineTotal).toFixed(2)}`
           ).join("\n");
 
-          // Show buyer description as reference (stripped from items, stored separately)
-          const _buyerRef = _scDraft.buyerDescription
-            ? `\n📝 *Buyer's request:* _"${String(_scDraft.buyerDescription).slice(0, 150)}${String(_scDraft.buyerDescription).length > 150 ? "..." : ""}"_\n`
-            : "";
-
-          // No items yet (natural text was auto-stripped) OR all items are $0
-          const _allZero = _scItems.length === 0 || _scItems.every(l => !l.unitPrice || l.unitPrice === 0);
-          const _itemSection = _scItems.length > 0
-            ? `${_itemRows}\n${"─".repeat(28)}\n*Total: $${_scTotal.toFixed(2)} USD*`
-            : `_No items yet — tap Edit & Price to add your items._`;
+          // If ALL items are $0, this is a natural-text request that needs pricing.
+          // Don't show "Confirm & Send" — route seller straight to the edit flow.
+          const _allZero = _scItems.every(l => !l.unitPrice || l.unitPrice === 0);
 
           return sendButtons(from, {
             text:
-              `📋 *Quote ${_scRefNum}*${_buyerRef}\n` +
+              `📋 *Quote ${_scRefNum}*\n\n` +
               `Buyer: ${_scDraft.buyerName || _scDraft.buyerPhone || "Buyer"}\n\n` +
-              `${_itemSection}\n\n` +
+              `${_itemRows}\n` +
+              `${"─".repeat(28)}\n` +
+              `*Total: $${_scTotal.toFixed(2)} USD*\n\n` +
               (_allZero
-                ? `⚠️ *Tap Edit & Price to build your quote.*\n` +
-                  `Add items from your catalogue, type custom ones, or both.`
-                : `Confirm to send the quote and PDF to the buyer, or edit first.`),
+                ? `⚠️ *Items need pricing before you can send.*\n` +
+                  `Tap *Edit & Price* to set prices, add items from your catalogue,\nor add custom items.`
+                : `Confirm to send the quote and PDF to the buyer, or edit the prices first.`),
             buttons: [
               ...(_allZero ? [] : [{ id: `sc_quote_confirm_${_scRefNum}`, title: "✅ Confirm & Send" }]),
               { id: `sc_quote_edit_${_scRefNum}`, title: _allZero ? "✏️ Edit & Price" : "✏️ Edit Prices" }

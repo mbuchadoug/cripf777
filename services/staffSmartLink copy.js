@@ -453,61 +453,29 @@ async function _notifyStaffCardOpened(card, supplier, source, visitorPhone) {
     // Format: "Muchaneta Horinda · Zibugold Construction Group"
     const businessParam = `${cardName} · ${bizName}`;
 
-    // Check if this business has VIP phone reveal enabled
-    const _isVip = supplier?.revealVisitorPhone === true && !!visitorPhone;
-    const _visitorDisplay = visitorPhone ? visitorPhone.replace(/^263/, "0") : "";
-
     try {
-      if (_isVip && _visitorDisplay) {
-        // ── VIP: use supplier_link_opened_with_phone template (4 parameters) ──
-        await axios.post(
-          `https://graph.facebook.com/v24.0/${PHONE_ID}/messages`,
-          {
-            messaging_product: "whatsapp",
-            to:   targetPhone,
-            type: "template",
-            template: {
-              name:     "supplier_link_opened_with_phone",
-              language: { code: "en" },
-              components: [{
-                type: "body",
-                parameters: [
-                  { type: "text", text: businessParam },
-                  { type: "text", text: sourceLabel },
-                  { type: "text", text: timeStr },
-                  { type: "text", text: _visitorDisplay }
-                ]
-              }]
-            }
-          },
-          { headers: { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json" } }
-        );
-        console.log(`[STAFF CARD NOTIFY VIP] supplier_link_opened_with_phone → ${targetPhone} (${cardName} via ${sourceLabel}, visitor: ${_visitorDisplay})`);
-      } else {
-        // ── Standard: supplier_link_opened template (3 parameters) ──────────
-        await axios.post(
-          `https://graph.facebook.com/v24.0/${PHONE_ID}/messages`,
-          {
-            messaging_product: "whatsapp",
-            to:   targetPhone,
-            type: "template",
-            template: {
-              name:     "supplier_link_opened",
-              language: { code: "en" },
-              components: [{
-                type: "body",
-                parameters: [
-                  { type: "text", text: businessParam },
-                  { type: "text", text: sourceLabel },
-                  { type: "text", text: timeStr }
-                ]
-              }]
-            }
-          },
-          { headers: { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json" } }
-        );
-        console.log(`[STAFF CARD NOTIFY] supplier_link_opened (staff) → ${targetPhone} (${cardName} via ${sourceLabel})`);
-      }
+      await axios.post(
+        `https://graph.facebook.com/v24.0/${PHONE_ID}/messages`,
+        {
+          messaging_product: "whatsapp",
+          to:   targetPhone,
+          type: "template",
+          template: {
+            name:     "supplier_link_opened",
+            language: { code: "en" },
+            components: [{
+              type: "body",
+              parameters: [
+                { type: "text", text: businessParam },
+                { type: "text", text: sourceLabel },
+                { type: "text", text: timeStr }
+              ]
+            }]
+          }
+        },
+        { headers: { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json" } }
+      );
+      console.log(`[STAFF CARD NOTIFY] supplier_link_opened (staff) → ${targetPhone} (${cardName} via ${sourceLabel})`);
       return;
     } catch (tplErr) {
       console.warn(`[STAFF CARD NOTIFY] template failed for ${targetPhone}: ${tplErr.message}`);
@@ -521,9 +489,8 @@ async function _notifyStaffCardOpened(card, supplier, source, visitorPhone) {
         `📛 Card: ${cardName}\n` +
         `🏪 ${bizName}\n` +
         `📱 Via: ${sourceLabel}\n` +
-        `⏰ ${timeStr}\n` +
-        (_isVip && _visitorDisplay ? `📞 Visitor: *${_visitorDisplay}*\n` : ``) +
-        `\nThey can browse your services, request a quote, or send an enquiry.\n\n` +
+        `⏰ ${timeStr}\n\n` +
+        `They can browse your services, request a quote, or send an enquiry.\n\n` +
         `💡 _Tip: Respond quickly — buyers in Zimbabwe compare multiple suppliers._`,
       buttons: [
         { id: "my_supplier_account",                  title: "🏪 My Store" },

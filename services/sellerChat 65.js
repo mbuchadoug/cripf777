@@ -1766,23 +1766,8 @@ The seller will review and price your request.
   // contact phones that may be listed on several sellers' accounts.
   try {
     const UserSession = (await import("../models/userSession.js")).default;
-    // ── Auto-separate natural-text buyer description from line items ──────────
-    // If the buyer sent a full-sentence paragraph request, it's stored as item 1
-    // with unitPrice=0. Strip it from lineItems and store as buyerDescription
-    // so it appears as REFERENCE ONLY for the seller — never on the PDF.
-    // Criteria: item has no price, and its name is ≥60 chars (natural text).
-    const _naturalItems   = lineItems.filter(l => (!l.unitPrice || l.unitPrice === 0) && (l.name || "").length >= 60);
-    const _structItems    = lineItems.filter(l => !_naturalItems.includes(l));
-    const _buyerDesc      = _naturalItems.map(l => l.name).join(" ").trim();
-    const _cleanLineItems = _structItems.length > 0 ? _structItems : [];
-    const _cleanTotal     = _cleanLineItems.reduce((s, l) => s + (l.lineTotal || 0), 0);
-
     const _draftPayload = {
-      refNum, supplierId, buyerPhone, buyerName,
-      lineItems:        _cleanLineItems,         // structured items only (on PDF)
-      buyerDescription: _buyerDesc || null,      // buyer's raw text (reference only)
-      total:            _cleanTotal,
-      expiry,
+      refNum, supplierId, buyerPhone, buyerName, lineItems, total, expiry,
       isService, storedAt: Date.now()
     };
 
@@ -2017,35 +2002,19 @@ async function _scHandleQuoteConfirm(from, refNum, biz, saveBiz) {
 
   const { lineItems, total, expiry, buyerPhone, buyerName } = draft;
 
-  // ── Guard: block sending empty or $0 quote ─────────────────────────────────
+  // ── Guard: block sending a $0 quote — seller must price it first ───────────
   const _unpricedForSend = (lineItems || []).filter(l => !l.unitPrice || l.unitPrice === 0);
-  if (lineItems.length === 0 || (_unpricedForSend.length > 0 && (total === 0 || !total))) {
-    const _buyerDescRef = draft.buyerDescription
-      ? `\n\n📝 *Buyer's request:* _"${String(draft.buyerDescription).slice(0, 120)}..."_`
-      : "";
-    if (lineItems.length === 0) {
-      return sendButtons(from, {
-        text:
-          `⚠️ *No items in quote yet.*${_buyerDescRef}\n\n` +
-          `Add your items and prices first:\n` +
-          `_BOQ 4-bed house $5000_ → add item + price\n` +
-          `_BOQ $5000, Survey $350_ → comma-separated\n` +
-          `_pick 3_ → add from your catalogue\n\n` +
-          `Or tap *Edit & Price* to build the quote.`,
-        buttons: [
-          { id: `sc_quote_edit_${refNum}`, title: "✏️ Edit & Price" }
-        ]
-      });
-    }
-    const _upNames = _unpricedForSend.map((l, i) => `• ${l.name.slice(0, 40)}${l.name.length > 40 ? "..." : ""}`).join("\n");
+  if (_unpricedForSend.length > 0 && (total === 0 || !total)) {
+    const _upNames = _unpricedForSend.map((l, i) => `${i + 1}. ${l.name}`).join("\n");
     return sendButtons(from, {
       text:
-        `⚠️ *Quote not sent — set prices first:*\n\n` +
+        `⚠️ *Quote not sent — items have no price*\n\n` +
         `${_upNames}\n\n` +
+        `Set prices before sending:\n` +
         `_1×350_ → set item 1 to $350\n` +
-        `_pick 3_ → add from catalogue at listed price\n` +
-        `_BOQ 4-bed house $5000_ → add new item with price\n\n` +
-        `Or tap *Edit & Price* to go back.`,
+        `_pick 3_ → add catalogue item 3 at listed price\n` +
+        `_add: Custom service - $200_ → add a custom line\n\n` +
+        `Or tap *Edit* to go back to the quote builder.`,
       buttons: [
         { id: `sc_quote_edit_${refNum}`, title: "✏️ Edit & Price" }
       ]
@@ -2158,15 +2127,12 @@ async function _scHandleQuoteEdit(from, refNum, biz, saveBiz) {
     { upsert: true }
   );
 
-  // Check if we have a buyer description stored separately (natural-text request)
-  const _buyerDesc = draft.buyerDescription || null;
-  // Also catch any items that slipped through as natural text (legacy sessions)
-  const _hasLongLegacy = !_buyerDesc && draft.lineItems.some(it => (it.name || "").length > 60 && !it.unitPrice);
+  // Check if buyer's request is a long natural-text paragraph
+  const _hasLongItems = draft.lineItems.some(it => (it.name || "").length > 60);
+  const _hasUnpricedAll = draft.lineItems.every(l => !l.unitPrice || l.unitPrice === 0);
 
   // Build current items display
-  const numbered = draft.lineItems.length > 0
-    ? _buildQuoteLines(draft.lineItems)
-    : "_No items yet — type your items below to build the quote._";
+  const numbered = _buildQuoteLines(draft.lineItems);
 
   // Build catalogue reference (up to 6 items)
   let _catRef = "";
@@ -2189,30 +2155,30 @@ async function _scHandleQuoteEdit(from, refNum, biz, saveBiz) {
     }
   } catch (_ce) {}
 
-  // Build buyer description reference block (if present)
-  const _buyerRefBlock = _buyerDesc
-    ? `\n📝 *Buyer's request (for your reference):*\n_"${_buyerDesc.length > 200 ? _buyerDesc.slice(0, 200) + "..." : _buyerDesc}"_\n`
-    : (_hasLongLegacy
-      ? `\n📝 *Buyer's request is in item 1 above (for reference — you can delete it after adding your items).*\n`
-      : "");
+  // Build context-aware instructions
+  // When buyer sent a long paragraph: focus on "delete it and add your own items"
+  // When items are already structured: focus on pricing/editing
+  const _naturalTextNote = _hasLongItems && _hasUnpricedAll
+    ? `\n💡 *Item 1 is the buyer's description.* Type _delete 1_ to remove it, then add your own items.`
+    : "";
 
-  // Concise, clear instructions for any seller
-  const _guideText = `*How to build your quote:*
+  const _guideText = `*What you can type:*
 _BOQ 4-bed house $5000_ → add item + price
-_BOQ $5000, Survey $350_ → add multiple, comma separated
-_1×350_ → set price on existing item 1
+_BOQ $5000, Site survey $350_ → multiple items, comma separated
+_1×350_ → set item 1 price to $350
 _delete 1_ → remove item 1
-_pick 3_ → add item 3 from catalogue
+_pick 3_ → add item 3 from your catalogue
 _rename 1: Short name_ → rename item 1
-_note: 50% deposit required_ → adds note to PDF
-_cat_ → view full catalogue
-_replace_ → clear and start fresh
+_note: 50% deposit required_ → add note to PDF
+_cat_ → view your full catalogue
+_replace_ → clear all, start fresh
 
-Type *confirm* to send  ·  *cancel* to discard`;
+Type *confirm* to send  ·  *cancel* to discard${_naturalTextNote}`;
 
   return sendButtons(from, {
     text:
-`📋 *Quote ${refNum}*${_buyerRefBlock}
+`📋 *Quote ${refNum} — price and send*
+
 ${numbered}${_catRef}
 
 ${_guideText}`,
@@ -2789,14 +2755,9 @@ async function _scProcessSellerPriceEdit(from, text, biz, saveBiz) {
     inlineNote ? "note saved" : ""
   ].filter(Boolean).join(" · ");
 
-  // Show buyer description as reference in the review (reference only, not on PDF)
-  const _reviewBuyerRef = draft.buyerDescription
-    ? `\n📝 *Buyer said:* _"${String(draft.buyerDescription).slice(0, 120)}${String(draft.buyerDescription).length > 120 ? "..." : ""}"_\n`
-    : "";
-
   return sendButtons(from, {
     text:
-      `📋 *Quote ${draft.refNum}* — ${_actions || "updated"}${_reviewBuyerRef}\n` +
+      `📋 *Quote ${draft.refNum}* — ${_actions || "updated"}\n\n` +
       `${_quoteLines}\n${"─".repeat(24)}\n` +
       `*Total: $${newTotal.toFixed(2)} USD*${_warnText}${_noteDisplay}\n\n` +
       `_name $price · pick N · delete N · rename N: name · cat · note: text_`,
