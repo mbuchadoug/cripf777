@@ -1099,8 +1099,9 @@ async function _scQuote(from, supplierId, biz, saveBiz) {
     const numExamples = [
       name1 ? `_1_ → selects *${name1}*${price1 ? ` (${price1})` : ""}` : null,
       name2 ? `_2_ → selects *${name2}*${price2 ? ` (${price2})` : ""}` : null,
-      name1 && name2 ? `_1, 2_ → selects both` : null,
-      name1 ? `_1×2_ → ${name1} × 2 jobs` : null,
+      name1 && name2 ? `_1, 2_ → selects both at once` : null,
+      (allItems.length >= 3) ? `_1, 4, 6_ → pick multiple by number` : null,
+      name1 ? `_1×2_ → ${name1} × 2` : null,
     ].filter(Boolean).join("\n");
 
     const freeTextExamples = isService ? [
@@ -1327,7 +1328,7 @@ async function _scProcessItemList(from, supplierId, raw, biz, saveBiz) {
     } else {
       knownItems = isService
         ? (seller.rates?.length > 0 ? seller.rates : (seller.listedProducts || seller.products || []).map(s => ({ service: s, rate: "" })))
-        : (seller.prices?.length > 0 ? seller.prices : (seller.listedProducts || seller.products || []).map(p => ({ product: p, amount: 0, unit: "each" })));
+        : (seller.prices?.length > 0 ? seller.prices.filter(p => p.inStock !== false) : (seller.listedProducts || seller.products || []).map(p => ({ product: p, amount: 0, unit: "each" })));
     }
   }
 
@@ -1384,7 +1385,7 @@ async function _scProcessItemList(from, supplierId, raw, biz, saveBiz) {
 
   const editHint = isService
     ? `\n\n💡 _Add more by number, name, or free text._\n_Type *note: your detail* to add size/location/scope._\n_Type *edit: 1: new name* to rename an item._`
-    : `\n\n💡 _Add more items, or tap the button to request your quote._\n_Type *note: your detail* to add context._`;
+    : `\n\n💡 _Type more numbers to add items (e.g. *2, 5, 8*), or tap *Get Quote* when ready._\n_Type *note: your detail* to add context._`;
 
   return sendButtons(from, {
     text:
