@@ -131,12 +131,14 @@ export async function startSchoolApplicationForm({ from, school, UserSession }) 
   // ── Form NOT active: show profile + contact info + any configured links ────
   const _baseUrlInactive = process.env.BASE_URL || process.env.PUBLIC_URL || "https://cripfcnt.com";
   if (!form.active) {
+    const _webUrlInactive = `${_baseUrlInactive}/apply/school/${school._id}`;
     await sendButtons(from, {
       text:
         profileCard +
-        `\n📝 *Applications*\n` +
-        (school.registrationLink ? `🔗 Apply online: ${school.registrationLink}\n` : "") +
-        `📞 Contact to apply: ${_phone}`,
+        `\n📝 *How to Apply*\n` +
+        `🌐 Web form: ${_webUrlInactive}\n` +
+        (school.registrationLink ? `🔗 External form: ${school.registrationLink}\n` : "") +
+        `📞 Call the school: ${_phone}`,
       buttons: [
         { id: `sfaq_enquiry_${school._id}`, title: "❓ Ask a Question" },
         { id: "school_search_refine",        title: "🏫 More Schools"  }
@@ -145,7 +147,8 @@ export async function startSchoolApplicationForm({ from, school, UserSession }) 
     // Still send documents if configured
     if (form.brochureUrl) {
       try {
-        await sendDocument(from, { link: form.brochureUrl, filename: form.brochureName || "School_Brochure.pdf", caption: `📄 *${school.schoolName} — Brochure*` });
+        await sendDocument(from, { link: form.brochureUrl, filename: form.brochureName || "School_Brochure.pdf",
+          caption: `📄 *${school.schoolName} — Brochure*\n_Save this for your records._` });
       } catch (_) {}
     }
     if (form.rawFormUrl) {

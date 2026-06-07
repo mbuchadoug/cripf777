@@ -4923,7 +4923,8 @@ router.get("/schools/:id", requireSupplierAdmin, async (req, res) => {
 .sg{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:22px}
 @media(max-width:660px){.sg{grid-template-columns:1fr}}
 .sc{background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.08);text-align:center}
-.sk{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:22px}
+.sk{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:22px}
+@media(max-width:660px){.sk{grid-template-columns:repeat(3,1fr)}}
 .sm{background:white;border-radius:10px;padding:14px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,.06)}
 .sn{font-size:26px;font-weight:800}.sl{font-size:11px;color:var(--muted);margin-top:2px}
 .toggle{position:relative;width:44px;height:24px;display:inline-block}
@@ -4933,14 +4934,30 @@ router.get("/schools/:id", requireSupplierAdmin, async (req, res) => {
 input:checked+.slid{background:#16a34a}
 input:checked+.slid:before{transform:translateX(20px)}
 </style>
-<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:10px">
-  <div><h1 style="font-size:19px;font-weight:800;margin:0">${esc(school.schoolName)}</h1>
-    <p style="margin:4px 0 0;color:var(--muted);font-size:13px">${esc([school.suburb,school.city].filter(Boolean).join(", "))} · ${school.active?"🟢 Active":"⚫ Inactive"}${school.verified?" · ✅ Verified":""}</p>
-  </div>
-  <div style="display:flex;gap:8px;flex-wrap:wrap">
-    <a href="/zq-admin/schools/${esc(String(school._id))}/contacts" class="btn btn-sm" style="background:#dbeafe;color:#1d4ed8">👥 Contacts (${cStats.total})</a>
-    <a href="/zq-admin/schools/${esc(String(school._id))}/apply-qr" class="btn btn-sm" style="background:#f0fdf4;color:#16a34a">📥 QR Codes</a>
-    <a href="/zq-admin/schools/${esc(String(school._id))}/delete-confirm" class="btn btn-sm btn-red">🗑</a>
+<div style="background:white;border-radius:14px;padding:20px 22px;margin-bottom:20px;box-shadow:0 1px 4px rgba(0,0,0,.08);border:1px solid #e2e8f0">
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px">
+    <div style="flex:1;min-width:200px">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px">
+        <h1 style="font-size:20px;font-weight:800;margin:0">${esc(school.schoolName)}</h1>
+        ${school.verified?`<span style="background:#fef9c3;color:#92400e;padding:2px 10px;border-radius:20px;font-size:12px;font-weight:700">✅ Verified</span>`:""}
+        <span style="background:${school.active?"#dcfce7":"#f1f5f9"};color:${school.active?"#16a34a":"#94a3b8"};padding:2px 10px;border-radius:20px;font-size:12px;font-weight:700">${school.active?"🟢 Active":"⚫ Inactive"}</span>
+      </div>
+      <p style="margin:0;color:var(--muted);font-size:13px;line-height:1.5">
+        📍 ${esc([school.address,school.suburb,school.city].filter(Boolean).join(", "))}
+        ${school.phone?` &nbsp;·&nbsp; 📞 ${esc(school.phone)}`:""}
+        ${school.email?` &nbsp;·&nbsp; 📧 ${esc(school.email)}`:""}
+      </p>
+      <p style="margin:4px 0 0;color:var(--muted);font-size:12px">
+        ${[school.schoolType,school.ownership,school.curriculum?.join("+")].filter(Boolean).map(s=>s.toUpperCase()).join(" · ")}
+        ${school.fees?.term1?` &nbsp;·&nbsp; 💰 $${school.fees.term1}/term`:""}
+      </p>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start">
+      <a href="/zq-admin/schools/${esc(String(school._id))}/contacts" class="btn btn-sm" style="background:#dbeafe;color:#1d4ed8">👥 Contacts&nbsp;(${cStats.total})</a>
+      <a href="/apply/school/${esc(String(school._id))}" target="_blank" class="btn btn-sm" style="background:#f0fdf4;color:#16a34a">🌐 Web Form</a>
+      <a href="/zq-admin/schools/${esc(String(school._id))}/apply-qr" class="btn btn-sm" style="background:#eff6ff;color:#1d4ed8">📲 QR Codes</a>
+      <a href="/zq-admin/schools/${esc(String(school._id))}/delete-confirm" class="btn btn-sm btn-red">🗑</a>
+    </div>
   </div>
 </div>
 ${ok?`<div style="background:#f0fdf4;border:1px solid #bbf7d0;color:#166534;padding:10px 14px;border-radius:8px;margin-bottom:14px">✅ ${esc(ok)}</div>`:""}
@@ -5101,9 +5118,186 @@ ${er?`<div style="background:#fef2f2;border:1px solid #fecaca;color:#dc2626;padd
   })();
   </script>
 </div>
+
+<div style="background:white;border-radius:12px;padding:24px;box-shadow:0 1px 3px rgba(0,0,0,.08);margin-bottom:22px;border:1px solid #e2e8f0">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px">
+    <div>
+      <h2 style="font-size:15px;font-weight:700;margin:0">✏️ Edit School Profile</h2>
+      <p style="font-size:12px;color:var(--muted);margin-top:3px">Update school information, status, and verification</p>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <form method="POST" action="/zq-admin/schools/${esc(String(school._id))}/toggle-active" style="margin:0">
+        <button type="submit" class="btn btn-sm" style="background:${school.active?"#fef2f2":"#f0fdf4"};color:${school.active?"#dc2626":"#16a34a"};border:1.5px solid ${school.active?"#fca5a5":"#bbf7d0"}">
+          ${school.active?"⏸ Deactivate":"✅ Activate"}
+        </button>
+      </form>
+      <form method="POST" action="/zq-admin/schools/${esc(String(school._id))}/toggle-verified" style="margin:0">
+        <button type="submit" class="btn btn-sm" style="background:${school.verified?"#fffbeb":"#eff6ff"};color:${school.verified?"#b45309":"#1d4ed8"};border:1.5px solid ${school.verified?"#fde68a":"#bfdbfe"}">
+          ${school.verified?"❌ Remove Verify":"✅ Verify School"}
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <form method="POST" action="/zq-admin/schools/${esc(String(school._id))}/edit">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px">
+      <div>
+        <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:#374151">School Name</label>
+        <input name="schoolName" value="${esc(school.schoolName||"")}" required style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:7px;font-size:13px">
+      </div>
+      <div>
+        <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:#374151">Phone Number</label>
+        <input name="phone" value="${esc(school.phone||"")}" style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:7px;font-size:13px" placeholder="e.g. 263773256276">
+      </div>
+      <div>
+        <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:#374151">Email</label>
+        <input name="email" type="email" value="${esc(school.email||"")}" style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:7px;font-size:13px">
+      </div>
+      <div>
+        <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:#374151">Website</label>
+        <input name="website" value="${esc(school.website||"")}" style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:7px;font-size:13px" placeholder="e.g. www.stangela.ac.zw">
+      </div>
+      <div>
+        <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:#374151">Suburb / Area</label>
+        <input name="suburb" value="${esc(school.suburb||school.location?.area||"")}" style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:7px;font-size:13px" placeholder="e.g. Borrowdale">
+      </div>
+      <div>
+        <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:#374151">City</label>
+        <select name="city" style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;background:white">
+          ${["Harare","Bulawayo","Mutare","Gweru","Masvingo","Kwekwe","Kadoma","Chinhoyi","Victoria Falls","Bindura","Marondera","Chegutu","Zvishavane","Kariba"].map(c=>`<option value="${c}"${(school.city||"")==c?" selected":""}>${c}</option>`).join("")}
+        </select>
+      </div>
+      <div style="grid-column:1/-1">
+        <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:#374151">Street Address</label>
+        <input name="address" value="${esc(school.address||"")}" style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:7px;font-size:13px" placeholder="e.g. 433 Wheeldon Ave, Borrowdale">
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:16px">
+      <div>
+        <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:#374151">School Type</label>
+        <select name="schoolType" style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;background:white">
+          <option value="">— Select —</option>
+          ${[["ecd","ECD / Pre-School"],["primary","Primary"],["secondary","Secondary"],["combined","Combined"]].map(([v,l])=>`<option value="${v}"${(school.schoolType||"")==v?" selected":""}>${l}</option>`).join("")}
+        </select>
+      </div>
+      <div>
+        <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:#374151">Ownership</label>
+        <select name="ownership" style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;background:white">
+          <option value="">— Select —</option>
+          ${[["government","Government"],["mission","Mission"],["private","Private"],["council","Council"]].map(([v,l])=>`<option value="${v}"${(school.ownership||"")==v?" selected":""}>${l}</option>`).join("")}
+        </select>
+      </div>
+      <div>
+        <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:#374151">Gender</label>
+        <select name="gender" style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;background:white">
+          ${[["mixed","Mixed (Co-ed)"],["boys","Boys Only"],["girls","Girls Only"]].map(([v,l])=>`<option value="${v}"${(school.gender||"")==v?" selected":""}>${l}</option>`).join("")}
+        </select>
+      </div>
+      <div>
+        <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:#374151">Curriculum</label>
+        <input name="curriculum" value="${esc((school.curriculum||[]).join(", "))}" style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:7px;font-size:13px" placeholder="e.g. cambridge, zimsec">
+        <p style="font-size:11px;color:var(--muted);margin-top:3px">Comma-separated: cambridge, zimsec, ib</p>
+      </div>
+      <div>
+        <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:#374151">Fees — Term 1 ($)</label>
+        <input name="fees_term1" type="number" value="${school.fees?.term1||""}" style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:7px;font-size:13px" placeholder="e.g. 800">
+      </div>
+      <div>
+        <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:#374151">Fees — Term 2 ($)</label>
+        <input name="fees_term2" type="number" value="${school.fees?.term2||""}" style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:7px;font-size:13px" placeholder="e.g. 800">
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px">
+      <div>
+        <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:#374151">Fees — Term 3 ($)</label>
+        <input name="fees_term3" type="number" value="${school.fees?.term3||""}" style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:7px;font-size:13px" placeholder="e.g. 800">
+      </div>
+      <div>
+        <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:#374151">Principal Name</label>
+        <input name="principalName" value="${esc(school.principalName||"")}" style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:7px;font-size:13px" placeholder="e.g. Mrs T. Mutasa">
+      </div>
+      <div>
+        <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:#374151">Contact Phone (public)</label>
+        <input name="contactPhone" value="${esc(school.contactPhone||"")}" style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:7px;font-size:13px" placeholder="e.g. 0773256276">
+      </div>
+      <div>
+        <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:#374151">Boarding</label>
+        <select name="boarding" style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;background:white">
+          ${[["day","Day School"],["boarding","Boarding"],["both","Day & Boarding"]].map(([v,l])=>`<option value="${v}"${(school.boarding||"day")==v?" selected":""}>${l}</option>`).join("")}
+        </select>
+      </div>
+      <div style="grid-column:1/-1">
+        <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:#374151">School Description</label>
+        <textarea name="description" rows="3" style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;resize:vertical;font-family:inherit" placeholder="Brief description shown to parents...">${esc(school.description||"")}</textarea>
+      </div>
+    </div>
+
+    <button type="submit" class="btn btn-blue" style="padding:10px 24px">💾 Save School Profile</button>
+  </form>
+</div>
+
 <a href="/zq-admin/schools" class="back-link">← All Schools</a>
     `));
   } catch(err){ res.send(layout("Error",`<div class="alert red">${esc(err.message)}</div>`)); }
+});
+
+// POST /schools/:id/toggle-active
+router.post("/schools/:id/toggle-active", requireSupplierAdmin, async(req,res) => {
+  try {
+    const SP = (await import("../models/schoolProfile.js")).default;
+    const sc = await SP.findById(req.params.id).lean();
+    if(!sc) return res.redirect("/zq-admin/schools");
+    await SP.findByIdAndUpdate(req.params.id, { $set: { active: !sc.active } });
+    res.redirect(`/zq-admin/schools/${req.params.id}?success=${encodeURIComponent(!sc.active ? "School activated — now visible to parents." : "School deactivated — hidden from search.")}`);
+  } catch(err) { res.redirect(`/zq-admin/schools/${req.params.id}?error=${encodeURIComponent(err.message)}`); }
+});
+
+// POST /schools/:id/toggle-verified
+router.post("/schools/:id/toggle-verified", requireSupplierAdmin, async(req,res) => {
+  try {
+    const SP = (await import("../models/schoolProfile.js")).default;
+    const sc = await SP.findById(req.params.id).lean();
+    if(!sc) return res.redirect("/zq-admin/schools");
+    await SP.findByIdAndUpdate(req.params.id, { $set: { verified: !sc.verified } });
+    res.redirect(`/zq-admin/schools/${req.params.id}?success=${encodeURIComponent(!sc.verified ? "School verified ✅ — badge now shown to parents." : "Verification removed.")}`);
+  } catch(err) { res.redirect(`/zq-admin/schools/${req.params.id}?error=${encodeURIComponent(err.message)}`); }
+});
+
+// POST /schools/:id/edit
+router.post("/schools/:id/edit", requireSupplierAdmin, async(req,res) => {
+  try {
+    const SP = (await import("../models/schoolProfile.js")).default;
+    const { schoolName, phone, email, website, suburb, city, address,
+            schoolType, ownership, gender, curriculum, fees_term1, fees_term2, fees_term3,
+            principalName, contactPhone, boarding, description } = req.body;
+    await SP.findByIdAndUpdate(req.params.id, { $set: {
+      schoolName:    String(schoolName||"").trim(),
+      phone:         String(phone||"").replace(/\D/g,""),
+      email:         String(email||"").trim(),
+      website:       String(website||"").trim(),
+      suburb:        String(suburb||"").trim(),
+      city:          String(city||"").trim(),
+      address:       String(address||"").trim(),
+      schoolType:    String(schoolType||"").trim(),
+      ownership:     String(ownership||"").trim(),
+      gender:        String(gender||"mixed").trim(),
+      curriculum:    String(curriculum||"").split(",").map(s=>s.trim().toLowerCase()).filter(Boolean),
+      fees: {
+        term1: parseFloat(fees_term1)||0,
+        term2: parseFloat(fees_term2)||0,
+        term3: parseFloat(fees_term3)||0
+      },
+      principalName: String(principalName||"").trim(),
+      contactPhone:  String(contactPhone||"").trim(),
+      boarding:      String(boarding||"day").trim(),
+      description:   String(description||"").trim(),
+      "location.area": String(suburb||"").trim(),
+      "location.city": String(city||"").trim()
+    }});
+    res.redirect(`/zq-admin/schools/${req.params.id}?success=School+profile+saved.`);
+  } catch(err) { res.redirect(`/zq-admin/schools/${req.params.id}?error=${encodeURIComponent(err.message)}`); }
 });
 
 // POST apply-toggle
