@@ -3643,6 +3643,8 @@ a.startsWith("sup_load_preset_") ||
       a.startsWith("school_view_") ||
     a.startsWith("school_dl_profile_") ||
       a.startsWith("school_apply_") ||
+      a.startsWith("school_apply_start_") ||
+      a.startsWith("sa_grade_") ||
       a.startsWith("school_enquiry_") ||
       a === "school_my_profile" ||
       a === "school_my_facilities" ||
@@ -3949,6 +3951,31 @@ if (!isMetaAction && /^ZQ:S:[a-z0-9_-]{1,60}$/i.test(text.trim())) {
   });
   if (_zqsTopHandled) return;
   try { await sendText(from, "❌ This supplier link is no longer active. Type *menu* to browse ZimQuote."); } catch(_) {}
+  return;
+}
+
+// ── APPLY:SCHOOL:<id> — application form QR deep link (TOP LEVEL) ────────────
+// MUST be top-level: without this, APPLY:SCHOOL: falls through to the product
+// search flow and returns "Which city?" to the parent.
+// Case-insensitive: wa.me pre-fills may lowercase the token.
+if (!isMetaAction && /^APPLY:SCHOOL:[a-f0-9]{24}$/i.test(text.trim())) {
+  console.log(`[APPLY:SCHOOL TOP LEVEL] from=${from} text=${text.trim()}`);
+  const _applyIdTop = text.trim().split(":")[2];
+  try {
+    const _SPTop = (await import("../models/schoolProfile.js")).default;
+    const _applySchoolTop = await _SPTop.findById(_applyIdTop).lean();
+    if (_applySchoolTop) {
+      const { captureSchoolContact, startSchoolApplicationForm, notifySchoolApplyLinkOpened }
+        = await import("./schoolApplicationForm.js");
+      captureSchoolContact({ schoolId: _applyIdTop, phone, source: "apply" }).catch(() => {});
+      notifySchoolApplyLinkOpened({ school: _applySchoolTop, visitorPhone: from, source: "qr" }).catch(() => {});
+      await startSchoolApplicationForm({ from, school: _applySchoolTop, UserSession });
+    } else {
+      await sendText(from, "❌ This application link is no longer active. Please contact the school directly.");
+    }
+  } catch (_applyTopErr) {
+    console.warn("[APPLY:SCHOOL TOP LEVEL]", _applyTopErr.message);
+  }
   return;
 }
 
@@ -12241,9 +12268,15 @@ if (a === "school_toggle_admissions" || a === "school_update_fees") {
   if (handled) return;
 }
  
-// ── School Application Form WhatsApp State Handler ───────────────────────────
-// Multi-step: student_name → grade → dob → parent_name → parent_phone → done
-if (!isMetaAction && flowSess?.tempData?.schoolApplyState) {
+// ── School Application Form WhatsApp State Handler ─────────────────────────
+// States: awaiting_start → awaiting_student_name → awaiting_grade →
+//         awaiting_dob → awaiting_parent_name → awaiting_parent_phone → done
+// "school_apply_start_<id>" button also handled here (isMetaAction path)
+if (
+  (a.startsWith("school_apply_start_") && flowSess?.tempData?.schoolApplyState === "awaiting_start") ||
+  (a.startsWith("sa_grade_")           && flowSess?.tempData?.schoolApplyState === "awaiting_grade") ||
+  (!isMetaAction && flowSess?.tempData?.schoolApplyState && flowSess.tempData.schoolApplyState !== "awaiting_start")
+) {
   const _saState = flowSess.tempData.schoolApplyState;
   const _saId    = flowSess.tempData.schoolApplyId;
   let _saData = {};
@@ -12258,61 +12291,89 @@ if (!isMetaAction && flowSess?.tempData?.schoolApplyState) {
     );
   };
 
-  const _steps = ["awaiting_student_name","awaiting_grade","awaiting_dob","awaiting_parent_name","awaiting_parent_phone"];
+  // Parent tapped "Start Application" button
+  if (_saState === "awaiting_start") {
+    await _saUpdate("awaiting_student_name");
+    await sendText(from,
+      `📝 *Application — ${_saData.schoolName || "School"}*\n` +
+      (_saData.intakeYear ? `_${_saData.intakeYear}_\n` : "") +
+      `\n*Step 1 of 5*\nWhat is the *student's full name?*\n_e.g. Tatenda Moyo_`
+    );
+    return;
+  }
 
   if (_saState === "awaiting_student_name") {
-    await _saUpdate("awaiting_grade", { studentName: text.trim() });
-    await sendText(from, `✅ *${text.trim()}*\n\n*Step 2 of 5*\nWhat *grade or form* are they applying for?\n_e.g. Form 1, Grade 7, ECD A_`);
+    const _saName = text.trim();
+    await _saUpdate("awaiting_grade", { studentName: _saName });
+    const _saGrades = _saData.gradeOptions || [];
+    if (_saGrades.length > 0 && _saGrades.length <= 10) {
+      // Show grade as a list so parent just taps — no typing
+      const _saRows = _saGrades.map(g => ({ id: `sa_grade_${g.replace(/\s+/g,"_")}`, title: g.slice(0,24) }));
+      await sendList(from,
+        `✅ *${_saName}*\n\n*Step 2 of 5*\nSelect the *grade or form* applying for:`,
+        _saRows
+      );
+    } else {
+      await sendText(from, `✅ *${_saName}*\n\n*Step 2 of 5*\nWhat *grade or form* are they applying for?\n_e.g. Form 1, Grade 7, ECD A_`);
+    }
     return;
   }
+
   if (_saState === "awaiting_grade") {
-    await _saUpdate("awaiting_dob", { grade: text.trim() });
-    await sendText(from, `✅ *${text.trim()}*\n\n*Step 3 of 5*\nWhat is the *student's date of birth?*\n_e.g. 15 March 2014 or 15/03/2014_`);
+    // Accept both free text and list reply (list reply: a = "sa_grade_Form_1", text = "Form 1")
+    const _saGrade = a.startsWith("sa_grade_")
+      ? a.replace(/^sa_grade_/,"").replace(/_/g," ").trim()
+      : text.trim();
+    await _saUpdate("awaiting_dob", { grade: _saGrade });
+    await sendText(from, `✅ *${_saGrade}*\n\n*Step 3 of 5*\nWhat is the *student's date of birth?*\n_e.g. 15 March 2014 or 15/03/2014_`);
     return;
   }
+
   if (_saState === "awaiting_dob") {
     await _saUpdate("awaiting_parent_name", { dob: text.trim() });
-    await sendText(from, `✅ *${text.trim()}*\n\n*Step 4 of 5*\nWhat is the *parent or guardian's full name?*`);
+    await sendText(from, `✅ *${text.trim()}*\n\n*Step 4 of 5*\nWhat is the *parent or guardian's full name?*\n_The name the school should use when contacting you_`);
     return;
   }
+
   if (_saState === "awaiting_parent_name") {
     await _saUpdate("awaiting_parent_phone", { parentName: text.trim() });
-    await sendText(from, `✅ *${text.trim()}*\n\n*Step 5 of 5*\nWhat is your *contact phone number?*\n_The school will call or WhatsApp you on this number._`);
+    await sendText(from, `✅ *${text.trim()}*\n\n*Step 5 of 5*\nWhat is your *WhatsApp / contact number?*\n_The school will call or message you on this number. You can also just type "same" to use this number._`);
     return;
   }
+
   if (_saState === "awaiting_parent_phone") {
-    _saData.parentPhone = text.trim();
+    const _rawPhone = text.trim().toLowerCase();
+    _saData.parentPhone = (_rawPhone === "same" || _rawPhone === "this") ? (from.startsWith("263") ? "0"+from.slice(3) : from) : _rawPhone;
     // Clear state
     await UserSession.findOneAndUpdate(
       { phone },
       { $unset: { "tempData.schoolApplyState": "", "tempData.schoolApplyId": "", "tempData.schoolApplyData": "" } },
       { upsert: true }
     );
-    // Summary
+    // Confirmation summary
     const _saSummary =
       `📝 *Application Submitted — ${_saData.schoolName || "School"}*\n\n` +
       `👤 Student: *${_saData.studentName || "—"}*\n` +
       `📚 Grade: *${_saData.grade || "—"}*\n` +
       `🎂 Date of Birth: *${_saData.dob || "—"}*\n` +
       `👪 Parent/Guardian: *${_saData.parentName || "—"}*\n` +
-      `📞 Contact: *${_saData.parentPhone || from}*`;
+      `📞 Contact: *${_saData.parentPhone || (from.startsWith("263") ? "0"+from.slice(3) : from)}*`;
     await sendButtons(from, {
       text:
         `${_saSummary}\n\n` +
-        `✅ *Your application has been submitted!*\n` +
-        `The school will contact you shortly on the number provided.\n\n` +
-        `_Keep this WhatsApp open so they can reach you here too._`,
+        `✅ *Application received!*\n` +
+        `The school will contact you on *${_saData.parentPhone || (from.startsWith("263") ? "0"+from.slice(3) : from)}* shortly.\n\n` +
+        `_Keep WhatsApp open — the school may message you here too._`,
       buttons: [
         { id: `sfaq_enquiry_${_saId}`, title: "❓ Ask a Question" },
-        { id: "school_search_refine",  title: "🔄 More Schools" }
+        { id: "school_search_refine",  title: "🏫 More Schools"  }
       ]
     });
-    // Save full contact record + send email
+    // Save full contact + send email
     try {
       const { captureSchoolContact, emailApplicationToSchool } = await import("./schoolApplicationForm.js");
       await captureSchoolContact({
-        schoolId: _saId, phone,
-        source: "apply",
+        schoolId: _saId, phone, source: "apply",
         extraData: {
           studentName:   _saData.studentName,
           parentName:    _saData.parentName,
@@ -12324,11 +12385,25 @@ if (!isMetaAction && flowSess?.tempData?.schoolApplyState) {
       });
       const _saSchool = _saId ? await SchoolProfile.findById(_saId).lean() : null;
       if (_saSchool) await emailApplicationToSchool({ school: _saSchool, data: _saData, applicantPhone: from });
-    } catch (_saFinalErr) {
-      console.warn("[SCHOOL APPLY FINAL]", _saFinalErr.message);
-    }
+    } catch (_saFinalErr) { console.warn("[SCHOOL APPLY FINAL]", _saFinalErr.message); }
     return;
   }
+}
+
+// ── school_apply_start_<id> when session is NOT awaiting_start (stale tap) ───
+if (a.startsWith("school_apply_start_")) {
+  const _sasId = a.replace("school_apply_start_","").trim();
+  try {
+    const _sasSchool = await SchoolProfile.findById(_sasId).lean();
+    if (_sasSchool) {
+      const { captureSchoolContact, startSchoolApplicationForm, notifySchoolApplyLinkOpened }
+        = await import("./schoolApplicationForm.js");
+      captureSchoolContact({ schoolId: _sasId, phone, source: "apply" }).catch(()=>{});
+      notifySchoolApplyLinkOpened({ school: _sasSchool, visitorPhone: from, source: "link" }).catch(()=>{});
+      await startSchoolApplicationForm({ from, school: _sasSchool, UserSession });
+    }
+  } catch (_sasErr) { console.warn("[SCHOOL APPLY START]", _sasErr.message); }
+  return;
 }
 
 // ── School FAQ text state for no-biz first-time users ───────────────────────
@@ -12404,24 +12479,7 @@ if (!biz && !isMetaAction && flowSess?.tempData?.schoolEnquiryState === "school_
   }
 }
 
-// ── APPLY:SCHOOL:<id> — application form QR deep link ────────────────────────
-// Triggered when parent scans the Apply QR code (different from profile QR).
-if (!isMetaAction && /^APPLY:SCHOOL:[a-f0-9]{24}$/i.test(text.trim())) {
-  const _applyId2 = text.trim().split(":")[2];
-  try {
-    const _applySchool2 = await SchoolProfile.findById(_applyId2).lean();
-    if (_applySchool2) {
-      const { captureSchoolContact, startSchoolApplicationForm, notifySchoolApplyLinkOpened }
-        = await import("./schoolApplicationForm.js");
-      captureSchoolContact({ schoolId: _applyId2, phone, source: "apply" }).catch(() => {});
-      notifySchoolApplyLinkOpened({ school: _applySchool2, visitorPhone: from, source: "qr" }).catch(() => {});
-      await startSchoolApplicationForm({ from, school: _applySchool2, UserSession });
-    }
-  } catch (_dlApplyErr) {
-    console.warn("[APPLY:SCHOOL]", _dlApplyErr.message);
-  }
-  return;
-}
+// [APPLY:SCHOOL deep link now handled at top level — see top of file]
 
 // ── ZQ deep-link intercept (ZQ:SCHOOL:id and ZQ:SUPPLIER:id) ────────────────
 // FIX: tightened regex to require valid 24-char hex ID, and sanitize text to
@@ -12429,6 +12487,31 @@ if (!isMetaAction && /^APPLY:SCHOOL:[a-f0-9]{24}$/i.test(text.trim())) {
 if (!isMetaAction && /ZQ:(SCHOOL|SUPPLIER):[a-f0-9]{24}/i.test(text)) {
   const _zqMatch2 = text.match(/ZQ:(SCHOOL|SUPPLIER):([a-f0-9]{24})/i);
   const _zqClean2 = _zqMatch2 ? ("ZQ:" + _zqMatch2[1].toUpperCase() + ":" + _zqMatch2[2]) : text;
+  // ── School profile view: capture contact + notify school ─────────────────
+  if (_zqMatch2 && _zqMatch2[1].toUpperCase() === "SCHOOL") {
+    try {
+      const _spView = await SchoolProfile.findById(_zqMatch2[2]).lean();
+      if (_spView) {
+        const { captureSchoolContact, notifySchoolApplyLinkOpened } = await import("./schoolApplicationForm.js");
+        captureSchoolContact({ schoolId: _zqMatch2[2], phone, source: "profile" }).catch(() => {});
+        // Notify school's admin phone of the profile view (if notifyPhone is set)
+        if (_spView.applicationForm?.notifyPhone) {
+          const _spTime = new Date().toLocaleString("en-GB", {
+            day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Africa/Harare"
+          });
+          const { sendText: _spSendText } = await import("./metaSender.js");
+          const _spNotify = String(_spView.applicationForm.notifyPhone).replace(/\D/g,"");
+          const _spNorm = _spNotify.startsWith("0") ? "263" + _spNotify.slice(1) : _spNotify;
+          _spSendText(_spNorm,
+            `👁 *New school profile view — ${_spView.schoolName}*\n` +
+            `📱 Parent number: *${from.startsWith("263") ? "0"+from.slice(3) : from}*\n` +
+            `⏰ ${_spTime}\n\n` +
+            `_This parent is browsing your school on ZimQuote._`
+          ).catch(() => {});
+        }
+      }
+    } catch (_spViewErr) { console.warn("[SCHOOL PROFILE VIEW]", _spViewErr.message); }
+  }
   const _handled = await handleZqDeepLink({ from, text: _zqClean2, biz, saveBiz: saveBizSafe.bind(null, biz) });
   if (_handled) return;
 }

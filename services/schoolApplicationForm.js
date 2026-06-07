@@ -101,81 +101,107 @@ export async function notifySchoolApplyLinkOpened({ school, visitorPhone, source
 }
 
 // ─── START WHATSAPP APPLICATION FORM ─────────────────────────────────────────
-// Called when parent taps Apply or scans QR.
-// Checks school.applicationForm.active and starts the flow.
+// Called when parent taps Apply or scans APPLY:SCHOOL QR.
+// 1. Shows school profile card (location, fees, curriculum, grades, contact)
+// 2. Sends brochure/flyer PDF if configured
+// 3. Prompts parent to tap "Start Application" before asking questions
 export async function startSchoolApplicationForm({ from, school, UserSession }) {
   const form = school.applicationForm || {};
 
-  // If school has an external link AND no WhatsApp form active, just send the link
-  if (school.registrationLink && !form.active) {
-    await sendButtons(from, {
-      text:
-        `📝 *Apply to ${school.schoolName}*\n\n` +
-        `Tap the link to open the online application form:\n\n` +
-        `🔗 ${school.registrationLink}\n\n` +
-        `_You can complete this on your phone or computer. No login needed._\n\n` +
-        `📞 Questions? Call: ${school.contactPhone || school.phone || ""}`,
-      buttons: [
-        { id: `sfaq_enquiry_${school._id}`, title: "❓ Ask a Question" }
-      ]
-    });
-    return;
-  }
+  // ── Build school profile card ─────────────────────────────────────────────
+  const _fees     = school.fees ? `$${school.fees}/term` : "";
+  const _type     = [school.schoolType, school.curriculum].filter(Boolean).join(" · ");
+  const _location = school.location?.area
+    ? `${school.location.area}, ${school.location.city || ""}`
+    : school.location?.city || school.address || "";
+  const _phone    = school.contactPhone || school.phone || "";
+  const _grades   = (form.gradeOptions || []).join(", ");
+  const _verified = school.verified ? " ✅" : "";
 
-  // WhatsApp form not activated for this school
+  const profileCard =
+    `🏫 *${school.schoolName}${_verified}*\n` +
+    (_location ? `📍 ${_location}\n` : "") +
+    (_fees     ? `💰 ${_fees}${_type ? ` · ${_type}` : ""}\n` : (_type ? `📚 ${_type}\n` : "")) +
+    (_grades   ? `📋 Grades: ${_grades}\n` : "") +
+    (_phone    ? `📞 ${_phone}\n` : "") +
+    (school.email ? `📧 ${school.email}\n` : "") +
+    (school.website ? `🌐 ${school.website}\n` : "") +
+    (school.description ? `\n_${school.description.slice(0, 180)}${school.description.length > 180 ? "…" : ""}_\n` : "");
+
+  // ── Form NOT active: show profile + contact info ──────────────────────────
   if (!form.active) {
     await sendButtons(from, {
       text:
-        `📝 *${school.schoolName} — Applications*\n\n` +
-        `Application forms are not yet active on WhatsApp for this school.\n\n` +
-        `📞 Please contact the school directly:\n` +
-        `${school.contactPhone || school.phone || ""}\n` +
-        `${school.email ? `📧 ${school.email}` : ""}`,
+        profileCard +
+        `\n📝 *Applications*\n` +
+        (school.registrationLink ? `Apply online: ${school.registrationLink}\n\n` : "") +
+        `Contact the school to apply:\n📞 ${_phone}`,
       buttons: [
         { id: `sfaq_enquiry_${school._id}`, title: "❓ Ask a Question" },
-        { id: "school_search_refine",        title: "🔄 More Schools" }
+        { id: "school_search_refine",        title: "🏫 More Schools"  }
       ]
     });
     return;
   }
 
-  // Start the WhatsApp form
-  const intakeLabel = form.intakeYear || "upcoming intake";
-  const firstQ     = form.customFields?.[0]?.question || null;
+  // ── Form IS active ────────────────────────────────────────────────────────
+  const intakeLabel = form.intakeYear ? `_${form.intakeYear}_` : "";
 
+  // Show school profile card + apply prompt
+  await sendButtons(from, {
+    text:
+      profileCard +
+      `\n📝 *Apply on WhatsApp — takes 2 minutes*\n` +
+      (intakeLabel ? `${intakeLabel}\n` : "") +
+      (school.registrationLink ? `\nAlso apply online: ${school.registrationLink}\n` : "") +
+      `\nTap *Start Application* below to begin ⬇`,
+    buttons: [
+      { id: `school_apply_start_${school._id}`, title: "📝 Start Application" },
+      { id: `sfaq_enquiry_${school._id}`,       title: "❓ Ask a Question"   }
+    ]
+  });
+
+  // Send brochure/flyer PDF if set
+  if (form.brochureUrl) {
+    try {
+      const fileName = form.brochureName || `${school.schoolName.replace(/\s+/g, "_")}_Brochure.pdf`;
+      await sendDocument(from, {
+        link:     form.brochureUrl,
+        filename: fileName,
+        caption:  `📄 *${school.schoolName}* — ${fileName}\n_Save this for your records._`
+      });
+    } catch (_be) { console.warn("[SCHOOL BROCHURE SEND]", _be.message); }
+  }
+
+  // Send raw application form PDF if set (the printable paper form)
+  if (form.rawFormUrl) {
+    try {
+      const rawName = form.rawFormName || `${school.schoolName.replace(/\s+/g, "_")}_Application_Form.pdf`;
+      await sendDocument(from, {
+        link:     form.rawFormUrl,
+        filename: rawName,
+        caption:
+          `📋 *Printable Application Form — ${school.schoolName}*\n` +
+          `_You can print and submit this in person, or complete the WhatsApp form below._`
+      });
+    } catch (_re) { console.warn("[SCHOOL RAW FORM SEND]", _re.message); }
+  }
+
+  // Pre-set session state ready for when parent taps "Start Application"
   await UserSession.findOneAndUpdate(
     { phone: _normPhone(from) },
     { $set: {
         "tempData.schoolApplyId":    String(school._id),
-        "tempData.schoolApplyState": "awaiting_student_name",
+        "tempData.schoolApplyState": "awaiting_start",
         "tempData.schoolApplyData":  JSON.stringify({
-          schoolId:   String(school._id),
-          schoolName: school.schoolName,
-          intakeYear: form.intakeYear || ""
+          schoolId:     String(school._id),
+          schoolName:   school.schoolName,
+          intakeYear:   form.intakeYear || "",
+          gradeOptions: form.gradeOptions || []
         })
       }
     },
     { upsert: true }
-  );
-
-  // Send brochure if available (before starting form)
-  if (school.applicationForm?.brochureUrl) {
-    try {
-      const fileName = school.applicationForm.brochureName || "School_Brochure.pdf";
-      await sendDocument(from, {
-        link:     school.applicationForm.brochureUrl,
-        filename: fileName,
-        caption:  `📄 *${school.schoolName}* — ${fileName}`
-      });
-    } catch (_be) { /* brochure is optional */ }
-  }
-
-  await sendText(from,
-    `📝 *Application — ${school.schoolName}*\n` +
-    `${intakeLabel ? `_${intakeLabel}_\n` : ""}` +
-    `\nComplete your application right here on WhatsApp — it only takes 2 minutes.\n\n` +
-    `*Step 1 of 5*\n` +
-    `What is the *student's full name?*`
   );
 }
 

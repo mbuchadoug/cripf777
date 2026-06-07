@@ -4900,13 +4900,15 @@ router.get("/schools/:id", requireSupplierAdmin, async (req, res) => {
     const SchoolProfile = (await import("../models/schoolProfile.js")).default;
     const school = await SchoolProfile.findById(req.params.id).lean();
     if (!school) return res.redirect("/zq-admin/schools");
-    let cStats = { total:0, applied:0, enquiries:0 };
+    let cStats = { total:0, applied:0, enquiries:0, linkOpens:0, convRate:"0%" };
     try {
       const SC = (await import("../models/schoolContact.js")).default;
       const cs = await SC.find({ schoolId: school._id }).lean();
-      cStats.total = cs.length;
-      cStats.applied = cs.filter(c=>c.converted).length;
+      cStats.total     = cs.length;
+      cStats.applied   = cs.filter(c=>c.converted).length;
       cStats.enquiries = cs.filter(c=>c.source==="enquiry").length;
+      cStats.linkOpens = cs.reduce((s,c)=>s+(c.viewCount||1),0);
+      cStats.convRate  = cStats.total ? Math.round((cStats.applied/cStats.total)*100)+"%": "0%";
     } catch(_){}
     const form       = school.applicationForm || {};
     const profLink   = _schProfileLink(String(school._id));
@@ -4944,10 +4946,11 @@ input:checked+.slid:before{transform:translateX(20px)}
 ${ok?`<div style="background:#f0fdf4;border:1px solid #bbf7d0;color:#166534;padding:10px 14px;border-radius:8px;margin-bottom:14px">✅ ${esc(ok)}</div>`:""}
 ${er?`<div style="background:#fef2f2;border:1px solid #fecaca;color:#dc2626;padding:10px 14px;border-radius:8px;margin-bottom:14px">❌ ${esc(er)}</div>`:""}
 <div class="sk">
+  <div class="sm"><div class="sn" style="color:#0ea5e9">${cStats.linkOpens}</div><div class="sl">Link Opens</div></div>
   <div class="sm"><div class="sn" style="color:#1d4ed8">${cStats.total}</div><div class="sl">Contacts</div></div>
   <div class="sm"><div class="sn" style="color:#16a34a">${cStats.applied}</div><div class="sl">Applications</div></div>
   <div class="sm"><div class="sn" style="color:#7c3aed">${cStats.enquiries}</div><div class="sl">Enquiries</div></div>
-  <div class="sm"><div class="sn" style="color:#d97706">${school.inquiries||0}</div><div class="sl">Total Enquiries</div></div>
+  <div class="sm"><div class="sn" style="color:#d97706">${cStats.convRate}</div><div class="sl">Conv. Rate</div></div>
 </div>
 <div class="sg">
   <div class="sc"><div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">School Profile QR</div>
@@ -4995,16 +4998,100 @@ ${er?`<div style="background:#fef2f2;border:1px solid #fecaca;color:#dc2626;padd
     <div style="margin-bottom:14px"><label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px">Grade Options (comma-separated)</label>
       <input name="gradeOptions" value="${esc((form.gradeOptions||[]).join(", "))}" placeholder="Form 1, Form 2, Form 3, Form 4, Form 5, Form 6" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px">
       <p style="font-size:11px;color:var(--muted);margin-top:3px">Shown to parents when completing the application form</p></div>
-    <div style="display:grid;grid-template-columns:2fr 1fr;gap:10px;margin-bottom:16px">
-      <div><label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px">Brochure / Flyer URL (PDF or image — optional)</label>
-        <input name="brochureUrl" value="${esc(form.brochureUrl||"")}" placeholder="https://yoursite.com/brochure.pdf" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px">
-        <p style="font-size:11px;color:var(--muted);margin-top:3px">Sent to parent automatically when they open the apply form. Upload to Google Drive / Dropbox and paste public link.</p></div>
-      <div><label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px">Brochure Filename</label>
-        <input name="brochureName" value="${esc(form.brochureName||"School_Brochure.pdf")}" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px">
-        <p style="font-size:11px;color:var(--muted);margin-top:3px">What parents see it named as</p></div>
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:16px;margin-bottom:16px">
+      <div style="font-size:12px;font-weight:700;margin-bottom:12px;color:#374151">📄 Brochure / Flyer (sent to parents when they open the apply link)</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+        <div>
+          <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px">Upload File (PDF, image)</label>
+          <input type="file" id="schBrochureFile" accept=".pdf,.jpg,.jpeg,.png,.webp" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:white">
+          <p style="font-size:11px;color:var(--muted);margin-top:3px">Upload PDF or image directly — or paste a URL below</p>
+          <div id="schUploadStatus" style="font-size:12px;margin-top:6px;display:none"></div>
+        </div>
+        <div>
+          <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px">Brochure Filename (what parents see)</label>
+          <input name="brochureName" id="schBrochureName" value="${esc(form.brochureName||"School_Brochure.pdf")}" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px">
+        </div>
+      </div>
+      <div>
+        <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px">Brochure URL (paste Google Drive / Dropbox public link, or uploaded above)</label>
+        <input name="brochureUrl" id="schBrochureUrl" value="${esc(form.brochureUrl||"")}" placeholder="https://..." style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px">
+        ${form.brochureUrl?`<p style="font-size:11px;color:#16a34a;margin-top:4px">✅ Brochure set — <a href="${esc(form.brochureUrl)}" target="_blank" style="color:#1d4ed8">Preview</a></p>`:'<p style="font-size:11px;color:var(--muted);margin-top:3px">Sent automatically to parents when they open the apply form</p>'}
+      </div>
+    </div>
+    <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:16px;margin-bottom:16px">
+      <div style="font-size:12px;font-weight:700;margin-bottom:12px;color:#374151">📋 Raw Application Form (printable PDF parents can download)</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+        <div>
+          <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px">Upload Application Form (PDF)</label>
+          <input type="file" id="schRawFormFile" accept=".pdf" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:white">
+          <div id="schRawUploadStatus" style="font-size:12px;margin-top:6px;display:none"></div>
+        </div>
+        <div>
+          <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px">Form Filename (what parents see)</label>
+          <input name="rawFormName" id="schRawFormName" value="${esc(form.rawFormName||"Application_Form.pdf")}" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px">
+        </div>
+      </div>
+      <div>
+        <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px">Raw Form URL</label>
+        <input name="rawFormUrl" id="schRawFormUrl" value="${esc(form.rawFormUrl||"")}" placeholder="https://..." style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px">
+        ${form.rawFormUrl?`<p style="font-size:11px;color:#16a34a;margin-top:4px">✅ Form set — <a href="${esc(form.rawFormUrl)}" target="_blank" style="color:#1d4ed8">Preview / Download</a></p>`:'<p style="font-size:11px;color:var(--muted);margin-top:3px">Parents see a "Download Form" button when they open your apply link</p>'}
+      </div>
     </div>
     <button type="submit" class="btn btn-blue">💾 Save Settings</button>
   </form>
+  <script>
+  (function(){
+    // Raw form upload
+    const rawFile = document.getElementById("schRawFormFile");
+    const rawUrl  = document.getElementById("schRawFormUrl");
+    const rawName = document.getElementById("schRawFormName");
+    const rawSt   = document.getElementById("schRawUploadStatus");
+    if(rawFile) rawFile.addEventListener("change", async function(){
+      const file = this.files[0];
+      if(!file) return;
+      rawSt.style.display = ""; rawSt.style.color = "#2563eb";
+      rawSt.textContent = "⏳ Uploading " + file.name + "…";
+      try {
+        const fd = new FormData(); fd.append("broadcastFile", file);
+        const r = await fetch("/zq-admin/broadcast/upload",{method:"POST",body:fd});
+        const d = await r.json();
+        if(d.url){ rawUrl.value=d.url; rawName.value=file.name; rawSt.style.color="#16a34a"; rawSt.textContent="✅ Uploaded. Save Settings to apply."; }
+        else { rawSt.style.color="#dc2626"; rawSt.textContent="❌ "+(d.error||"Upload failed"); }
+      } catch(e){ rawSt.style.color="#dc2626"; rawSt.textContent="❌ "+e.message; }
+    });
+
+    const fileInput = document.getElementById("schBrochureFile");
+    const urlInput  = document.getElementById("schBrochureUrl");
+    const nameInput = document.getElementById("schBrochureName");
+    const status    = document.getElementById("schUploadStatus");
+    if(!fileInput) return;
+    fileInput.addEventListener("change", async function(){
+      const file = this.files[0];
+      if(!file) return;
+      status.style.display = "";
+      status.style.color   = "#2563eb";
+      status.textContent   = "⏳ Uploading " + file.name + "…";
+      try {
+        const fd = new FormData();
+        fd.append("broadcastFile", file);
+        const r  = await fetch("/zq-admin/broadcast/upload", { method:"POST", body:fd });
+        const d  = await r.json();
+        if(d.url) {
+          urlInput.value  = d.url;
+          nameInput.value = file.name;
+          status.style.color   = "#16a34a";
+          status.textContent   = "✅ Uploaded: " + file.name + " — Save Settings to apply.";
+        } else {
+          status.style.color  = "#dc2626";
+          status.textContent  = "❌ Upload failed: " + (d.error||"unknown error");
+        }
+      } catch(e) {
+        status.style.color  = "#dc2626";
+        status.textContent  = "❌ Upload error: " + e.message;
+      }
+    });
+  })();
+  </script>
 </div>
 <a href="/zq-admin/schools" class="back-link">← All Schools</a>
     `));
@@ -5026,7 +5113,7 @@ router.post("/schools/:id/apply-toggle", requireSupplierAdmin, async(req,res) =>
 router.post("/schools/:id/apply-settings", requireSupplierAdmin, async(req,res) => {
   try {
     const SP = (await import("../models/schoolProfile.js")).default;
-    const {intakeYear,notifyEmail,notifyPhone,registrationLink,gradeOptions,brochureUrl,brochureName} = req.body;
+    const {intakeYear,notifyEmail,notifyPhone,registrationLink,gradeOptions,brochureUrl,brochureName,rawFormUrl,rawFormName} = req.body;
     await SP.findByIdAndUpdate(req.params.id,{$set:{
       registrationLink: String(registrationLink||"").trim(),
       "applicationForm.intakeYear":   String(intakeYear||"").trim(),
@@ -5034,7 +5121,9 @@ router.post("/schools/:id/apply-settings", requireSupplierAdmin, async(req,res) 
       "applicationForm.notifyPhone":  String(notifyPhone||"").trim(),
       "applicationForm.gradeOptions": String(gradeOptions||"").split(",").map(s=>s.trim()).filter(Boolean),
       "applicationForm.brochureUrl":  String(brochureUrl||"").trim(),
-      "applicationForm.brochureName": String(brochureName||"School_Brochure.pdf").trim()
+      "applicationForm.brochureName": String(brochureName||"School_Brochure.pdf").trim(),
+      "applicationForm.rawFormUrl":   String(rawFormUrl||"").trim(),
+      "applicationForm.rawFormName":  String(rawFormName||"Application_Form.pdf").trim()
     }});
     res.redirect(`/zq-admin/schools/${req.params.id}?success=Settings+saved.`);
   }catch(err){res.redirect(`/zq-admin/schools/${req.params.id}?error=${encodeURIComponent(err.message)}`);}
@@ -5112,11 +5201,30 @@ router.get("/schools/:id/contacts", requireSupplierAdmin, async(req,res) => {
     const rows=contacts.map(c=>{
       const d=c.applicationData||{};
       const dp=c.phone.startsWith("263")?"0"+c.phone.slice(3):c.phone;
+      const _parentPhone = d.parentPhone || c.parentPhone || "";
+      const _waLink = `https://wa.me/${c.phone}`;
+      const _submittedAt = c.appliedAt ? new Date(c.appliedAt).toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"2-digit"}) : "";
       return `<tr>
-<td style="padding:9px 12px;border-bottom:1px solid var(--border)"><strong>${esc(dp)}</strong><br><span style="font-size:10px;color:var(--muted)">${esc(c.phone)}</span></td>
-<td style="padding:9px 12px;border-bottom:1px solid var(--border);font-size:13px">${esc(d.studentName||c.studentName||"—")}<br><span style="font-size:11px;color:var(--muted)">${esc(d.grade||c.gradeInterest||"")}</span></td>
-<td style="padding:9px 12px;border-bottom:1px solid var(--border);font-size:13px">${esc(d.parentName||c.parentName||"—")}</td>
-<td style="padding:9px 12px;border-bottom:1px solid var(--border);font-size:12px"><span style="background:${c.source==="apply"?"#dbeafe":"#f1f5f9"};color:${c.source==="apply"?"#1d4ed8":"#64748b"};padding:2px 8px;border-radius:12px">${c.source==="apply"?"📝 Applied":c.source==="enquiry"?"❓ Enquiry":"👁 Viewed"}</span></td>
+<td style="padding:9px 12px;border-bottom:1px solid var(--border)">
+  <strong>${esc(dp)}</strong>
+  <a href="${esc(_waLink)}" target="_blank" title="Open WhatsApp" style="margin-left:6px;font-size:11px;background:#25d366;color:white;padding:2px 7px;border-radius:10px;text-decoration:none">💬 WA</a>
+  <br><span style="font-size:10px;color:var(--muted)">${c.viewCount>1?`${c.viewCount} views · `:""} ${esc(new Date(c.firstSeen).toLocaleDateString("en-GB",{day:"numeric",month:"short"}))}</span>
+</td>
+<td style="padding:9px 12px;border-bottom:1px solid var(--border);font-size:13px">
+  ${esc(d.studentName||c.studentName||"—")}
+  <br><span style="font-size:11px;color:#7c3aed">${esc(d.grade||c.gradeInterest||"")}</span>
+  ${d.dob?`<br><span style="font-size:10px;color:var(--muted)">DOB: ${esc(d.dob)}</span>`:""}
+</td>
+<td style="padding:9px 12px;border-bottom:1px solid var(--border);font-size:13px">
+  ${esc(d.parentName||c.parentName||"—")}
+  ${_parentPhone?`<br><span style="font-size:11px;color:var(--muted)">${esc(_parentPhone)}</span>`:""}
+</td>
+<td style="padding:9px 12px;border-bottom:1px solid var(--border);font-size:12px">
+  <span style="background:${c.converted?"#dcfce7":c.source==="apply"?"#dbeafe":c.source==="enquiry"?"#fef9c3":"#f1f5f9"};color:${c.converted?"#16a34a":c.source==="apply"?"#1d4ed8":c.source==="enquiry"?"#92400e":"#64748b"};padding:2px 8px;border-radius:12px">
+    ${c.converted?"✅ Applied":c.source==="apply"?"📝 Apply Started":c.source==="enquiry"?"❓ Enquiry":"👁 Viewed"}
+  </span>
+  ${_submittedAt?`<br><span style="font-size:10px;color:var(--muted)">${esc(_submittedAt)}</span>`:""}
+</td>
 <td style="padding:9px 12px;border-bottom:1px solid var(--border);font-size:12px">${new Date(c.lastSeen).toLocaleDateString("en-GB",{day:"numeric",month:"short"})}</td>
 <td style="padding:9px 12px;border-bottom:1px solid var(--border)">
 <form method="POST" action="/zq-admin/schools/${esc(String(school._id))}/contacts/${esc(String(c._id))}/status" style="margin:0">
@@ -5138,9 +5246,9 @@ ${contacts.length===0?`<div style="background:white;border-radius:12px;padding:4
 <table style="width:100%;border-collapse:collapse">
 <thead><tr style="background:#f8fafc">
 <th style="padding:9px 12px;text-align:left;font-size:12px;color:var(--muted);font-weight:600">Phone</th>
-<th style="padding:9px 12px;text-align:left;font-size:12px;color:var(--muted);font-weight:600">Student</th>
-<th style="padding:9px 12px;text-align:left;font-size:12px;color:var(--muted);font-weight:600">Parent</th>
-<th style="padding:9px 12px;text-align:left;font-size:12px;color:var(--muted);font-weight:600">Source</th>
+<th style="padding:9px 12px;text-align:left;font-size:12px;color:var(--muted);font-weight:600">Student / Grade</th>
+<th style="padding:9px 12px;text-align:left;font-size:12px;color:var(--muted);font-weight:600">Parent / Contact</th>
+<th style="padding:9px 12px;text-align:left;font-size:12px;color:var(--muted);font-weight:600">Stage</th>
 <th style="padding:9px 12px;text-align:left;font-size:12px;color:var(--muted);font-weight:600">Last Seen</th>
 <th style="padding:9px 12px;text-align:left;font-size:12px;color:var(--muted);font-weight:600">Status</th>
 </tr></thead><tbody>${rows}</tbody></table></div>`}
