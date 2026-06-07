@@ -12241,96 +12241,6 @@ if (a === "school_toggle_admissions" || a === "school_update_fees") {
   if (handled) return;
 }
  
-// ── School Application Form WhatsApp State Handler ───────────────────────────
-// Multi-step: student_name → grade → dob → parent_name → parent_phone → done
-if (!isMetaAction && flowSess?.tempData?.schoolApplyState) {
-  const _saState = flowSess.tempData.schoolApplyState;
-  const _saId    = flowSess.tempData.schoolApplyId;
-  let _saData = {};
-  try { _saData = JSON.parse(flowSess.tempData.schoolApplyData || "{}"); } catch (_) {}
-
-  const _saUpdate = async (nextState, extraData = {}) => {
-    _saData = { ..._saData, ...extraData };
-    await UserSession.findOneAndUpdate(
-      { phone },
-      { $set: { "tempData.schoolApplyState": nextState, "tempData.schoolApplyData": JSON.stringify(_saData) } },
-      { upsert: true }
-    );
-  };
-
-  const _steps = ["awaiting_student_name","awaiting_grade","awaiting_dob","awaiting_parent_name","awaiting_parent_phone"];
-
-  if (_saState === "awaiting_student_name") {
-    await _saUpdate("awaiting_grade", { studentName: text.trim() });
-    await sendText(from, `✅ *${text.trim()}*\n\n*Step 2 of 5*\nWhat *grade or form* are they applying for?\n_e.g. Form 1, Grade 7, ECD A_`);
-    return;
-  }
-  if (_saState === "awaiting_grade") {
-    await _saUpdate("awaiting_dob", { grade: text.trim() });
-    await sendText(from, `✅ *${text.trim()}*\n\n*Step 3 of 5*\nWhat is the *student's date of birth?*\n_e.g. 15 March 2014 or 15/03/2014_`);
-    return;
-  }
-  if (_saState === "awaiting_dob") {
-    await _saUpdate("awaiting_parent_name", { dob: text.trim() });
-    await sendText(from, `✅ *${text.trim()}*\n\n*Step 4 of 5*\nWhat is the *parent or guardian's full name?*`);
-    return;
-  }
-  if (_saState === "awaiting_parent_name") {
-    await _saUpdate("awaiting_parent_phone", { parentName: text.trim() });
-    await sendText(from, `✅ *${text.trim()}*\n\n*Step 5 of 5*\nWhat is your *contact phone number?*\n_The school will call or WhatsApp you on this number._`);
-    return;
-  }
-  if (_saState === "awaiting_parent_phone") {
-    _saData.parentPhone = text.trim();
-    // Clear state
-    await UserSession.findOneAndUpdate(
-      { phone },
-      { $unset: { "tempData.schoolApplyState": "", "tempData.schoolApplyId": "", "tempData.schoolApplyData": "" } },
-      { upsert: true }
-    );
-    // Summary
-    const _saSummary =
-      `📝 *Application Submitted — ${_saData.schoolName || "School"}*\n\n` +
-      `👤 Student: *${_saData.studentName || "—"}*\n` +
-      `📚 Grade: *${_saData.grade || "—"}*\n` +
-      `🎂 Date of Birth: *${_saData.dob || "—"}*\n` +
-      `👪 Parent/Guardian: *${_saData.parentName || "—"}*\n` +
-      `📞 Contact: *${_saData.parentPhone || from}*`;
-    await sendButtons(from, {
-      text:
-        `${_saSummary}\n\n` +
-        `✅ *Your application has been submitted!*\n` +
-        `The school will contact you shortly on the number provided.\n\n` +
-        `_Keep this WhatsApp open so they can reach you here too._`,
-      buttons: [
-        { id: `sfaq_enquiry_${_saId}`, title: "❓ Ask a Question" },
-        { id: "school_search_refine",  title: "🔄 More Schools" }
-      ]
-    });
-    // Save full contact record + send email
-    try {
-      const { captureSchoolContact, emailApplicationToSchool } = await import("./schoolApplicationForm.js");
-      await captureSchoolContact({
-        schoolId: _saId, phone,
-        source: "apply",
-        extraData: {
-          studentName:   _saData.studentName,
-          parentName:    _saData.parentName,
-          gradeInterest: _saData.grade,
-          converted:     true,
-          appliedAt:     new Date(),
-          applicationData: _saData
-        }
-      });
-      const _saSchool = _saId ? await SchoolProfile.findById(_saId).lean() : null;
-      if (_saSchool) await emailApplicationToSchool({ school: _saSchool, data: _saData, applicantPhone: from });
-    } catch (_saFinalErr) {
-      console.warn("[SCHOOL APPLY FINAL]", _saFinalErr.message);
-    }
-    return;
-  }
-}
-
 // ── School FAQ text state for no-biz first-time users ───────────────────────
 // A parent who opened a school smart link (ZQ:SCHOOL:...) is NOT a biz user.
 // Their sfaq state is in UserSession.tempData.sfaqState (saved by _sess in schoolFAQ.js).
@@ -12404,25 +12314,6 @@ if (!biz && !isMetaAction && flowSess?.tempData?.schoolEnquiryState === "school_
   }
 }
 
-// ── APPLY:SCHOOL:<id> — application form QR deep link ────────────────────────
-// Triggered when parent scans the Apply QR code (different from profile QR).
-if (!isMetaAction && /^APPLY:SCHOOL:[a-f0-9]{24}$/i.test(text.trim())) {
-  const _applyId2 = text.trim().split(":")[2];
-  try {
-    const _applySchool2 = await SchoolProfile.findById(_applyId2).lean();
-    if (_applySchool2) {
-      const { captureSchoolContact, startSchoolApplicationForm, notifySchoolApplyLinkOpened }
-        = await import("./schoolApplicationForm.js");
-      captureSchoolContact({ schoolId: _applyId2, phone, source: "apply" }).catch(() => {});
-      notifySchoolApplyLinkOpened({ school: _applySchool2, visitorPhone: from, source: "qr" }).catch(() => {});
-      await startSchoolApplicationForm({ from, school: _applySchool2, UserSession });
-    }
-  } catch (_dlApplyErr) {
-    console.warn("[APPLY:SCHOOL]", _dlApplyErr.message);
-  }
-  return;
-}
-
 // ── ZQ deep-link intercept (ZQ:SCHOOL:id and ZQ:SUPPLIER:id) ────────────────
 // FIX: tightened regex to require valid 24-char hex ID, and sanitize text to
 // extract only the first valid deep-link token (handles wa.me doubled pre-fills).
@@ -12478,29 +12369,6 @@ if (!isMetaAction && /^zq /i.test(text) && text.trim().length > 4) {
 if (!isMetaAction && /^(my card|staff card|my link|my qr)$/i.test(text.trim())) {
   const _handled = await handleStaffCardSelfMenu({ from });
   if (_handled) return;
-}
-
-// ── school_apply_<id> — parent taps "Apply Online" or scans Apply QR ─────────
-if (a.startsWith("school_apply_")) {
-  const _applySchoolId = a.replace("school_apply_", "").trim();
-  try {
-    const _applySchool = await SchoolProfile.findById(_applySchoolId).lean();
-    if (!_applySchool) {
-      await sendText(from, "❌ School not found. Please try the link again.");
-    } else {
-      const { captureSchoolContact, startSchoolApplicationForm, notifySchoolApplyLinkOpened }
-        = await import("./schoolApplicationForm.js");
-      // Save contact — they showed interest
-      captureSchoolContact({ schoolId: _applySchoolId, phone, source: "apply" }).catch(() => {});
-      // Notify school admin phone if set
-      notifySchoolApplyLinkOpened({ school: _applySchool, visitorPhone: from, source: "link" }).catch(() => {});
-      await startSchoolApplicationForm({ from, school: _applySchool, UserSession });
-    }
-  } catch (_applyErr) {
-    console.warn("[SCHOOL APPLY] error:", _applyErr.message);
-    await sendText(from, "❌ Could not open application form. Please contact the school directly.");
-  }
-  return;
 }
 
 // ── School FAQ chatbot (sfaq_ actions) ───────────────────────────────────────
