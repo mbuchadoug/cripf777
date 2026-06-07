@@ -12369,9 +12369,9 @@ if (
         { id: "school_search_refine",  title: "🏫 More Schools"  }
       ]
     });
-    // Save full contact + send email
+    // Save full contact + email + WhatsApp notify school
     try {
-      const { captureSchoolContact, emailApplicationToSchool } = await import("./schoolApplicationForm.js");
+      const { captureSchoolContact, emailApplicationToSchool, notifySchoolApplyLinkOpened } = await import("./schoolApplicationForm.js");
       await captureSchoolContact({
         schoolId: _saId, phone, source: "apply",
         extraData: {
@@ -12384,7 +12384,28 @@ if (
         }
       });
       const _saSchool = _saId ? await SchoolProfile.findById(_saId).lean() : null;
-      if (_saSchool) await emailApplicationToSchool({ school: _saSchool, data: _saData, applicantPhone: from });
+      if (_saSchool) {
+        await emailApplicationToSchool({ school: _saSchool, data: _saData, applicantPhone: from });
+        // WhatsApp notify school of completed WhatsApp application
+        if (_saSchool.applicationForm?.notifyPhone) {
+          try {
+            const { sendButtons: _sbNotify } = await import("./metaSender.js");
+            const _saNP = String(_saSchool.applicationForm.notifyPhone).replace(/\D/g,"");
+            const _saNorm = _saNP.startsWith("0") ? "263"+_saNP.slice(1) : _saNP;
+            const _saTime = new Date().toLocaleString("en-GB",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit",timeZone:"Africa/Harare"});
+            await _sbNotify(_saNorm, {
+              text:
+                `✅ *New WhatsApp Application — ${_saSchool.schoolName}*\n\n` +
+                `👤 *${_saData.studentName || "—"}*  |  📚 ${_saData.grade || "—"}\n` +
+                `👪 Parent: *${_saData.parentName || "—"}*\n` +
+                `📞 *${_saData.parentPhone || (from.startsWith("263") ? "0"+from.slice(3) : from)}*\n` +
+                `⏰ ${_saTime}\n\n` +
+                `_Full details sent to your email. Call the parent to confirm._`,
+              buttons: [{ id: "school_my_profile", title: "🏫 My School" }]
+            });
+          } catch (_saNotifyErr) { console.warn("[SCHOOL WA NOTIFY]", _saNotifyErr.message); }
+        }
+      }
     } catch (_saFinalErr) { console.warn("[SCHOOL APPLY FINAL]", _saFinalErr.message); }
     return;
   }

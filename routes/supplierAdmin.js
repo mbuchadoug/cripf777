@@ -4970,6 +4970,14 @@ ${er?`<div style="background:#fef2f2;border:1px solid #fecaca;color:#dc2626;padd
     </div>
   </div>
 </div>
+<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px 18px;margin-bottom:22px">
+  <div style="font-size:12px;font-weight:700;color:#16a34a;margin-bottom:6px">🌐 Web Application Form (parents fill online)</div>
+  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+    <code style="font-size:12px;background:white;padding:6px 10px;border-radius:6px;border:1px solid #bbf7d0;flex:1;word-break:break-all">/apply/school/${esc(String(school._id))}</code>
+    <a href="/apply/school/${esc(String(school._id))}" target="_blank" class="btn btn-sm" style="background:#dcfce7;color:#16a34a;white-space:nowrap">🔗 Open</a>
+  </div>
+  <p style="font-size:11px;color:#16a34a;margin-top:6px">Share this link on Facebook, school website, email blasts — parents fill the form on their phone, submission goes to your email.</p>
+</div>
 <div style="background:white;border-radius:12px;padding:22px;box-shadow:0 1px 3px rgba(0,0,0,.08);margin-bottom:22px">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:10px">
     <div><h2 style="font-size:15px;font-weight:700;margin:0">Application Form Settings</h2>
@@ -10244,6 +10252,278 @@ router.get("/suppliers/:id/staff-cards/:cid/business-card", requireSupplierAdmin
 </div></div><div class="zq-badge">ZimQuote</div></div></body></html>`);
   } catch (err) {
     res.status(500).send("Error: "+esc(err.message));
+  }
+});
+
+
+// ═════════════════════════════════════════════════════════════════════════════
+// PUBLIC SCHOOL APPLICATION FORM — no auth required
+// GET  /apply/school/:id          → web application form page
+// POST /apply/school/:id/submit   → handle web form submission
+// ═════════════════════════════════════════════════════════════════════════════
+
+router.get("/apply/school/:id", async (req, res) => {
+  try {
+    const SP = (await import("../models/schoolProfile.js")).default;
+    const school = await SP.findById(req.params.id).lean();
+    if (!school) return res.status(404).send("School not found.");
+
+    const form       = school.applicationForm || {};
+    const feesRaw    = school.fees;
+    const feesStr    = feesRaw?.term1 ? `$${feesRaw.term1}/term` : (typeof feesRaw === "number" ? `$${feesRaw}/term` : "");
+    const curriculum = (school.curriculum || []).map(c => c.toUpperCase()).join(" + ") || "";
+    const location   = school.location?.area
+      ? `${school.location.area}, ${school.location.city || ""}`
+      : school.location?.city || school.suburb || "";
+    const gradeOpts  = form.gradeOptions || [];
+    const intakeYear = form.intakeYear || "";
+    const ok         = req.query.success === "1";
+
+    const gradeSelect = gradeOpts.length
+      ? `<select name="grade" required style="width:100%;padding:11px 14px;border:2px solid #e2e8f0;border-radius:8px;font-size:15px;background:white;appearance:none">
+           <option value="">— Select grade —</option>
+           ${gradeOpts.map(g => `<option value="${esc(g)}">${esc(g)}</option>`).join("")}
+         </select>`
+      : `<input name="grade" type="text" required placeholder="e.g. Form 1, Grade 7, ECD A" style="width:100%;padding:11px 14px;border:2px solid #e2e8f0;border-radius:8px;font-size:15px">`;
+
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Apply — ${esc(school.schoolName)}</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f0f4f8;min-height:100vh;padding:16px}
+.wrap{max-width:560px;margin:0 auto}
+.header{background:linear-gradient(135deg,#1a3c5e 0%,#0ea5e9 100%);color:white;border-radius:16px 16px 0 0;padding:28px 24px 24px;text-align:center}
+.header h1{font-size:22px;font-weight:800;margin-bottom:4px}
+.header .sub{font-size:14px;opacity:.85}
+.school-card{background:#1e4976;color:white;padding:16px 24px;font-size:13px;line-height:1.7}
+.school-card p{margin:2px 0}
+.card{background:white;padding:24px;border-radius:0 0 16px 16px;box-shadow:0 4px 20px rgba(0,0,0,.1)}
+.section{margin-bottom:22px}
+.section-title{font-size:13px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.8px;margin-bottom:14px;padding-bottom:6px;border-bottom:2px solid #f0f4f8}
+.field{margin-bottom:16px}
+label{display:block;font-size:13px;font-weight:600;color:#374151;margin-bottom:6px}
+label .req{color:#ef4444}
+input[type=text],input[type=date],input[type=email],input[type=tel],select,textarea{width:100%;padding:11px 14px;border:2px solid #e2e8f0;border-radius:8px;font-size:15px;transition:border .2s;outline:none;font-family:inherit}
+input:focus,select:focus,textarea:focus{border-color:#0ea5e9}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:480px){.grid2{grid-template-columns:1fr}}
+.btn-submit{width:100%;padding:16px;background:linear-gradient(135deg,#1a3c5e,#0ea5e9);color:white;border:none;border-radius:10px;font-size:17px;font-weight:700;cursor:pointer;margin-top:8px;letter-spacing:.3px}
+.btn-submit:hover{opacity:.92}
+.success{background:#f0fdf4;border:2px solid #bbf7d0;border-radius:12px;padding:28px;text-align:center;margin:16px 0}
+.success h2{color:#16a34a;font-size:20px;margin-bottom:10px}
+.success p{color:#166534;font-size:14px;line-height:1.6}
+.downloads{background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:16px;margin-top:18px}
+.downloads h3{font-size:13px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.6px;margin-bottom:12px}
+.dl-btn{display:block;padding:11px 16px;background:white;border:1.5px solid #e2e8f0;border-radius:8px;text-decoration:none;color:#1a3c5e;font-size:14px;font-weight:600;margin-bottom:8px;transition:border-color .2s}
+.dl-btn:hover{border-color:#0ea5e9}
+.footer{text-align:center;font-size:12px;color:#94a3b8;margin-top:20px;padding-bottom:16px}
+.footer a{color:#1a3c5e}
+.note{font-size:12px;color:#94a3b8;margin-top:4px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="header">
+    <div style="font-size:36px;margin-bottom:8px">🏫</div>
+    <h1>${esc(school.schoolName)}${school.verified ? " ✅" : ""}</h1>
+    ${intakeYear ? `<div class="sub">${esc(intakeYear)}</div>` : ""}
+  </div>
+  <div class="school-card">
+    ${location ? `<p>📍 ${esc(location)}</p>` : ""}
+    ${feesStr ? `<p>💰 ${esc(feesStr)}${curriculum ? ` &nbsp;·&nbsp; ${esc(curriculum)}` : ""}</p>` : (curriculum ? `<p>📚 ${esc(curriculum)}</p>` : "")}
+    ${school.contactPhone || school.phone ? `<p>📞 ${esc(school.contactPhone || school.phone)}</p>` : ""}
+    ${school.email ? `<p>📧 ${esc(school.email)}</p>` : ""}
+  </div>
+  <div class="card">
+    ${ok ? `<div class="success">
+      <div style="font-size:48px;margin-bottom:10px">✅</div>
+      <h2>Application Submitted!</h2>
+      <p>Your application has been sent directly to <strong>${esc(school.schoolName)}</strong>.<br>
+      The school will contact you shortly on the number you provided.<br><br>
+      <em>If you also completed a WhatsApp form or downloaded the PDF, the school has received all versions.</em></p>
+    </div>` : `
+    <form method="POST" action="/apply/school/${esc(req.params.id)}/submit">
+
+      <div class="section">
+        <div class="section-title">Student Details</div>
+        <div class="field">
+          <label>Student Full Name <span class="req">*</span></label>
+          <input name="studentName" type="text" required placeholder="e.g. Tatenda Moyo">
+        </div>
+        <div class="grid2">
+          <div class="field">
+            <label>Grade Applying For <span class="req">*</span></label>
+            ${gradeSelect}
+          </div>
+          <div class="field">
+            <label>Date of Birth <span class="req">*</span></label>
+            <input name="dob" type="date" required>
+          </div>
+        </div>
+        <div class="grid2">
+          <div class="field">
+            <label>Gender</label>
+            <select name="gender" style="width:100%;padding:11px 14px;border:2px solid #e2e8f0;border-radius:8px;font-size:15px;background:white">
+              <option value="">— Select —</option>
+              <option>Male</option><option>Female</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Nationality</label>
+            <input name="nationality" type="text" placeholder="e.g. Zimbabwean">
+          </div>
+        </div>
+        <div class="field">
+          <label>Current School (if any)</label>
+          <input name="currentSchool" type="text" placeholder="e.g. Churchill Primary School">
+        </div>
+        <div class="field">
+          <label>Home Address</label>
+          <input name="homeAddress" type="text" placeholder="e.g. 12 Borrowdale Road, Harare">
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">Parent / Guardian Details</div>
+        <div class="grid2">
+          <div class="field">
+            <label>Parent / Guardian Name <span class="req">*</span></label>
+            <input name="parentName" type="text" required placeholder="e.g. Blessing Moyo">
+          </div>
+          <div class="field">
+            <label>Relationship to Student</label>
+            <select name="relationship" style="width:100%;padding:11px 14px;border:2px solid #e2e8f0;border-radius:8px;font-size:15px;background:white">
+              <option value="">— Select —</option>
+              <option>Father</option><option>Mother</option><option>Guardian</option><option>Other</option>
+            </select>
+          </div>
+        </div>
+        <div class="grid2">
+          <div class="field">
+            <label>WhatsApp / Phone Number <span class="req">*</span></label>
+            <input name="parentPhone" type="tel" required placeholder="e.g. 0771234567">
+            <div class="note">The school will call or WhatsApp you on this number</div>
+          </div>
+          <div class="field">
+            <label>Email Address (optional)</label>
+            <input name="parentEmail" type="email" placeholder="parent@email.com">
+          </div>
+        </div>
+        <div class="field">
+          <label>Occupation</label>
+          <input name="occupation" type="text" placeholder="e.g. Teacher, Business Owner">
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">Emergency &amp; Medical</div>
+        <div class="grid2">
+          <div class="field">
+            <label>Emergency Contact Name</label>
+            <input name="emergencyName" type="text" placeholder="e.g. Chipo Moyo">
+          </div>
+          <div class="field">
+            <label>Emergency Contact Phone</label>
+            <input name="emergencyPhone" type="tel" placeholder="e.g. 0712345678">
+          </div>
+        </div>
+        <div class="field">
+          <label>Known Allergies or Medical Conditions</label>
+          <textarea name="medical" rows="2" placeholder="None / describe any conditions..." style="width:100%;padding:11px 14px;border:2px solid #e2e8f0;border-radius:8px;font-size:14px;resize:vertical;font-family:inherit"></textarea>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">Additional Notes</div>
+        <div class="field">
+          <textarea name="notes" rows="2" placeholder="Any other information the school should know..." style="width:100%;padding:11px 14px;border:2px solid #e2e8f0;border-radius:8px;font-size:14px;resize:vertical;font-family:inherit"></textarea>
+        </div>
+      </div>
+
+      <p style="font-size:12px;color:#94a3b8;margin-bottom:16px;line-height:1.5">
+        ✅ By submitting this form, I confirm that the information provided is true and correct.
+        This application will be sent directly to ${esc(school.schoolName)}.
+      </p>
+      <button type="submit" class="btn-submit">📩 Submit Application</button>
+    </form>`}
+
+    ${form.brochureUrl || form.rawFormUrl ? `
+    <div class="downloads">
+      <h3>📥 Downloads</h3>
+      ${form.brochureUrl ? `<a href="${esc(form.brochureUrl)}" target="_blank" class="dl-btn">📄 ${esc(form.brochureName || "School Brochure")} ↗</a>` : ""}
+      ${form.rawFormUrl  ? `<a href="${esc(form.rawFormUrl)}"  target="_blank" class="dl-btn">📋 ${esc(form.rawFormName  || "Printable Application Form")} ↗</a>` : ""}
+    </div>` : ""}
+  </div>
+  <div class="footer">
+    Powered by <a href="https://zimquote.co.zw">ZimQuote</a> · School Management Platform
+  </div>
+</div>
+</body></html>`;
+
+    res.send(html);
+  } catch (err) {
+    res.status(500).send("Error loading application form: " + err.message);
+  }
+});
+
+// POST /apply/school/:id/submit — handle web form submission
+router.post("/apply/school/:id/submit", async (req, res) => {
+  try {
+    const SP = (await import("../models/schoolProfile.js")).default;
+    const school = await SP.findById(req.params.id).lean();
+    if (!school) return res.status(404).send("School not found.");
+
+    const {
+      studentName, grade, dob, gender, nationality, currentSchool, homeAddress,
+      parentName, relationship, parentPhone, parentEmail, occupation,
+      emergencyName, emergencyPhone, medical, notes
+    } = req.body;
+
+    if (!studentName || !grade || !dob || !parentName || !parentPhone) {
+      return res.redirect(`/apply/school/${req.params.id}?error=Please+fill+in+all+required+fields.`);
+    }
+
+    const data = {
+      studentName, grade, dob, gender, nationality, currentSchool, homeAddress,
+      parentName, relationship, parentPhone, parentEmail, occupation,
+      emergencyName, emergencyPhone, medical, notes,
+      intakeYear: school.applicationForm?.intakeYear || "",
+      submittedVia: "web"
+    };
+
+    // Capture contact
+    try {
+      const SC = (await import("../models/schoolContact.js")).default;
+      const normP = parentPhone.replace(/\D/g,"");
+      const fullP = normP.startsWith("0") ? "263"+normP.slice(1) : normP;
+      await SC.findOneAndUpdate(
+        { schoolId: school._id, phone: fullP },
+        {
+          $set:  { lastSeen: new Date(), source: "apply", converted: true, appliedAt: new Date(),
+                   studentName, parentName, gradeInterest: grade, applicationData: data },
+          $inc:  { viewCount: 1 },
+          $setOnInsert: { firstSeen: new Date(), phone: fullP, schoolId: school._id }
+        },
+        { upsert: true }
+      );
+    } catch (_ce) { console.warn("[SCHOOL WEB CONTACT]", _ce.message); }
+
+    // Email + WhatsApp notifications
+    try {
+      const { notifySchoolWebSubmission } = await import("../services/schoolApplicationForm.js");
+      const normP2 = parentPhone.replace(/\D/g,"");
+      const fullP2 = normP2.startsWith("0") ? "263"+normP2.slice(1) : normP2;
+      await notifySchoolWebSubmission({ school, data, applicantPhone: fullP2 });
+    } catch (_ne) { console.warn("[SCHOOL WEB NOTIFY]", _ne.message); }
+
+    res.redirect(`/apply/school/${req.params.id}?success=1`);
+  } catch (err) {
+    console.error("[SCHOOL WEB SUBMIT]", err.message);
+    res.redirect(`/apply/school/${req.params.id}?error=${encodeURIComponent("Submission failed. Please try again.")}`);
   }
 });
 
