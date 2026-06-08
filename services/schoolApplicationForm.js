@@ -14,38 +14,35 @@
 import nodemailer from "nodemailer";
 import { sendText, sendButtons, sendDocument } from "./metaSender.js";
 
-// ─── EMAIL CONFIG (info@zimquote.co.zw) ──────────────────────────────────────
-// Uses SCHOOL_SMTP_* env vars — kept separate from the main SMTP_* Gmail config.
-// Add these 5 lines to your .env (do NOT reuse the existing SMTP_* names):
-//
-//   SCHOOL_SMTP_HOST=mail.zimquote.co.zw   ← cPanel: Email → Configure Mail Client
-//   SCHOOL_SMTP_PORT=465
-//   SCHOOL_SMTP_SECURE=true
-//   SCHOOL_SMTP_USER=info@zimquote.co.zw
-//   SCHOOL_SMTP_PASS=your_email_password
-//
-// If zimquote.co.zw is on Zoho: SCHOOL_SMTP_HOST=smtp.zoho.com
+// ─── EMAIL CONFIG ─────────────────────────────────────────────────────────────
+// DIAGNOSIS: The app server (cripfcnt.com / 162.0.225.121) has outbound SMTP
+// ports 25/465/587 blocked by the hosting firewall. mail.zimqoute.co.zw:465
+// is unreachable from this server. The existing Gmail SMTP credentials already
+// work for the rest of the app, so we reuse them here.
+// FROM display name is "ZimQuote Schools" so schools see that in their inbox.
+// No new env vars needed — reuses the existing SMTP_* vars in .env.
 
 function _makeTransporter() {
-  const host   = process.env.SCHOOL_SMTP_HOST;
-  const port   = parseInt(process.env.SCHOOL_SMTP_PORT   || "465");
-  const secure = (process.env.SCHOOL_SMTP_SECURE || "true") === "true";
-  const user   = process.env.SCHOOL_SMTP_USER || "info@zimquote.co.zw";
-  const pass   = process.env.SCHOOL_SMTP_PASS;
+  const host   = process.env.SMTP_HOST || "smtp.gmail.com";
+  const port   = parseInt(process.env.SMTP_PORT   || "465");
+  const secure = (process.env.SMTP_SECURE || "true") === "true";
+  const user   = process.env.SMTP_USER;
+  const pass   = process.env.SMTP_PASS;
 
-  if (!host) console.error("[SCHOOL APPLY EMAIL] ❌ SCHOOL_SMTP_HOST not set in .env — emails will fail");
-  if (!pass) console.error("[SCHOOL APPLY EMAIL] ❌ SCHOOL_SMTP_PASS not set in .env — emails will fail");
+  if (!user) console.error("[SCHOOL APPLY EMAIL] ❌ SMTP_USER not set in .env");
+  if (!pass) console.error("[SCHOOL APPLY EMAIL] ❌ SMTP_PASS not set in .env");
 
   return nodemailer.createTransport({
     host,
     port,
     secure,
     auth: { user, pass },
-    tls: { rejectUnauthorized: false }  // needed for cPanel self-signed certs
+    tls: { rejectUnauthorized: false }
   });
 }
 
-const FROM_EMAIL = process.env.SCHOOL_SMTP_USER || "info@zimquote.co.zw";
+// Display name schools see in their inbox — Gmail account sends, name shows as ZimQuote Schools
+const FROM_EMAIL = process.env.SMTP_USER || "cripfcnt@gmail.com";
 const FROM_NAME  = "ZimQuote Schools";
 
 // ─── HELPER: normalise phone ──────────────────────────────────────────────────
