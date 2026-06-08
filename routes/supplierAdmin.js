@@ -5464,7 +5464,7 @@ router.post("/schools/:id/apply-toggle", requireSupplierAdmin, async(req,res) =>
     const SP = (await import("../models/schoolProfile.js")).default;
     const sc = await SP.findById(req.params.id).lean();
     if(!sc) return res.redirect("/zq-admin/schools");
-    await SP.findByIdAndUpdate(req.params.id,{$set:{"applicationForm.active":!sc.applicationForm?.active}});
+    await SP.findByIdAndUpdate(req.params.id,{$set:{"applicationForm.active":!sc.applicationForm?.active}}, { strict: false });
     res.redirect(`/zq-admin/schools/${req.params.id}?success=${encodeURIComponent(!sc.applicationForm?.active?"Form enabled.":"Form disabled.")}`);
   }catch(err){res.redirect(`/zq-admin/schools/${req.params.id}?error=${encodeURIComponent(err.message)}`);}
 });
@@ -5474,6 +5474,7 @@ router.post("/schools/:id/apply-settings", requireSupplierAdmin, async(req,res) 
   try {
     const SP = (await import("../models/schoolProfile.js")).default;
     const {intakeYear,notifyEmail,notifyPhone,registrationLink,gradeOptions,brochureUrl,brochureName,rawFormUrl,rawFormName} = req.body;
+    // Use { strict: false } so dot-notation saves to Mixed type applicationForm are guaranteed
     await SP.findByIdAndUpdate(req.params.id,{$set:{
       registrationLink: String(registrationLink||"").trim(),
       "applicationForm.intakeYear":   String(intakeYear||"").trim(),
@@ -5484,7 +5485,7 @@ router.post("/schools/:id/apply-settings", requireSupplierAdmin, async(req,res) 
       "applicationForm.brochureName": String(brochureName||"School_Brochure.pdf").trim(),
       "applicationForm.rawFormUrl":   String(rawFormUrl||"").trim(),
       "applicationForm.rawFormName":  String(rawFormName||"Application_Form.pdf").trim()
-    }});
+    }}, { strict: false, new: true });
     res.redirect(`/zq-admin/schools/${req.params.id}?success=Settings+saved.`);
   }catch(err){res.redirect(`/zq-admin/schools/${req.params.id}?error=${encodeURIComponent(err.message)}`);}
 });

@@ -4091,7 +4091,7 @@ if (
 // MUST be at top level - sfaq_* arrive as isMetaAction=true interactive replies.
 // The handler inside the !isMetaAction block at ~line 10875 is dead for these.
 if (typeof a === "string" && a.startsWith("sfaq_")) {
-  console.log("[SFAQ_FIXED] phone:", phone, "action:", a);
+  console.log("[SFAQ] phone:", phone, "action:", a);
   const _sfaqHandled = await handleSchoolFAQAction({
     from,
     action: a,
@@ -4099,7 +4099,36 @@ if (typeof a === "string" && a.startsWith("sfaq_")) {
     saveBiz: biz ? saveBizSafe.bind(null, biz) : null
   });
   if (_sfaqHandled) return;
-  console.warn("[SFAQ_FIXED] unhandled sfaq action:", a);
+
+  // FAQ handler returned false/undefined — school has no FAQ set up yet.
+  // For sfaq_enquiry_, show school contact info instead of error message.
+  if (a.startsWith("sfaq_enquiry_")) {
+    const _sfaqId = a.replace("sfaq_enquiry_", "").trim();
+    try {
+      const _sfaqSP = (await import("../models/schoolProfile.js")).default;
+      const _sfaqSch = await _sfaqSP.findById(_sfaqId).lean();
+      if (_sfaqSch) {
+        const _sfaqPh = _sfaqSch.contactPhone || _sfaqSch.phone || "";
+        const _dispPh = _sfaqPh.startsWith("263") ? "0"+_sfaqPh.slice(3) : _sfaqPh;
+        await sendButtons(from, {
+          text:
+            `❓ *Enquiries — ${_sfaqSch.schoolName}*\n\n` +
+            `To ask a question, contact the school directly:\n\n` +
+            `📞 Call or WhatsApp: *${_dispPh}*\n` +
+            (_sfaqSch.email   ? `📧 ${_sfaqSch.email}\n`   : "") +
+            (_sfaqSch.website ? `🌐 ${_sfaqSch.website}\n` : "") +
+            `\n_The school team will get back to you._`,
+          buttons: [
+            { id: `school_apply_start_${_sfaqId}`, title: "📝 Apply on WhatsApp" },
+            { id: "school_search_refine", title: "🏫 More Schools" }
+          ]
+        });
+        return;
+      }
+    } catch (_sfaqErr) { console.warn("[SFAQ FALLBACK]", _sfaqErr.message); }
+  }
+
+  console.warn("[SFAQ] unhandled sfaq action:", a);
   return sendText(from, "Sorry, that option expired. Please open the school link again to start fresh.");
 }
 // ── END SCHOOL FAQ EARLY HANDLER ─────────────────────────────────────────────
