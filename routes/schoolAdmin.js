@@ -925,7 +925,33 @@ router.get("/schools/:id", requireSupplierAdmin, async (req, res) => {
             <a href="/zq-admin/schools/${school._id}/smartcard" class="btn btn-teal">
               🔗 Smart Card
             </a>
+            <a href="/zq-admin/schools/${school._id}/apply-qr" class="btn btn-blue">
+              📝 Apply QR &amp; Settings
+            </a>
           </div>
+
+          <!-- ── Application Form Info ────────────────────────────────────── -->
+          ${(()=>{
+            const _af = school.applicationForm || {};
+            const _webUrl = `https://cripfcnt.com/apply/school/${school._id}`;
+            const _rawUrl = _af.rawFormUrl || school.applicationFormUrl || "";
+            const _brochureUrl = _af.brochureUrl || (school.brochures?.[0]?.url) || "";
+            return `
+            <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px 18px;margin-top:16px">
+              <div style="font-size:13px;font-weight:700;color:#16a34a;margin-bottom:10px">📝 Application Form Links</div>
+              <div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;margin-bottom:8px">
+                <div>
+                  <div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">Web Form URL (share with parents)</div>
+                  <code style="font-size:12px;background:white;padding:5px 10px;border-radius:6px;border:1px solid #bbf7d0;display:block;word-break:break-all">${_webUrl}</code>
+                </div>
+                <a href="${_webUrl}" target="_blank" class="btn btn-sm btn-green" style="white-space:nowrap">🔗 Open</a>
+              </div>
+              ${_rawUrl ? `<div style="font-size:12px;color:#16a34a;margin-bottom:4px">📋 Printable form: <a href="${esc(_rawUrl)}" target="_blank" style="color:#1d4ed8">${esc(_af.rawFormName||"Application Form")}</a></div>` : `<div style="font-size:12px;color:#94a3b8">📋 No printable form set — <a href="/zq-admin/schools/${school._id}/edit" style="color:#1d4ed8">Set in Edit page</a></div>`}
+              ${_brochureUrl ? `<div style="font-size:12px;color:#16a34a">📄 Brochure: <a href="${esc(_brochureUrl)}" target="_blank" style="color:#1d4ed8">${esc(_af.brochureName||school.brochures?.[0]?.label||"Brochure")}</a></div>` : ""}
+              ${_af.intakeYear ? `<div style="font-size:12px;color:#64748b;margin-top:4px">📋 Intake: ${esc(_af.intakeYear)}</div>` : ""}
+              ${_af.gradeOptions?.length ? `<div style="font-size:12px;color:#64748b">📚 Grades: ${esc(_af.gradeOptions.join(", "))}</div>` : ""}
+            </div>`;
+          })()}
         </div>
 
         <!-- ── Brochures panel ── -->
@@ -968,12 +994,18 @@ router.get("/schools/:id", requireSupplierAdmin, async (req, res) => {
           </div>
         <div>
           <div class="panel">
-            <h3>🏊 Facilities (${(school.facilities || []).length})</h3>
-            <p style="font-size:13px;line-height:1.8">${esc(facilitiesText)}</p>
+            <div class="panel-head">
+              <h3>🏊 Facilities (${(school.facilities || []).length})</h3>
+              <a href="/zq-admin/schools/${school._id}/edit" class="btn btn-sm btn-blue">✏️ Edit</a>
+            </div>
+            <p style="font-size:13px;line-height:1.8">${facilitiesText || '<em style="color:var(--muted)">None set — click Edit to add</em>'}</p>
           </div>
           <div class="panel">
-            <h3>🏃 Extramural (${(school.extramuralActivities || []).length})</h3>
-            <p style="font-size:13px;line-height:1.8">${esc(extramuralText)}</p>
+            <div class="panel-head">
+              <h3>🏃 Extramural (${(school.extramuralActivities || []).length})</h3>
+              <a href="/zq-admin/schools/${school._id}/edit" class="btn btn-sm btn-blue">✏️ Edit</a>
+            </div>
+            <p style="font-size:13px;line-height:1.8">${extramuralText || '<em style="color:var(--muted)">None set — click Edit to add</em>'}</p>
           </div>
         </div>
       </div>

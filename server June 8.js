@@ -1,4 +1,5 @@
 // server.js - CRIPFCnt SCOI Server (merged, updated)
+// server.js - CRIPFCnt SCOI Server (merged, updated)
 import express from "express";
 import dotenv from "dotenv";
 import OpenAI from "openai";
@@ -101,7 +102,6 @@ import lmsApiRoutes from "./routes/lms_api.js";
 import adminRoutes from "./routes/admin.js"; // merged admin (includes import/upload UI)
 import supplierAdminRoutes from "./routes/supplierAdmin.js"; // ← ADD THIS
 import schoolAdminRoutes from "./routes/schoolAdmin.js";
-import schoolApplyRouter from "./routes/schoolApplyRouter.js"; // Public apply form — mounted at root
 import User from "./models/user.js";
 import adminAttempts from "./routes/admin_attempts.js";
 // org-specific quiz API (if present)
@@ -471,7 +471,6 @@ app.use("/auth", authRoutes);
 // ADMIN (single mount for admin UI & import routes)
 app.use("/admin", adminRoutes);
 app.use("/admin", adminAnalyticsRoutes);
-app.use("/", schoolApplyRouter);          // Public apply form: /apply/school/:id
 app.use("/zq-admin", supplierAdminRoutes); // ← ADD THIS
 app.use("/zq-admin", schoolAdminRoutes);
 // API routes - keep LMS API on /api/lms so quiz UI fetches work
