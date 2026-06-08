@@ -7464,6 +7464,143 @@ const _orderBlockedStates = new Set([
 // AFTER:
 const _schoolEnquiryState = _sessForOrderCheck?.tempData?.schoolEnquiryState;
 
+// ── School Application text-reply early intercept ─────────────────────────────
+// CRITICAL FIX: parents in any schoolApplyState (awaiting_student_name,
+// awaiting_grade, awaiting_dob, awaiting_parent_name, awaiting_parent_phone)
+// must NEVER reach the supplier shortcode search blocks below.
+// Both the biz-path (line ~10950) and no-biz-path (line ~7499) shortcode guards
+// only check biz.sessionState / scState — they don't know about schoolApplyState
+// stored in UserSession.tempData. This early intercept catches all text replies
+// mid-application for BOTH biz and no-biz users, before either shortcode guard.
+if (!isMetaAction && _sessForOrderCheck?.tempData?.schoolApplyState &&
+    _sessForOrderCheck.tempData.schoolApplyState !== "awaiting_start") {
+
+  const _earlyApplyState = _sessForOrderCheck.tempData.schoolApplyState;
+  const _earlyApplyId    = _sessForOrderCheck.tempData.schoolApplyId;
+  let _earlyApplyData = {};
+  try { _earlyApplyData = JSON.parse(_sessForOrderCheck.tempData.schoolApplyData || "{}"); } catch (_) {}
+
+  const _earlyApplyUpdate = async (nextState, extraData = {}) => {
+    _earlyApplyData = { ..._earlyApplyData, ...extraData };
+    await UserSession.findOneAndUpdate(
+      { phone },
+      { $set: {
+          "tempData.schoolApplyState": nextState,
+          "tempData.schoolApplyData": JSON.stringify(_earlyApplyData)
+        }
+      },
+      { upsert: true }
+    );
+  };
+
+  if (_earlyApplyState === "awaiting_student_name") {
+    const _earlyName = text.trim();
+    await _earlyApplyUpdate("awaiting_grade", { studentName: _earlyName });
+    const _earlyGrades = _earlyApplyData.gradeOptions || [];
+    if (_earlyGrades.length > 0 && _earlyGrades.length <= 10) {
+      const _earlyRows = _earlyGrades.map(g => ({ id: `sa_grade_${g.replace(/\s+/g,"_")}`, title: g.slice(0,24) }));
+      await sendList(from,
+        `✅ *${_earlyName}*\n\n*Step 2 of 5*\nSelect the *grade or form* applying for:`,
+        _earlyRows
+      );
+    } else {
+      await sendText(from, `✅ *${_earlyName}*\n\n*Step 2 of 5*\nWhat *grade or form* are they applying for?\n_e.g. Form 1, Grade 7, ECD A_`);
+    }
+    return;
+  }
+
+  if (_earlyApplyState === "awaiting_grade") {
+    const _earlyGrade = a.startsWith("sa_grade_")
+      ? a.replace(/^sa_grade_/,"").replace(/_/g," ").trim()
+      : text.trim();
+    await _earlyApplyUpdate("awaiting_dob", { grade: _earlyGrade });
+    await sendText(from, `✅ *${_earlyGrade}*\n\n*Step 3 of 5*\nWhat is the *student's date of birth?*\n_e.g. 15 March 2014 or 15/03/2014_`);
+    return;
+  }
+
+  if (_earlyApplyState === "awaiting_dob") {
+    await _earlyApplyUpdate("awaiting_parent_name", { dob: text.trim() });
+    await sendText(from, `✅ *${text.trim()}*\n\n*Step 4 of 5*\nWhat is the *parent or guardian's full name?*\n_The name the school should use when contacting you_`);
+    return;
+  }
+
+  if (_earlyApplyState === "awaiting_parent_name") {
+    await _earlyApplyUpdate("awaiting_parent_phone", { parentName: text.trim() });
+    await sendText(from, `✅ *${text.trim()}*\n\n*Step 5 of 5*\nWhat is your *WhatsApp / contact number?*\n_The school will call or message you on this number. You can also just type "same" to use this number._`);
+    return;
+  }
+
+  if (_earlyApplyState === "awaiting_parent_phone") {
+    const _earlyRawPhone = text.trim().toLowerCase();
+    _earlyApplyData.parentPhone = (_earlyRawPhone === "same" || _earlyRawPhone === "this")
+      ? (from.startsWith("263") ? "0"+from.slice(3) : from)
+      : _earlyRawPhone;
+    // Clear state
+    await UserSession.findOneAndUpdate(
+      { phone },
+      { $unset: { "tempData.schoolApplyState": "", "tempData.schoolApplyId": "", "tempData.schoolApplyData": "" } },
+      { upsert: true }
+    );
+    // Confirmation to parent
+    const _earlySummary =
+      `📝 *Application Submitted — ${_earlyApplyData.schoolName || "School"}*\n\n` +
+      `👤 Student: *${_earlyApplyData.studentName || "—"}*\n` +
+      `📚 Grade: *${_earlyApplyData.grade || "—"}*\n` +
+      `🎂 Date of Birth: *${_earlyApplyData.dob || "—"}*\n` +
+      `👪 Parent/Guardian: *${_earlyApplyData.parentName || "—"}*\n` +
+      `📞 Contact: *${_earlyApplyData.parentPhone || (from.startsWith("263") ? "0"+from.slice(3) : from)}*`;
+    await sendButtons(from, {
+      text:
+        `${_earlySummary}\n\n` +
+        `✅ *Application received!*\n` +
+        `The school will contact you on *${_earlyApplyData.parentPhone || (from.startsWith("263") ? "0"+from.slice(3) : from)}* shortly.\n\n` +
+        `_Keep WhatsApp open — the school may message you here too._`,
+      buttons: [
+        { id: `sfaq_enquiry_${_earlyApplyId}`, title: "❓ Ask a Question" },
+        { id: "school_search_refine",           title: "🏫 More Schools"  }
+      ]
+    });
+    // Email + WhatsApp notify school
+    try {
+      const { captureSchoolContact, emailApplicationToSchool } = await import("./schoolApplicationForm.js");
+      await captureSchoolContact({
+        schoolId: _earlyApplyId, phone, source: "apply",
+        extraData: {
+          studentName:     _earlyApplyData.studentName,
+          parentName:      _earlyApplyData.parentName,
+          gradeInterest:   _earlyApplyData.grade,
+          converted:       true,
+          appliedAt:       new Date(),
+          applicationData: _earlyApplyData
+        }
+      });
+      const _earlySchool = _earlyApplyId ? await SchoolProfile.findById(_earlyApplyId).lean() : null;
+      if (_earlySchool) {
+        await emailApplicationToSchool({ school: _earlySchool, data: _earlyApplyData, applicantPhone: from });
+        if (_earlySchool.applicationForm?.notifyPhone) {
+          try {
+            const { sendButtons: _earlySb } = await import("./metaSender.js");
+            const _earlyNP   = String(_earlySchool.applicationForm.notifyPhone).replace(/\D/g,"");
+            const _earlyNorm = _earlyNP.startsWith("0") ? "263"+_earlyNP.slice(1) : _earlyNP;
+            const _earlyTime = new Date().toLocaleString("en-GB",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit",timeZone:"Africa/Harare"});
+            await _earlySb(_earlyNorm, {
+              text:
+                `✅ *New WhatsApp Application — ${_earlySchool.schoolName}*\n\n` +
+                `👤 *${_earlyApplyData.studentName || "—"}*  |  📚 ${_earlyApplyData.grade || "—"}\n` +
+                `👪 Parent: *${_earlyApplyData.parentName || "—"}*\n` +
+                `📞 *${_earlyApplyData.parentPhone || (from.startsWith("263") ? "0"+from.slice(3) : from)}*\n` +
+                `⏰ ${_earlyTime}\n\n` +
+                `_Full details sent to your email. Call the parent to confirm._`,
+              buttons: [{ id: "school_my_profile", title: "🏫 My School" }]
+            });
+          } catch (_earlyNotifyErr) { console.warn("[SCHOOL WA NOTIFY EARLY]", _earlyNotifyErr.message); }
+        }
+      }
+    } catch (_earlyFinalErr) { console.warn("[SCHOOL APPLY EARLY FINAL]", _earlyFinalErr.message); }
+    return;
+  }
+}
+
 // ── Group list-reply tap early intercept (no-biz path) ─────────────────────
 // FIX: zqg_sel_ and zqg_register_ come in as interactive list_reply actions.
 // isMetaAction is now true for them (fixed above), so they no longer hit the
