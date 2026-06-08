@@ -12291,13 +12291,16 @@ if (
     );
   };
 
-  // Parent tapped "Start Application" button
+  // Parent tapped "Apply on WhatsApp" button (awaiting_start or stale)
   if (_saState === "awaiting_start") {
     await _saUpdate("awaiting_student_name");
     await sendText(from,
       `📝 *Application — ${_saData.schoolName || "School"}*\n` +
       (_saData.intakeYear ? `_${_saData.intakeYear}_\n` : "") +
-      `\n*Step 1 of 5*\nWhat is the *student's full name?*\n_e.g. Tatenda Moyo_`
+      `\nAnswer 5 quick questions — your application goes directly to the school.\n\n` +
+      `*Step 1 of 5*\n` +
+      `What is the *student's full name?*\n` +
+      `_e.g. Tatenda Moyo_`
     );
     return;
   }
@@ -12411,19 +12414,62 @@ if (
   }
 }
 
-// ── school_apply_start_<id> when session is NOT awaiting_start (stale tap) ───
+// ── school_apply_start_<id> — parent tapped "Apply on WhatsApp" button ──────
+// Fires whether session is awaiting_start (fresh) or any other state (stale tap).
+// Always starts Step 1 questions immediately — never re-sends the menu.
 if (a.startsWith("school_apply_start_")) {
   const _sasId = a.replace("school_apply_start_","").trim();
   try {
     const _sasSchool = await SchoolProfile.findById(_sasId).lean();
     if (_sasSchool) {
-      const { captureSchoolContact, startSchoolApplicationForm, notifySchoolApplyLinkOpened }
-        = await import("./schoolApplicationForm.js");
-      captureSchoolContact({ schoolId: _sasId, phone, source: "apply" }).catch(()=>{});
-      notifySchoolApplyLinkOpened({ school: _sasSchool, visitorPhone: from, source: "link" }).catch(()=>{});
-      await startSchoolApplicationForm({ from, school: _sasSchool, UserSession });
+      const { captureSchoolContact } = await import("./schoolApplicationForm.js");
+      const { notifyAllSchoolApplicationInterest } = await import("./schoolNotifications.js");
+      captureSchoolContact({ schoolId: _sasId, phone, source: "apply" }).catch(() => {});
+      notifyAllSchoolApplicationInterest(_sasSchool, from.startsWith("263") ? "0"+from.slice(3) : from).catch(() => {});
+
+      // Read existing grade options from session or school
+      let _sasGrades = [];
+      let _sasSchoolName = _sasSchool.schoolName;
+      let _sasIntakeYear = _sasSchool.applicationForm?.intakeYear || "";
+      try {
+        const _sasParsed = JSON.parse(flowSess?.tempData?.schoolApplyData || "{}");
+        _sasGrades = _sasParsed.gradeOptions || _sasSchool.applicationForm?.gradeOptions || [];
+      } catch(_) {
+        _sasGrades = _sasSchool.applicationForm?.gradeOptions || [];
+      }
+
+      // Set state to awaiting_student_name (skip awaiting_start entirely)
+      await UserSession.findOneAndUpdate(
+        { phone },
+        { $set: {
+            "tempData.schoolApplyId":    _sasId,
+            "tempData.schoolApplyState": "awaiting_student_name",
+            "tempData.schoolApplyData":  JSON.stringify({
+              schoolId:     _sasId,
+              schoolName:   _sasSchoolName,
+              intakeYear:   _sasIntakeYear,
+              gradeOptions: _sasGrades
+            })
+          }
+        },
+        { upsert: true }
+      );
+
+      // Send Step 1 immediately
+      await sendText(from,
+        `📝 *Application — ${_sasSchoolName}*\n` +
+        (_sasIntakeYear ? `_${_sasIntakeYear}_\n` : "") +
+        `\nAnswer 5 quick questions and your application goes directly to the school.\n\n` +
+        `*Step 1 of 5*\n` +
+        `What is the *student's full name?*\n` +
+        `_e.g. Tatenda Moyo_`
+      );
+    } else {
+      await sendText(from, "❌ This application link has expired. Please scan the QR code again.");
     }
-  } catch (_sasErr) { console.warn("[SCHOOL APPLY START]", _sasErr.message); }
+  } catch (_sasErr) {
+    console.warn("[SCHOOL APPLY START]", _sasErr.message);
+  }
   return;
 }
 
@@ -12508,28 +12554,16 @@ if (!biz && !isMetaAction && flowSess?.tempData?.schoolEnquiryState === "school_
 if (!isMetaAction && /ZQ:(SCHOOL|SUPPLIER):[a-f0-9]{24}/i.test(text)) {
   const _zqMatch2 = text.match(/ZQ:(SCHOOL|SUPPLIER):([a-f0-9]{24})/i);
   const _zqClean2 = _zqMatch2 ? ("ZQ:" + _zqMatch2[1].toUpperCase() + ":" + _zqMatch2[2]) : text;
-  // ── School profile view: capture contact + notify school ─────────────────
+  // ── School profile view: capture contact + notify ALL school numbers ────────
   if (_zqMatch2 && _zqMatch2[1].toUpperCase() === "SCHOOL") {
     try {
       const _spView = await SchoolProfile.findById(_zqMatch2[2]).lean();
       if (_spView) {
-        const { captureSchoolContact, notifySchoolApplyLinkOpened } = await import("./schoolApplicationForm.js");
+        const { captureSchoolContact } = await import("./schoolApplicationForm.js");
+        const { notifyAllSchoolProfileView } = await import("./schoolNotifications.js");
+        const _spDisplayFrom = from.startsWith("263") ? "0"+from.slice(3) : from;
         captureSchoolContact({ schoolId: _zqMatch2[2], phone, source: "profile" }).catch(() => {});
-        // Notify school's admin phone of the profile view (if notifyPhone is set)
-        if (_spView.applicationForm?.notifyPhone) {
-          const _spTime = new Date().toLocaleString("en-GB", {
-            day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Africa/Harare"
-          });
-          const { sendText: _spSendText } = await import("./metaSender.js");
-          const _spNotify = String(_spView.applicationForm.notifyPhone).replace(/\D/g,"");
-          const _spNorm = _spNotify.startsWith("0") ? "263" + _spNotify.slice(1) : _spNotify;
-          _spSendText(_spNorm,
-            `👁 *New school profile view — ${_spView.schoolName}*\n` +
-            `📱 Parent number: *${from.startsWith("263") ? "0"+from.slice(3) : from}*\n` +
-            `⏰ ${_spTime}\n\n` +
-            `_This parent is browsing your school on ZimQuote._`
-          ).catch(() => {});
-        }
+        notifyAllSchoolProfileView(_spView, _spDisplayFrom).catch(() => {});
       }
     } catch (_spViewErr) { console.warn("[SCHOOL PROFILE VIEW]", _spViewErr.message); }
   }

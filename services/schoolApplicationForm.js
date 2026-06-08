@@ -108,15 +108,21 @@ export async function notifySchoolApplyLinkOpened({ school, visitorPhone, source
 export async function startSchoolApplicationForm({ from, school, UserSession }) {
   const form = school.applicationForm || {};
 
-  // ── Build school profile card ─────────────────────────────────────────────
-  const _fees     = school.fees?.term1 ? `$${school.fees.term1}/term` : (typeof school.fees === "number" ? `$${school.fees}/term` : "");
-  const _type     = [school.schoolType, school.curriculum].filter(Boolean).join(" · ");
+  // ── Build school profile card shown to parent ─────────────────────────────
+  const _fees     = school.fees?.term1
+    ? `$${school.fees.term1}/term`
+    : (typeof school.fees === "number" ? `$${school.fees}/term` : "");
+  const _curricArr = Array.isArray(school.curriculum) ? school.curriculum : [school.curriculum].filter(Boolean);
+  const _curric   = _curricArr.map(c => String(c).toUpperCase()).join(" + ");
+  const _type     = [school.schoolType, _curric].filter(Boolean).join(" · ");
   const _location = school.location?.area
     ? `${school.location.area}, ${school.location.city || ""}`
-    : school.location?.city || school.address || "";
+    : school.location?.city || school.suburb || school.address || "";
   const _phone    = school.contactPhone || school.phone || "";
   const _grades   = (form.gradeOptions || []).join(", ");
   const _verified = school.verified ? " ✅" : "";
+  const _baseUrl  = process.env.BASE_URL || process.env.PUBLIC_URL || "https://cripfcnt.com";
+  const webFormUrl = `${_baseUrl}/apply/school/${school._id}`;
 
   const profileCard =
     `🏫 *${school.schoolName}${_verified}*\n` +
@@ -124,74 +130,39 @@ export async function startSchoolApplicationForm({ from, school, UserSession }) 
     (_fees     ? `💰 ${_fees}${_type ? ` · ${_type}` : ""}\n` : (_type ? `📚 ${_type}\n` : "")) +
     (_grades   ? `📋 Grades: ${_grades}\n` : "") +
     (_phone    ? `📞 ${_phone}\n` : "") +
-    (school.email ? `📧 ${school.email}\n` : "") +
+    (school.email   ? `📧 ${school.email}\n`   : "") +
     (school.website ? `🌐 ${school.website}\n` : "") +
-    (school.description ? `\n_${school.description.slice(0, 180)}${school.description.length > 180 ? "…" : ""}_\n` : "");
+    (school.description
+      ? `\n_${school.description.slice(0, 160)}${school.description.length > 160 ? "…" : ""}_\n`
+      : "");
 
-  // ── Form NOT active: show profile + contact info + any configured links ────
-  const _baseUrlInactive = process.env.BASE_URL || process.env.PUBLIC_URL || "https://cripfcnt.com";
-  if (!form.active) {
-    const _webUrlInactive = `${_baseUrlInactive}/apply/school/${school._id}`;
-    await sendButtons(from, {
-      text:
-        profileCard +
-        `\n📝 *How to Apply*\n` +
-        `🌐 Web form: ${_webUrlInactive}\n` +
-        (school.registrationLink ? `🔗 External form: ${school.registrationLink}\n` : "") +
-        `📞 Call the school: ${_phone}`,
-      buttons: [
-        { id: `sfaq_enquiry_${school._id}`, title: "❓ Ask a Question" },
-        { id: "school_search_refine",        title: "🏫 More Schools"  }
-      ]
-    });
-    // Still send documents if configured
-    if (form.brochureUrl) {
-      try {
-        await sendDocument(from, { link: form.brochureUrl, filename: form.brochureName || "School_Brochure.pdf",
-          caption: `📄 *${school.schoolName} — Brochure*\n_Save this for your records._` });
-      } catch (_) {}
-    }
-    if (form.rawFormUrl) {
-      try {
-        await sendDocument(from, { link: form.rawFormUrl, filename: form.rawFormName || "Application_Form.pdf",
-          caption: `📋 *${school.schoolName} — Printable Application Form*\n_Print, fill in, and hand in at the school office._` });
-      } catch (_) {}
-    }
-    return;
-  }
+  const intakeLabel = form.intakeYear ? `_${form.intakeYear}_` : "";
 
-  // ── Form IS active ────────────────────────────────────────────────────────
-  const intakeLabel  = form.intakeYear ? `_${form.intakeYear}_` : "";
-  const _botNum      = process.env.WHATSAPP_PHONE_NUMBER_ID ? "" : "";
-  const _baseUrl     = process.env.BASE_URL || process.env.PUBLIC_URL || "https://cripfcnt.com";
-  const webFormUrl   = `${_baseUrl}/apply/school/${school._id}`;
-
-  // ── Step 1: School profile card ───────────────────────────────────────────
+  // ── Message 1: Profile card + 3 options ──────────────────────────────────
+  // Always show all 3 options regardless of form.active
+  // form.active only controls whether the WhatsApp form is PROMOTED in search results
   await sendButtons(from, {
     text:
       profileCard +
-      `\n📝 *Applications${intakeLabel ? " — " + intakeLabel.replace(/_/g,"") : ""}*\n` +
-      `\nYou have *3 ways* to apply:\n` +
-      `1️⃣ Fill the form here on WhatsApp\n` +
-      `2️⃣ Apply online (web form)\n` +
-      `3️⃣ Download & print the paper form\n` +
-      `\nAll submissions go directly to the school.`,
+      `\n📝 *How to Apply${intakeLabel ? " — " + intakeLabel.replace(/_/g,"") : ""}*\n\n` +
+      `You have *3 options:*\n` +
+      `\n1️⃣ *WhatsApp form* — tap button below, answer 5 questions\n` +
+      `\n2️⃣ *Web form* — fill online on your phone or computer\n` +
+      `${webFormUrl}\n` +
+      `\n3️⃣ *Download PDF* — print and hand in at the school\n` +
+      (form.rawFormUrl ? `${form.rawFormUrl}\n` : "_Upload a PDF form in the school admin to enable_\n") +
+      `\n_All submissions go directly to ${school.schoolName}._`,
     buttons: [
       { id: `school_apply_start_${school._id}`, title: "📝 Apply on WhatsApp" },
       { id: `sfaq_enquiry_${school._id}`,       title: "❓ Ask a Question"    }
     ]
   });
 
-  // ── Step 2: Web form link ─────────────────────────────────────────────────
-  await sendText(from,
-    `🌐 *Apply online (web form):*\n${webFormUrl}\n` +
-    `_Opens in your browser — fill the form on your phone or computer._`
-  );
-
-  // ── Step 3: Brochure PDF ──────────────────────────────────────────────────
+  // ── Message 2: Brochure PDF (auto-send if configured) ─────────────────────
   if (form.brochureUrl) {
     try {
-      const fileName = form.brochureName || `${school.schoolName.replace(/\s+/g, "_")}_Brochure.pdf`;
+      const fileName = form.brochureName ||
+        `${school.schoolName.replace(/\s+/g, "_")}_Brochure.pdf`;
       await sendDocument(from, {
         link:     form.brochureUrl,
         filename: fileName,
@@ -200,10 +171,11 @@ export async function startSchoolApplicationForm({ from, school, UserSession }) 
     } catch (_be) { console.warn("[SCHOOL BROCHURE SEND]", _be.message); }
   }
 
-  // ── Step 4: Raw printable application form ────────────────────────────────
+  // ── Message 3: Printable application form PDF (auto-send if configured) ───
   if (form.rawFormUrl) {
     try {
-      const rawName = form.rawFormName || `${school.schoolName.replace(/\s+/g, "_")}_Application_Form.pdf`;
+      const rawName = form.rawFormName ||
+        `${school.schoolName.replace(/\s+/g, "_")}_Application_Form.pdf`;
       await sendDocument(from, {
         link:     form.rawFormUrl,
         filename: rawName,
@@ -214,7 +186,7 @@ export async function startSchoolApplicationForm({ from, school, UserSession }) 
     } catch (_re) { console.warn("[SCHOOL RAW FORM SEND]", _re.message); }
   }
 
-  // ── Pre-set session for WhatsApp form ─────────────────────────────────────
+  // ── Pre-set session so "Apply on WhatsApp" button immediately starts Step 1 ─
   await UserSession.findOneAndUpdate(
     { phone: _normPhone(from) },
     { $set: {

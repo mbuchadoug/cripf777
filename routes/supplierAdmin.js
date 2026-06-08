@@ -4988,12 +4988,19 @@ ${er?`<div style="background:#fef2f2;border:1px solid #fecaca;color:#dc2626;padd
   </div>
 </div>
 <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px 18px;margin-bottom:22px">
-  <div style="font-size:12px;font-weight:700;color:#16a34a;margin-bottom:6px">🌐 Web Application Form (parents fill online)</div>
-  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-    <code style="font-size:12px;background:white;padding:6px 10px;border-radius:6px;border:1px solid #bbf7d0;flex:1;word-break:break-all">/apply/school/${esc(String(school._id))}</code>
+  <div style="font-size:12px;font-weight:700;color:#16a34a;margin-bottom:8px">🌐 Web Application Form — share this link with parents</div>
+  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px">
+    <code style="font-size:12px;background:white;padding:7px 10px;border-radius:6px;border:1px solid #bbf7d0;flex:1;word-break:break-all">https://cripfcnt.com/apply/school/${esc(String(school._id))}</code>
     <a href="/apply/school/${esc(String(school._id))}" target="_blank" class="btn btn-sm" style="background:#dcfce7;color:#16a34a;white-space:nowrap">🔗 Open</a>
   </div>
-  <p style="font-size:11px;color:#16a34a;margin-top:6px">Share this link on Facebook, school website, email blasts — parents fill the form on their phone, submission goes to your email.</p>
+  <p style="font-size:11px;color:#166534;line-height:1.5">
+    Share on <strong>Facebook, school website, WhatsApp groups, email</strong> — parents open it in their browser, fill the form, and submission goes directly to your email. 
+    No login needed. Works on any phone.
+  </p>
+  <p style="font-size:11px;color:#94a3b8;margin-top:4px">
+    ⚠️ Make sure <code>schoolApplyRouter.js</code> is mounted at root in server.js:
+    <code>app.use("/", schoolApplyRouter)</code>
+  </p>
 </div>
 <div style="background:white;border-radius:12px;padding:22px;box-shadow:0 1px 3px rgba(0,0,0,.08);margin-bottom:22px">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:10px">
