@@ -193,8 +193,7 @@ export async function notifySchoolWebSubmission({ school, data, applicantPhone }
           `The school will contact you on *${data.parentPhone || _displayPhone(applicantPhone)}* shortly.\n\n` +
           `📞 ${school.contactPhone || school.phone || ""}`,
         buttons: [
-          { id: `sfaq_enquiry_${school._id}`, title: "❓ Ask a Question" },
-          { id: "school_search_refine",        title: "🏫 More Schools"  }
+          { id: `sfaq_enquiry_${school._id}`, title: "❓ Ask a Question" }
         ]
       });
     } catch (_pe) { console.warn("[SCHOOL WEB PARENT CONFIRM]", _pe.message); }
