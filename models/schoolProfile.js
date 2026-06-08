@@ -329,4 +329,5 @@ schoolProfileSchema.index({ "preschoolLevels.nursery": 1, city: 1, active: 1 });
 schoolProfileSchema.index({ "preschoolLevels.ecd_a":   1, city: 1, active: 1 });
 schoolProfileSchema.index({ "preschoolLevels.ecd_b":   1, city: 1, active: 1 });
 
-export default mongoose.model("SchoolProfile", schoolProfileSchema);
+export default mongoose.models.SchoolProfile
+  || mongoose.model("SchoolProfile", schoolProfileSchema);
