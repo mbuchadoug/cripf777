@@ -15,19 +15,37 @@ import nodemailer from "nodemailer";
 import { sendText, sendButtons, sendDocument } from "./metaSender.js";
 
 // ─── EMAIL CONFIG (info@zimquote.co.zw) ──────────────────────────────────────
+// Uses SCHOOL_SMTP_* env vars — kept separate from the main SMTP_* Gmail config.
+// Add these 5 lines to your .env (do NOT reuse the existing SMTP_* names):
+//
+//   SCHOOL_SMTP_HOST=mail.zimquote.co.zw   ← cPanel: Email → Configure Mail Client
+//   SCHOOL_SMTP_PORT=465
+//   SCHOOL_SMTP_SECURE=true
+//   SCHOOL_SMTP_USER=info@zimquote.co.zw
+//   SCHOOL_SMTP_PASS=your_email_password
+//
+// If zimquote.co.zw is on Zoho: SCHOOL_SMTP_HOST=smtp.zoho.com
+
 function _makeTransporter() {
+  const host   = process.env.SCHOOL_SMTP_HOST;
+  const port   = parseInt(process.env.SCHOOL_SMTP_PORT   || "465");
+  const secure = (process.env.SCHOOL_SMTP_SECURE || "true") === "true";
+  const user   = process.env.SCHOOL_SMTP_USER || "info@zimquote.co.zw";
+  const pass   = process.env.SCHOOL_SMTP_PASS;
+
+  if (!host) console.error("[SCHOOL APPLY EMAIL] ❌ SCHOOL_SMTP_HOST not set in .env — emails will fail");
+  if (!pass) console.error("[SCHOOL APPLY EMAIL] ❌ SCHOOL_SMTP_PASS not set in .env — emails will fail");
+
   return nodemailer.createTransport({
-    host:   process.env.SMTP_HOST   || "smtp.gmail.com",
-    port:   parseInt(process.env.SMTP_PORT  || "587"),
-    secure: (process.env.SMTP_SECURE || "false") === "true",
-    auth: {
-      user: process.env.SMTP_USER   || process.env.EMAIL_FROM || "info@zimquote.co.zw",
-      pass: process.env.SMTP_PASS   || process.env.EMAIL_PASS
-    }
+    host,
+    port,
+    secure,
+    auth: { user, pass },
+    tls: { rejectUnauthorized: false }  // needed for cPanel self-signed certs
   });
 }
 
-const FROM_EMAIL = process.env.EMAIL_FROM || "info@zimquote.co.zw";
+const FROM_EMAIL = process.env.SCHOOL_SMTP_USER || "info@zimquote.co.zw";
 const FROM_NAME  = "ZimQuote Schools";
 
 // ─── HELPER: normalise phone ──────────────────────────────────────────────────
@@ -290,9 +308,11 @@ export async function emailApplicationToSchool({ school, data, applicantPhone })
       subject: `New Application: ${data.studentName || "Student"} - ${data.grade || ""} - ${school.schoolName}`,
       html
     });
-    console.log(`[SCHOOL APPLY EMAIL] Sent to ${toEmail} for ${data.studentName} @ ${school.schoolName}`);
+    console.log(`[SCHOOL APPLY EMAIL] ✅ Sent to ${toEmail} for ${data.studentName} @ ${school.schoolName}`);
   } catch (err) {
-    console.warn("[SCHOOL APPLY EMAIL] Failed:", err.message);
+    console.error(`[SCHOOL APPLY EMAIL] ❌ Failed → ${toEmail}: ${err.message}`);
+    if (err.response) console.error(`[SCHOOL APPLY EMAIL]    SMTP response: ${err.response}`);
+    if (err.code)     console.error(`[SCHOOL APPLY EMAIL]    Error code: ${err.code}`);
   }
 }
 // ─── NOTIFY SCHOOL + WHATSAPP: web form submission ───────────────────────────
