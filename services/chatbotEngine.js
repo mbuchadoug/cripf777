@@ -12618,28 +12618,7 @@ if (!isMetaAction && /^(my card|staff card|my link|my qr)$/i.test(text.trim())) 
   if (_handled) return;
 }
 
-// ── school_apply_<id> — parent taps "Apply Online" or scans Apply QR ─────────
-if (a.startsWith("school_apply_")) {
-  const _applySchoolId = a.replace("school_apply_", "").trim();
-  try {
-    const _applySchool = await SchoolProfile.findById(_applySchoolId).lean();
-    if (!_applySchool) {
-      await sendText(from, "❌ School not found. Please try the link again.");
-    } else {
-      const { captureSchoolContact, startSchoolApplicationForm, notifySchoolApplyLinkOpened }
-        = await import("./schoolApplicationForm.js");
-      // Save contact — they showed interest
-      captureSchoolContact({ schoolId: _applySchoolId, phone, source: "apply" }).catch(() => {});
-      // Notify school admin phone if set
-      notifySchoolApplyLinkOpened({ school: _applySchool, visitorPhone: from, source: "link" }).catch(() => {});
-      await startSchoolApplicationForm({ from, school: _applySchool, UserSession });
-    }
-  } catch (_applyErr) {
-    console.warn("[SCHOOL APPLY] error:", _applyErr.message);
-    await sendText(from, "❌ Could not open application form. Please contact the school directly.");
-  }
-  return;
-}
+// [REMOVED: old school_apply_ handler — now handled by school_apply_start_ above]
 
 // ── School FAQ chatbot (sfaq_ actions) ───────────────────────────────────────
 if (a.startsWith("sfaq_")) {

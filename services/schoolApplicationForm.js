@@ -106,15 +106,34 @@ export async function notifySchoolApplyLinkOpened({ school, visitorPhone, source
 // 2. Sends brochure/flyer PDF if configured
 // 3. Prompts parent to tap "Start Application" before asking questions
 export async function startSchoolApplicationForm({ from, school, UserSession }) {
+  // ── Resolve form settings from BOTH applicationForm subdoc AND top-level schema fields ──
+  // applicationForm is a Mixed field added to the schema.
+  // Fallback to top-level schema fields where applicationForm fields are absent.
   const form = school.applicationForm || {};
 
-  // ── Build school profile card shown to parent ─────────────────────────────
+  // Document fields (actual schema):
+  // school.applicationFormUrl  → printable PDF form link
+  // school.brochures[]         → [{label, url, addedAt}] array of brochures
+  // school.notificationContacts[] → extra notification phones
+  // school.admissionsOpen      → whether admissions are open
+
+  // Resolve brochure: prefer applicationForm.brochureUrl, fallback to brochures[0].url
+  const _brochureUrl  = form.brochureUrl || (school.brochures?.[0]?.url) || "";
+  const _brochureName = form.brochureName || (school.brochures?.[0]?.label) || "School_Brochure.pdf";
+
+  // Resolve raw form: prefer applicationForm.rawFormUrl, fallback to applicationFormUrl
+  const _rawFormUrl  = form.rawFormUrl || school.applicationFormUrl || "";
+  const _rawFormName = form.rawFormName || "Application_Form.pdf";
+
+  // Resolve notify email: prefer applicationForm.notifyEmail, fallback to school.email
+  const _notifyEmail = form.notifyEmail || school.email || "";
+
+  // ── Build school profile card ─────────────────────────────────────────────
   const _fees     = school.fees?.term1
     ? `$${school.fees.term1}/term`
     : (typeof school.fees === "number" ? `$${school.fees}/term` : "");
   const _curricArr = Array.isArray(school.curriculum) ? school.curriculum : [school.curriculum].filter(Boolean);
   const _curric   = _curricArr.map(c => String(c).toUpperCase()).join(" + ");
-  const _type     = [school.schoolType, _curric].filter(Boolean).join(" · ");
   const _location = school.location?.area
     ? `${school.location.area}, ${school.location.city || ""}`
     : school.location?.city || school.suburb || school.address || "";
@@ -127,30 +146,30 @@ export async function startSchoolApplicationForm({ from, school, UserSession }) 
   const profileCard =
     `🏫 *${school.schoolName}${_verified}*\n` +
     (_location ? `📍 ${_location}\n` : "") +
-    (_fees     ? `💰 ${_fees}${_type ? ` · ${_type}` : ""}\n` : (_type ? `📚 ${_type}\n` : "")) +
-    (_grades   ? `📋 Grades: ${_grades}\n` : "") +
-    (_phone    ? `📞 ${_phone}\n` : "") +
+    (_fees  ? `💰 ${_fees}${_curric ? ` · ${_curric}` : ""}\n` : (_curric ? `📚 ${_curric}\n` : "")) +
+    (_grades ? `📋 Grades: ${_grades}\n` : "") +
+    (_phone  ? `📞 ${_phone}\n` : "") +
     (school.email   ? `📧 ${school.email}\n`   : "") +
     (school.website ? `🌐 ${school.website}\n` : "") +
     (school.description
       ? `\n_${school.description.slice(0, 160)}${school.description.length > 160 ? "…" : ""}_\n`
       : "");
 
-  const intakeLabel = form.intakeYear ? `_${form.intakeYear}_` : "";
+  const intakeLabel = form.intakeYear ? form.intakeYear : "";
 
-  // ── Message 1: Profile card + 3 options ──────────────────────────────────
-  // Always show all 3 options regardless of form.active
-  // form.active only controls whether the WhatsApp form is PROMOTED in search results
+  // ── Message 1: Profile card + all 3 apply options ────────────────────────
   await sendButtons(from, {
     text:
       profileCard +
-      `\n📝 *How to Apply${intakeLabel ? " — " + intakeLabel.replace(/_/g,"") : ""}*\n\n` +
-      `You have *3 options:*\n` +
-      `\n1️⃣ *WhatsApp form* — tap button below, answer 5 questions\n` +
-      `\n2️⃣ *Web form* — fill online on your phone or computer\n` +
-      `${webFormUrl}\n` +
-      `\n3️⃣ *Download PDF* — print and hand in at the school\n` +
-      (form.rawFormUrl ? `${form.rawFormUrl}\n` : "_Upload a PDF form in the school admin to enable_\n") +
+      `\n📝 *How to Apply${intakeLabel ? " — " + intakeLabel : ""}*\n\n` +
+      `You have *3 options:*\n\n` +
+      `1️⃣ *WhatsApp form* — tap button below, answer 5 questions\n\n` +
+      `2️⃣ *Web form* — fill online on your phone or computer:\n` +
+      `${webFormUrl}\n\n` +
+      `3️⃣ *Download PDF* — print and hand in at the school:\n` +
+      (_rawFormUrl
+        ? `${_rawFormUrl}\n`
+        : `_No PDF form set yet — contact school directly_\n`) +
       `\n_All submissions go directly to ${school.schoolName}._`,
     buttons: [
       { id: `school_apply_start_${school._id}`, title: "📝 Apply on WhatsApp" },
@@ -158,27 +177,23 @@ export async function startSchoolApplicationForm({ from, school, UserSession }) 
     ]
   });
 
-  // ── Message 2: Brochure PDF (auto-send if configured) ─────────────────────
-  if (form.brochureUrl) {
+  // ── Message 2: Auto-send brochure PDF if configured ───────────────────────
+  if (_brochureUrl) {
     try {
-      const fileName = form.brochureName ||
-        `${school.schoolName.replace(/\s+/g, "_")}_Brochure.pdf`;
       await sendDocument(from, {
-        link:     form.brochureUrl,
-        filename: fileName,
+        link:     _brochureUrl,
+        filename: _brochureName,
         caption:  `📄 *${school.schoolName} — School Brochure*\n_Save this for your records._`
       });
     } catch (_be) { console.warn("[SCHOOL BROCHURE SEND]", _be.message); }
   }
 
-  // ── Message 3: Printable application form PDF (auto-send if configured) ───
-  if (form.rawFormUrl) {
+  // ── Message 3: Auto-send printable application form PDF if configured ─────
+  if (_rawFormUrl) {
     try {
-      const rawName = form.rawFormName ||
-        `${school.schoolName.replace(/\s+/g, "_")}_Application_Form.pdf`;
       await sendDocument(from, {
-        link:     form.rawFormUrl,
-        filename: rawName,
+        link:     _rawFormUrl,
+        filename: _rawFormName,
         caption:
           `📋 *Printable Application Form — ${school.schoolName}*\n` +
           `_Print, fill in, and hand in at the school office._`
@@ -186,21 +201,31 @@ export async function startSchoolApplicationForm({ from, school, UserSession }) 
     } catch (_re) { console.warn("[SCHOOL RAW FORM SEND]", _re.message); }
   }
 
-  // ── Pre-set session so "Apply on WhatsApp" button immediately starts Step 1 ─
+  // ── Pre-set session so "Apply on WhatsApp" starts questions immediately ───
   await UserSession.findOneAndUpdate(
     { phone: _normPhone(from) },
     { $set: {
         "tempData.schoolApplyId":    String(school._id),
-        "tempData.schoolApplyState": "awaiting_start",
+        "tempData.schoolApplyState": "awaiting_student_name",  // skip awaiting_start
         "tempData.schoolApplyData":  JSON.stringify({
           schoolId:     String(school._id),
           schoolName:   school.schoolName,
-          intakeYear:   form.intakeYear || "",
+          intakeYear:   intakeLabel,
           gradeOptions: form.gradeOptions || []
         })
       }
     },
     { upsert: true }
+  );
+
+  // Send Step 1 immediately after the options (no extra button tap needed)
+  await sendText(from,
+    `📝 *Application — ${school.schoolName}*\n` +
+    (intakeLabel ? `_${intakeLabel}_\n` : "") +
+    `\nAnswer 5 quick questions — your application goes directly to the school.\n\n` +
+    `*Step 1 of 5*\n` +
+    `What is the *student's full name?*\n` +
+    `_e.g. Tatenda Moyo_`
   );
 }
 
