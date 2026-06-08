@@ -201,12 +201,15 @@ export async function startSchoolApplicationForm({ from, school, UserSession }) 
     } catch (_re) { console.warn("[SCHOOL RAW FORM SEND]", _re.message); }
   }
 
-  // ── Pre-set session so "Apply on WhatsApp" starts questions immediately ───
+  // ── Pre-set session state so "Apply on WhatsApp" button immediately starts questions ──
+  // Set to awaiting_start — NOT awaiting_student_name.
+  // Step 1 is sent only when parent taps the "📝 Apply on WhatsApp" button.
+  // This prevents questions appearing BEFORE the parent has tapped anything.
   await UserSession.findOneAndUpdate(
     { phone: _normPhone(from) },
     { $set: {
         "tempData.schoolApplyId":    String(school._id),
-        "tempData.schoolApplyState": "awaiting_student_name",  // skip awaiting_start
+        "tempData.schoolApplyState": "awaiting_start",
         "tempData.schoolApplyData":  JSON.stringify({
           schoolId:     String(school._id),
           schoolName:   school.schoolName,
@@ -216,16 +219,6 @@ export async function startSchoolApplicationForm({ from, school, UserSession }) 
       }
     },
     { upsert: true }
-  );
-
-  // Send Step 1 immediately after the options (no extra button tap needed)
-  await sendText(from,
-    `📝 *Application — ${school.schoolName}*\n` +
-    (intakeLabel ? `_${intakeLabel}_\n` : "") +
-    `\nAnswer 5 quick questions — your application goes directly to the school.\n\n` +
-    `*Step 1 of 5*\n` +
-    `What is the *student's full name?*\n` +
-    `_e.g. Tatenda Moyo_`
   );
 }
 

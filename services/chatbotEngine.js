@@ -3965,10 +3965,12 @@ if (!isMetaAction && /^APPLY:SCHOOL:[a-f0-9]{24}$/i.test(text.trim())) {
     const _SPTop = (await import("../models/schoolProfile.js")).default;
     const _applySchoolTop = await _SPTop.findById(_applyIdTop).lean();
     if (_applySchoolTop) {
-      const { captureSchoolContact, startSchoolApplicationForm, notifySchoolApplyLinkOpened }
-        = await import("./schoolApplicationForm.js");
+      const { captureSchoolContact, startSchoolApplicationForm } = await import("./schoolApplicationForm.js");
+      const { notifyAllSchoolApplicationInterest } = await import("./schoolNotifications.js");
       captureSchoolContact({ schoolId: _applyIdTop, phone, source: "apply" }).catch(() => {});
-      notifySchoolApplyLinkOpened({ school: _applySchoolTop, visitorPhone: from, source: "qr" }).catch(() => {});
+      // Notify ALL registered notification numbers (school.phone + school.notificationContacts[])
+      const _qrDisplayPhone = from.startsWith("263") ? "0"+from.slice(3) : from;
+      notifyAllSchoolApplicationInterest(_applySchoolTop, _qrDisplayPhone).catch(() => {});
       await startSchoolApplicationForm({ from, school: _applySchoolTop, UserSession });
     } else {
       await sendText(from, "❌ This application link is no longer active. Please contact the school directly.");

@@ -1489,6 +1489,42 @@ router.get("/schools/:id/edit", requireSupplierAdmin, async (req, res) => {
             <textarea name="adminNote" rows="2">${esc(school.adminNote || "")}</textarea>
           </div>
 
+          <!-- ── Application Form Settings ─────────────────────────────── -->
+          <hr style="margin:24px 0;border:none;border-top:1px solid var(--border)">
+          <p style="font-weight:700;font-size:13px;margin-bottom:14px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">
+            📝 WhatsApp &amp; Web Application Form Settings
+          </p>
+          <div class="form-grid">
+            <div class="fg">
+              <label>Intake Year / Label</label>
+              <input name="afIntakeYear" value="${esc(school.applicationForm?.intakeYear||'')}"
+                     placeholder="e.g. 2027 Form 1 Intake" />
+              <span style="font-size:11px;color:var(--muted)">Shown at top of apply form</span>
+            </div>
+            <div class="fg">
+              <label>Notify Email (receives completed applications)</label>
+              <input name="afNotifyEmail" type="email"
+                     value="${esc(school.applicationForm?.notifyEmail||school.email||'')}"
+                     placeholder="admin@school.co.zw" />
+              <span style="font-size:11px;color:var(--muted)">Sent from info@zimquote.co.zw</span>
+            </div>
+            <div class="fg full">
+              <label>Grade Options (comma-separated — shown as tap list to parents on WhatsApp)</label>
+              <input name="afGradeOptions"
+                     value="${esc((school.applicationForm?.gradeOptions||[]).join(', '))}"
+                     placeholder="e.g. Form 1, Form 2, Form 3, Form 4, Form 5, Form 6" />
+            </div>
+            <div class="fg full">
+              <label>Application Form PDF URL (printable — sent to parents via WhatsApp)</label>
+              <input name="afRawFormUrl"
+                     value="${esc(school.applicationForm?.rawFormUrl||school.applicationFormUrl||'')}"
+                     placeholder="https://..." />
+              ${school.applicationForm?.rawFormUrl||school.applicationFormUrl
+                ? `<span style="font-size:11px;color:#16a34a">✅ PDF set — <a href="${esc(school.applicationForm?.rawFormUrl||school.applicationFormUrl)}" target="_blank">Preview</a></span>`
+                : `<span style="font-size:11px;color:var(--muted)">Paste a public URL or upload via the Brochures panel below</span>`}
+            </div>
+          </div>
+
           <div class="form-actions">
             <button type="submit" class="btn btn-blue">💾 Save Changes</button>
             <a href="/zq-admin/schools/${school._id}" class="btn btn-gray">Cancel</a>
@@ -1650,6 +1686,26 @@ router.post("/schools/:id/edit", requireSupplierAdmin, async (req, res) => {
     }
     // Always deduplicate and exclude the primary phone (it always gets notified)
     school.notificationContacts = [...new Set(_notifRaw)].filter(p => p !== school.phone.replace(/\D+/g, ""));
+
+    // ── Application Form Settings (WhatsApp + web form config) ───────────────
+    const afIntakeYear  = (req.body.afIntakeYear  || "").trim();
+    const afNotifyEmail = (req.body.afNotifyEmail || "").trim();
+    const afGradeOptions = (req.body.afGradeOptions || "")
+      .split(",").map(s => s.trim()).filter(Boolean);
+    const afRawFormUrl  = (req.body.afRawFormUrl  || "").trim();
+
+    // Merge with existing applicationForm (keep fields not set in this form)
+    const existingAf = school.applicationForm || {};
+    school.applicationForm = {
+      ...existingAf,
+      intakeYear:   afIntakeYear   || existingAf.intakeYear   || "",
+      notifyEmail:  afNotifyEmail  || existingAf.notifyEmail  || "",
+      gradeOptions: afGradeOptions.length ? afGradeOptions : (existingAf.gradeOptions || []),
+      rawFormUrl:   afRawFormUrl   || existingAf.rawFormUrl   || "",
+    };
+    school.markModified("applicationForm");
+    // Also sync to top-level applicationFormUrl for backward compat
+    if (afRawFormUrl) school.applicationFormUrl = afRawFormUrl;
 
     await school.save();
 
@@ -3695,260 +3751,6 @@ router.post("/schools/:id/faq/q/:qId/move", requireSupplierAdmin, async (req, re
 });
 
 
-// ═════════════════════════════════════════════════════════════════════════════
-// PUBLIC SCHOOL APPLICATION FORM — no auth required
-// GET  /apply/school/:id          → web form (parents fill online)
-// POST /apply/school/:id/submit   → handle submission → email school + WhatsApp notify
-//
-// Mount schoolAdmin at /zq-admin AND root so /apply/school works:
-//   app.use("/zq-admin", schoolAdminRouter);
-//   app.use("/", schoolAdminRouter);   ← enables /apply/school/:id at root
-// ═════════════════════════════════════════════════════════════════════════════
-
-router.get("/apply/school/:id", async (req, res) => {
-  try {
-    const school = await SchoolProfile.findById(req.params.id).lean();
-    if (!school) return res.status(404).send(`<html><body style="font-family:sans-serif;padding:40px;text-align:center"><h2>School not found</h2><p>This link may have expired.</p></body></html>`);
-
-    const form       = school.applicationForm || {};
-    const feesRaw    = school.fees;
-    const feesStr    = feesRaw?.term1 ? `$${feesRaw.term1}/term` : "";
-    const curriculum = (school.curriculum || []).map(c => c.toUpperCase()).join(" + ") || "";
-    const location   = school.suburb || school.location?.area || "";
-    const city       = school.city || school.location?.city || "";
-    const locStr     = [location, city].filter(Boolean).join(", ");
-    const phone      = school.contactPhone || school.phone || "";
-    const gradeOpts  = form.gradeOptions || [];
-    const intakeYear = form.intakeYear || "";
-    const rawFormUrl = form.rawFormUrl || school.applicationFormUrl || "";
-    const rawFormName= form.rawFormName || "Application_Form.pdf";
-    const brochureUrl= form.brochureUrl || school.brochures?.[0]?.url || "";
-    const brochureName=form.brochureName || school.brochures?.[0]?.label || "School_Brochure.pdf";
-    const ok         = req.query.success === "1";
-    const errMsg     = req.query.error ? decodeURIComponent(req.query.error) : "";
-
-    const gradeSelect = gradeOpts.length
-      ? `<select name="grade" required style="width:100%;padding:13px 14px;border:2px solid #e2e8f0;border-radius:8px;font-size:16px;background:white">
-           <option value="">— Select grade / form —</option>
-           ${gradeOpts.map(g => `<option value="${esc(g)}">${esc(g)}</option>`).join("")}
-         </select>`
-      : `<input name="grade" type="text" required placeholder="e.g. Form 1, Grade 7, ECD A" style="width:100%;padding:13px 14px;border:2px solid #e2e8f0;border-radius:8px;font-size:16px">`;
-
-    const html = `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>Apply — ${esc(school.schoolName)}</title>
-<style>
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f0f4f8;min-height:100vh}
-.wrap{max-width:580px;margin:0 auto;padding-bottom:40px}
-.header{background:linear-gradient(135deg,#1a3c5e,#1e6091);color:#fff;padding:28px 24px 22px;text-align:center}
-.header .icon{font-size:44px;margin-bottom:8px}
-.header h1{font-size:22px;font-weight:800;margin-bottom:4px}
-.header .sub{font-size:13px;opacity:.85;margin-top:4px}
-.info{background:#16355a;padding:13px 20px;font-size:13px;color:#bfdbfe;line-height:1.9}
-.info strong{color:#fff}
-.card{background:#fff;padding:22px 20px;border-bottom:1px solid #e2e8f0}
-.stitle{font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin-bottom:14px;padding-bottom:8px;border-bottom:2px solid #f0f4f8}
-.field{margin-bottom:14px}
-label{display:block;font-size:13px;font-weight:700;color:#374151;margin-bottom:6px}
-.req{color:#ef4444}
-input,select,textarea{width:100%;padding:13px 14px;border:2px solid #e2e8f0;border-radius:8px;font-size:16px;font-family:inherit;outline:none;-webkit-appearance:none;transition:border-color .15s}
-input:focus,select:focus,textarea:focus{border-color:#1a3c5e}
-.g2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-@media(max-width:440px){.g2{grid-template-columns:1fr}}
-.btn{width:100%;padding:16px;background:linear-gradient(135deg,#1a3c5e,#1e6091);color:#fff;border:none;border-radius:10px;font-size:17px;font-weight:800;cursor:pointer;letter-spacing:.3px}
-.btn:active{opacity:.88}
-.success{text-align:center;padding:32px 20px}
-.success .tick{font-size:60px;margin-bottom:14px}
-.success h2{color:#16a34a;font-size:22px;font-weight:800;margin-bottom:8px}
-.success p{color:#374151;font-size:14px;line-height:1.7;margin-bottom:12px}
-.next{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px;font-size:13px;color:#166534;text-align:left}
-.errbx{background:#fef2f2;border:2px solid #fecaca;border-radius:8px;padding:13px 16px;margin-bottom:16px;color:#dc2626;font-size:14px}
-.dl{background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:16px;margin-top:18px}
-.dl h3{font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.8px;margin-bottom:12px}
-.dl a{display:flex;align-items:center;gap:12px;padding:12px 14px;background:#fff;border:1.5px solid #e2e8f0;border-radius:8px;text-decoration:none;color:#1a3c5e;font-size:14px;font-weight:600;margin-bottom:8px}
-.dl a:last-child{margin-bottom:0}
-.dl a .ic{font-size:22px;flex-shrink:0}
-.dl a .meta{font-size:12px;color:#64748b;font-weight:400;margin-top:2px}
-.note{font-size:12px;color:#94a3b8;margin-top:5px}
-footer{text-align:center;font-size:12px;color:#94a3b8;padding:20px;border-top:1px solid #e2e8f0}
-footer a{color:#1a3c5e;font-weight:600;text-decoration:none}
-</style>
-</head>
-<body>
-<div class="wrap">
-  <div class="header">
-    <div class="icon">🏫</div>
-    <h1>${esc(school.schoolName)}${school.verified ? " ✅" : ""}</h1>
-    ${intakeYear ? `<div class="sub">📋 ${esc(intakeYear)}</div>` : ""}
-  </div>
-  <div class="info">
-    ${locStr ? `📍 <strong>${esc(locStr)}</strong>&ensp;` : ""}
-    ${feesStr ? `💰 <strong>${esc(feesStr)}</strong>${curriculum ? `&ensp;·&ensp;<strong>${esc(curriculum)}</strong>` : ""}` : ""}
-    ${phone ? `<br>📞 <strong>${esc(phone)}</strong>` : ""}
-    ${school.email ? `&ensp;·&ensp;✉️ <strong>${esc(school.email)}</strong>` : ""}
-  </div>
-
-  <div class="card">
-    ${ok ? `
-    <div class="success">
-      <div class="tick">✅</div>
-      <h2>Application Received!</h2>
-      <p>Your application has been sent to <strong>${esc(school.schoolName)}</strong>.</p>
-      <div class="next">
-        📞 The school will call or WhatsApp you shortly on the number you provided.<br><br>
-        <strong>Keep your phone on</strong> — ${esc(school.schoolName)} will be in touch.
-      </div>
-    </div>
-    ` : `
-    ${errMsg ? `<div class="errbx">❌ ${esc(errMsg)}</div>` : ""}
-    <div class="stitle">Student Application Form</div>
-
-    <form method="POST" action="/apply/school/${esc(req.params.id)}/submit">
-
-      <div class="stitle" style="margin-top:4px">👤 Student Details</div>
-      <div class="field">
-        <label>Student Full Name <span class="req">*</span></label>
-        <input name="studentName" type="text" required placeholder="e.g. Tatenda Moyo" autocomplete="name">
-      </div>
-      <div class="g2">
-        <div class="field">
-          <label>Grade / Form <span class="req">*</span></label>
-          ${gradeSelect}
-        </div>
-        <div class="field">
-          <label>Date of Birth <span class="req">*</span></label>
-          <input name="dob" type="date" required>
-        </div>
-      </div>
-      <div class="g2">
-        <div class="field">
-          <label>Gender</label>
-          <select name="gender"><option value="">— Select —</option><option>Male</option><option>Female</option></select>
-        </div>
-        <div class="field">
-          <label>Nationality</label>
-          <input name="nationality" placeholder="e.g. Zimbabwean">
-        </div>
-      </div>
-      <div class="field"><label>Current School (if any)</label><input name="currentSchool" placeholder="e.g. Churchill Primary"></div>
-      <div class="field"><label>Home Address</label><input name="homeAddress" placeholder="e.g. 12 Borrowdale Road, Harare"></div>
-
-      <div class="stitle" style="margin-top:20px">👪 Parent / Guardian Details</div>
-      <div class="field">
-        <label>Parent / Guardian Name <span class="req">*</span></label>
-        <input name="parentName" type="text" required placeholder="e.g. Blessing Moyo" autocomplete="name">
-      </div>
-      <div class="g2">
-        <div class="field">
-          <label>Relationship</label>
-          <select name="relationship"><option value="">— Select —</option><option>Father</option><option>Mother</option><option>Guardian</option><option>Other</option></select>
-        </div>
-        <div class="field"><label>Occupation</label><input name="occupation" placeholder="e.g. Teacher"></div>
-      </div>
-      <div class="field">
-        <label>WhatsApp / Phone <span class="req">*</span></label>
-        <input name="parentPhone" type="tel" required placeholder="e.g. 0771234567" autocomplete="tel">
-        <div class="note">The school will call or WhatsApp you on this number</div>
-      </div>
-      <div class="field"><label>Email Address (optional)</label><input name="parentEmail" type="email" placeholder="parent@email.com"></div>
-
-      <div class="stitle" style="margin-top:20px">🏥 Emergency &amp; Medical</div>
-      <div class="g2">
-        <div class="field"><label>Emergency Contact Name</label><input name="emergencyName" placeholder="e.g. Chipo Moyo"></div>
-        <div class="field"><label>Emergency Contact Phone</label><input name="emergencyPhone" type="tel" placeholder="e.g. 0712345678"></div>
-      </div>
-      <div class="field">
-        <label>Known Allergies / Medical Conditions</label>
-        <textarea name="medical" rows="2" placeholder="None, or describe..."></textarea>
-      </div>
-      <div class="field">
-        <label>Additional Notes (optional)</label>
-        <textarea name="notes" rows="2" placeholder="Anything else the school should know..."></textarea>
-      </div>
-
-      <p style="font-size:12px;color:#94a3b8;margin:16px 0 12px;line-height:1.5">
-        By submitting this form I confirm that all information is true and correct.
-        This application will be sent directly to ${esc(school.schoolName)}.
-      </p>
-      <button type="submit" class="btn">📩 Submit Application to ${esc(school.schoolName)}</button>
-    </form>
-    `}
-
-    ${brochureUrl || rawFormUrl ? `
-    <div class="dl">
-      <h3>📥 Downloads</h3>
-      ${brochureUrl ? `<a href="${esc(brochureUrl)}" target="_blank"><span class="ic">📄</span><div><div>${esc(brochureName)}</div><div class="meta">School Brochure — tap to open</div></div></a>` : ""}
-      ${rawFormUrl  ? `<a href="${esc(rawFormUrl)}"  target="_blank"><span class="ic">📋</span><div><div>${esc(rawFormName)}</div><div class="meta">Printable form — print &amp; hand in at school</div></div></a>` : ""}
-    </div>` : ""}
-  </div>
-  <footer>Powered by <a href="https://zimquote.co.zw">ZimQuote</a> · School Management Platform</footer>
-</div>
-</body></html>`;
-
-    res.send(html);
-  } catch (err) {
-    console.error("[SCHOOL WEB FORM]", err.message);
-    res.status(500).send(`<html><body style="font-family:sans-serif;padding:40px;text-align:center"><h2>Something went wrong</h2><p>${err.message}</p></body></html>`);
-  }
-});
-
-router.post("/apply/school/:id/submit", async (req, res) => {
-  try {
-    const school = await SchoolProfile.findById(req.params.id).lean();
-    if (!school) return res.status(404).send("School not found.");
-
-    const { studentName, grade, dob, gender, nationality, currentSchool, homeAddress,
-            parentName, relationship, parentPhone, parentEmail, occupation,
-            emergencyName, emergencyPhone, medical, notes } = req.body;
-
-    if (!studentName?.trim() || !grade?.trim() || !dob?.trim() || !parentName?.trim() || !parentPhone?.trim()) {
-      return res.redirect(`/apply/school/${req.params.id}?error=${encodeURIComponent("Please fill in all required fields: Student name, Grade, Date of birth, Parent name, and Phone number.")}`);
-    }
-
-    const data = {
-      studentName:   studentName.trim(), grade: grade.trim(), dob: dob.trim(),
-      gender:        gender?.trim() || "", nationality: nationality?.trim() || "",
-      currentSchool: currentSchool?.trim() || "", homeAddress: homeAddress?.trim() || "",
-      parentName:    parentName.trim(), relationship: relationship?.trim() || "",
-      parentPhone:   parentPhone.trim(), parentEmail: parentEmail?.trim() || "",
-      occupation:    occupation?.trim() || "", emergencyName: emergencyName?.trim() || "",
-      emergencyPhone:emergencyPhone?.trim() || "", medical: medical?.trim() || "",
-      notes:         notes?.trim() || "",
-      intakeYear:    (school.applicationForm?.intakeYear) || "",
-      submittedVia:  "web"
-    };
-
-    const normP = parentPhone.replace(/\D/g, "");
-    const fullP = normP.startsWith("0") ? "263" + normP.slice(1) : normP;
-
-    // 1. Save contact
-    try {
-      const SC = (await import("../models/schoolContact.js")).default;
-      await SC.findOneAndUpdate(
-        { schoolId: school._id, phone: fullP },
-        { $set: { lastSeen: new Date(), source: "apply", converted: true, appliedAt: new Date(),
-                  studentName: data.studentName, parentName: data.parentName, gradeInterest: data.grade, applicationData: data },
-          $inc: { viewCount: 1 },
-          $setOnInsert: { firstSeen: new Date(), phone: fullP, schoolId: school._id } },
-        { upsert: true }
-      );
-    } catch (_ce) { console.warn("[SCHOOL WEB CONTACT]", _ce.message); }
-
-    // 2. Email + WhatsApp notify all school numbers
-    try {
-      const { notifySchoolWebSubmission } = await import("../services/schoolApplicationForm.js");
-      await notifySchoolWebSubmission({ school, data, applicantPhone: fullP });
-    } catch (_ne) { console.warn("[SCHOOL WEB NOTIFY]", _ne.message); }
-
-    res.redirect(`/apply/school/${req.params.id}?success=1`);
-  } catch (err) {
-    console.error("[SCHOOL WEB SUBMIT]", err.message);
-    res.redirect(`/apply/school/${req.params.id}?error=${encodeURIComponent("Submission failed. Please try again.")}`);
-  }
-});
+// [Apply routes moved to routes/schoolApplyRouter.js — mount at root: app.use('/', schoolApplyRouter)]
 
 export default router;
