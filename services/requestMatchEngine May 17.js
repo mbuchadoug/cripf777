@@ -151,12 +151,12 @@ const INTENT_KEYWORD_MAP = [
   { pattern: /\b(pharmacy|chemist|medicine|pills|prescription|supplement|vitamin|first aid)\b/, intent: "medical_service" },
 
   // ══════════════════════════════════════════════════════════════════════════
-  // HOSPITALITY — ACCOMMODATION (stay, sleep, check in)
+  // HOSPITALITY - ACCOMMODATION (stay, sleep, check in)
   // IMPORTANT: These ONLY match profileType="hospitality" suppliers.
   // They will NEVER match plumbers, electricians, product sellers, etc.
   // ══════════════════════════════════════════════════════════════════════════
 
-  // Accommodation keywords — very specific to overnight stays
+  // Accommodation keywords - very specific to overnight stays
   { pattern: /\b(lodge|game lodge|safari lodge|bush lodge|tented camp|luxury lodge|bush camp|nature lodge|riverside lodge|lakeside lodge)\b/, intent: "hospitality_stay" },
   { pattern: /\b(hotel|boutique hotel|motel|inn|guesthouse|guest house|bed and breakfast|b&b|airbnb|holiday home|self catering|self-catering|chalet|cottage|villa|rondavel|hut hire)\b/, intent: "hospitality_stay" },
   { pattern: /\b(resort|resort booking|accommodation|accommodation booking|stay|overnight stay|overnight accommodation|place to stay|sleep|sleeps)\b/, intent: "hospitality_stay" },
@@ -167,13 +167,13 @@ const INTENT_KEYWORD_MAP = [
   // Night / nights is the clearest accommodation signal
   { pattern: /\b(\d+\s+night|\d+\s+nights|one night|two nights|three nights|four nights|five nights|weekend stay|long weekend|midweek)\b/, intent: "hospitality_stay" },
 
-  // Famous Zim destinations combined with stay-words — strong accommodation signal
+  // Famous Zim destinations combined with stay-words - strong accommodation signal
   { pattern: /\b(victoria falls|vic falls|hwange|kariba|lake kariba|nyanga|chimanimani|gonarezhou|mana pools|binga|matobo|matopos|great zimbabwe|vumba|nyanga mountains|eastern highlands)\b.*\b(night|nights|stay|lodge|hotel|room|chalet|book|accommodation)\b/, intent: "hospitality_stay" },
   { pattern: /\b(book|booking|reserve|reservation)\b.*\b(lodge|hotel|chalet|room|guesthouse|chalet|camp|stay)\b/, intent: "hospitality_stay" },
 
   // ══════════════════════════════════════════════════════════════════════════
-  // TOURISM — ACTIVITIES (day trips, experiences, guided)
-  // These match safari operators, tour guides, boat hire — NOT accommodation.
+  // TOURISM - ACTIVITIES (day trips, experiences, guided)
+  // These match safari operators, tour guides, boat hire - NOT accommodation.
   // A lodge that ALSO does game drives will have tourismSubtype including both.
   // ══════════════════════════════════════════════════════════════════════════
 
@@ -204,7 +204,7 @@ export const VAGUE_SINGLE_TERMS = new Set([
   // Ambiguous general terms
   "supplies", "materials", "equipment", "goods", "items", "products",
   "tiles", "tile", "paint", "sand", "cement", "hardware",
-  // Hospitality vague terms — destination alone or property type alone
+  // Hospitality vague terms - destination alone or property type alone
   "lodge", "hotel", "accommodation", "guesthouse", "chalet", "room",
   "kariba", "hwange", "nyanga", "victoria falls", "vic falls",
   "safari", "tour", "cruise",
@@ -232,7 +232,7 @@ const VAGUE_CLARIFICATION = {
   tiles:        "Please include the type and size.\n\nExamples:\n_600x600 porcelain floor tiles harare_\n_300x600 wall tiles harare_\n_200x200 ceramic tiles harare_",
   tile:         "Please include the type and size.\n\nExamples:\n_600x600 porcelain floor tile harare_\n_300x600 wall tile harare_",
   hardware:     "Please include the specific item you need.\n\nExamples:\n_50 bags cement harare_\n_river sand 2 loads harare_\n_110mm pvc pipe x10 harare_",
-  // ── Hospitality vague terms — need more context ─────────────────────────────
+  // ── Hospitality vague terms - need more context ─────────────────────────────
   lodge:
     "Which area and how many nights?\n\n" +
     "Examples:\n" +
@@ -380,14 +380,14 @@ const INTENT_TO_SUPPLIER_CATEGORIES = {
   welding_service:        ["welding", "fabrication", "steel_work", "trades", "welding_service"],
   medical_service:        ["medical_health", "dental", "pharmacy", "health", "wellness"],
 
-  // ── HOSPITALITY — accommodation stays ─────────────────────────────────────
+  // ── HOSPITALITY - accommodation stays ─────────────────────────────────────
   // These categories must ONLY be present on profileType="hospitality" suppliers.
   // Matching is further enforced by the profileType gate in scoreSupplierForRequest.
   hospitality_stay:       ["lodge", "hotel", "guesthouse", "self_catering", "campsite",
                            "hospitality", "accommodation", "tourism", "tourism_service"],
 
-  // ── TOURISM — activities (game drives, cruises, tours) ─────────────────────
-  // Matches safari operators, tour guides, boat hire — AND lodges that also offer activities.
+  // ── TOURISM - activities (game drives, cruises, tours) ─────────────────────
+  // Matches safari operators, tour guides, boat hire - AND lodges that also offer activities.
   tourism_activity:       ["safari_operator", "tour_guide", "boat_hire", "safari", "tours",
                            "game_drive", "boat_hire", "tourism", "tourism_service",
                            "lodge", "hospitality"],
@@ -571,7 +571,7 @@ function scoreSupplierForRequest(supplier, items, intentResult) {
   const subStatus = supplier.subscriptionStatus;
   if (subStatus !== "active" && subStatus !== "trial") return null;
 
-  // Stage 2a: HARD SEPARATION — hospitality suppliers ONLY receive hospitality requests
+  // Stage 2a: HARD SEPARATION - hospitality suppliers ONLY receive hospitality requests
   // and non-hospitality suppliers NEVER receive hospitality requests.
   const supplierIsHospitality = supplier.profileType === "hospitality";
 
@@ -662,7 +662,7 @@ const CITY_ALIASES = {
   "redcliff":        ["redcliff"],
   "chitungwiza":     ["chitungwiza", "chitu"],
   "epworth":         ["epworth"],
-  // Tourism areas — map to the city nearest the attraction
+  // Tourism areas - map to the city nearest the attraction
   "kariba":          ["kariba", "lake kariba", "nyamhunga", "andora"],
   "nyanga":          ["nyanga", "nyanga mountains", "eastern highlands", "troutbeck"],
   "binga":           ["binga", "mlibizi", "siakobvu"],
@@ -700,7 +700,7 @@ export async function findSuppliersForRequest({ items = [], city = null, area = 
     ],
   };
 
-  // Hard profileType gate in DB query — prevents cross-contamination at fetch level
+  // Hard profileType gate in DB query - prevents cross-contamination at fetch level
   if (isHospitality) {
     query.profileType = "hospitality";
   } else if (profileType && dominant !== "other") {

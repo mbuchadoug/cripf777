@@ -3784,9 +3784,9 @@ if (biz) {
         console.log("[OWNERSHIP] phone", phone, "has no role on biz", biz._id, "- notification contact only");
       }
     } else {
-      // No UserRole for this phone on any biz — notification contact or new user.
+      // No UserRole for this phone on any biz - notification contact or new user.
       _bizIsOwnedByUser = false;
-      console.log("[OWNERSHIP] phone", phone, "has no role on any biz — notification contact or new user");
+      console.log("[OWNERSHIP] phone", phone, "has no role on any biz - notification contact or new user");
     }
   } else {
     console.log("[OWNERSHIP] phone", phone, "owns biz", biz._id, "as", _ownerRoleCheck.role, "state:", biz.sessionState);

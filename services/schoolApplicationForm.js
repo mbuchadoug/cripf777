@@ -18,7 +18,7 @@ import { sendText, sendButtons, sendDocument } from "./metaSender.js";
 // Uses Gmail SMTP (SMTP_HOST / SMTP_USER / SMTP_PASS already in .env).
 // FROM address is set to "ZimQuote Schools <info@zimqoute.co.zw>" so schools
 // see that sender. Gmail accepts this as long as the Gmail account is the
-// authenticated sender — the display name and from-header are cosmetic.
+// authenticated sender - the display name and from-header are cosmetic.
 // replyTo is also set to info@zimqoute.co.zw so replies land there.
 //
 // No new env vars needed. Uses existing SMTP_* vars.
@@ -32,8 +32,8 @@ function _makeTransporter() {
 
   console.log(`[SCHOOL EMAIL TRANSPORT] host=${host} port=${port} secure=${secure} user=${user ? user : "NOT SET"} pass=${pass ? "SET" : "NOT SET"}`);
 
-  if (!user) console.error("[SCHOOL APPLY EMAIL] ❌ SMTP_USER not set in .env — emails will fail");
-  if (!pass) console.error("[SCHOOL APPLY EMAIL] ❌ SMTP_PASS not set in .env — emails will fail");
+  if (!user) console.error("[SCHOOL APPLY EMAIL] ❌ SMTP_USER not set in .env - emails will fail");
+  if (!pass) console.error("[SCHOOL APPLY EMAIL] ❌ SMTP_PASS not set in .env - emails will fail");
 
   return nodemailer.createTransport({
     host,
@@ -51,17 +51,17 @@ const REPLY_TO     = "info@zimqoute.co.zw";
 export async function emailApplicationToSchool({ school, data, applicantPhone }) {
   const toEmail = school.applicationForm?.notifyEmail || school.email;
 
-  console.log(`[SCHOOL APPLY EMAIL] ▶ called — school=${school?.schoolName} toEmail=${toEmail} student=${data?.studentName}`);
+  console.log(`[SCHOOL APPLY EMAIL] ▶ called - school=${school?.schoolName} toEmail=${toEmail} student=${data?.studentName}`);
 
   if (!toEmail) {
-    console.warn(`[SCHOOL APPLY EMAIL] ⚠ No notify email set for ${school.schoolName} — skipping`);
+    console.warn(`[SCHOOL APPLY EMAIL] ⚠ No notify email set for ${school.schoolName} - skipping`);
     return;
   }
 
   try {
     const transporter = _makeTransporter();
 
-    // Verify SMTP connection before send — surfaces auth/connection errors immediately
+    // Verify SMTP connection before send - surfaces auth/connection errors immediately
     await new Promise((resolve, reject) => {
       transporter.verify((err, success) => {
         if (err) {
@@ -135,7 +135,7 @@ export async function emailApplicationToSchool({ school, data, applicantPhone })
       from:    FROM_DISPLAY,
       replyTo: REPLY_TO,
       to:      toEmail,
-      subject: `New Application: ${data.studentName || "Student"} — ${data.grade || ""} — ${school.schoolName}`,
+      subject: `New Application: ${data.studentName || "Student"} - ${data.grade || ""} - ${school.schoolName}`,
       html
     });
 

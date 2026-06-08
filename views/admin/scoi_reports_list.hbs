@@ -73,7 +73,7 @@
     .btn-success:hover { background:#047857; }
     .btn-gold    { background:var(--gold);    color:var(--navy); }
     .btn-gold:hover    { background:#b8943f; color:var(--white); }
-    /* FIX: explicit small size — do NOT rely on font-size alone */
+    /* FIX: explicit small size - do NOT rely on font-size alone */
     .btn-sm { padding:0.38rem 0.7rem; font-size:0.75rem; }
     .btn:disabled { opacity:0.55; cursor:not-allowed; }
 
@@ -95,7 +95,7 @@
     .tbl-wrap { background:var(--white); border-radius:var(--r-lg); box-shadow:var(--sh); overflow:hidden; }
     /* FIX: overflow-x:auto so actions column never gets clipped */
     .tbl-scroll { overflow-x:auto; -webkit-overflow-scrolling:touch; }
-    /* FIX: removed min-width:900px — use explicit column widths instead */
+    /* FIX: removed min-width:900px - use explicit column widths instead */
     table { width:100%; border-collapse:collapse; table-layout:fixed; }
     thead { background:var(--g50); border-bottom:2px solid var(--g200); }
     th { padding:0.85rem 0.85rem; font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; color:var(--g600); text-align:left; white-space:nowrap; overflow:hidden; }
@@ -104,19 +104,19 @@
     tbody tr { transition:background 0.15s; }
     tbody tr:hover { background:var(--g50); }
 
-    /* FIX: explicit column widths that add up to 100% — actions always visible */
+    /* FIX: explicit column widths that add up to 100% - actions always visible */
     .col-title   { width:30%; }
     .col-type    { width:9%; }
     .col-window  { width:22%; }
     .col-status  { width:9%; }
     .col-pdf     { width:7%; }
-    /* FIX: actions column — min-content ensures buttons never wrap off-screen */
+    /* FIX: actions column - min-content ensures buttons never wrap off-screen */
     .col-actions { width:23%; white-space:nowrap; }
 
     .rpt-name { font-weight:700; color:var(--navy); line-height:1.3; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .rpt-meta { font-size:0.73rem; color:var(--g400); margin-top:0.2rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
-    /* FIX: act-cell — flex with gap, never wraps, always in row */
+    /* FIX: act-cell - flex with gap, never wraps, always in row */
     .act-cell {
       display:flex;
       gap:0.3rem;
@@ -332,7 +332,7 @@
               {{#if this.pdfUrl}}
                 <span class="badge b-pdf">✓</span>
               {{else}}
-                <span class="badge b-nopdf">—</span>
+                <span class="badge b-nopdf">-</span>
               {{/if}}
             </td>
             <td>
@@ -499,7 +499,7 @@
         btn.innerHTML = orig;
       }
     } catch(e) {
-      showToast('❌ Request failed — check server logs', 'error');
+      showToast('❌ Request failed - check server logs', 'error');
       btn.disabled = false;
       btn.innerHTML = orig;
     }

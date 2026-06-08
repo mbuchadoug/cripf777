@@ -9551,7 +9551,7 @@ router.get("/suppliers/:id/staff-cards", requireSupplierAdmin, async (req, res) 
         <td style="padding:12px 8px;vertical-align:middle">
           <span style="display:inline-block;width:32px;height:32px;border-radius:50%;background:#e0e7ff;color:#4f46e5;text-align:center;line-height:32px;font-size:13px;font-weight:700;margin-right:8px;vertical-align:middle">${esc(card.name.charAt(0).toUpperCase())}</span>
           <strong style="font-size:14px">${esc(card.name)}</strong><br>
-          <span style="font-size:11px;color:#888;margin-left:40px">${esc(card.title||"—")}</span>
+          <span style="font-size:11px;color:#888;margin-left:40px">${esc(card.title||"-")}</span>
           ${card.locationLabel?`<br><span style="font-size:11px;color:#aaa;margin-left:40px">📍 ${esc(card.locationLabel)}</span>`:""}
         </td>
         <td style="padding:12px 8px;vertical-align:middle;font-size:13px">${esc(card.phone)}${card.email?`<br><span style="color:#888;font-size:11px">${esc(card.email)}</span>`:""}</td>
@@ -9618,7 +9618,7 @@ router.post("/suppliers/:id/staff-cards/add", requireSupplierAdmin, async (req, 
     if (!name?.trim()) return res.redirect(`/zq-admin/suppliers/${req.params.id}/staff-cards?error=Name+is+required`);
     let phone = String(rawPhone||"").replace(/\D+/g,"");
     if (phone.startsWith("0")&&phone.length===10) phone="263"+phone.slice(1);
-    if (!phone||phone.length<9) return res.redirect(`/zq-admin/suppliers/${req.params.id}/staff-cards?error=${encodeURIComponent("Invalid phone — use 07xxxxxxxx or 263xxxxxxxxx")}`);
+    if (!phone||phone.length<9) return res.redirect(`/zq-admin/suppliers/${req.params.id}/staff-cards?error=${encodeURIComponent("Invalid phone - use 07xxxxxxxx or 263xxxxxxxxx")}`);
     const card = await StaffCard.create({
       supplierId: req.params.id, name: name.trim(), title: (title||"").trim(), phone,
       email: (email||"").trim(), locationLabel: (locationLabel||"").trim(),

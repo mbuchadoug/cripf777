@@ -3785,9 +3785,9 @@ if (biz) {
         console.log("[OWNERSHIP] phone", phone, "has no role on biz", biz._id, "- notification contact only");
       }
     } else {
-      // No UserRole for this phone on any biz — notification contact or new user.
+      // No UserRole for this phone on any biz - notification contact or new user.
       _bizIsOwnedByUser = false;
-      console.log("[OWNERSHIP] phone", phone, "has no role on any biz — notification contact or new user");
+      console.log("[OWNERSHIP] phone", phone, "has no role on any biz - notification contact or new user");
     }
   } else {
     console.log("[OWNERSHIP] phone", phone, "owns biz", biz._id, "as", _ownerRoleCheck.role, "state:", biz.sessionState);
@@ -12216,7 +12216,7 @@ if (a.startsWith("zqg_sel_")) {
 if (a.startsWith("sc_")) {
   // ── Staff card actions (sc_staff_share_ / sc_staff_stats_) ───────────────
   // These must be checked BEFORE the main sc_ router because they don't follow
-  // the standard sc_<topic>_<supplierId> pattern — they use a staffCardId.
+  // the standard sc_<topic>_<supplierId> pattern - they use a staffCardId.
   if (a.startsWith("sc_staff_")) {
     const _staffHandled = await handleStaffCardAction({ from, action: a });
     if (_staffHandled) return;

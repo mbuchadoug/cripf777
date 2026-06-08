@@ -101,7 +101,7 @@
     tbody tr { transition:background 0.15s; }
     tbody tr:hover { background:var(--g50); }
 
-    /* Column widths — always show the actions column */
+    /* Column widths - always show the actions column */
     .col-entity  { width:28%; }
     .col-type    { width:14%; }
     .col-window  { width:20%; }
@@ -236,15 +236,15 @@
       <div class="stat-lbl">Total Reports</div>
     </div>
     <div class="stat" style="border-left-color:var(--success)">
-      <div class="stat-val" id="statPdf">—</div>
+      <div class="stat-val" id="statPdf">-</div>
       <div class="stat-lbl">With PDF</div>
     </div>
     <div class="stat" style="border-left-color:var(--info)">
-      <div class="stat-val" id="statAvail">—</div>
+      <div class="stat-val" id="statAvail">-</div>
       <div class="stat-lbl">Available</div>
     </div>
     <div class="stat" style="border-left-color:var(--gold)">
-      <div class="stat-val" id="statPaid">—</div>
+      <div class="stat-val" id="statPaid">-</div>
       <div class="stat-lbl">Paid / Locked</div>
     </div>
   </div>
@@ -318,7 +318,7 @@
             </td>
             <td style="font-size:0.8rem;color:var(--g600);">{{this.assessmentWindow.label}}</td>
             <td style="font-weight:700;color:var(--navy);">
-              {{#if this.price}}$\{{divide this.price 100}}{{else}}—{{/if}}
+              {{#if this.price}}$\{{divide this.price 100}}{{else}}-{{/if}}
             </td>
             <td>
               {{#if this.isPaid}}
@@ -331,7 +331,7 @@
               {{#if this.pdfUrl}}
                 <span class="badge b-pdf">✓</span>
               {{else}}
-                <span class="badge b-nopdf">—</span>
+                <span class="badge b-nopdf">-</span>
               {{/if}}
             </td>
             <td>
@@ -393,7 +393,7 @@
         <span class="rcard-lbl">Window</span>
         <span class="rcard-val">{{this.assessmentWindow.label}}</span>
         <span class="rcard-lbl">Price</span>
-        <span class="rcard-val">{{#if this.price}}$\{{divide this.price 100}}{{else}}—{{/if}}</span>
+        <span class="rcard-val">{{#if this.price}}$\{{divide this.price 100}}{{else}}-{{/if}}</span>
       </div>
       <div class="rcard-foot">
         <a href="/admin/special-scoi-audits/{{this._id}}"

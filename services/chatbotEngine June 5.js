@@ -3771,7 +3771,7 @@ a.startsWith("sup_load_preset_") ||
     }
 
     // ── "edit 1x5 3x15" or "1x5, 3x15" or "1 5, 3 15" or "1:5" - edit specific prices ──
-    // Accepts: 1x12.50  1=12.50  1:12.50  1 12.50  — all map to item 1 @ $12.50
+    // Accepts: 1x12.50  1=12.50  1:12.50  1 12.50  - all map to item 1 @ $12.50
     const editSection = raw
       .replace(/\bhave\s+[\d,\s]+/i, "")
       .replace(/\bskip\s+[\d,\s]+/i, "")
@@ -3870,9 +3870,9 @@ if (biz) {
         console.log("[OWNERSHIP] phone", phone, "has no role on biz", biz._id, "- notification contact only");
       }
     } else {
-      // No UserRole for this phone on any biz — notification contact or new user.
+      // No UserRole for this phone on any biz - notification contact or new user.
       _bizIsOwnedByUser = false;
-      console.log("[OWNERSHIP] phone", phone, "has no role on any biz — notification contact or new user");
+      console.log("[OWNERSHIP] phone", phone, "has no role on any biz - notification contact or new user");
     }
   } else {
     console.log("[OWNERSHIP] phone", phone, "owns biz", biz._id, "as", _ownerRoleCheck.role, "state:", biz.sessionState);
@@ -4662,7 +4662,7 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
               `_1×350_ or _1=350_ → item 1 = $350\n` +
               `_1×350, 2×120_ → price two items\n\n` +
               (_hasLongItems
-                ? `*2️⃣ Rename the item* (buyer sent a long description — clean it up):\n` +
+                ? `*2️⃣ Rename the item* (buyer sent a long description - clean it up):\n` +
                   `_rename 1: Bill of Quantities (4-bed house, 280m², Ruwa)_\n` +
                   `_Or in one line: 1×350 Bill of Quantities (4-bed, Ruwa)_\n\n`
                 : `*2️⃣ Rename (optional):*\n` +
@@ -12362,7 +12362,7 @@ if (a.startsWith("zqg_sel_")) {
 if (a.startsWith("sc_")) {
   // ── Staff card actions (sc_staff_share_ / sc_staff_stats_) ───────────────
   // These must be checked BEFORE the main sc_ router because they don't follow
-  // the standard sc_<topic>_<supplierId> pattern — they use a staffCardId.
+  // the standard sc_<topic>_<supplierId> pattern - they use a staffCardId.
   if (a.startsWith("sc_staff_")) {
     const _staffHandled = await handleStaffCardAction({ from, action: a });
     if (_staffHandled) return;
@@ -12373,7 +12373,7 @@ if (a.startsWith("sc_")) {
   // If the same phone previously received a marketplace seller notification and
   // still has sellerRequestReplyState in session, that stale state would cause
   // the BuyerRequest intercept (lines ~4746-4880) to fire and return
-  // "That request has closed." — completely wrong for a smart-link buyer.
+  // "That request has closed." - completely wrong for a smart-link buyer.
   // Clearing the stale state here prevents the bleed-through entirely.
   if (a.startsWith("sc_quote_") && !a.startsWith("sc_quote_confirm_") &&
       !a.startsWith("sc_quote_edit_") && !a.startsWith("sc_quote_done_") &&
@@ -12391,7 +12391,7 @@ if (a.startsWith("sc_")) {
           }},
           { upsert: true }
         );
-        console.log(`[SC_QUOTE_FIX] Cleared stale sellerRequestReplyState for ${phone} — smart-link quote wins`);
+        console.log(`[SC_QUOTE_FIX] Cleared stale sellerRequestReplyState for ${phone} - smart-link quote wins`);
       }
     } catch (_sqErr) { /* non-critical */ }
   }
@@ -17869,7 +17869,7 @@ isService
 
 
 // ── Buyer request lane: entry menu ───────────────────────────────────────────
-// ── Buyer clarification reply — buyer tapped "I replied below" or typed response ──
+// ── Buyer clarification reply - buyer tapped "I replied below" or typed response ──
 // When a seller typed "ask: what size PVC elbow?" the bot asked the buyer.
 // Now the buyer's next message (or button tap) is their answer.
 // We relay it back to the seller immediately so they can price accurately.
@@ -17945,7 +17945,7 @@ if (!isMetaAction && text && text.trim().length > 1) {
   return sendButtons(from, {
     text:
       `⚡ *Request Sellers*\n\n` +
-      `Type what you need — *any way you like.*\n` +
+      `Type what you need - *any way you like.*\n` +
       `You can write a full sentence, a short phrase, or a list.\n\n` +
       `─────────────────\n` +
       `*💬 Write naturally:*\n` +

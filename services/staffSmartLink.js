@@ -407,7 +407,7 @@ export function buildStaffAnalyticsSummary(card) {
     views,
     converts,
     convRate: views > 0 ? ((converts / views) * 100).toFixed(0) : "0",
-    topSource: topSource ? `${topSource[0].toUpperCase()}: ${topSource[1]}` : "—",
+    topSource: topSource ? `${topSource[0].toUpperCase()}: ${topSource[1]}` : "-",
   };
 }
 
@@ -415,7 +415,7 @@ export function buildStaffAnalyticsSummary(card) {
 // Uses the ALREADY-APPROVED supplier_link_opened template (same one the company
 // smart link uses) so notifications work immediately without any new Meta approval.
 // The salesperson receives the SAME notification format as the business owner,
-// addressed to their own phone — no new template submission needed.
+// addressed to their own phone - no new template submission needed.
 //
 // supplier_link_opened template body (already approved):
 //   Business: {{1}}    ← we pass "Muchaneta Horinda (Zibugold Construction Group)"
@@ -524,7 +524,7 @@ async function _notifyStaffCardOpened(card, supplier, source, visitorPhone) {
         `⏰ ${timeStr}\n` +
         (_isVip && _visitorDisplay ? `📞 Visitor: *${_visitorDisplay}*\n` : ``) +
         `\nThey can browse your services, request a quote, or send an enquiry.\n\n` +
-        `💡 _Tip: Respond quickly — buyers in Zimbabwe compare multiple suppliers._`,
+        `💡 _Tip: Respond quickly - buyers in Zimbabwe compare multiple suppliers._`,
       buttons: [
         { id: "my_supplier_account",                  title: "🏪 My Store" },
         { id: `sc_staff_stats_${String(card._id)}`,   title: "📊 My Card Stats" }
@@ -537,7 +537,7 @@ async function _notifyStaffCardOpened(card, supplier, source, visitorPhone) {
 
 // ─── Notify salesperson: they received an enquiry via their card ──────────────
 // Uses the ALREADY-APPROVED supplier_new_buyer_request template (same one used
-// for company enquiry notifications) — no new Meta template approval needed.
+// for company enquiry notifications) - no new Meta template approval needed.
 //
 // supplier_new_buyer_request template body (already approved):
 //   Ref: {{1}}          ← enquiry reference number
@@ -739,7 +739,7 @@ export async function handleStaffCardAction({ from, action }) {
 
 // ═════════════════════════════════════════════════════════════════════════════
 // PATCH INSTRUCTIONS FOR EXISTING FILES
-// Read carefully — these are MINIMAL changes to existing files.
+// Read carefully - these are MINIMAL changes to existing files.
 // ═════════════════════════════════════════════════════════════════════════════
 //
 // ── PATCH 1: chatbotEngine.js ─────────────────────────────────────────────────
@@ -804,7 +804,7 @@ export async function handleStaffCardAction({ from, action }) {
 //     }
 //   }
 //
-// Also inject scStaffCardId into saveBiz calls — in showSellerMenu, update the
+// Also inject scStaffCardId into saveBiz calls - in showSellerMenu, update the
 // biz.sessionData block to include staffCardId passed via opts:
 //
 //   biz.sessionData = {

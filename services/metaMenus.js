@@ -125,7 +125,7 @@ const { branches } = await ensureDefaultBranch(biz._id);
 export async function sendMainMenu(to) {
   const phone = to.replace(/\D+/g, "");
 
-  // Load models fresh every time — no module-level caching issues
+  // Load models fresh every time - no module-level caching issues
   const Business       = (await import("../models/business.js")).default;
   const UserSession    = (await import("../models/userSession.js")).default;
   const UserRole       = (await import("../models/userRole.js")).default;
@@ -197,7 +197,7 @@ export async function sendMainMenu(to) {
     }
   }
 
-  // ── Step 5: Determine role — use the role on the resolved biz ───────────
+  // ── Step 5: Determine role - use the role on the resolved biz ───────────
   let staffRole = null;
   if (biz) {
     staffRole = await UserRole.findOne({ businessId: biz._id, phone, pending: false }).lean();
@@ -266,7 +266,7 @@ export async function sendMainMenu(to) {
 
   // ── Case 4: Has a biz but it's a pending registration OR has no staff role
   //    → show List My Business so they can complete/start registration ────────
-  // ── Case 5: Brand new user — no biz, no supplier, no role ─────────────────
+  // ── Case 5: Brand new user - no biz, no supplier, no role ─────────────────
   return sendList(to, MENU_MSG, [
     { id: "register_supplier",   title: "🏪 List My Business" },
     { id: "sup_request_sellers", title: "⚡ Request Sellers" },

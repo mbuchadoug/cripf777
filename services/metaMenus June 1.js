@@ -152,7 +152,7 @@ export async function sendMainMenu(to) {
 
   // ── Case 1: Active supplier (paid) ───────────────────────────────────────
   if (supplier?.active) {
-    // Ensure we have biz — supplier may have businessId even if session is stale
+    // Ensure we have biz - supplier may have businessId even if session is stale
     let supplierBiz = biz;
     if (!supplierBiz && supplier.businessId) {
       supplierBiz = await (await import("../models/business.js")).default.findById(supplier.businessId);
@@ -198,7 +198,7 @@ export async function sendMainMenu(to) {
     return sendList(to, "👋 *Welcome to ZimQuote!*\n\nYour listing is saved but not yet live.", filtered);
   }
 
-  // ── Case 3: Has a staff role (clerk/manager/owner) — the key fix ──────────
+  // ── Case 3: Has a staff role (clerk/manager/owner) - the key fix ──────────
   // A clerk or manager has a UserRole but NO SupplierProfile of their own.
   // They must see Business Tools regardless of whether biz.name is "pending_supplier_".
   // EXCEPTION: if the biz is still "pending_supplier_" registration in progress,
@@ -248,7 +248,7 @@ export async function sendMainMenu(to) {
     return sendList(to, "👋 *Welcome to ZimQuote!*\nZimbabwe's marketplace for products & services.", filtered);
   }
 
-  // ── Case 5: Brand new user — no biz, no supplier, no role ─────────────────
+  // ── Case 5: Brand new user - no biz, no supplier, no role ─────────────────
   return sendList(to, "👋 *Welcome to ZimQuote!*\nZimbabwe's marketplace for products & services.", [
     { id: "register_supplier",   title: "🏪 List My Business" },
     { id: "sup_request_sellers", title: "⚡ Request Sellers" },

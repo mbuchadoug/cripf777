@@ -600,7 +600,7 @@ export async function handleSellerChatAction({ from, action: a, biz, saveBiz }) 
     case "quote_item":      return _scQuoteAddItem(from, supplierId, biz, saveBiz);
     case "quote_done":      return _scQuoteDone(from, supplierId, biz, saveBiz);
     case "quote_clear":     return _scQuoteClear(from, supplierId, biz, saveBiz);
-    // ── Scope skip: buyer tapped "⏩ Skip — send as is" on the scope prompt ──
+    // ── Scope skip: buyer tapped "⏩ Skip - send as is" on the scope prompt ──
     // Set scScopeNote to empty string (truthy-enough to pass the gate) and proceed
     case "scope_skip": {
       if (biz) {
@@ -1122,10 +1122,10 @@ async function _scQuote(from, supplierId, biz, saveBiz) {
 `📋 *${seller.businessName}*
 
 ${_quickRef}
-*Pick by number — then add scope or quantity:*
+*Pick by number - then add scope or quantity:*
 _1_ → ${_exName1}${name2 ? `   _2_ → ${name2}` : ""}${allItems.length >= 3 ? `   _1, 2_ → both` : ""}
 
-For services — add scope after the number:
+For services - add scope after the number:
 _1: ${_exScope1}_ → ${_exName1}, ${_exScope1}
 ${name1 && name2 ? `_1: ${_exScope1}, 2: ${_guessServiceScopeHint(name2 || "")[0] || "Harare CBD"}_ → both with scope` : ""}
 
@@ -1198,7 +1198,7 @@ ${_quickRef}
 *Pick by number or describe what you need:*
 _1_ → ${_pEx1}${name2 ? `   _1, 2_ → both` : ""}${allItems.length >= 3 ? `   _1, 4, 6_ → pick any` : ""}
 
-For quantities — add ×N after the number:
+For quantities - add ×N after the number:
 _1×5_ → 5× ${_pEx1}
 
 Or just describe freely:
@@ -1238,7 +1238,7 @@ async function _scProcessItemList(from, supplierId, raw, biz, saveBiz) {
         }
         const _scopeSummary = _existCart.map(it => {
           const ps = _scopePriceMap[it.name?.toLowerCase().trim()] || "";
-          const sc = it.scope ? ` — _${it.scope}_` : "";
+          const sc = it.scope ? ` - _${it.scope}_` : "";
           return `• ${it.name}${sc}${ps}`;
         }).join("\n");
         const _isRFQ2 = biz?.sessionData?.scRFQ;
@@ -1422,7 +1422,7 @@ async function _scProcessItemList(from, supplierId, raw, biz, saveBiz) {
     // For services, show scope instead of qty (unless qty > 1 like "2 visits")
     const _showQty = !isService || Number(it.qty) > 1;
     const _qtyPart = _showQty ? `${it.qty}× ` : "";
-    const _scopePart = isService && it.scope ? ` — _${it.scope}_` : "";
+    const _scopePart = isService && it.scope ? ` - _${it.scope}_` : "";
     return priceStr
       ? `• ${_qtyPart}${it.name}${_scopePart}  -  ${priceStr}`
       : `• ${_qtyPart}${it.name}${_scopePart}`;
@@ -1479,8 +1479,8 @@ async function _scQuoteDone(from, supplierId, biz, saveBiz) {
   // ── Scope of work gate (service quotes only) ──────────────────────────────
   // For ALL service quotes (both priced and RFQ), we ask for scope before sending
   // to the seller. This gives the seller the information they need to quote accurately.
-  // Hospitality already captures scope via scPeopleCount — skip for hospitality.
-  // We only ask ONCE — skip if scScopeNote already set.
+  // Hospitality already captures scope via scPeopleCount - skip for hospitality.
+  // We only ask ONCE - skip if scScopeNote already set.
   //
   // Why this matters: "House wiring ×1" tells an electrician nothing.
   // "House wiring ×1 (3-bedroom house, Borrowdale)" lets them price immediately.
@@ -1532,7 +1532,7 @@ async function _scQuoteDone(from, supplierId, biz, saveBiz) {
         `\nYou can describe size, location, number of rooms/floors, condition, etc.\n\n` +
         `Type *skip* to send your request without this detail _(seller may need to call you for more info)_.`,
       buttons: [
-        { id: `sc_scope_skip_${supplierId}`, title: "⏩ Skip — send as is" },
+        { id: `sc_scope_skip_${supplierId}`, title: "⏩ Skip - send as is" },
       ]
     });
   }
@@ -1713,7 +1713,7 @@ The seller will review and price your request.
   }
 
   let total = 0;
-  // Pull scope note — append to first item's name so seller sees it on the draft
+  // Pull scope note - append to first item's name so seller sees it on the draft
   const _pricedScopeNote  = biz?.sessionData?.scScopeNote;
   const _pricedScopeClean = _pricedScopeNote && _pricedScopeNote !== "skip" ? _pricedScopeNote : "";
 
@@ -1769,7 +1769,7 @@ The seller will review and price your request.
     // ── Auto-separate natural-text buyer description from line items ──────────
     // If the buyer sent a full-sentence paragraph request, it's stored as item 1
     // with unitPrice=0. Strip it from lineItems and store as buyerDescription
-    // so it appears as REFERENCE ONLY for the seller — never on the PDF.
+    // so it appears as REFERENCE ONLY for the seller - never on the PDF.
     // Criteria: item has no price, and its name is ≥60 chars (natural text).
     const _naturalItems   = lineItems.filter(l => (!l.unitPrice || l.unitPrice === 0) && (l.name || "").length >= 60);
     const _structItems    = lineItems.filter(l => !_naturalItems.includes(l));
@@ -1854,7 +1854,7 @@ The seller will review and price your request.
     console.error("[SC QUOTE] Failed to store draft on seller session:", err.message);
   }
 
-  // ── Notifications — different paths for staff link vs business link ─────────
+  // ── Notifications - different paths for staff link vs business link ─────────
   const _qtStaffCardId = biz?.sessionData?.scStaffCardId;
   let _resolvedStaffCard = null;
   if (_qtStaffCardId) {
@@ -1911,7 +1911,7 @@ The seller will review and price your request.
     } catch (_te) {}
 
   } else {
-    // ── BUSINESS SMART LINK: existing behaviour — supplier + notif contacts get V&Q ──
+    // ── BUSINESS SMART LINK: existing behaviour - supplier + notif contacts get V&Q ──
     await _sendSellerNotification({
       sellerPhone:          seller.phone,
       notificationContacts: seller.notificationContacts || [],
@@ -1975,7 +1975,7 @@ async function _scHandleQuotePreview(from, refNum, biz, saveBiz) {
   if (_unpricedItems.length > 0) {
     const _upList = _unpricedItems.map((l, i) => `• ${l.name}`).join("\n");
     return sendText(from,
-      `⚠️ *Cannot preview — ${_unpricedItems.length} item${_unpricedItems.length > 1 ? "s" : ""} have no price:*\n${_upList}\n\n` +
+      `⚠️ *Cannot preview - ${_unpricedItems.length} item${_unpricedItems.length > 1 ? "s" : ""} have no price:*\n${_upList}\n\n` +
       `Set prices first: _1×350, 2×120_\nThen tap *👁 Preview PDF* again.`
     );
   }
@@ -2031,9 +2031,9 @@ async function _scHandleQuotePreview(from, refNum, biz, saveBiz) {
 
   return sendButtons(from, {
     text:
-`${pdfSentToSeller ? "👁 *PDF preview sent to you above* ↑" : "⚠️ Could not generate PDF preview — check format below"}
+`${pdfSentToSeller ? "👁 *PDF preview sent to you above* ↑" : "⚠️ Could not generate PDF preview - check format below"}
 
-📋 *Quote ${refNum} — ready to send*
+📋 *Quote ${refNum} - ready to send*
 
 ${itemRows}
 ${"─".repeat(28)}
@@ -2099,7 +2099,7 @@ async function _scHandleQuoteConfirm(from, refNum, biz, saveBiz) {
     const _upNames = _unpricedForSend.map((l, i) => `• ${l.name.slice(0, 40)}${l.name.length > 40 ? "..." : ""}`).join("\n");
     return sendButtons(from, {
       text:
-        `⚠️ *Quote not sent — set prices first:*\n\n` +
+        `⚠️ *Quote not sent - set prices first:*\n\n` +
         `${_upNames}\n\n` +
         `_1×350_ → set item 1 to $350\n` +
         `_pick 3_ → add from catalogue at listed price\n` +
@@ -2225,7 +2225,7 @@ async function _scHandleQuoteEdit(from, refNum, biz, saveBiz) {
   // Build current items display
   const numbered = draft.lineItems.length > 0
     ? _buildQuoteLines(draft.lineItems)
-    : "_No items yet — type your items below to build the quote._";
+    : "_No items yet - type your items below to build the quote._";
 
   // Build catalogue reference (up to 6 items)
   let _catRef = "";
@@ -2252,10 +2252,10 @@ async function _scHandleQuoteEdit(from, refNum, biz, saveBiz) {
   const _buyerRefBlock = _buyerDesc
     ? `\n📝 *Buyer's request (for your reference):*\n_"${_buyerDesc.length > 200 ? _buyerDesc.slice(0, 200) + "..." : _buyerDesc}"_\n`
     : (_hasLongLegacy
-      ? `\n📝 *Buyer's request is in item 1 above (for reference — you can delete it after adding your items).*\n`
+      ? `\n📝 *Buyer's request is in item 1 above (for reference - you can delete it after adding your items).*\n`
       : "");
 
-  // Simple, clear instructions — readable by anyone
+  // Simple, clear instructions - readable by anyone
   const _guideText = `*Add your items and prices:*
 _BOQ 4-bed house $5000_ → add item + price
 _BOQ $5000, Survey $350, Soil test $120_ → add multiple at once
@@ -2303,7 +2303,7 @@ async function _saveUpdatedDraft(from, updatedDraft, _tmpSess, UserSession) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PROCESS SELLER'S TYPED PRICE EDITS — MULTI-FORMAT PARSER
+// PROCESS SELLER'S TYPED PRICE EDITS - MULTI-FORMAT PARSER
 //
 // SUPPORTED INPUT FORMATS (all work, single or multi-line):
 //
@@ -2396,7 +2396,7 @@ async function _scProcessSellerPriceEdit(from, text, biz, saveBiz) {
     return _scHandleQuoteConfirm(from, draft.refNum, biz, saveBiz);
   }
 
-  // ── Replace / New / Restart — clear buyer text, start fresh ──────────────
+  // ── Replace / New / Restart - clear buyer text, start fresh ──────────────
   // When seller gets a buyer paragraph and wants to write a proper quote from scratch.
   if (/^(replace|new|restart|clear|fresh)$/i.test(al)) {
     const _blankDraft = { ...draft, lineItems: [], total: 0 };
@@ -2418,9 +2418,9 @@ async function _scProcessSellerPriceEdit(from, text, biz, saveBiz) {
       : "";
     return sendButtons(from, {
       text:
-        `✅ *Quote ${draft.refNum} cleared — ready for your items*\n\n` +
+        `✅ *Quote ${draft.refNum} cleared - ready for your items*\n\n` +
         `Buyer: *${draft.buyerName || draft.buyerPhone || "Buyer"}*${_blankCatSection}\n\n` +
-        `*Type your line items — one per line:*\n` +
+        `*Type your line items - one per line:*\n` +
         `_BOQ 4-bed house $5000_\n` +
         `_Site survey $350_\n` +
         `_Soil tests $120_\n` +
@@ -2475,7 +2475,7 @@ async function _scProcessSellerPriceEdit(from, text, biz, saveBiz) {
     await _saveUpdatedDraft(from, _deletedDraft, _delSess, UserSession);
 
     if (_remainingItems.length === 0) {
-      // All items deleted — prompt to add new ones
+      // All items deleted - prompt to add new ones
       return sendButtons(from, {
         text:
           `🗑 *Item removed.* Quote ${draft.refNum} is now empty.\n\n` +
@@ -2640,7 +2640,7 @@ async function _scProcessSellerPriceEdit(from, text, biz, saveBiz) {
   //   4. note: line
   //   5. Unpriced name:   "Soil tests" (added with $0, flagged)
   // ─────────────────────────────────────────────────────────────────────────
-  // Split input into lines — supports BOTH newline-separated AND comma-separated items.
+  // Split input into lines - supports BOTH newline-separated AND comma-separated items.
   // Comma-split only when input looks like multiple items (each has a price OR commas separate distinct items).
   // This lets sellers type: "BOQ $5000, Site survey $350" or one per line.
   const _rawText = text.trim();
@@ -2649,13 +2649,13 @@ async function _scProcessSellerPriceEdit(from, text, biz, saveBiz) {
     // First split by newlines
     const _byNewline = _rawText.split(/\n+/).map(l => l.trim()).filter(Boolean);
     if (_byNewline.length > 1) {
-      // Multi-line input — use as-is
+      // Multi-line input - use as-is
       lines = _byNewline;
     } else {
-      // Single line — check if comma-separated items (each part has a price)
+      // Single line - check if comma-separated items (each part has a price)
       const _commaParts = _rawText.split(/,\s*/).map(l => l.trim()).filter(Boolean);
       // Price detection: each part must end with a standalone price ($350, $5000, or just 350 at end)
-      // "4-bed house" has "4" but it's not a standalone price — require $ prefix OR number at end of string
+      // "4-bed house" has "4" but it's not a standalone price - require $ prefix OR number at end of string
       const _hasStandalonePrice = (p) =>
         /\$\d+(?:\.\d+)?/.test(p) ||          // explicit $price
         /\s\d{2,}(?:\.\d+)?\s*$/.test(p) ||   // number >= 10 at end (prices are usually multi-digit)
@@ -2731,7 +2731,7 @@ async function _scProcessSellerPriceEdit(from, text, biz, saveBiz) {
       }
     }
 
-    // Unpriced item name (no price found) — add with $0 and flag
+    // Unpriced item name (no price found) - add with $0 and flag
     if (line.length >= 3 && !line.match(/^\d+[.)×=@x]/i)) {
       newItems.push({
         name:      line.charAt(0).toUpperCase() + line.slice(1),
@@ -2850,7 +2850,7 @@ async function _scProcessSellerPriceEdit(from, text, biz, saveBiz) {
 
   return sendButtons(from, {
     text:
-      `📋 *Quote ${draft.refNum}* — ${_actions || "updated"}${_reviewBuyerRef}\n` +
+      `📋 *Quote ${draft.refNum}* - ${_actions || "updated"}${_reviewBuyerRef}\n` +
       `${_quoteLines}\n${"─".repeat(24)}\n` +
       `*Total: $${newTotal.toFixed(2)} USD*${_warnText}${_noteDisplay}\n\n` +
       `_item $price · pick N · rename N: name · note: text · cat_`,
@@ -4052,7 +4052,7 @@ function _guessServiceScopeHint(serviceName = "") {
 }
 
 // ─── Parse service RFQ input ─────────────────────────────────────────────────
-// Supports ALL input styles — buyer can use any of these:
+// Supports ALL input styles - buyer can use any of these:
 //
 //   NUMBER SELECTION:
 //     "1"                    → service 1
@@ -4070,7 +4070,7 @@ function _guessServiceScopeHint(serviceName = "") {
 //
 //   FULL NATURAL LANGUAGE (most common for professional services):
 //     "I need a BOQ for a 4-bed house in Ruwa, 280m², drawings available"
-//     → stored as ONE item with full description — seller will see and refactor
+//     → stored as ONE item with full description - seller will see and refactor
 //     "Plain drawing and quantity survey for a 3-bed house"
 //     → stored as single descriptive item
 //
@@ -4082,7 +4082,7 @@ function _guessServiceScopeHint(serviceName = "") {
 //   When buyer writes "I need a BOQ for a 4-bed house 280m² in Ruwa", that is
 //   a valid complete request. The seller sees it, renames it to the professional
 //   service name, and prices it. This matches how real-world professional service
-//   requests work in Zimbabwe — clients describe what they need, not pick from menus.
+//   requests work in Zimbabwe - clients describe what they need, not pick from menus.
 //
 function _parseServiceRFQInput(raw, knownItems = []) {
   const results = [];
@@ -4128,11 +4128,11 @@ function _parseServiceRFQInput(raw, knownItems = []) {
           price: parseFloat(item.rate) || 0
         });
       } else {
-        // Number out of range — keep as typed
+        // Number out of range - keep as typed
         results.push({ name: part, qty: 1, price: 0 });
       }
     } else {
-      // Not a number — try exact name match in catalogue first
+      // Not a number - try exact name match in catalogue first
       const lc = part.toLowerCase().trim();
       const found = knownItems.find(i =>
         (i.service || "").toLowerCase().trim() === lc ||
@@ -4141,7 +4141,7 @@ function _parseServiceRFQInput(raw, knownItems = []) {
       if (found) {
         results.push({ name: found.service, qty: 1, price: parseFloat(found.rate) || 0 });
       } else {
-        // Free text service description — store as-is
+        // Free text service description - store as-is
         results.push({ name: part, qty: 1, price: 0 });
       }
     }

@@ -1059,8 +1059,8 @@ const successMsg = req.query.success
             <dt>Monthly Orders</dt><dd>${supplier.monthlyOrders || 0}</dd>
             <dt>Total Revenue</dt><dd><strong>$${totalRevenue.toFixed(2)}</strong></dd>
             <dt>Suspended</dt><dd>${supplier.suspended ? "⛔ Yes" : "✅ No"}</dd>
-            <dt>VIP Buyer Phone</dt><dd>${supplier.revealBuyerPhone ? "🔒 Yes — buyer phone revealed on requests" : "⚪ No"}</dd>
-            <dt>VIP Visitor Phone</dt><dd>${supplier.revealVisitorPhone ? "🔒 Yes — visitor phone revealed on smart link opens" : "⚪ No"}</dd>
+            <dt>VIP Buyer Phone</dt><dd>${supplier.revealBuyerPhone ? "🔒 Yes - buyer phone revealed on requests" : "⚪ No"}</dd>
+            <dt>VIP Visitor Phone</dt><dd>${supplier.revealVisitorPhone ? "🔒 Yes - visitor phone revealed on smart link opens" : "⚪ No"}</dd>
             <dt>Delivery</dt><dd>${supplier.delivery?.available ? "🚚 Yes" : "🏠 Collection only"}</dd>
             <dt>Min Order</dt><dd>$${supplier.minOrder || 0}</dd>
             <dt>Registered</dt><dd>${new Date(supplier.createdAt).toDateString()}</dd>
@@ -1545,7 +1545,7 @@ if (req.body.maxGroupSize !== undefined) {
     }
 
     // ── VIP notification flags (set via VIP Settings page, not edit form) ────
-    // These are managed via /suppliers/:id/vip-settings — do not overwrite here.
+    // These are managed via /suppliers/:id/vip-settings - do not overwrite here.
     await SupplierProfile.findByIdAndUpdate(req.params.id, update, { new: true });
     res.redirect(`/zq-admin/suppliers/${req.params.id}`);
   } catch (err) {

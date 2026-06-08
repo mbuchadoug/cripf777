@@ -1623,7 +1623,7 @@ The seller will review and price your request.
           card:       _qtStaffCard,
           supplier:   seller,
           buyerPhone: from,
-          message:    `Quote: ${_qtItemSummary}${lineItems.length > 3 ? ` + ${lineItems.length - 3} more` : ""} — Total: $${total.toFixed(2)}`,
+          message:    `Quote: ${_qtItemSummary}${lineItems.length > 3 ? ` + ${lineItems.length - 3} more` : ""} - Total: $${total.toFixed(2)}`,
           refNum
         }).catch(() => {});
         trackStaffLinkEvent(_qtStaffCardId, { source: "direct", isConversion: true }).catch(() => {});
