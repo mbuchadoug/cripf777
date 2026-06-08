@@ -81,6 +81,12 @@ const schoolProfileSchema = new mongoose.Schema({
   // Extra numbers that receive WhatsApp template notifications (enquiries, profile views, smart link opens).
   // Admin-managed via /zq-admin/schools/:id/edit. Primary phone always notified separately.
   notificationContacts: { type: [String], default: [] },
+
+  // ── Per-school application form configuration ─────────────────────────────
+  // Stored as Mixed so any subfield can be added without schema migration.
+  // Subfields used: active, intakeYear, notifyEmail, notifyPhone,
+  //   gradeOptions[], brochureUrl, brochureName, rawFormUrl, rawFormName
+  applicationForm: { type: mongoose.Schema.Types.Mixed, default: {} },
   schoolName:     { type: String, required: true },
   principalName:  { type: String, default: "" },
   deputyName:     { type: String, default: "" },

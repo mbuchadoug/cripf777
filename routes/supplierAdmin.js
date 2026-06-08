@@ -5012,6 +5012,35 @@ ${er?`<div style="background:#fef2f2;border:1px solid #fecaca;color:#dc2626;padd
     <code>app.use("/", schoolApplyRouter)</code>
   </p>
 </div>
+<!-- ── Existing Brochures ──────────────────────────────────────────────────── -->
+${(()=>{
+  const _brs = school.brochures || [];
+  const _af  = school.applicationForm || {};
+  const _hasAny = _brs.length || _af.brochureUrl || _af.rawFormUrl;
+  if (!_hasAny) return "";
+  return `
+  <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.08);margin-bottom:22px">
+    <h2 style="font-size:15px;font-weight:700;margin:0 0 14px">📄 Uploaded Documents</h2>
+    ${_brs.length ? `
+    <table style="width:100%;border-collapse:collapse;margin-bottom:14px;font-size:13px">
+      <thead><tr style="background:#f8fafc">
+        <th style="padding:8px 12px;text-align:left;border-bottom:1px solid var(--border)">Label</th>
+        <th style="padding:8px 12px;text-align:left;border-bottom:1px solid var(--border)">Link</th>
+        <th style="padding:8px 12px;text-align:left;border-bottom:1px solid var(--border)">Added</th>
+      </tr></thead>
+      <tbody>
+        ${_brs.map((b,i)=>`<tr>
+          <td style="padding:8px 12px;border-bottom:1px solid var(--border)"><strong>${esc(b.label||"Brochure")}</strong></td>
+          <td style="padding:8px 12px;border-bottom:1px solid var(--border)"><a href="${esc(b.url)}" target="_blank" style="color:#1d4ed8">View / Download →</a></td>
+          <td style="padding:8px 12px;border-bottom:1px solid var(--border);color:var(--muted);font-size:11px">${b.addedAt?new Date(b.addedAt).toLocaleDateString():""}</td>
+        </tr>`).join("")}
+      </tbody>
+    </table>` : ""}
+    ${_af.brochureUrl ? `<div style="font-size:13px;margin-bottom:8px">📄 <strong>Brochure (Application Settings):</strong> <a href="${esc(_af.brochureUrl)}" target="_blank" style="color:#1d4ed8">${esc(_af.brochureName||"View →")}</a></div>` : ""}
+    ${_af.rawFormUrl  ? `<div style="font-size:13px">📋 <strong>Printable Form (Application Settings):</strong> <a href="${esc(_af.rawFormUrl)}" target="_blank" style="color:#1d4ed8">${esc(_af.rawFormName||"Download →")}</a></div>` : ""}
+  </div>`;
+})()}
+
 <div style="background:white;border-radius:12px;padding:22px;box-shadow:0 1px 3px rgba(0,0,0,.08);margin-bottom:22px">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:10px">
     <div><h2 style="font-size:15px;font-weight:700;margin:0">Application Form Settings</h2>
@@ -5251,8 +5280,101 @@ ${er?`<div style="background:#fef2f2;border:1px solid #fecaca;color:#dc2626;padd
       </div>
     </div>
 
+    <!-- ── Facilities ────────────────────────────────────────────────────── -->
+    <div style="margin-bottom:20px">
+      <div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:10px;padding-bottom:6px;border-bottom:1.5px solid var(--border)">🏊 Facilities (tick all that apply)</div>
+      <div id="facilitiesGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:6px">
+        ${(()=>{
+          const FACS=[
+            {id:"swimming_pool",label:"Swimming Pool"},{id:"science_lab",label:"Science Lab"},
+            {id:"computer_lab",label:"Computer Lab"},{id:"library",label:"Library"},
+            {id:"sports_field",label:"Sports Field"},{id:"gymnasium",label:"Gymnasium"},
+            {id:"cafeteria",label:"Cafeteria"},{id:"transport",label:"School Transport"},
+            {id:"wifi",label:"WiFi / Internet"},{id:"boarding_house",label:"Boarding House"},
+            {id:"chapel",label:"Chapel"},{id:"music_room",label:"Music Room"},
+            {id:"art_room",label:"Art Room"},{id:"tennis_court",label:"Tennis Court"},
+            {id:"basketball_court",label:"Basketball Court"},{id:"drama_theatre",label:"Drama / Theatre"},
+            {id:"photography_lab",label:"Photography Lab"},{id:"nursery",label:"Nursery / Crèche"},
+            {id:"special_needs",label:"Special Needs Support"}
+          ];
+          const current = school.facilities || [];
+          return FACS.map(f=>`
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;padding:5px 8px;background:${current.includes(f.id)?"#eff6ff":"white"};border:1px solid var(--border);border-radius:6px;cursor:pointer">
+              <input type="checkbox" name="facilities" value="${esc(f.id)}" ${current.includes(f.id)?"checked":""} style="width:14px;height:14px">
+              ${esc(f.label)}
+            </label>`).join("");
+        })()}
+      </div>
+    </div>
+
+    <!-- ── Extramural Activities ────────────────────────────────────────── -->
+    <div style="margin-bottom:20px">
+      <div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:10px;padding-bottom:6px;border-bottom:1.5px solid var(--border)">🏃 Extramural Activities</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:6px">
+        ${(()=>{
+          const ACTS=[
+            {id:"swimming",label:"Swimming"},{id:"football",label:"Football"},
+            {id:"rugby",label:"Rugby"},{id:"cricket",label:"Cricket"},
+            {id:"netball",label:"Netball"},{id:"basketball",label:"Basketball"},
+            {id:"tennis",label:"Tennis"},{id:"athletics",label:"Athletics"},
+            {id:"chess",label:"Chess"},{id:"debate",label:"Debate"},
+            {id:"science_club",label:"Science Club"},{id:"music",label:"Music"},
+            {id:"drama",label:"Drama"},{id:"art",label:"Art"},
+            {id:"dance",label:"Dance"},{id:"computer_club",label:"Computer Club"},
+            {id:"environmental_club",label:"Environmental Club"},{id:"rotary_interact",label:"Rotary Interact"}
+          ];
+          const current = school.extramuralActivities || [];
+          return ACTS.map(a=>`
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;padding:5px 8px;background:${current.includes(a.id)?"#f0fdf4":"white"};border:1px solid var(--border);border-radius:6px;cursor:pointer">
+              <input type="checkbox" name="extramuralActivities" value="${esc(a.id)}" ${current.includes(a.id)?"checked":""} style="width:14px;height:14px">
+              ${esc(a.label)}
+            </label>`).join("");
+        })()}
+      </div>
+    </div>
+
+    <!-- ── Notification Contacts ────────────────────────────────────────── -->
+    <div style="margin-bottom:20px">
+      <div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:6px;padding-bottom:6px;border-bottom:1.5px solid var(--border)">
+        📲 Notification Contacts
+        <span style="font-weight:400;font-size:11px;color:var(--muted)"> — Extra numbers that receive WhatsApp alerts when parents open school links</span>
+      </div>
+      <div id="notifContactsList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px">
+        ${(school.notificationContacts||[]).map((p,i)=>`
+          <div style="display:flex;gap:8px;align-items:center">
+            <input name="notifContact_${i}" value="${esc(p)}" placeholder="e.g. 2637712345678"
+                   style="flex:1;padding:9px 11px;border:1.5px solid var(--border);border-radius:7px;font-size:13px">
+            <button type="button" onclick="this.closest('div').remove()"
+                    style="padding:6px 12px;border:1.5px solid #dc2626;border-radius:6px;color:#dc2626;background:none;cursor:pointer;font-size:13px">✕</button>
+          </div>`).join("")}
+      </div>
+      <input type="hidden" name="notifContactCount" id="notifContactCount" value="${(school.notificationContacts||[]).length}">
+      <button type="button" onclick="addNotifContact()"
+              style="padding:7px 14px;border:1.5px solid #1d4ed8;border-radius:6px;color:#1d4ed8;background:none;cursor:pointer;font-size:13px">
+        ➕ Add number
+      </button>
+      <p style="font-size:11px;color:var(--muted);margin-top:6px">
+        Use international format: 2637XXXXXXXX. The primary phone always receives notifications too.
+      </p>
+    </div>
+
     <button type="submit" class="btn btn-blue" style="padding:10px 24px">💾 Save School Profile</button>
   </form>
+  <script>
+  function addNotifContact() {
+    const list = document.getElementById("notifContactsList");
+    const count = document.getElementById("notifContactCount");
+    const idx = parseInt(count.value, 10);
+    const div = document.createElement("div");
+    div.style.cssText = "display:flex;gap:8px;align-items:center";
+    div.innerHTML = \`<input name="notifContact_\${idx}" placeholder="e.g. 2637712345678"
+      style="flex:1;padding:9px 11px;border:1.5px solid var(--border);border-radius:7px;font-size:13px">
+      <button type="button" onclick="this.closest('div').remove()"
+        style="padding:6px 12px;border:1.5px solid #dc2626;border-radius:6px;color:#dc2626;background:none;cursor:pointer;font-size:13px">✕</button>\`;
+    list.appendChild(div);
+    count.value = idx + 1;
+  }
+  </script>
 </div>
 
 <a href="/zq-admin/schools" class="back-link">← All Schools</a>
@@ -5289,9 +5411,25 @@ router.post("/schools/:id/edit", requireSupplierAdmin, async(req,res) => {
     const { schoolName, phone, email, website, suburb, city, address,
             schoolType, ownership, gender, curriculum, fees_term1, fees_term2, fees_term3,
             principalName, contactPhone, boarding, description } = req.body;
+    // Parse facilities and extramural checkboxes
+    const { facilities, extramuralActivities } = req.body;
+    const facilitiesArr       = facilities            ? (Array.isArray(facilities)            ? facilities            : [facilities])            : [];
+    const extramuralArr       = extramuralActivities  ? (Array.isArray(extramuralActivities)  ? extramuralActivities  : [extramuralActivities])  : [];
+
+    // Parse notification contacts
+    const _notifCount = parseInt(req.body.notifContactCount || "0", 10);
+    const _notifRaw = [];
+    for (let i = 0; i < _notifCount; i++) {
+      const p = String(req.body["notifContact_" + i] || "").trim().replace(/[^0-9]/g, "");
+      const normalized = p.startsWith("0") && p.length === 10 ? "263" + p.slice(1) : p;
+      if (normalized.length >= 10) _notifRaw.push(normalized);
+    }
+    const primaryPhone = String(phone || "").replace(/\D/g, "");
+    const notificationContacts = [...new Set(_notifRaw)].filter(p => p !== primaryPhone);
+
     await SP.findByIdAndUpdate(req.params.id, { $set: {
       schoolName:    String(schoolName||"").trim(),
-      phone:         String(phone||"").replace(/\D/g,""),
+      phone:         primaryPhone,
       email:         String(email||"").trim(),
       website:       String(website||"").trim(),
       suburb:        String(suburb||"").trim(),
@@ -5306,12 +5444,15 @@ router.post("/schools/:id/edit", requireSupplierAdmin, async(req,res) => {
         term2: parseFloat(fees_term2)||0,
         term3: parseFloat(fees_term3)||0
       },
-      principalName: String(principalName||"").trim(),
-      contactPhone:  String(contactPhone||"").trim(),
-      boarding:      String(boarding||"day").trim(),
-      description:   String(description||"").trim(),
-      "location.area": String(suburb||"").trim(),
-      "location.city": String(city||"").trim()
+      principalName:          String(principalName||"").trim(),
+      contactPhone:           String(contactPhone||"").trim(),
+      boarding:               String(boarding||"day").trim(),
+      description:            String(description||"").trim(),
+      facilities:             facilitiesArr,
+      extramuralActivities:   extramuralArr,
+      notificationContacts,
+      "location.area":        String(suburb||"").trim(),
+      "location.city":        String(city||"").trim()
     }});
     res.redirect(`/zq-admin/schools/${req.params.id}?success=School+profile+saved.`);
   } catch(err) { res.redirect(`/zq-admin/schools/${req.params.id}?error=${encodeURIComponent(err.message)}`); }

@@ -3642,7 +3642,7 @@ a.startsWith("sup_load_preset_") ||
       a.startsWith("school_search_page_") ||
       a.startsWith("school_view_") ||
     a.startsWith("school_dl_profile_") ||
-      a.startsWith("school_apply_") ||
+      (a.startsWith("school_apply_") && !a.startsWith("school_apply_start_")) ||
       a.startsWith("school_apply_start_") ||
       a.startsWith("sa_grade_") ||
       a.startsWith("school_enquiry_") ||
@@ -3965,10 +3965,11 @@ if (!isMetaAction && /^APPLY:SCHOOL:[a-f0-9]{24}$/i.test(text.trim())) {
     const _SPTop = (await import("../models/schoolProfile.js")).default;
     const _applySchoolTop = await _SPTop.findById(_applyIdTop).lean();
     if (_applySchoolTop) {
-      const { captureSchoolContact, startSchoolApplicationForm, notifySchoolApplyLinkOpened }
-        = await import("./schoolApplicationForm.js");
+      const { captureSchoolContact, startSchoolApplicationForm } = await import("./schoolApplicationForm.js");
+      const { notifyAllSchoolApplicationInterest } = await import("./schoolNotifications.js");
       captureSchoolContact({ schoolId: _applyIdTop, phone, source: "apply" }).catch(() => {});
-      notifySchoolApplyLinkOpened({ school: _applySchoolTop, visitorPhone: from, source: "qr" }).catch(() => {});
+      // Notify ALL registered notification numbers (school.phone + notificationContacts[])
+      notifyAllSchoolApplicationInterest(_applySchoolTop, from.startsWith("263") ? "0"+from.slice(3) : from).catch(() => {});
       await startSchoolApplicationForm({ from, school: _applySchoolTop, UserSession });
     } else {
       await sendText(from, "❌ This application link is no longer active. Please contact the school directly.");
@@ -7289,7 +7290,8 @@ a === "sup_search_next_page" ||
   a.startsWith("school_search_page_") ||
   a.startsWith("school_view_") ||
  a.startsWith("school_dl_profile_") ||
-  a.startsWith("school_apply_") ||
+  (a.startsWith("school_apply_") && !a.startsWith("school_apply_start_")) ||
+  a.startsWith("school_apply_start_") ||
   a.startsWith("school_enquiry_") ||
   a === "school_my_profile" ||
   a === "school_my_facilities" ||
@@ -12195,6 +12197,30 @@ if (isMetaAction && typeof a === "string" && a.startsWith("sfaq_")) {
 
   if (handled) return;
 
+  // If FAQ handler can't handle it (no FAQs set up), show school contact info
+  if (a.startsWith("sfaq_enquiry_")) {
+    const _sfaqSchoolId = a.replace("sfaq_enquiry_","").trim();
+    try {
+      const _sfaqSP = (await import("../models/schoolProfile.js")).default;
+      const _sfaqSchool = await _sfaqSP.findById(_sfaqSchoolId).lean();
+      if (_sfaqSchool) {
+        const _sfaqPhone = _sfaqSchool.contactPhone || _sfaqSchool.phone || "";
+        return sendButtons(from, {
+          text:
+            `❓ *Enquiries — ${_sfaqSchool.schoolName}*\n\n` +
+            `📞 Call or WhatsApp: *${_sfaqPhone.startsWith("263") ? "0"+_sfaqPhone.slice(3) : _sfaqPhone}*\n` +
+            (_sfaqSchool.email ? `📧 Email: *${_sfaqSchool.email}*\n` : "") +
+            (_sfaqSchool.website ? `🌐 Website: ${_sfaqSchool.website}\n` : "") +
+            `\n_The school team will respond to your enquiry directly._`,
+          buttons: [
+            { id: `school_apply_start_${_sfaqSchoolId}`, title: "📝 Apply on WhatsApp" },
+            { id: "school_search_refine", title: "🏫 More Schools" }
+          ]
+        });
+      }
+    } catch (_sfaqErr) { console.warn("[SFAQ FALLBACK]", _sfaqErr.message); }
+  }
+
   console.warn("[SFAQ ACTION NOT HANDLED]", { from, action: a });
   return sendText(from, "Sorry, that option expired. Please open the school link again to start fresh.");
 }
@@ -12251,7 +12277,8 @@ if (
 if (
   a.startsWith("school_view_") ||
   a.startsWith("school_dl_profile_") ||
-  a.startsWith("school_apply_") ||
+  (a.startsWith("school_apply_") && !a.startsWith("school_apply_start_")) ||
+  a.startsWith("school_apply_start_") ||
   a.startsWith("school_enquiry_")
 ) {
   const handled = await handleSchoolSearchActions({
