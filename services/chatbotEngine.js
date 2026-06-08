@@ -3980,6 +3980,76 @@ if (!isMetaAction && /^APPLY:SCHOOL:[a-f0-9]{24}$/i.test(text.trim())) {
   return;
 }
 
+// ── school_apply_start_<id> — TOP LEVEL early intercept ─────────────────────
+// MUST be top-level: a parent who also owns a supplier biz (sessionState =
+// "supplier_search_city" etc.) would have this action swallowed by
+// handleSupplierRegistrationStates() before reaching the handler at line ~12476.
+// This mirrors the APPLY:SCHOOL: deep-link pattern above.
+if (isMetaAction && a.startsWith("school_apply_start_")) {
+  const _sasIdEarly = a.replace("school_apply_start_", "").trim();
+  if (mongoose.Types.ObjectId.isValid(_sasIdEarly)) {
+    try {
+      const _sasSchoolEarly = await SchoolProfile.findById(_sasIdEarly).lean();
+      if (_sasSchoolEarly) {
+        const { captureSchoolContact } = await import("./schoolApplicationForm.js");
+        const { notifyAllSchoolApplicationInterest } = await import("./schoolNotifications.js");
+        captureSchoolContact({ schoolId: _sasIdEarly, phone, source: "apply" }).catch(() => {});
+        notifyAllSchoolApplicationInterest(_sasSchoolEarly, from.startsWith("263") ? "0"+from.slice(3) : from).catch(() => {});
+
+        // Check for an active in-progress application session
+        const _sasFlowEarly = await UserSession.findOne({ phone }).lean();
+        const _sasStateEarly = _sasFlowEarly?.tempData?.schoolApplyState;
+        if (_sasStateEarly && _sasStateEarly !== "awaiting_start") {
+          await sendText(from,
+            "📝 You already started an application for *" + _sasSchoolEarly.schoolName + "*.\n" +
+            "Please reply to the last question to continue, or type *restart* to start again."
+          );
+          return;
+        }
+
+        let _sasGradesEarly = [];
+        try {
+          const _sasParsedEarly = JSON.parse(_sasFlowEarly?.tempData?.schoolApplyData || "{}");
+          _sasGradesEarly = _sasParsedEarly.gradeOptions || _sasSchoolEarly.applicationForm?.gradeOptions || [];
+        } catch (_) {
+          _sasGradesEarly = _sasSchoolEarly.applicationForm?.gradeOptions || [];
+        }
+        const _sasIntakeEarly = _sasSchoolEarly.applicationForm?.intakeYear || "";
+
+        await UserSession.findOneAndUpdate(
+          { phone },
+          { $set: {
+              "tempData.schoolApplyId":    _sasIdEarly,
+              "tempData.schoolApplyState": "awaiting_student_name",
+              "tempData.schoolApplyData":  JSON.stringify({
+                schoolId:     _sasIdEarly,
+                schoolName:   _sasSchoolEarly.schoolName,
+                intakeYear:   _sasIntakeEarly,
+                gradeOptions: _sasGradesEarly
+              })
+            }
+          },
+          { upsert: true }
+        );
+
+        await sendText(from,
+          "📝 *Application — " + _sasSchoolEarly.schoolName + "*\n" +
+          (_sasIntakeEarly ? "_" + _sasIntakeEarly + "_\n" : "") +
+          "\nAnswer 5 quick questions and your application goes directly to the school.\n\n" +
+          "*Step 1 of 5*\n" +
+          "What is the *student's full name?*\n" +
+          "_e.g. Tatenda Moyo_"
+        );
+      } else {
+        await sendText(from, "❌ This application link has expired. Please contact the school directly.");
+      }
+    } catch (_sasEarlyErr) {
+      console.warn("[SCHOOL APPLY START TOP LEVEL]", _sasEarlyErr.message);
+    }
+    return;
+  }
+}
+
 // ── ZQG EARLY HANDLER (TOP LEVEL - runs for ALL users, any session state) ──────
 // zqg_sel_<supplierId>  = buyer tapped a seller row in a group WhatsApp list
 // zqg_register_<slug>   = buyer tapped "List Your Business Here" CTA row
@@ -12303,11 +12373,15 @@ if (
 }
  
 // ── Parent taps a school card (view detail / download / apply / contact) ─────
+// NOTE: school_apply_start_ is intentionally excluded here — it has its own
+// dedicated handler below (line ~12476) and at top-level (line ~3982).
+// Routing school_apply_start_ through handleSchoolSearchActions() causes a
+// CastError because that function strips "school_apply_" leaving "start_<id>"
+// which is not a valid ObjectId.
 if (
   a.startsWith("school_view_") ||
   a.startsWith("school_dl_profile_") ||
   (a.startsWith("school_apply_") && !a.startsWith("school_apply_start_")) ||
-  a.startsWith("school_apply_start_") ||
   a.startsWith("school_enquiry_")
 ) {
   const handled = await handleSchoolSearchActions({
