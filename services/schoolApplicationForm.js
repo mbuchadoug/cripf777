@@ -200,3 +200,166 @@ export async function notifySchoolWebSubmission({ school, data, applicantPhone }
     } catch (_pe) { console.warn("[SCHOOL WEB PARENT CONFIRM]", _pe.message); }
   }
 }
+// ─── HELPER: normalise phone ──────────────────────────────────────────────────
+function _normPhone(p = "") {
+  const d = String(p).replace(/\D/g, "");
+  if (d.startsWith("263")) return d;
+  if (d.startsWith("0"))   return "263" + d.slice(1);
+  return d;
+}
+function _displayPhone(p = "") {
+  const d = _normPhone(p);
+  return d.startsWith("263") ? "0" + d.slice(3) : d;
+}
+
+// ─── CONTACT CAPTURE ─────────────────────────────────────────────────────────
+// Called whenever someone opens a school smart link or apply link.
+// Upserts a SchoolContact record (one per phone+school).
+export async function captureSchoolContact({
+  schoolId,
+  phone,
+  source = "profile",   // "profile" | "apply" | "enquiry" | "brochure"
+  extraData = {}        // { studentName, parentName, gradeInterest, etc. }
+}) {
+  try {
+    const SchoolContact = (await import("../models/schoolContact.js")).default;
+    const update = {
+      $set:  { lastSeen: new Date(), source, ...extraData },
+      $inc:  { viewCount: 1 },
+      $setOnInsert: { firstSeen: new Date(), phone, schoolId }
+    };
+    await SchoolContact.findOneAndUpdate(
+      { schoolId, phone: _normPhone(phone) },
+      update,
+      { upsert: true, new: true }
+    );
+  } catch (err) {
+    console.warn("[SCHOOL CONTACT CAPTURE]", err.message);
+  }
+}
+
+// ─── NOTIFY SCHOOL VIA WHATSAPP: someone opened their apply link ──────────────
+export async function notifySchoolApplyLinkOpened({ school, visitorPhone, source = "qr" }) {
+  if (!school?.applicationForm?.notifyPhone) return;
+  try {
+    const notifyNum = _normPhone(school.applicationForm.notifyPhone);
+    const sourceLabels = {
+      qr: "QR code scan", wa: "WhatsApp link", direct: "direct link",
+      flyer: "flyer QR", social: "social media"
+    };
+    const sourceLabel = sourceLabels[source] || "link";
+    const timeStr = new Date().toLocaleString("en-GB", {
+      day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
+      timeZone: "Africa/Harare"
+    });
+    await sendButtons(notifyNum, {
+      text:
+        `📝 *Someone opened your Application Form!*\n\n` +
+        `🏫 ${school.schoolName}\n` +
+        `📱 Via: ${sourceLabel}\n` +
+        `⏰ ${timeStr}\n` +
+        (visitorPhone ? `📞 Visitor: *${_displayPhone(visitorPhone)}*\n` : "") +
+        `\n_They may be interested in enrolling. Follow up if no application arrives._`,
+      buttons: [{ id: "school_my_profile", title: "🏫 My School" }]
+    });
+    console.log(`[SCHOOL APPLY NOTIFY] → ${notifyNum} (${school.schoolName}, visitor: ${visitorPhone})`);
+  } catch (err) {
+    console.warn("[SCHOOL APPLY NOTIFY]", err.message);
+  }
+}
+
+// ─── START WHATSAPP APPLICATION FORM ─────────────────────────────────────────
+// Called when parent taps Apply or scans APPLY:SCHOOL QR.
+export async function startSchoolApplicationForm({ from, school, UserSession }) {
+  const form = school.applicationForm || {};
+
+  const _brochureUrl  = form.brochureUrl  || (school.brochures?.[0]?.url)   || "";
+  const _brochureName = form.brochureName || (school.brochures?.[0]?.label) || "School_Brochure.pdf";
+  const _rawFormUrl   = form.rawFormUrl   || school.applicationFormUrl       || "";
+  const _rawFormName  = form.rawFormName  || "Application_Form.pdf";
+
+  const _fees     = school.fees?.term1
+    ? `$${school.fees.term1}/term`
+    : (typeof school.fees === "number" ? `$${school.fees}/term` : "");
+  const _curricArr = Array.isArray(school.curriculum) ? school.curriculum : [school.curriculum].filter(Boolean);
+  const _curric    = _curricArr.map(c => String(c).toUpperCase()).join(" + ");
+  const _location  = school.location?.area
+    ? `${school.location.area}, ${school.location.city || ""}`
+    : school.location?.city || school.suburb || school.address || "";
+  const _phone    = school.contactPhone || school.phone || "";
+  const _grades   = (form.gradeOptions || []).join(", ");
+  const _verified = school.verified ? " ✅" : "";
+  const _baseUrl  = process.env.BASE_URL || process.env.PUBLIC_URL || "https://cripfcnt.com";
+  const webFormUrl = `${_baseUrl}/apply/school/${school._id}`;
+
+  const profileCard =
+    `🏫 *${school.schoolName}${_verified}*\n` +
+    (_location ? `📍 ${_location}\n` : "") +
+    (_fees  ? `💰 ${_fees}${_curric ? ` · ${_curric}` : ""}\n` : (_curric ? `📚 ${_curric}\n` : "")) +
+    (_grades ? `📋 Grades: ${_grades}\n` : "") +
+    (_phone  ? `📞 ${_phone}\n` : "") +
+    (school.email   ? `📧 ${school.email}\n`   : "") +
+    (school.website ? `🌐 ${school.website}\n` : "") +
+    (school.description
+      ? `\n_${school.description.slice(0, 160)}${school.description.length > 160 ? "…" : ""}_\n`
+      : "");
+
+  const intakeLabel = form.intakeYear ? form.intakeYear : "";
+
+  await sendButtons(from, {
+    text:
+      profileCard +
+      `\n📝 *How to Apply${intakeLabel ? " - " + intakeLabel : ""}*\n\n` +
+      `You have *3 options:*\n\n` +
+      `1️⃣ *WhatsApp form* - tap button below, answer 5 questions\n\n` +
+      `2️⃣ *Web form* - fill online on your phone or computer:\n` +
+      `${webFormUrl}\n\n` +
+      `3️⃣ *Download PDF* - print and hand in at the school:\n` +
+      (_rawFormUrl
+        ? `${_rawFormUrl}\n`
+        : `_No PDF form set yet - contact school directly_\n`) +
+      `\n_All submissions go directly to ${school.schoolName}._`,
+    buttons: [
+      { id: `school_apply_start_${school._id}`, title: "📝 Apply on WhatsApp" },
+      { id: `sfaq_enquiry_${school._id}`,       title: "❓ Ask a Question"    }
+    ]
+  });
+
+  if (_brochureUrl) {
+    try {
+      await sendDocument(from, {
+        link:     _brochureUrl,
+        filename: _brochureName,
+        caption:  `📄 *${school.schoolName} - School Brochure*\n_Save this for your records._`
+      });
+    } catch (_be) { console.warn("[SCHOOL BROCHURE SEND]", _be.message); }
+  }
+
+  if (_rawFormUrl) {
+    try {
+      await sendDocument(from, {
+        link:     _rawFormUrl,
+        filename: _rawFormName,
+        caption:
+          `📋 *Printable Application Form - ${school.schoolName}*\n` +
+          `_Print, fill in, and hand in at the school office._`
+      });
+    } catch (_re) { console.warn("[SCHOOL RAW FORM SEND]", _re.message); }
+  }
+
+  await UserSession.findOneAndUpdate(
+    { phone: _normPhone(from) },
+    { $set: {
+        "tempData.schoolApplyId":    String(school._id),
+        "tempData.schoolApplyState": "awaiting_start",
+        "tempData.schoolApplyData":  JSON.stringify({
+          schoolId:     String(school._id),
+          schoolName:   school.schoolName,
+          intakeYear:   intakeLabel,
+          gradeOptions: form.gradeOptions || []
+        })
+      }
+    },
+    { upsert: true }
+  );
+}
