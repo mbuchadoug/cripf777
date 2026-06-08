@@ -3773,7 +3773,7 @@ a.startsWith("sup_load_preset_") ||
     }
 
     // ── "edit 1x5 3x15" or "1x5, 3x15" or "1 5, 3 15" or "1:5" - edit specific prices ──
-    // Accepts: 1x12.50  1=12.50  1:12.50  1 12.50  — all map to item 1 @ $12.50
+    // Accepts: 1x12.50  1=12.50  1:12.50  1 12.50  - all map to item 1 @ $12.50
     const editSection = raw
       .replace(/\bhave\s+[\d,\s]+/i, "")
       .replace(/\bskip\s+[\d,\s]+/i, "")
@@ -3872,9 +3872,9 @@ if (biz) {
         console.log("[OWNERSHIP] phone", phone, "has no role on biz", biz._id, "- notification contact only");
       }
     } else {
-      // No UserRole for this phone on any biz — notification contact or new user.
+      // No UserRole for this phone on any biz - notification contact or new user.
       _bizIsOwnedByUser = false;
-      console.log("[OWNERSHIP] phone", phone, "has no role on any biz — notification contact or new user");
+      console.log("[OWNERSHIP] phone", phone, "has no role on any biz - notification contact or new user");
     }
   } else {
     console.log("[OWNERSHIP] phone", phone, "owns biz", biz._id, "as", _ownerRoleCheck.role, "state:", biz.sessionState);
@@ -3954,7 +3954,7 @@ if (!isMetaAction && /^ZQ:S:[a-z0-9_-]{1,60}$/i.test(text.trim())) {
   return;
 }
 
-// ── APPLY:SCHOOL:<id> — application form QR deep link (TOP LEVEL) ────────────
+// ── APPLY:SCHOOL:<id> - application form QR deep link (TOP LEVEL) ────────────
 // MUST be top-level: without this, APPLY:SCHOOL: falls through to the product
 // search flow and returns "Which city?" to the parent.
 // Case-insensitive: wa.me pre-fills may lowercase the token.
@@ -3980,7 +3980,7 @@ if (!isMetaAction && /^APPLY:SCHOOL:[a-f0-9]{24}$/i.test(text.trim())) {
   return;
 }
 
-// ── school_apply_start_<id> — TOP LEVEL early intercept ─────────────────────
+// ── school_apply_start_<id> - TOP LEVEL early intercept ─────────────────────
 // MUST be top-level: a parent who also owns a supplier biz (sessionState =
 // "supplier_search_city" etc.) would have this action swallowed by
 // handleSupplierRegistrationStates() before reaching the handler at line ~12476.
@@ -4033,7 +4033,7 @@ if (isMetaAction && a.startsWith("school_apply_start_")) {
         );
 
         await sendText(from,
-          "📝 *Application — " + _sasSchoolEarly.schoolName + "*\n" +
+          "📝 *Application - " + _sasSchoolEarly.schoolName + "*\n" +
           (_sasIntakeEarly ? "_" + _sasIntakeEarly + "_\n" : "") +
           "\nAnswer 5 quick questions and your application goes directly to the school.\n\n" +
           "*Step 1 of 5*\n" +
@@ -4170,7 +4170,7 @@ if (typeof a === "string" && a.startsWith("sfaq_")) {
   });
   if (_sfaqHandled) return;
 
-  // FAQ handler returned false/undefined — school has no FAQ set up yet.
+  // FAQ handler returned false/undefined - school has no FAQ set up yet.
   // For sfaq_enquiry_, show school contact info instead of error message.
   if (a.startsWith("sfaq_enquiry_")) {
     const _sfaqId = a.replace("sfaq_enquiry_", "").trim();
@@ -4182,7 +4182,7 @@ if (typeof a === "string" && a.startsWith("sfaq_")) {
         const _dispPh = _sfaqPh.startsWith("263") ? "0"+_sfaqPh.slice(3) : _sfaqPh;
         await sendButtons(from, {
           text:
-            `❓ *Enquiries — ${_sfaqSch.schoolName}*\n\n` +
+            `❓ *Enquiries - ${_sfaqSch.schoolName}*\n\n` +
             `To ask a question, contact the school directly:\n\n` +
             `📞 Call or WhatsApp: *${_dispPh}*\n` +
             (_sfaqSch.email   ? `📧 ${_sfaqSch.email}\n`   : "") +
@@ -4789,7 +4789,7 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
               `_1×350_ or _1=350_ → item 1 = $350\n` +
               `_1×350, 2×120_ → price two items\n\n` +
               (_hasLongItems
-                ? `*2️⃣ Rename the item* (buyer sent a long description — clean it up):\n` +
+                ? `*2️⃣ Rename the item* (buyer sent a long description - clean it up):\n` +
                   `_rename 1: Bill of Quantities (4-bed house, 280m², Ruwa)_\n` +
                   `_Or in one line: 1×350 Bill of Quantities (4-bed, Ruwa)_\n\n`
                 : `*2️⃣ Rename (optional):*\n` +
@@ -4800,7 +4800,7 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
               `_add: Travel to site - $30_\n\n` +
               `Type *confirm* to send · *cancel* to discard`;
 
-            // Short, clear guide — avoid wall-of-text
+            // Short, clear guide - avoid wall-of-text
             const _rfqGuide =
               `*How to price:*\n` +
               `_1×350_ → set item 1 to $350\n` +
@@ -4814,7 +4814,7 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
             return sendButtons(from,
               {
                 text:
-                  `📋 *Quote ${_scRefNum}* — price and send to buyer\n\n` +
+                  `📋 *Quote ${_scRefNum}* - price and send to buyer\n\n` +
                   `Buyer: *${_scDraft.buyerName || _scDraft.buyerPhone || "Buyer"}*\n` +
                   _buyerNotesSection +
                   `*Requested:*\n${_rfqItemList}\n\n` +
@@ -4841,7 +4841,7 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
           const _allZero = _scItems.length === 0 || _scItems.every(l => !l.unitPrice || l.unitPrice === 0);
           const _itemSection = _scItems.length > 0
             ? `${_itemRows}\n${"─".repeat(28)}\n*Total: $${_scTotal.toFixed(2)} USD*`
-            : `_No items yet — tap Edit & Price to add your items._`;
+            : `_No items yet - tap Edit & Price to add your items._`;
 
           return sendButtons(from, {
             text:
@@ -7864,7 +7864,7 @@ if (a.startsWith("zqg_sel_") || a.startsWith("zqg_register_")) {
 // CRITICAL FIX: parents mid-application (awaiting_student_name, awaiting_grade,
 // awaiting_dob, awaiting_parent_name, awaiting_parent_phone) must NEVER reach
 // the supplier shortcode search guards. Those guards check biz.sessionState
-// only — they are blind to schoolApplyState in UserSession.tempData.
+// only - they are blind to schoolApplyState in UserSession.tempData.
 // This block runs AFTER if(!biz) so it covers BIZ users (the failing case).
 // No-biz users: they return from inside if(!biz) so they never reach here,
 // but their path is safe because they exit above before shortcode search.
@@ -12425,7 +12425,7 @@ if (isMetaAction && typeof a === "string" && a.startsWith("sfaq_")) {
         const _sfaqPhone = _sfaqSchool.contactPhone || _sfaqSchool.phone || "";
         return sendButtons(from, {
           text:
-            `❓ *Enquiries — ${_sfaqSchool.schoolName}*\n\n` +
+            `❓ *Enquiries - ${_sfaqSchool.schoolName}*\n\n` +
             `📞 Call or WhatsApp: *${_sfaqPhone.startsWith("263") ? "0"+_sfaqPhone.slice(3) : _sfaqPhone}*\n` +
             (_sfaqSchool.email ? `📧 Email: *${_sfaqSchool.email}*\n` : "") +
             (_sfaqSchool.website ? `🌐 Website: ${_sfaqSchool.website}\n` : "") +
@@ -12492,7 +12492,7 @@ if (
 }
  
 // ── Parent taps a school card (view detail / download / apply / contact) ─────
-// NOTE: school_apply_start_ is intentionally excluded here — it has its own
+// NOTE: school_apply_start_ is intentionally excluded here - it has its own
 // dedicated handler below (line ~12476) and at top-level (line ~3982).
 // Routing school_apply_start_ through handleSchoolSearchActions() causes a
 // CastError because that function strips "school_apply_" leaving "start_<id>"
@@ -12544,9 +12544,9 @@ if (
   if (_saState === "awaiting_start") {
     await _saUpdate("awaiting_student_name");
     await sendText(from,
-      `📝 *Application — ${_saData.schoolName || "School"}*\n` +
+      `📝 *Application - ${_saData.schoolName || "School"}*\n` +
       (_saData.intakeYear ? `_${_saData.intakeYear}_\n` : "") +
-      `\nAnswer 5 quick questions — your application goes directly to the school.\n\n` +
+      `\nAnswer 5 quick questions - your application goes directly to the school.\n\n` +
       `*Step 1 of 5*\n` +
       `What is the *student's full name?*\n` +
       `_e.g. Tatenda Moyo_`
@@ -12559,7 +12559,7 @@ if (
     await _saUpdate("awaiting_grade", { studentName: _saName });
     const _saGrades = _saData.gradeOptions || [];
     if (_saGrades.length > 0 && _saGrades.length <= 10) {
-      // Show grade as a list so parent just taps — no typing
+      // Show grade as a list so parent just taps - no typing
       const _saRows = _saGrades.map(g => ({ id: `sa_grade_${g.replace(/\s+/g,"_")}`, title: g.slice(0,24) }));
       await sendList(from,
         `✅ *${_saName}*\n\n*Step 2 of 5*\nSelect the *grade or form* applying for:`,
@@ -12604,18 +12604,18 @@ if (
     );
     // Confirmation summary
     const _saSummary =
-      `📝 *Application Submitted — ${_saData.schoolName || "School"}*\n\n` +
-      `👤 Student: *${_saData.studentName || "—"}*\n` +
-      `📚 Grade: *${_saData.grade || "—"}*\n` +
-      `🎂 Date of Birth: *${_saData.dob || "—"}*\n` +
-      `👪 Parent/Guardian: *${_saData.parentName || "—"}*\n` +
+      `📝 *Application Submitted - ${_saData.schoolName || "School"}*\n\n` +
+      `👤 Student: *${_saData.studentName || "-"}*\n` +
+      `📚 Grade: *${_saData.grade || "-"}*\n` +
+      `🎂 Date of Birth: *${_saData.dob || "-"}*\n` +
+      `👪 Parent/Guardian: *${_saData.parentName || "-"}*\n` +
       `📞 Contact: *${_saData.parentPhone || (from.startsWith("263") ? "0"+from.slice(3) : from)}*`;
     await sendButtons(from, {
       text:
         `${_saSummary}\n\n` +
         `✅ *Application received!*\n` +
         `The school will contact you on *${_saData.parentPhone || (from.startsWith("263") ? "0"+from.slice(3) : from)}* shortly.\n\n` +
-        `_Keep WhatsApp open — the school may message you here too._`,
+        `_Keep WhatsApp open - the school may message you here too._`,
       buttons: [
         { id: `sfaq_enquiry_${_saId}`, title: "❓ Ask a Question" },
         { id: "school_search_refine",  title: "🏫 More Schools"  }
@@ -12647,9 +12647,9 @@ if (
             const _saTime = new Date().toLocaleString("en-GB",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit",timeZone:"Africa/Harare"});
             await _sbNotify(_saNorm, {
               text:
-                `✅ *New WhatsApp Application — ${_saSchool.schoolName}*\n\n` +
-                `👤 *${_saData.studentName || "—"}*  |  📚 ${_saData.grade || "—"}\n` +
-                `👪 Parent: *${_saData.parentName || "—"}*\n` +
+                `✅ *New WhatsApp Application - ${_saSchool.schoolName}*\n\n` +
+                `👤 *${_saData.studentName || "-"}*  |  📚 ${_saData.grade || "-"}\n` +
+                `👪 Parent: *${_saData.parentName || "-"}*\n` +
                 `📞 *${_saData.parentPhone || (from.startsWith("263") ? "0"+from.slice(3) : from)}*\n` +
                 `⏰ ${_saTime}\n\n` +
                 `_Full details sent to your email. Call the parent to confirm._`,
@@ -12663,9 +12663,9 @@ if (
   }
 }
 
-// ── school_apply_start_<id> — parent tapped "Apply on WhatsApp" button ──────
+// ── school_apply_start_<id> - parent tapped "Apply on WhatsApp" button ──────
 // Fires whether session is awaiting_start (fresh) or any other state (stale tap).
-// Always starts Step 1 questions immediately — never re-sends the menu.
+// Always starts Step 1 questions immediately - never re-sends the menu.
 if (a.startsWith("school_apply_start_")) {
   const _sasId = a.replace("school_apply_start_","").trim();
   try {
@@ -12706,7 +12706,7 @@ if (a.startsWith("school_apply_start_")) {
 
       // Send Step 1 immediately
       await sendText(from,
-        `📝 *Application — ${_sasSchoolName}*\n` +
+        `📝 *Application - ${_sasSchoolName}*\n` +
         (_sasIntakeYear ? `_${_sasIntakeYear}_\n` : "") +
         `\nAnswer 5 quick questions and your application goes directly to the school.\n\n` +
         `*Step 1 of 5*\n` +
@@ -12795,7 +12795,7 @@ if (!biz && !isMetaAction && flowSess?.tempData?.schoolEnquiryState === "school_
   }
 }
 
-// [APPLY:SCHOOL deep link now handled at top level — see top of file]
+// [APPLY:SCHOOL deep link now handled at top level - see top of file]
 
 // ── ZQ deep-link intercept (ZQ:SCHOOL:id and ZQ:SUPPLIER:id) ────────────────
 // FIX: tightened regex to require valid 24-char hex ID, and sanitize text to
@@ -12867,7 +12867,7 @@ if (!isMetaAction && /^(my card|staff card|my link|my qr)$/i.test(text.trim())) 
   if (_handled) return;
 }
 
-// [REMOVED: old school_apply_ handler — now handled by school_apply_start_ above]
+// [REMOVED: old school_apply_ handler - now handled by school_apply_start_ above]
 
 // ── School FAQ chatbot (sfaq_ actions) ───────────────────────────────────────
 if (a.startsWith("sfaq_")) {
@@ -12890,7 +12890,7 @@ if (a.startsWith("zqg_sel_")) {
 if (a.startsWith("sc_")) {
   // ── Staff card actions (sc_staff_share_ / sc_staff_stats_) ───────────────
   // These must be checked BEFORE the main sc_ router because they don't follow
-  // the standard sc_<topic>_<supplierId> pattern — they use a staffCardId.
+  // the standard sc_<topic>_<supplierId> pattern - they use a staffCardId.
   if (a.startsWith("sc_staff_")) {
     const _staffHandled = await handleStaffCardAction({ from, action: a });
     if (_staffHandled) return;
@@ -12901,7 +12901,7 @@ if (a.startsWith("sc_")) {
   // If the same phone previously received a marketplace seller notification and
   // still has sellerRequestReplyState in session, that stale state would cause
   // the BuyerRequest intercept (lines ~4746-4880) to fire and return
-  // "That request has closed." — completely wrong for a smart-link buyer.
+  // "That request has closed." - completely wrong for a smart-link buyer.
   // Clearing the stale state here prevents the bleed-through entirely.
   if (a.startsWith("sc_quote_") && !a.startsWith("sc_quote_confirm_") &&
       !a.startsWith("sc_quote_edit_") && !a.startsWith("sc_quote_done_") &&
@@ -12919,7 +12919,7 @@ if (a.startsWith("sc_")) {
           }},
           { upsert: true }
         );
-        console.log(`[SC_QUOTE_FIX] Cleared stale sellerRequestReplyState for ${phone} — smart-link quote wins`);
+        console.log(`[SC_QUOTE_FIX] Cleared stale sellerRequestReplyState for ${phone} - smart-link quote wins`);
       }
     } catch (_sqErr) { /* non-critical */ }
   }
@@ -18397,7 +18397,7 @@ isService
 
 
 // ── Buyer request lane: entry menu ───────────────────────────────────────────
-// ── Buyer clarification reply — buyer tapped "I replied below" or typed response ──
+// ── Buyer clarification reply - buyer tapped "I replied below" or typed response ──
 // When a seller typed "ask: what size PVC elbow?" the bot asked the buyer.
 // Now the buyer's next message (or button tap) is their answer.
 // We relay it back to the seller immediately so they can price accurately.
@@ -18473,7 +18473,7 @@ if (!isMetaAction && text && text.trim().length > 1) {
   return sendButtons(from, {
     text:
       `⚡ *Request Sellers*\n\n` +
-      `Type what you need — *any way you like.*\n` +
+      `Type what you need - *any way you like.*\n` +
       `You can write a full sentence, a short phrase, or a list.\n\n` +
       `─────────────────\n` +
       `*💬 Write naturally:*\n` +

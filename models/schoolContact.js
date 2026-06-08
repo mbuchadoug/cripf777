@@ -7,7 +7,7 @@
 //   - Submitted an application                (source: "apply", converted: true)
 //   - Sent an enquiry                         (source: "enquiry")
 //
-// One record per (phone + schoolId) combination — upserted on each interaction.
+// One record per (phone + schoolId) combination - upserted on each interaction.
 // Used for:
 //   - Follow-up campaigns by school admins
 //   - Conversion tracking (viewed → applied → enrolled)

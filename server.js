@@ -101,7 +101,7 @@ import lmsApiRoutes from "./routes/lms_api.js";
 import adminRoutes from "./routes/admin.js"; // merged admin (includes import/upload UI)
 import supplierAdminRoutes from "./routes/supplierAdmin.js"; // ← ADD THIS
 import schoolAdminRoutes from "./routes/schoolAdmin.js";
-import schoolApplyRouter from "./routes/schoolApplyRouter.js"; // Public apply form — mounted at root
+import schoolApplyRouter from "./routes/schoolApplyRouter.js"; // Public apply form - mounted at root
 import User from "./models/user.js";
 import adminAttempts from "./routes/admin_attempts.js";
 // org-specific quiz API (if present)

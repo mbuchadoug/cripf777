@@ -161,15 +161,15 @@ export async function startSchoolApplicationForm({ from, school, UserSession }) 
   await sendButtons(from, {
     text:
       profileCard +
-      `\n📝 *How to Apply${intakeLabel ? " — " + intakeLabel : ""}*\n\n` +
+      `\n📝 *How to Apply${intakeLabel ? " - " + intakeLabel : ""}*\n\n` +
       `You have *3 options:*\n\n` +
-      `1️⃣ *WhatsApp form* — tap button below, answer 5 questions\n\n` +
-      `2️⃣ *Web form* — fill online on your phone or computer:\n` +
+      `1️⃣ *WhatsApp form* - tap button below, answer 5 questions\n\n` +
+      `2️⃣ *Web form* - fill online on your phone or computer:\n` +
       `${webFormUrl}\n\n` +
-      `3️⃣ *Download PDF* — print and hand in at the school:\n` +
+      `3️⃣ *Download PDF* - print and hand in at the school:\n` +
       (_rawFormUrl
         ? `${_rawFormUrl}\n`
-        : `_No PDF form set yet — contact school directly_\n`) +
+        : `_No PDF form set yet - contact school directly_\n`) +
       `\n_All submissions go directly to ${school.schoolName}._`,
     buttons: [
       { id: `school_apply_start_${school._id}`, title: "📝 Apply on WhatsApp" },
@@ -183,7 +183,7 @@ export async function startSchoolApplicationForm({ from, school, UserSession }) 
       await sendDocument(from, {
         link:     _brochureUrl,
         filename: _brochureName,
-        caption:  `📄 *${school.schoolName} — School Brochure*\n_Save this for your records._`
+        caption:  `📄 *${school.schoolName} - School Brochure*\n_Save this for your records._`
       });
     } catch (_be) { console.warn("[SCHOOL BROCHURE SEND]", _be.message); }
   }
@@ -195,14 +195,14 @@ export async function startSchoolApplicationForm({ from, school, UserSession }) 
         link:     _rawFormUrl,
         filename: _rawFormName,
         caption:
-          `📋 *Printable Application Form — ${school.schoolName}*\n` +
+          `📋 *Printable Application Form - ${school.schoolName}*\n` +
           `_Print, fill in, and hand in at the school office._`
       });
     } catch (_re) { console.warn("[SCHOOL RAW FORM SEND]", _re.message); }
   }
 
   // ── Pre-set session state so "Apply on WhatsApp" button immediately starts questions ──
-  // Set to awaiting_start — NOT awaiting_student_name.
+  // Set to awaiting_start - NOT awaiting_student_name.
   // Step 1 is sent only when parent taps the "📝 Apply on WhatsApp" button.
   // This prevents questions appearing BEFORE the parent has tapped anything.
   await UserSession.findOneAndUpdate(
@@ -236,20 +236,20 @@ export async function emailApplicationToSchool({ school, data, applicantPhone })
       hour: "2-digit", minute: "2-digit", timeZone: "Africa/Harare"
     });
     const rows = [
-      ["Student Full Name",     data.studentName    || "—"],
-      ["Grade / Form",          data.grade          || "—"],
-      ["Date of Birth",         data.dob            || "—"],
-      ["Parent / Guardian",     data.parentName     || "—"],
+      ["Student Full Name",     data.studentName    || "-"],
+      ["Grade / Form",          data.grade          || "-"],
+      ["Date of Birth",         data.dob            || "-"],
+      ["Parent / Guardian",     data.parentName     || "-"],
       ["Parent Contact Phone",  data.parentPhone    || _displayPhone(applicantPhone)],
       ["WhatsApp Number",       _displayPhone(applicantPhone)],
-      ["School Applying For",   school.schoolName   || "—"],
-      ["Intake Year",           data.intakeYear     || school.applicationForm?.intakeYear || "—"],
+      ["School Applying For",   school.schoolName   || "-"],
+      ["Intake Year",           data.intakeYear     || school.applicationForm?.intakeYear || "-"],
       ["Submitted",             timeStr]
     ];
     // Add any custom field answers
     if (data.customAnswers) {
       for (const [q, a] of Object.entries(data.customAnswers)) {
-        rows.push([q, a || "—"]);
+        rows.push([q, a || "-"]);
       }
     }
     const tableRows = rows.map(([k, v]) =>
@@ -287,7 +287,7 @@ export async function emailApplicationToSchool({ school, data, applicantPhone })
     await transporter.sendMail({
       from:    `"${FROM_NAME}" <${FROM_EMAIL}>`,
       to:      toEmail,
-      subject: `New Application: ${data.studentName || "Student"} — ${data.grade || ""} — ${school.schoolName}`,
+      subject: `New Application: ${data.studentName || "Student"} - ${data.grade || ""} - ${school.schoolName}`,
       html
     });
     console.log(`[SCHOOL APPLY EMAIL] Sent to ${toEmail} for ${data.studentName} @ ${school.schoolName}`);
@@ -311,13 +311,13 @@ export async function notifySchoolWebSubmission({ school, data, applicantPhone }
       });
       await _sb(notifyNum, {
         text:
-          `📋 *New Web Application — ${school.schoolName}*\n\n` +
-          `👤 Student: *${data.studentName || "—"}*\n` +
-          `📚 Grade: *${data.grade || "—"}*\n` +
-          `🎂 DOB: *${data.dob || "—"}*\n` +
-          `👪 Parent: *${data.parentName || "—"}*\n` +
-          `📞 Contact: *${data.parentPhone || "—"}*\n` +
-          `📧 Email: *${data.parentEmail || "—"}*\n` +
+          `📋 *New Web Application - ${school.schoolName}*\n\n` +
+          `👤 Student: *${data.studentName || "-"}*\n` +
+          `📚 Grade: *${data.grade || "-"}*\n` +
+          `🎂 DOB: *${data.dob || "-"}*\n` +
+          `👪 Parent: *${data.parentName || "-"}*\n` +
+          `📞 Contact: *${data.parentPhone || "-"}*\n` +
+          `📧 Email: *${data.parentEmail || "-"}*\n` +
           `⏰ ${timeStr}\n\n` +
           `_Submitted via ZimQuote web form. Full details sent to your email._`,
         buttons: [{ id: "school_my_profile", title: "🏫 My School" }]
@@ -332,10 +332,10 @@ export async function notifySchoolWebSubmission({ school, data, applicantPhone }
       const parentNum = _normPhone(applicantPhone);
       await _sb2(parentNum, {
         text:
-          `✅ *Application Received — ${school.schoolName}*\n\n` +
-          `👤 Student: *${data.studentName || "—"}*\n` +
-          `📚 Grade: *${data.grade || "—"}*\n` +
-          `👪 Parent: *${data.parentName || "—"}*\n\n` +
+          `✅ *Application Received - ${school.schoolName}*\n\n` +
+          `👤 Student: *${data.studentName || "-"}*\n` +
+          `📚 Grade: *${data.grade || "-"}*\n` +
+          `👪 Parent: *${data.parentName || "-"}*\n\n` +
           `The school will contact you on *${data.parentPhone || _displayPhone(applicantPhone)}* shortly.\n\n` +
           `📞 ${school.contactPhone || school.phone || ""}`,
         buttons: [

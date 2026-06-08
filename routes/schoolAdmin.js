@@ -946,7 +946,7 @@ router.get("/schools/:id", requireSupplierAdmin, async (req, res) => {
                 </div>
                 <a href="${_webUrl}" target="_blank" class="btn btn-sm btn-green" style="white-space:nowrap">🔗 Open</a>
               </div>
-              ${_rawUrl ? `<div style="font-size:12px;color:#16a34a;margin-bottom:4px">📋 Printable form: <a href="${esc(_rawUrl)}" target="_blank" style="color:#1d4ed8">${esc(_af.rawFormName||"Application Form")}</a></div>` : `<div style="font-size:12px;color:#94a3b8">📋 No printable form set — <a href="/zq-admin/schools/${school._id}/edit" style="color:#1d4ed8">Set in Edit page</a></div>`}
+              ${_rawUrl ? `<div style="font-size:12px;color:#16a34a;margin-bottom:4px">📋 Printable form: <a href="${esc(_rawUrl)}" target="_blank" style="color:#1d4ed8">${esc(_af.rawFormName||"Application Form")}</a></div>` : `<div style="font-size:12px;color:#94a3b8">📋 No printable form set - <a href="/zq-admin/schools/${school._id}/edit" style="color:#1d4ed8">Set in Edit page</a></div>`}
               ${_brochureUrl ? `<div style="font-size:12px;color:#16a34a">📄 Brochure: <a href="${esc(_brochureUrl)}" target="_blank" style="color:#1d4ed8">${esc(_af.brochureName||school.brochures?.[0]?.label||"Brochure")}</a></div>` : ""}
               ${_af.intakeYear ? `<div style="font-size:12px;color:#64748b;margin-top:4px">📋 Intake: ${esc(_af.intakeYear)}</div>` : ""}
               ${_af.gradeOptions?.length ? `<div style="font-size:12px;color:#64748b">📚 Grades: ${esc(_af.gradeOptions.join(", "))}</div>` : ""}
@@ -998,14 +998,14 @@ router.get("/schools/:id", requireSupplierAdmin, async (req, res) => {
               <h3>🏊 Facilities (${(school.facilities || []).length})</h3>
               <a href="/zq-admin/schools/${school._id}/edit" class="btn btn-sm btn-blue">✏️ Edit</a>
             </div>
-            <p style="font-size:13px;line-height:1.8">${facilitiesText || '<em style="color:var(--muted)">None set — click Edit to add</em>'}</p>
+            <p style="font-size:13px;line-height:1.8">${facilitiesText || '<em style="color:var(--muted)">None set - click Edit to add</em>'}</p>
           </div>
           <div class="panel">
             <div class="panel-head">
               <h3>🏃 Extramural (${(school.extramuralActivities || []).length})</h3>
               <a href="/zq-admin/schools/${school._id}/edit" class="btn btn-sm btn-blue">✏️ Edit</a>
             </div>
-            <p style="font-size:13px;line-height:1.8">${extramuralText || '<em style="color:var(--muted)">None set — click Edit to add</em>'}</p>
+            <p style="font-size:13px;line-height:1.8">${extramuralText || '<em style="color:var(--muted)">None set - click Edit to add</em>'}</p>
           </div>
         </div>
       </div>
@@ -1541,18 +1541,18 @@ router.get("/schools/:id/edit", requireSupplierAdmin, async (req, res) => {
               <span style="font-size:11px;color:var(--muted)">Sent from info@zimquote.co.zw</span>
             </div>
             <div class="fg full">
-              <label>Grade Options (comma-separated — shown as tap list to parents on WhatsApp)</label>
+              <label>Grade Options (comma-separated - shown as tap list to parents on WhatsApp)</label>
               <input name="afGradeOptions"
                      value="${esc((school.applicationForm?.gradeOptions||[]).join(', '))}"
                      placeholder="e.g. Form 1, Form 2, Form 3, Form 4, Form 5, Form 6" />
             </div>
             <div class="fg full">
-              <label>Application Form PDF URL (printable — sent to parents via WhatsApp)</label>
+              <label>Application Form PDF URL (printable - sent to parents via WhatsApp)</label>
               <input name="afRawFormUrl"
                      value="${esc(school.applicationForm?.rawFormUrl||school.applicationFormUrl||'')}"
                      placeholder="https://..." />
               ${school.applicationForm?.rawFormUrl||school.applicationFormUrl
-                ? `<span style="font-size:11px;color:#16a34a">✅ PDF set — <a href="${esc(school.applicationForm?.rawFormUrl||school.applicationFormUrl)}" target="_blank">Preview</a></span>`
+                ? `<span style="font-size:11px;color:#16a34a">✅ PDF set - <a href="${esc(school.applicationForm?.rawFormUrl||school.applicationFormUrl)}" target="_blank">Preview</a></span>`
                 : `<span style="font-size:11px;color:var(--muted)">Paste a public URL or upload via the Brochures panel below</span>`}
             </div>
           </div>
@@ -3783,6 +3783,6 @@ router.post("/schools/:id/faq/q/:qId/move", requireSupplierAdmin, async (req, re
 });
 
 
-// [Apply routes moved to routes/schoolApplyRouter.js — mount at root: app.use('/', schoolApplyRouter)]
+// [Apply routes moved to routes/schoolApplyRouter.js - mount at root: app.use('/', schoolApplyRouter)]
 
 export default router;

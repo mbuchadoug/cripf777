@@ -229,7 +229,7 @@ console.log("Full msg:", JSON.stringify(msg, null, 2));
 
       if (sess?.tempData?.buyerRequestState === "awaiting_photo_upload") {
         try {
-          // Download image from Meta immediately — mediaIds expire in ~10 minutes
+          // Download image from Meta immediately - mediaIds expire in ~10 minutes
           const token  = process.env.META_ACCESS_TOKEN;
           const metaRes = await axios.get(`https://graph.facebook.com/v24.0/${mediaId}`, {
             headers: { Authorization: `Bearer ${token}` }
@@ -269,7 +269,7 @@ console.log("Full msg:", JSON.stringify(msg, null, 2));
         return;
       }
 
-      // ── Unknown image context — ignore silently ─────────────────────────────
+      // ── Unknown image context - ignore silently ─────────────────────────────
       return;
     }
 
@@ -360,7 +360,7 @@ if (msg.type === "text") {
   const rawText = (msg.text?.body || "").trim();
   const lowered = rawText.toLowerCase();
 
-  // ── ZQ:REQUEST deep link — drops buyer straight into Request Sellers flow ──
+  // ── ZQ:REQUEST deep link - drops buyer straight into Request Sellers flow ──
   // Share link: https://wa.me/263771143904?text=ZQ%3AREQUEST
   if (/^ZQ:REQUEST$/i.test(rawText)) {
     action = "sup_request_sellers";

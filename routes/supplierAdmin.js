@@ -4894,14 +4894,14 @@ const _schProfileLink = id => `https://wa.me/${_SCHOOL_BOT}?text=${encodeURIComp
 const _schApplyLink   = id => `https://wa.me/${_SCHOOL_BOT}?text=${encodeURIComponent("APPLY:SCHOOL:"+id)}`;
 const _schQr = (data,size=300,col="1a3c5e") => `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(data)}&color=${col}&bgcolor=FFFFFF&qzone=2`;
 
-// GET /zq-admin/schools/:id — school profile + settings
+// GET /zq-admin/schools/:id - school profile + settings
 // GET /schools/new - guard: schoolAdmin.js handles this; redirect so supplierAdmin :id doesn't catch it
 router.get("/schools/new", requireSupplierAdmin, (req, res) => {
   res.redirect("/zq-admin/schools/new");
 });
 
 router.get("/schools/:id", requireSupplierAdmin, async (req, res) => {
-  // Guard: validate ObjectId before querying — "new" and other non-ID strings would cause CastError
+  // Guard: validate ObjectId before querying - "new" and other non-ID strings would cause CastError
   const mongoose = (await import("mongoose")).default;
   if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
     return res.redirect("/zq-admin/schools");
@@ -4928,7 +4928,7 @@ router.get("/schools/:id", requireSupplierAdmin, async (req, res) => {
     const webQr      = school.registrationLink ? _schQr(school.registrationLink,220,"7c3aed") : null;
     const ok         = req.query.success||"";
     const er         = req.query.error||"";
-    res.send(layout(`${esc(school.schoolName)} — Admin`, `
+    res.send(layout(`${esc(school.schoolName)} - Admin`, `
 <style>
 .sg{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:22px}
 @media(max-width:660px){.sg{grid-template-columns:1fr}}
@@ -4998,13 +4998,13 @@ ${er?`<div style="background:#fef2f2;border:1px solid #fecaca;color:#dc2626;padd
   </div>
 </div>
 <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px 18px;margin-bottom:22px">
-  <div style="font-size:12px;font-weight:700;color:#16a34a;margin-bottom:8px">🌐 Web Application Form — share this link with parents</div>
+  <div style="font-size:12px;font-weight:700;color:#16a34a;margin-bottom:8px">🌐 Web Application Form - share this link with parents</div>
   <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px">
     <code style="font-size:12px;background:white;padding:7px 10px;border-radius:6px;border:1px solid #bbf7d0;flex:1;word-break:break-all">https://cripfcnt.com/apply/school/${esc(String(school._id))}</code>
     <a href="/apply/school/${esc(String(school._id))}" target="_blank" class="btn btn-sm" style="background:#dcfce7;color:#16a34a;white-space:nowrap">🔗 Open</a>
   </div>
   <p style="font-size:11px;color:#166534;line-height:1.5">
-    Share on <strong>Facebook, school website, WhatsApp groups, email</strong> — parents open it in their browser, fill the form, and submission goes directly to your email. 
+    Share on <strong>Facebook, school website, WhatsApp groups, email</strong> - parents open it in their browser, fill the form, and submission goes directly to your email. 
     No login needed. Works on any phone.
   </p>
   <p style="font-size:11px;color:#94a3b8;margin-top:4px">
@@ -5075,7 +5075,7 @@ ${(()=>{
         <div>
           <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px">Upload File (PDF, image)</label>
           <input type="file" id="schBrochureFile" accept=".pdf,.jpg,.jpeg,.png,.webp" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:white">
-          <p style="font-size:11px;color:var(--muted);margin-top:3px">Upload PDF or image directly — or paste a URL below</p>
+          <p style="font-size:11px;color:var(--muted);margin-top:3px">Upload PDF or image directly - or paste a URL below</p>
           <div id="schUploadStatus" style="font-size:12px;margin-top:6px;display:none"></div>
         </div>
         <div>
@@ -5086,7 +5086,7 @@ ${(()=>{
       <div>
         <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px">Brochure URL (paste Google Drive / Dropbox public link, or uploaded above)</label>
         <input name="brochureUrl" id="schBrochureUrl" value="${esc(form.brochureUrl||"")}" placeholder="https://..." style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px">
-        ${form.brochureUrl?`<p style="font-size:11px;color:#16a34a;margin-top:4px">✅ Brochure set — <a href="${esc(form.brochureUrl)}" target="_blank" style="color:#1d4ed8">Preview</a></p>`:'<p style="font-size:11px;color:var(--muted);margin-top:3px">Sent automatically to parents when they open the apply form</p>'}
+        ${form.brochureUrl?`<p style="font-size:11px;color:#16a34a;margin-top:4px">✅ Brochure set - <a href="${esc(form.brochureUrl)}" target="_blank" style="color:#1d4ed8">Preview</a></p>`:'<p style="font-size:11px;color:var(--muted);margin-top:3px">Sent automatically to parents when they open the apply form</p>'}
       </div>
     </div>
     <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:16px;margin-bottom:16px">
@@ -5105,7 +5105,7 @@ ${(()=>{
       <div>
         <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px">Raw Form URL</label>
         <input name="rawFormUrl" id="schRawFormUrl" value="${esc(form.rawFormUrl||"")}" placeholder="https://..." style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px">
-        ${form.rawFormUrl?`<p style="font-size:11px;color:#16a34a;margin-top:4px">✅ Form set — <a href="${esc(form.rawFormUrl)}" target="_blank" style="color:#1d4ed8">Preview / Download</a></p>`:'<p style="font-size:11px;color:var(--muted);margin-top:3px">Parents see a "Download Form" button when they open your apply link</p>'}
+        ${form.rawFormUrl?`<p style="font-size:11px;color:#16a34a;margin-top:4px">✅ Form set - <a href="${esc(form.rawFormUrl)}" target="_blank" style="color:#1d4ed8">Preview / Download</a></p>`:'<p style="font-size:11px;color:var(--muted);margin-top:3px">Parents see a "Download Form" button when they open your apply link</p>'}
       </div>
     </div>
     <button type="submit" class="btn btn-blue">💾 Save Settings</button>
@@ -5151,7 +5151,7 @@ ${(()=>{
           urlInput.value  = d.url;
           nameInput.value = file.name;
           status.style.color   = "#16a34a";
-          status.textContent   = "✅ Uploaded: " + file.name + " — Save Settings to apply.";
+          status.textContent   = "✅ Uploaded: " + file.name + " - Save Settings to apply.";
         } else {
           status.style.color  = "#dc2626";
           status.textContent  = "❌ Upload failed: " + (d.error||"unknown error");
@@ -5223,14 +5223,14 @@ ${(()=>{
       <div>
         <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:#374151">School Type</label>
         <select name="schoolType" style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;background:white">
-          <option value="">— Select —</option>
+          <option value="">- Select -</option>
           ${[["ecd","ECD / Pre-School"],["primary","Primary"],["secondary","Secondary"],["combined","Combined"]].map(([v,l])=>`<option value="${v}"${(school.schoolType||"")==v?" selected":""}>${l}</option>`).join("")}
         </select>
       </div>
       <div>
         <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:#374151">Ownership</label>
         <select name="ownership" style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;background:white">
-          <option value="">— Select —</option>
+          <option value="">- Select -</option>
           ${[["government","Government"],["mission","Mission"],["private","Private"],["council","Council"]].map(([v,l])=>`<option value="${v}"${(school.ownership||"")==v?" selected":""}>${l}</option>`).join("")}
         </select>
       </div>
@@ -5246,18 +5246,18 @@ ${(()=>{
         <p style="font-size:11px;color:var(--muted);margin-top:3px">Comma-separated: cambridge, zimsec, ib</p>
       </div>
       <div>
-        <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:#374151">Fees — Term 1 ($)</label>
+        <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:#374151">Fees - Term 1 ($)</label>
         <input name="fees_term1" type="number" value="${school.fees?.term1||""}" style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:7px;font-size:13px" placeholder="e.g. 800">
       </div>
       <div>
-        <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:#374151">Fees — Term 2 ($)</label>
+        <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:#374151">Fees - Term 2 ($)</label>
         <input name="fees_term2" type="number" value="${school.fees?.term2||""}" style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:7px;font-size:13px" placeholder="e.g. 800">
       </div>
     </div>
 
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px">
       <div>
-        <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:#374151">Fees — Term 3 ($)</label>
+        <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:#374151">Fees - Term 3 ($)</label>
         <input name="fees_term3" type="number" value="${school.fees?.term3||""}" style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:7px;font-size:13px" placeholder="e.g. 800">
       </div>
       <div>
@@ -5337,7 +5337,7 @@ ${(()=>{
     <div style="margin-bottom:20px">
       <div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:6px;padding-bottom:6px;border-bottom:1.5px solid var(--border)">
         📲 Notification Contacts
-        <span style="font-weight:400;font-size:11px;color:var(--muted)"> — Extra numbers that receive WhatsApp alerts when parents open school links</span>
+        <span style="font-weight:400;font-size:11px;color:var(--muted)"> - Extra numbers that receive WhatsApp alerts when parents open school links</span>
       </div>
       <div id="notifContactsList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px">
         ${(school.notificationContacts||[]).map((p,i)=>`
@@ -5389,7 +5389,7 @@ router.post("/schools/:id/toggle-active", requireSupplierAdmin, async(req,res) =
     const sc = await SP.findById(req.params.id).lean();
     if(!sc) return res.redirect("/zq-admin/schools");
     await SP.findByIdAndUpdate(req.params.id, { $set: { active: !sc.active } });
-    res.redirect(`/zq-admin/schools/${req.params.id}?success=${encodeURIComponent(!sc.active ? "School activated — now visible to parents." : "School deactivated — hidden from search.")}`);
+    res.redirect(`/zq-admin/schools/${req.params.id}?success=${encodeURIComponent(!sc.active ? "School activated - now visible to parents." : "School deactivated - hidden from search.")}`);
   } catch(err) { res.redirect(`/zq-admin/schools/${req.params.id}?error=${encodeURIComponent(err.message)}`); }
 });
 
@@ -5400,7 +5400,7 @@ router.post("/schools/:id/toggle-verified", requireSupplierAdmin, async(req,res)
     const sc = await SP.findById(req.params.id).lean();
     if(!sc) return res.redirect("/zq-admin/schools");
     await SP.findByIdAndUpdate(req.params.id, { $set: { verified: !sc.verified } });
-    res.redirect(`/zq-admin/schools/${req.params.id}?success=${encodeURIComponent(!sc.verified ? "School verified ✅ — badge now shown to parents." : "Verification removed.")}`);
+    res.redirect(`/zq-admin/schools/${req.params.id}?success=${encodeURIComponent(!sc.verified ? "School verified ✅ - badge now shown to parents." : "Verification removed.")}`);
   } catch(err) { res.redirect(`/zq-admin/schools/${req.params.id}?error=${encodeURIComponent(err.message)}`); }
 });
 
@@ -5490,7 +5490,7 @@ router.post("/schools/:id/apply-settings", requireSupplierAdmin, async(req,res) 
   }catch(err){res.redirect(`/zq-admin/schools/${req.params.id}?error=${encodeURIComponent(err.message)}`);}
 });
 
-// GET apply-qr — QR poster page
+// GET apply-qr - QR poster page
 router.get("/schools/:id/apply-qr", requireSupplierAdmin, async(req,res) => {
   try {
     const SP = (await import("../models/schoolProfile.js")).default;
@@ -5503,7 +5503,7 @@ router.get("/schools/:id/apply-qr", requireSupplierAdmin, async(req,res) => {
     const lo  = esc([school.suburb,school.city].filter(Boolean).join(", "));
     const iy  = esc(school.applicationForm?.intakeYear||"");
     res.send(`<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Apply QR — ${nm}</title>
+<title>Apply QR - ${nm}</title>
 <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,sans-serif;background:#f8fafc;padding:24px}
 .hd{text-align:center;margin-bottom:28px}.hd h1{font-size:22px;font-weight:800;color:#1a3c5e}
 .hd p{font-size:14px;color:#64748b;margin-top:6px}
@@ -5543,7 +5543,7 @@ ${wqr ? `<div class="cd"><span class="bg" style="background:#ede9fe;color:#7c3ae
 </div>
 <div class="tp np"><strong>💡 Where to use these QR codes:</strong><br>
 Print on <strong>flyers, gate signage, notice boards</strong> and share on social media (Facebook, WhatsApp Status, Instagram).<br>
-The WhatsApp QR works on <strong>any phone with WhatsApp</strong> — no login or download needed.</div>
+The WhatsApp QR works on <strong>any phone with WhatsApp</strong> - no login or download needed.</div>
 <a href="/zq-admin/schools/${esc(String(school._id))}" class="bk np">← Back to School Profile</a>
 </body></html>`);
   }catch(err){res.status(500).send("Error: "+err.message);}
@@ -5572,12 +5572,12 @@ router.get("/schools/:id/contacts", requireSupplierAdmin, async(req,res) => {
   <br><span style="font-size:10px;color:var(--muted)">${c.viewCount>1?`${c.viewCount} views · `:""} ${esc(new Date(c.firstSeen).toLocaleDateString("en-GB",{day:"numeric",month:"short"}))}</span>
 </td>
 <td style="padding:9px 12px;border-bottom:1px solid var(--border);font-size:13px">
-  ${esc(d.studentName||c.studentName||"—")}
+  ${esc(d.studentName||c.studentName||"-")}
   <br><span style="font-size:11px;color:#7c3aed">${esc(d.grade||c.gradeInterest||"")}</span>
   ${d.dob?`<br><span style="font-size:10px;color:var(--muted)">DOB: ${esc(d.dob)}</span>`:""}
 </td>
 <td style="padding:9px 12px;border-bottom:1px solid var(--border);font-size:13px">
-  ${esc(d.parentName||c.parentName||"—")}
+  ${esc(d.parentName||c.parentName||"-")}
   ${_parentPhone?`<br><span style="font-size:11px;color:var(--muted)">${esc(_parentPhone)}</span>`:""}
 </td>
 <td style="padding:9px 12px;border-bottom:1px solid var(--border);font-size:12px">
@@ -5592,7 +5592,7 @@ router.get("/schools/:id/contacts", requireSupplierAdmin, async(req,res) => {
 <select name="status" onchange="this.form.submit()" style="font-size:11px;padding:3px 6px;border:1px solid var(--border);border-radius:6px;background:${sCol[c.status]||"white"}">
 ${["new","contacted","enrolled","not_interested"].map(s=>`<option value="${s}"${c.status===s?" selected":""}>${sLbl[s]}</option>`).join("")}
 </select></form></td></tr>`;}).join("");
-    res.send(layout(`Contacts — ${esc(school.schoolName)}`,`
+    res.send(layout(`Contacts - ${esc(school.schoolName)}`,`
 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:10px">
 <div><h1 style="font-size:18px;font-weight:800;margin:0">👥 ${esc(school.schoolName)} Contacts</h1>
 <p style="font-size:12px;color:var(--muted);margin-top:3px">${contacts.length} total · ${contacts.filter(c=>c.converted).length} applications</p></div>
@@ -10317,7 +10317,7 @@ router.get("/suppliers/:id/staff-cards", requireSupplierAdmin, async (req, res) 
         <td style="padding:12px 8px;vertical-align:middle">
           <span style="display:inline-block;width:32px;height:32px;border-radius:50%;background:#e0e7ff;color:#4f46e5;text-align:center;line-height:32px;font-size:13px;font-weight:700;margin-right:8px;vertical-align:middle">${esc(card.name.charAt(0).toUpperCase())}</span>
           <strong style="font-size:14px">${esc(card.name)}</strong><br>
-          <span style="font-size:11px;color:#888;margin-left:40px">${esc(card.title||"—")}</span>
+          <span style="font-size:11px;color:#888;margin-left:40px">${esc(card.title||"-")}</span>
           ${card.locationLabel?`<br><span style="font-size:11px;color:#aaa;margin-left:40px">📍 ${esc(card.locationLabel)}</span>`:""}
         </td>
         <td style="padding:12px 8px;vertical-align:middle;font-size:13px">${esc(card.phone)}${card.email?`<br><span style="color:#888;font-size:11px">${esc(card.email)}</span>`:""}</td>
@@ -10384,7 +10384,7 @@ router.post("/suppliers/:id/staff-cards/add", requireSupplierAdmin, async (req, 
     if (!name?.trim()) return res.redirect(`/zq-admin/suppliers/${req.params.id}/staff-cards?error=Name+is+required`);
     let phone = String(rawPhone||"").replace(/\D+/g,"");
     if (phone.startsWith("0")&&phone.length===10) phone="263"+phone.slice(1);
-    if (!phone||phone.length<9) return res.redirect(`/zq-admin/suppliers/${req.params.id}/staff-cards?error=${encodeURIComponent("Invalid phone — use 07xxxxxxxx or 263xxxxxxxxx")}`);
+    if (!phone||phone.length<9) return res.redirect(`/zq-admin/suppliers/${req.params.id}/staff-cards?error=${encodeURIComponent("Invalid phone - use 07xxxxxxxx or 263xxxxxxxxx")}`);
     const card = await StaffCard.create({
       supplierId: req.params.id, name: name.trim(), title: (title||"").trim(), phone,
       email: (email||"").trim(), locationLabel: (locationLabel||"").trim(),
@@ -10610,7 +10610,7 @@ router.get("/suppliers/:id/staff-cards/:cid/business-card", requireSupplierAdmin
 
 
 // ═════════════════════════════════════════════════════════════════════════════
-// PUBLIC SCHOOL APPLICATION FORM — no auth required
+// PUBLIC SCHOOL APPLICATION FORM - no auth required
 // GET  /apply/school/:id          → web application form page
 // POST /apply/school/:id/submit   → handle web form submission
 // ═════════════════════════════════════════════════════════════════════════════
@@ -10634,7 +10634,7 @@ router.get("/apply/school/:id", async (req, res) => {
 
     const gradeSelect = gradeOpts.length
       ? `<select name="grade" required style="width:100%;padding:11px 14px;border:2px solid #e2e8f0;border-radius:8px;font-size:15px;background:white;appearance:none">
-           <option value="">— Select grade —</option>
+           <option value="">- Select grade -</option>
            ${gradeOpts.map(g => `<option value="${esc(g)}">${esc(g)}</option>`).join("")}
          </select>`
       : `<input name="grade" type="text" required placeholder="e.g. Form 1, Grade 7, ECD A" style="width:100%;padding:11px 14px;border:2px solid #e2e8f0;border-radius:8px;font-size:15px">`;
@@ -10644,7 +10644,7 @@ router.get("/apply/school/:id", async (req, res) => {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Apply — ${esc(school.schoolName)}</title>
+<title>Apply - ${esc(school.schoolName)}</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f0f4f8;min-height:100vh;padding:16px}
@@ -10721,7 +10721,7 @@ input:focus,select:focus,textarea:focus{border-color:#0ea5e9}
           <div class="field">
             <label>Gender</label>
             <select name="gender" style="width:100%;padding:11px 14px;border:2px solid #e2e8f0;border-radius:8px;font-size:15px;background:white">
-              <option value="">— Select —</option>
+              <option value="">- Select -</option>
               <option>Male</option><option>Female</option>
             </select>
           </div>
@@ -10750,7 +10750,7 @@ input:focus,select:focus,textarea:focus{border-color:#0ea5e9}
           <div class="field">
             <label>Relationship to Student</label>
             <select name="relationship" style="width:100%;padding:11px 14px;border:2px solid #e2e8f0;border-radius:8px;font-size:15px;background:white">
-              <option value="">— Select —</option>
+              <option value="">- Select -</option>
               <option>Father</option><option>Mother</option><option>Guardian</option><option>Other</option>
             </select>
           </div>
@@ -10823,7 +10823,7 @@ input:focus,select:focus,textarea:focus{border-color:#0ea5e9}
   }
 });
 
-// POST /apply/school/:id/submit — handle web form submission
+// POST /apply/school/:id/submit - handle web form submission
 router.post("/apply/school/:id/submit", async (req, res) => {
   try {
     const SP = (await import("../models/schoolProfile.js")).default;

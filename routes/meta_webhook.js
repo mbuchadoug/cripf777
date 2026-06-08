@@ -239,7 +239,7 @@ console.log("Full msg:", JSON.stringify(msg, null, 2));
 
       if (sess?.tempData?.buyerRequestState === "awaiting_photo_upload") {
         try {
-          // Download image from Meta immediately — mediaIds expire in ~10 minutes
+          // Download image from Meta immediately - mediaIds expire in ~10 minutes
           const token  = process.env.META_ACCESS_TOKEN;
           const metaRes = await axios.get(`https://graph.facebook.com/v24.0/${mediaId}`, {
             headers: { Authorization: `Bearer ${token}` }
@@ -252,7 +252,7 @@ console.log("Full msg:", JSON.stringify(msg, null, 2));
             responseType: "arraybuffer"
           });
 
-          // Save to project root docs/ — same folder served by express.static in server.js
+          // Save to project root docs/ - same folder served by express.static in server.js
           // Use __projectRoot (derived from import.meta.url) NOT process.cwd()
           // process.cwd() differs from __dirname under PM2 and causes 404s.
           const ext    = mime.includes("png") ? "png" : "jpg";
@@ -264,7 +264,7 @@ console.log("Full msg:", JSON.stringify(msg, null, 2));
 
           const siteUrl  = (process.env.SITE_URL || "").replace(/\/$/, "");
 
-          // ── STRICT: abort if SITE_URL is missing — relative URLs break Meta API ──
+          // ── STRICT: abort if SITE_URL is missing - relative URLs break Meta API ──
           // Meta's sendImage and admin panel both need a full https:// URL.
           // If SITE_URL is not set, the image is saved but unusable. Fail loudly.
           if (!siteUrl || !siteUrl.startsWith("http")) {
@@ -300,7 +300,7 @@ console.log("Full msg:", JSON.stringify(msg, null, 2));
         return;
       }
 
-      // ── Unknown image context — ignore silently ─────────────────────────────
+      // ── Unknown image context - ignore silently ─────────────────────────────
       return;
     }
 
@@ -391,7 +391,7 @@ if (msg.type === "text") {
   const rawText = (msg.text?.body || "").trim();
   const lowered = rawText.toLowerCase();
 
-  // ── ZQ:REQUEST deep link — drops buyer straight into Request Sellers flow ──
+  // ── ZQ:REQUEST deep link - drops buyer straight into Request Sellers flow ──
   // Share link: https://wa.me/263771143904?text=ZQ%3AREQUEST
   if (/^ZQ:REQUEST$/i.test(rawText)) {
     action = "sup_request_sellers";

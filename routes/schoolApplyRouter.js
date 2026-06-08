@@ -1,6 +1,6 @@
 // routes/schoolApplyRouter.js
 // ─────────────────────────────────────────────────────────────────────────────
-// Public school application form — NO auth required.
+// Public school application form - NO auth required.
 //
 // MOUNTED IN server.js:
 //   import schoolApplyRouter from "./routes/schoolApplyRouter.js";
@@ -57,7 +57,7 @@ router.get("/apply/school/:id", async (req, res) => {
 
     const gradeSelect = gradeOpts.length
       ? `<select name="grade" required style="width:100%;padding:13px 14px;border:2px solid #e2e8f0;border-radius:8px;font-size:16px;background:white;-webkit-appearance:none">
-           <option value="">— Select grade / form —</option>
+           <option value="">- Select grade / form -</option>
            ${gradeOpts.map(g => `<option value="${esc(g)}">${esc(g)}</option>`).join("")}
          </select>`
       : `<input name="grade" type="text" required placeholder="e.g. Form 1, Grade 7, ECD A"
@@ -68,7 +68,7 @@ router.get("/apply/school/:id", async (req, res) => {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>Apply — ${esc(school.schoolName)}</title>
+<title>Apply - ${esc(school.schoolName)}</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#f0f4f8;min-height:100vh}
@@ -140,7 +140,7 @@ footer a{color:#1a3c5e;font-weight:600;text-decoration:none}
       <p>Your application has been sent to <strong>${esc(school.schoolName)}</strong>.</p>
       <div class="nxt">
         📞 The school will call or WhatsApp you shortly on the number you provided.<br><br>
-        <strong>Keep your phone on</strong> — ${esc(school.schoolName)} will be in touch.
+        <strong>Keep your phone on</strong> - ${esc(school.schoolName)} will be in touch.
       </div>
     </div>`:`
 
@@ -172,7 +172,7 @@ footer a{color:#1a3c5e;font-weight:600;text-decoration:none}
         <div class="field">
           <label>Gender</label>
           <select name="gender">
-            <option value="">— Select —</option>
+            <option value="">- Select -</option>
             <option>Male</option><option>Female</option>
           </select>
         </div>
@@ -199,7 +199,7 @@ footer a{color:#1a3c5e;font-weight:600;text-decoration:none}
         <div class="field">
           <label>Relationship</label>
           <select name="relationship">
-            <option value="">— Select —</option>
+            <option value="">- Select -</option>
             <option>Father</option><option>Mother</option>
             <option>Guardian</option><option>Other</option>
           </select>
@@ -255,13 +255,13 @@ footer a{color:#1a3c5e;font-weight:600;text-decoration:none}
       <a href="${esc(brochureUrl)}" target="_blank" class="dl-link">
         <span class="ico">📄</span>
         <div><div>${esc(brochureName)}</div>
-        <div class="meta">School Brochure — tap to view &amp; save</div></div>
+        <div class="meta">School Brochure - tap to view &amp; save</div></div>
       </a>`:""}
       ${rawFormUrl?`
       <a href="${esc(rawFormUrl)}" target="_blank" class="dl-link">
         <span class="ico">📋</span>
         <div><div>${esc(rawFormName)}</div>
-        <div class="meta">Printable form — print &amp; hand in at school office</div></div>
+        <div class="meta">Printable form - print &amp; hand in at school office</div></div>
       </a>`:""}
     </div>`:""}
   </div>

@@ -40,7 +40,7 @@ const SpecialScoiAuditSchema = new mongoose.Schema({
   revisionPolicy: String,
 
   // ── matrix ────────────────────────────────────────────────────────────────
-  // e.g. "dual" — analytical matrix descriptor shown on cover and in profile
+  // e.g. "dual" - analytical matrix descriptor shown on cover and in profile
   matrix: String,
 
   // ── Core doctrine ─────────────────────────────────────────────────────────
