@@ -735,7 +735,7 @@ app.get("/", async (req, res) => {
           streamUrl: `/videos/${f.filename}`,
         }));
     } catch (vidErr) {
-      // GridFS not available yet — silently skip, videos section stays hardcoded
+      // GridFS not available yet - silently skip, videos section stays hardcoded
       console.warn("[Homepage videos]", vidErr.message);
     }
 
