@@ -715,13 +715,25 @@ app.get("/", async (req, res) => {
       const bucket = new GridFSBucket(db, { bucketName: "videos" });
       const files  = await bucket.find({}).sort({ uploadDate: 1 }).toArray();
 
-      featuredVideos = files.map(f => ({
-        filename:  f.filename,
-        title:     f.metadata?.title    || f.filename,
-        episode:   f.metadata?.episode  || "",
-        content:   f.metadata?.content  || "",
-        streamUrl: `/videos/${f.filename}`,
-      }));
+      // These two slugs are hardcoded in index.hbs (Episodes 01 & 02).
+      // Exclude them here so they never render twice.
+      const HARDCODED_SLUGS = new Set([
+        "primitive-accumulation-redistribution",
+        "you-were-never-weak",
+      ]);
+
+      featuredVideos = files
+        .filter(f => {
+          const slug = f.metadata?.slug || f.filename.replace(/\.[^.]+$/, "");
+          return !HARDCODED_SLUGS.has(slug);
+        })
+        .map(f => ({
+          filename:  f.filename,
+          title:     f.metadata?.title    || f.filename,
+          episode:   f.metadata?.episode  || "",
+          content:   f.metadata?.content  || "",
+          streamUrl: `/videos/${f.filename}`,
+        }));
     } catch (vidErr) {
       // GridFS not available yet — silently skip, videos section stays hardcoded
       console.warn("[Homepage videos]", vidErr.message);
