@@ -369,25 +369,9 @@ add: (a, b) => {
     if (varName) ctx[varName] = value;
 
     return options.fn ? options.fn(ctx) : "";
-  },
+  }
 
-  // formatVideoContent: plain text newlines -> HTML paragraphs
-  formatVideoContent: function(text) {
-    if (!text) return "";
-    var s = String(text)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;");
-    var NL = String.fromCharCode(10);
-    var blocks = s.split(NL + NL);
-    var html = blocks
-      .map(function(b) { return b.replace(new RegExp(String.fromCharCode(13), "g"), "").trim(); })
-      .filter(function(b) { return b.length > 0; })
-      .map(function(b) { return "<p>" + b.split(NL).join("<br>") + "</p>"; })
-      .join("");
-    return new Handlebars.SafeString(html);
-  },
-
+  
 };
 
 /*app.engine(
@@ -672,7 +656,8 @@ ${commentary}
 
 app.get("/", async (req, res) => {
   try {
-    // Fetch audits + GridFS videos in parallel
+    // Fetch a small sample of each type to show on the homepage.
+    // We deliberately limit to 3 each (6 total) so the page stays clean.
     const [latestSpecial, latestPlacement] = await Promise.all([
       SpecialScoiAudit.find({ isPaid: false })
         .sort({ createdAt: -1 })
@@ -684,6 +669,7 @@ app.get("/", async (req, res) => {
         .lean(),
     ]);
 
+    // Normalize so both types share the same shape the template expects
     const normalizedSpecial = latestSpecial.map(a => ({
       ...a,
       assessmentWindow: { label: a.assessmentWindow?.label || "Special Audit" },
@@ -697,47 +683,25 @@ app.get("/", async (req, res) => {
       auditKind: "placement",
     }));
 
+    // Show special reports first, then placement audits
     const featuredAudits = [...normalizedSpecial, ...normalizedPlacement];
 
+    // Also fetch the total count for the "X reports available" badge
     const [specialTotal, placementTotal] = await Promise.all([
       SpecialScoiAudit.countDocuments({ isPaid: false }),
       PlacementAudit.countDocuments({ status: "archived_reference" }),
     ]);
 
-    // ── Fetch dynamic videos from GridFS ──────────────────────────────────
-    // Episodes 01 & 02 are hardcoded in index.hbs.
-    // Any video uploaded via /admin/videos/upload appears here dynamically.
-    // Sorted by uploadDate ascending so episode numbers stay in order.
-    let featuredVideos = [];
-    try {
-      const { GridFSBucket } = await import("mongodb");
-      const db     = mongoose.connection.db;
-      const bucket = new GridFSBucket(db, { bucketName: "videos" });
-      const files  = await bucket.find({}).sort({ uploadDate: 1 }).toArray();
-
-      featuredVideos = files.map(f => ({
-        filename:  f.filename,
-        title:     f.metadata?.title    || f.filename,
-        episode:   f.metadata?.episode  || "",
-        content:   f.metadata?.content  || "",
-        streamUrl: `/videos/${f.filename}`,
-      }));
-    } catch (vidErr) {
-      // GridFS not available yet — silently skip, videos section stays hardcoded
-      console.warn("[Homepage videos]", vidErr.message);
-    }
-
     renderPage(res, "website/index", req, "/", {
       featuredAudits,
       totalAuditCount: specialTotal + placementTotal,
-      featuredVideos,
     });
   } catch (err) {
     console.error("[Homepage]", err);
+    // Graceful fallback - render homepage without audits if DB fails
     renderPage(res, "website/index", req, "/", {
       featuredAudits: [],
       totalAuditCount: 0,
-      featuredVideos: [],
     });
   }
 });

@@ -36,30 +36,6 @@
     background: #fff;
   }
 
-  .form-group textarea {
-    padding: 0.6rem 0.85rem;
-    border: 1.5px solid #e5e7eb;
-    border-radius: 6px;
-    font-size: 0.9rem;
-    font-family: inherit;
-    transition: border-color 0.2s;
-    background: #fafafa;
-    resize: vertical;
-    min-height: 180px;
-    line-height: 1.65;
-  }
-  .form-group textarea:focus {
-    outline: none;
-    border-color: #c9a84c;
-    background: #fff;
-  }
-  .char-count {
-    font-size: 0.75rem;
-    color: #9ca3af;
-    text-align: right;
-    margin-top: 0.2rem;
-  }
-
   .file-drop {
     border: 1.5px dashed #e5e7eb;
     border-radius: 6px;
@@ -213,12 +189,6 @@
       </div>
     </div>
 
-    <div class="form-group" style="grid-column: 1 / -1; margin-top:0.5rem;">
-      <label>Content / Analysis Text</label>
-      <textarea id="content" placeholder="Paste the full essay, analysis, or written content that accompanies this video. This will appear below the video on the website. Can be 20,000+ lines."></textarea>
-      <div class="char-count" id="charCount">0 characters</div>
-    </div>
-
     <div class="form-group">
       <label>Video File (MP4 / WebM / MOV - max 500 MB)</label>
       <div class="file-drop" id="dropZone">
@@ -307,13 +277,11 @@
     if (!slug)  return showResult("error", "Please enter a slug (URL key).");
     if (!title) return showResult("error", "Please enter a title.");
 
-    const content = document.getElementById("content").value.trim();
     const formData = new FormData();
     formData.append("video",   file);
     formData.append("slug",    slug);
     formData.append("title",   title);
     formData.append("episode", episode);
-    formData.append("content", content);
 
     btn.disabled = true;
     progressWrap.style.display = "block";
@@ -340,8 +308,6 @@
           addToList(data, slug, episode, title);
           fileInput.value = "";
           fileNameEl.textContent = "";
-          document.getElementById("content").value = "";
-          document.getElementById("charCount").textContent = "0 characters";
         } else {
           showResult("error", `❌ ${data.error || "Upload failed."}`);
         }
@@ -410,15 +376,5 @@
     navigator.clipboard.writeText(window.location.origin + url)
       .then(() => alert("Copied: " + window.location.origin + url))
       .catch(() => prompt("Copy this URL:", window.location.origin + url));
-  }
-
-  // ── Character counter for content textarea ────────────────────
-  const contentArea = document.getElementById("content");
-  const charCount   = document.getElementById("charCount");
-  if (contentArea && charCount) {
-    contentArea.addEventListener("input", () => {
-      const n = contentArea.value.length;
-      charCount.textContent = n.toLocaleString() + " character" + (n !== 1 ? "s" : "");
-    });
   }
 </script>

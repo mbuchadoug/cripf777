@@ -152,30 +152,6 @@
     .video-tags { display:flex; flex-wrap:wrap; gap:0.4rem; }
     .video-tag-pill { font-size:0.75rem; padding:0.2rem 0.65rem; border:1px solid var(--medium-gray); color:var(--dark-gray); border-radius:2px; }
 
-    /* Dynamic video content (uploaded via admin) */
-    .video-content-wrap { border-top:1px solid var(--medium-gray); margin-top:1.25rem; padding-top:1.25rem; }
-    .video-content-toggle {
-      display:inline-flex; align-items:center; gap:0.5rem;
-      background:none; border:none; cursor:pointer; padding:0;
-      font-family:var(--font-sans); font-size:0.82rem; font-weight:700;
-      color:var(--navy); letter-spacing:0.5px; text-transform:uppercase;
-      transition:color 0.2s;
-    }
-    .video-content-toggle:hover { color:var(--gold); }
-    .video-content-toggle .toggle-arrow { font-size:0.75rem; transition:transform 0.25s; display:inline-block; }
-    .video-content-toggle.open .toggle-arrow { transform:rotate(180deg); }
-    .video-content-body {
-      display:none; margin-top:1.25rem;
-      font-family:var(--font-serif); font-size:1rem;
-      color:var(--text-primary); line-height:1.85;
-      max-height:520px; overflow-y:auto;
-      border-left:3px solid var(--gold);
-      padding-left:1.25rem;
-    }
-    .video-content-body.open { display:block; }
-    .video-content-body p { margin-bottom:0.75rem; }
-    .video-content-body p:last-child { margin-bottom:0; }
-
     /* ── EQUATION / SCOI ─────────────────────────────────────────── */
     .equation-section { background:linear-gradient(135deg, var(--navy-dark), var(--navy)); color:var(--white); padding:7rem 5%; position:relative; overflow:hidden; }
     .equation-section::before { content:'SCOI'; position:absolute; right:-2rem; top:50%; transform:translateY(-50%); font-family:var(--font-serif); font-size:18rem; font-weight:700; color:rgba(201,169,97,0.05); pointer-events:none; line-height:1; }
@@ -370,9 +346,8 @@
     <div class="hero-badge">Taking Psychology to the People</div>
     <h1>Structure shapes what<br><em>effort cannot explain.</em></h1>
     <p class="hero-subtitle">
-      CRIPFCnt began by naming the invisible forces between effort and outcome.
-      Now it is being applied to Maslow, AI, Law, Governance, and Civilization itself.
-      Frameworks mature when they stop explaining themselves and start interpreting everything else.
+      Two people work equally hard. One advances. One remains unseen. CRIPFCnt is the framework 
+      that names what happens in the space between effort and outcome - and what you can do about it.
     </p>
     <div class="hero-actions">
       <a href="/scoi" class="btn btn-gold">Browse Intelligence Reports →</a>
@@ -507,9 +482,9 @@
     <div class="videos-header">
       <div>
         <div class="section-label">Insight Series</div>
-        <h2 class="section-title">The question has changed.</h2>
+        <h2 class="section-title">Psychology, applied.</h2>
       </div>
-      <p class="videos-intro">A year ago the question was <em>"What is CRIPFCnt?"</em> A different question is emerging: <em>"What happens when CRIPFCnt is applied to Maslow? To AI? To Law, Governance, Civilization?"</em> Frameworks mature when they stop talking about themselves and start helping us interpret everything else.</p>
+      <p class="videos-intro">Two short films. One expanded framework. Watch how invisible forces shape who rises, who is seen, and how understanding the structure can change what you do next.</p>
     </div>
     <div class="videos-grid">
       <div class="video-card reveal">
@@ -548,31 +523,6 @@
           </div>
         </div>
       </div>
-      {{!-- ── Dynamic videos (uploaded via /admin/videos/upload) ──────── --}}
-      {{#each featuredVideos}}
-      <div class="video-card reveal">
-        <div class="video-wrapper">
-          <video controls preload="metadata">
-            <source src="{{this.streamUrl}}" type="video/mp4">
-          </video>
-          {{#if this.episode}}<span class="video-episode">Episode {{this.episode}}</span>{{/if}}
-        </div>
-        <div class="video-body">
-          <div class="video-tag">CRIPFCnt Framework</div>
-          <h3 class="video-title">{{this.title}}</h3>
-          {{#if this.content}}
-          <div class="video-content-wrap">
-            <button class="video-content-toggle" onclick="toggleContent(this)" aria-expanded="false">
-              Read Full Analysis <span class="toggle-arrow">&#9660;</span>
-            </button>
-            <div class="video-content-body">
-              {{{this.content}}}
-            </div>
-          </div>
-          {{/if}}
-        </div>
-      </div>
-      {{/each}}
     </div>
   </div>
 </section>
@@ -761,14 +711,6 @@
   document.getElementById('lmsDropdown')?.addEventListener('click', function(e) {
     if (window.innerWidth <= NAV_BP) { e.preventDefault(); this.classList.toggle('open'); }
   });
-
-  /* ── Dynamic video content expand/collapse ─────────────────── */
-  function toggleContent(btn) {
-    const body    = btn.nextElementSibling;
-    const isOpen  = body.classList.toggle('open');
-    btn.classList.toggle('open', isOpen);
-    btn.setAttribute('aria-expanded', String(isOpen));
-  }
 
   /* ── Scroll reveal ──────────────────────────────────────────── */
   const observer = new IntersectionObserver(entries => {
