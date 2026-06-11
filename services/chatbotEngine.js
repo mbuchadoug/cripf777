@@ -18494,48 +18494,110 @@ if (!isMetaAction && text && text.trim().length > 1) {
       );
     }
   }
-  await UserSession.findOneAndUpdate(
-    { phone },
-    {
-      $set: {
-        "tempData.buyerRequestState": "awaiting_items",
-        "tempData.buyerRequestMode":  "simple",
-        "tempData.pendingBuyerRequest": {
-          requestType: "simple",
-          profileType: "product",
-          items: []
-        }
-      }
-    },
-    { upsert: true }
-  );
 
-  return sendButtons(from, {
-    text:
-      `⚡ *Request Sellers*\n\n` +
-      `Type what you need - *any way you like.*\n` +
-      `You can write a full sentence, a short phrase, or a list.\n\n` +
-      `─────────────────\n` +
-      `*💬 Write naturally:*\n` +
-      `_I need a Bill of Quantities for a 4-bed house in Ruwa, 280m², drawings available_\n` +
-      `_Need an electrician for DB board fault in Borrowdale Harare_\n` +
-      `_Please quote for architectural drawings, 3-bedroom single storey, Greendale_\n\n` +
-      `*🔧 Short service request:*\n` +
-      `_house rewiring 4 bedroom 280sqm, Borrowdale_\n` +
-      `_plumber burst pipe Avondale Harare_\n` +
-      `_glass repair 600x900mm, Eastlea_\n\n` +
-      `*📦 Products:*\n` +
-      `_copper pipe 15mm x5 lengths, Msasa Harare_\n` +
-      `_cement 50kg x20 bags, river sand 3m3, Mbare_\n` +
-      `_10kw growatt inverter x2, Glen View Harare_\n\n` +
-      `*📋 Big list?* Tap *Bulk List* below.\n\n` +
-      `💡 _Include your suburb/city so we can find nearby sellers._\n` +
-      `_Type *0* for main menu · *00* to cancel_`,
-    buttons: [
-      { id: "sup_request_mode_bulk", title: "📋 Bulk List" },
-      { id: "find_supplier",         title: "🔍 Browse & Shop" }
-    ]
-  });
+  // ── GUARD: never hijack text input that belongs to an active biz flow ────────
+  // If the biz session is in any business-tools state (invoice, quote, receipt,
+  // product entry, payment, expense, etc.) let continueTwilioFlow handle it.
+  // Without this guard, ANY plain text typed during an invoice flow (e.g. "3x2, 3x3"
+  // to pick catalogue items) lands here and shows "Request Sellers" instead.
+  const _bizActiveStates = new Set([
+    // Invoice
+    "creating_invoice_choose_client", "creating_invoice_new_client",
+    "creating_invoice_new_client_phone", "creating_invoice_add_items",
+    "creating_invoice_pick_product", "creating_invoice_enter_catalogue_prices",
+    "creating_invoice_confirm", "creating_invoice_qty", "creating_invoice_add_item_text",
+    "creating_invoice_custom_names", "creating_invoice_custom_preview",
+    "creating_invoice_custom_edit", "creating_invoice_set_discount",
+    "creating_invoice_set_vat", "creating_invoice_enter_prices",
+    "creating_invoice_add_note", "invoice_quick_add_product_name",
+    "invoice_quick_add_product_price",
+    // Quote
+    "creating_quote_choose_client", "creating_quote_new_client",
+    "creating_quote_new_client_phone", "creating_quote_add_items",
+    "creating_quote_pick_product", "creating_quote_enter_catalogue_prices",
+    "creating_quote_confirm", "creating_quote_qty", "creating_quote_add_item_text",
+    "creating_quote_custom_names", "creating_quote_custom_preview",
+    "creating_quote_custom_edit", "creating_quote_set_discount",
+    "creating_quote_set_vat", "creating_quote_enter_prices",
+    "creating_quote_add_note", "quote_quick_add_product_name",
+    "quote_quick_add_product_price",
+    // Receipt
+    "creating_receipt_choose_client", "creating_receipt_new_client",
+    "creating_receipt_new_client_phone", "creating_receipt_add_items",
+    "creating_receipt_pick_product", "creating_receipt_enter_catalogue_prices",
+    "creating_receipt_confirm", "creating_receipt_qty", "creating_receipt_add_item_text",
+    "creating_receipt_custom_names", "creating_receipt_custom_preview",
+    "creating_receipt_custom_edit", "creating_receipt_set_discount",
+    "creating_receipt_set_vat", "creating_receipt_enter_prices",
+    "creating_receipt_add_note", "receipt_quick_add_product_name",
+    "receipt_quick_add_product_price",
+    // Sales doc list / search / action
+    "sales_doc_list", "sales_doc_search", "sales_doc_filter", "sales_doc_action",
+    // Payments & expenses
+    "payment_amount", "payment_method", "payment_invoice_search",
+    "expense_smart_entry", "expense_bulk_confirm", "bulk_expense_input",
+    "expense_amount", "expense_category",
+    // Cash balance
+    "cash_set_opening_balance", "cash_payout_amount", "cash_payout_reason",
+    // Products
+    "product_add_name", "product_add_price", "product_edit_name", "product_edit_price",
+    "product_add_name_or_menu",
+    // Clients / branches / settings / onboarding
+    "add_client_name", "add_client_phone", "adding_client_name",
+    "client_statement_choose_client", "client_statement_generate",
+    "awaiting_address", "awaiting_business_name",
+    "settings_currency", "settings_terms", "settings_inv_prefix",
+    "settings_qt_prefix", "settings_rcpt_prefix",
+    "branch_add_name", "invite_user_phone",
+    "subscription_payment_pending", "subscription_enter_ecocash"
+  ]);
+
+  if (biz && _bizActiveStates.has(biz.sessionState)) {
+    // Let the request fall through to continueTwilioFlow below
+  } else {
+    await UserSession.findOneAndUpdate(
+      { phone },
+      {
+        $set: {
+          "tempData.buyerRequestState": "awaiting_items",
+          "tempData.buyerRequestMode":  "simple",
+          "tempData.pendingBuyerRequest": {
+            requestType: "simple",
+            profileType: "product",
+            items: []
+          }
+        }
+      },
+      { upsert: true }
+    );
+
+    return sendButtons(from, {
+      text:
+        `⚡ *Request Sellers*\n\n` +
+        `Type what you need - *any way you like.*\n` +
+        `You can write a full sentence, a short phrase, or a list.\n\n` +
+        `─────────────────\n` +
+        `*💬 Write naturally:*\n` +
+        `_I need a Bill of Quantities for a 4-bed house in Ruwa, 280m², drawings available_\n` +
+        `_Need an electrician for DB board fault in Borrowdale Harare_\n` +
+        `_Please quote for architectural drawings, 3-bedroom single storey, Greendale_\n\n` +
+        `*🔧 Short service request:*\n` +
+        `_house rewiring 4 bedroom 280sqm, Borrowdale_\n` +
+        `_plumber burst pipe Avondale Harare_\n` +
+        `_glass repair 600x900mm, Eastlea_\n\n` +
+        `*📦 Products:*\n` +
+        `_copper pipe 15mm x5 lengths, Msasa Harare_\n` +
+        `_cement 50kg x20 bags, river sand 3m3, Mbare_\n` +
+        `_10kw growatt inverter x2, Glen View Harare_\n\n` +
+        `*📋 Big list?* Tap *Bulk List* below.\n\n` +
+        `💡 _Include your suburb/city so we can find nearby sellers._\n` +
+        `_Type *0* for main menu · *00* to cancel_`,
+      buttons: [
+        { id: "sup_request_mode_bulk", title: "📋 Bulk List" },
+        { id: "find_supplier",         title: "🔍 Browse & Shop" }
+      ]
+    });
+  }
 }
 
 if (a === "sup_request_mode_simple" || a === "sup_request_mode_bulk") {
