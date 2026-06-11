@@ -5747,7 +5747,7 @@ await UserSession.findOneAndUpdate(
 
     // Get the buyer's phone from the request
     const _askRequest = await BuyerRequest.findById(sellerRequestId).lean();
-    const _askBuyerPhone = _askRequest?.phone;
+    const _askBuyerPhone = _askRequest?.buyerPhone || _askRequest?.phone;
 
     if (!_askBuyerPhone) {
       return sendText(from, `❌ Could not find buyer's contact. The request may have expired.`);
@@ -5791,6 +5791,11 @@ await UserSession.findOneAndUpdate(
       `Type *confirm* when ready to send your quote, or keep editing.`
     );
   }
+
+  // ── "note [text]" - seller adds a note to the quote (visible on PDF) ─────
+  // e.g. "note deposit required, available Monday"
+  const _noteText = _parseNoteCommand(text);
+  if (_noteText) {
     const _noteDraft = pendingDraftQuote || { responseItems: [], skippedItems: [], totalAmount: 0 };
     const updatedDraft = { ..._noteDraft, sellerNote: _noteText };
     await UserSession.findOneAndUpdate(
@@ -5803,7 +5808,7 @@ await UserSession.findOneAndUpdate(
       `Type *confirm* to send, or keep editing.\n` +
       `Type *note [new text]* to replace the note.`
     );
-
+  }
 
   // pick 1 qty 2 or pick P1 2 -- seller picks from their own catalogue by number
   // Accepts: "pick 1", "pick 1 qty 2", "pick P1 2", "pick 1 2"
@@ -6077,6 +6082,40 @@ await UserSession.findOneAndUpdate(
 
 
  if (buyerRequestState === "awaiting_items") {
+  // ── GUARD: if the user's biz is actively in an invoice/quote/receipt flow,
+  // skip the buyer request handler entirely so business tools state machine
+  // (continueTwilioFlow) can process the typed input correctly.
+  // Without this guard, typing catalogue numbers like "3,4" in the invoice
+  // catalogue picker gets swallowed by the buyer request parser.
+  const _bizFlowStates = new Set([
+    "creating_invoice_add_items", "creating_invoice_pick_product",
+    "creating_invoice_enter_prices", "creating_invoice_enter_catalogue_prices",
+    "creating_invoice_confirm", "creating_invoice_qty",
+    "creating_invoice_add_item_text", "creating_invoice_custom_names",
+    "creating_invoice_custom_preview", "creating_invoice_custom_edit",
+    "creating_invoice_set_discount", "creating_invoice_set_vat",
+    "creating_invoice_add_note", "creating_invoice_new_client",
+    "creating_invoice_new_client_phone",
+    "creating_quote_add_items", "creating_quote_pick_product",
+    "creating_quote_enter_prices", "creating_quote_enter_catalogue_prices",
+    "creating_quote_confirm", "creating_quote_qty",
+    "creating_quote_add_item_text", "creating_quote_custom_names",
+    "creating_quote_custom_preview", "creating_quote_custom_edit",
+    "creating_quote_set_discount", "creating_quote_set_vat",
+    "creating_quote_add_note", "creating_quote_new_client",
+    "creating_quote_new_client_phone",
+    "creating_receipt_add_items", "creating_receipt_pick_product",
+    "creating_receipt_enter_prices", "creating_receipt_enter_catalogue_prices",
+    "creating_receipt_confirm", "creating_receipt_qty",
+    "creating_receipt_add_item_text", "creating_receipt_custom_names",
+    "creating_receipt_custom_preview", "creating_receipt_custom_edit",
+    "creating_receipt_set_discount", "creating_receipt_set_vat",
+    "creating_receipt_add_note", "creating_receipt_new_client",
+    "creating_receipt_new_client_phone",
+    "sales_doc_list", "creating_invoice_choose_client"
+  ]);
+  const _skipBuyerReqForBizFlow = biz && _bizFlowStates.has(biz.sessionState);
+  if (!_skipBuyerReqForBizFlow) {
   // ── Universal escape words always work in any state ────────────────────
   if (al === "cancel" || al === "00" || al === "000") {
     await UserSession.findOneAndUpdate(
@@ -6410,6 +6449,7 @@ if (al === "my requests" || al === "buyer_my_requests") {
     from,
     `📍 *Where do you need these items?*\n\nReply with city or suburb + city.\n\nExamples:\n_Harare_\n_Mbare, Harare_\n_Borrowdale, Harare_\n\nType *0* for main menu`
   );
+  } // end _skipBuyerReqForBizFlow guard
 }
 
     if (buyerRequestState === "awaiting_location" &&
