@@ -1,29 +1,20 @@
 // services/schoolFAQ.js
-// ─── ZimQuote School Smart Link - Instant Profile Card ────────────────────────
-//
-// PHILOSOPHY (v2):
-//   Parents are impatient. Every extra tap loses an enrollment.
-//   When a parent opens a school WhatsApp link they immediately receive:
-//     1. School identity + pitch text (one text message)
-//     2. Full fee schedule (auto-sent if fees exist)
-//     3. All flyers as WhatsApp images (auto-sent)
-//     4. All brochures / PDFs as WhatsApp documents (auto-sent)
-//     5. 3 action buttons: Apply | Book Tour | Ask Question
-//   Zero navigation required. Everything lands in their chat.
+// ─── ZimQuote School Smart Link ───────────────────────────────────────────────
+// v3: instant smart card - no category menus, everything sent immediately.
 //
 // WHATSAPP LIMITS:
-//   Button title: ≤20 chars
+//   Button title:  ≤20 chars
 //   Reply buttons: ≤3 per message
-//   Text message: ≤4096 chars
 
 import SchoolProfile from "../models/schoolProfile.js";
 import SchoolLead    from "../models/schoolLead.js";
-import { sendText, sendButtons, sendList, sendDocument, sendImage } from "./metaSender.js";
+import { sendText, sendButtons, sendList } from "./metaSender.js";
 import {
   notifySchoolEnquiry,
   notifySchoolApplicationInterest,
   notifySchoolVisitRequest,
   notifySchoolPlaceEnquiry,
+  notifySchoolNewLead
 } from "./schoolNotifications.js";
 import { SCHOOL_FACILITIES, SCHOOL_EXTRAMURALACTIVITIES } from "./schoolPlans.js";
 
@@ -40,7 +31,6 @@ const LEVEL = {
   form1_4:   { label: "O-Level (Form 1–4)",     short: "Form 1–4",   ageGuide: "ages 13–17",emoji: "📙" },
   form5_6:   { label: "A-Level (Form 5–6)",     short: "Form 5–6",   ageGuide: "ages 17–19",emoji: "📘" },
   boarding:  { label: "Boarding",               short: "Boarding",   ageGuide: "",           emoji: "🛏️" },
-  transport: { label: "Transport",              short: "Transport",  ageGuide: "",           emoji: "🚌" },
   all:       { label: "School-wide",            short: "All",        ageGuide: "",           emoji: "🏫" },
 };
 
@@ -83,7 +73,6 @@ function _feeText(school) {
   return { budget:"Under $300/term", mid:"$300–$800/term", premium:"$800+/term" }[school.feeRange] || null;
 }
 
-// Build the fee schedule as a single text block
 function _buildFeeBlock(school) {
   const tuition  = _tuitionFees(school);
   const boarding = _boardingFees(school);
@@ -101,7 +90,6 @@ function _buildFeeBlock(school) {
       text += "\n";
     });
   }
-
   if (boarding.length > 0) {
     text += "\n*Boarding (per term):*\n";
     boarding.forEach(f => {
@@ -110,7 +98,6 @@ function _buildFeeBlock(school) {
       text += "\n";
     });
   }
-
   if (levies.length > 0) {
     text += "\n*Levies:*\n";
     levies.forEach(f => {
@@ -119,7 +106,6 @@ function _buildFeeBlock(school) {
       text += "\n";
     });
   }
-
   if (onceOff.length > 0) {
     text += "\n*Once-off:*\n";
     onceOff.forEach(f => {
@@ -146,12 +132,8 @@ function _buildFeeBlock(school) {
   }
 
   text += "\n_All fees in USD._";
-
   const firstTuition = tuition[0]?.amount || school.fees?.term1 || 0;
-  if (firstTuition > 0) {
-    text += `\n💡 _Annual estimate (day, 3 terms): ~$${firstTuition * 3}_`;
-  }
-
+  if (firstTuition > 0) text += `\n💡 _Annual estimate (day, 3 terms): ~$${firstTuition * 3}_`;
   if (school.ecocashNumber) text += `\n📲 EcoCash: *${school.ecocashNumber}*`;
   if (school.bankDetails)   text += `\n🏦 ${school.bankDetails}`;
 
@@ -159,8 +141,33 @@ function _buildFeeBlock(school) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SESSION HELPER
+// COLLECT ALL DOCUMENTS for this school
+// Reads from every location documents can be stored:
+//   - school.profilePdfUrl
+//   - school.feeSchedulePdfUrl
+//   - school.applicationFormUrl  (legacy top-level)
+//   - school.applicationForm.rawFormUrl  (WhatsApp/web form PDF)
+//   - school.applicationForm.brochureUrl (brochure stored via apply-qr page)
+//   - school.brochures[]  (PDFs uploaded via Brochures panel)
 // ─────────────────────────────────────────────────────────────────────────────
+function _getAllDocs(school) {
+  const af = school.applicationForm || {};
+  return [
+    school.profilePdfUrl       && { label: "School Prospectus",  url: school.profilePdfUrl },
+    school.feeSchedulePdfUrl   && { label: "Fee Schedule",        url: school.feeSchedulePdfUrl },
+    // applicationForm.brochureUrl — set via the Apply QR / Application Form Settings page
+    af.brochureUrl             && { label: af.brochureName || "School Brochure", url: af.brochureUrl },
+    // applicationForm.rawFormUrl — printable application form PDF
+    af.rawFormUrl              && { label: af.rawFormName  || "Application Form", url: af.rawFormUrl },
+    // legacy top-level applicationFormUrl
+    (!af.rawFormUrl && school.applicationFormUrl)
+                               && { label: "Application Form",    url: school.applicationFormUrl },
+    // brochures[] — PDFs uploaded via the Brochures panel
+    ...(school.brochures || []).map(b => ({ label: b.label || "School Brochure", url: b.url }))
+  ].filter(Boolean);
+}
+
+// SESSION HELPER
 async function _sess(biz, saveBiz, state, data = {}, from = null) {
   if (from) {
     try {
@@ -192,15 +199,13 @@ function _saveLead(from, school, action, source, extra = {}) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// MAIN ENTRY POINT — replaces showSchoolFAQMenu
-// Called when a parent opens a ZQ:SCHOOL:<id> link.
-// Sends everything immediately with no navigation required.
+// MAIN ENTRY — called when parent opens ZQ:SCHOOL:<id> link
+// Sends everything immediately. Zero navigation required.
 // ─────────────────────────────────────────────────────────────────────────────
-export async function showSchoolSmartCard(from, schoolId, biz, saveBiz, { source = "direct", parentName = "" } = {}) {
+export async function showSchoolFAQMenu(from, schoolId, biz, saveBiz, { source = "direct", parentName = "" } = {}) {
   const school = await SchoolProfile.findById(schoolId).lean();
   if (!school) return sendText(from, "❌ School not found. Please try the link again.");
 
-  // Fire-and-forget analytics + lead capture
   SchoolProfile.findByIdAndUpdate(schoolId, { $inc: { monthlyViews: 1, zqLinkConversions: 1 } }).catch(() => {});
   _saveLead(from, school, "view", source, { parentName });
   await _sess(biz, saveBiz, "sfaq_menu", { faqSchoolId: String(schoolId), faqParentName: parentName, faqSource: source }, from);
@@ -217,41 +222,34 @@ export async function showSchoolSmartCard(from, schoolId, biz, saveBiz, { source
   const pl  = school.preschoolLevels || {};
   const preLevels = [pl.nursery && "Nursery", pl.ecd_a && "ECD A", pl.ecd_b && "ECD B"].filter(Boolean);
 
-  // Results summary
   const r = school.academicResults || {};
   const resultLine = r.oLevelPassRate > 0
     ? `🏆 O-Level ${r.oLevelYear || ""}: *${r.oLevelPassRate}%* pass rate${r.nationalRanking > 0 ? ` · Ranked #${r.nationalRanking} nationally` : ""}`
     : "";
 
-  // Facilities summary (top 5 to keep it short)
   const FAC = Object.fromEntries((SCHOOL_FACILITIES || []).map(f => [f.id, f.label]));
   const facList = (school.facilities || []).slice(0, 5).map(id => FAC[id] || id).filter(Boolean);
   const facLine = facList.length ? `🏊 ${facList.join(" · ")}` : "";
 
-  // Extramurals summary
   const EXT = Object.fromEntries((SCHOOL_EXTRAMURALACTIVITIES || []).map(e => [e.id, e.label]));
   const extList = (school.extramuralActivities || []).slice(0, 4).map(id => EXT[id] || id).filter(Boolean);
   const extLine = extList.length ? `⚽ ${extList.join(", ")}` : "";
 
-  // Fee snapshot line
   const feeText = _feeText(school);
 
-  // ── MESSAGE 1: Identity + pitch ─────────────────────────────────────────────
+  // ── MESSAGE 1: Identity + pitch ────────────────────────────────────────────
   let msg1 = `🏫 *${school.schoolName}*${school.verified ? " ✅" : ""}\n`;
   msg1 += `📍 ${school.suburb ? school.suburb + ", " : ""}${school.city}\n`;
   msg1 += `${adm}${feeText ? " · " + feeText : ""} · ${TYPE[school.type] || "School"} · ${cur}`;
   if (preLevels.length) msg1 += `\n🌱 Preschool: ${preLevels.join(" · ")}`;
   if (school.grades?.from && school.grades?.to) msg1 += `\n📚 Grades: ${school.grades.from} – ${school.grades.to}`;
-  if (school.gender && school.gender !== "mixed") msg1 += ` · ${school.gender === "boys" ? "Boys only" : "Girls only"}`;
   if (school.boarding === "boarding" || school.boarding === "both") msg1 += " · 🛏️ Boarding";
 
-  // Admin pitch text (free text the school admin writes)
+  // Admin pitch — what the school typed in the "School Description" field
   if (school.smartLinkPitch && school.smartLinkPitch.trim()) {
     msg1 += `\n\n${school.smartLinkPitch.trim()}`;
-  }
-
-  // Auto-generated highlights if no pitch
-  if (!school.smartLinkPitch?.trim()) {
+  } else {
+    // Auto-generate highlights when no pitch is set
     const lines = [];
     if (resultLine) lines.push(resultLine);
     if (facLine)    lines.push(facLine);
@@ -261,63 +259,85 @@ export async function showSchoolSmartCard(from, schoolId, biz, saveBiz, { source
   }
 
   msg1 += `\n\n📞 ${phone}`;
-  if (school.email)   msg1 += `  📧 ${school.email}`;
-  if (school.website) msg1 += `\n🌐 ${school.website}`;
-  if (school.address) msg1 += `\n📍 ${school.address}`;
+  if (school.email)       msg1 += `  📧 ${school.email}`;
+  if (school.website)     msg1 += `\n🌐 ${school.website}`;
+  if (school.address)     msg1 += `\n📍 ${school.address}`;
   if (school.officeHours) msg1 += `\n⏰ ${school.officeHours}`;
 
   if (parentName) msg1 = `Hi ${parentName.split(" ")[0]}! 👋\n\n` + msg1;
 
   await sendText(from, msg1);
 
-  // ── MESSAGE 2: Full fee schedule (if fees exist) ─────────────────────────────
+  // ── MESSAGE 2: Fee schedule ─────────────────────────────────────────────────
   if (_hasFees(school)) {
     await sendText(from, _buildFeeBlock(school));
   }
 
-  // ── MESSAGE 3: Smart link flyers (images) — sent as WhatsApp images ──────────
+  // ── MESSAGE 3: Flyers as WhatsApp images ────────────────────────────────────
   const flyers = school.smartLinkFlyers || [];
-  for (const flyer of flyers) {
-    if (!flyer.url) continue;
+  if (flyers.length > 0) {
+    let sendImage = null;
     try {
-      // Try sendImage first; fall back to sendDocument
-      if (typeof sendImage === "function") {
-        try {
-          await sendImage(from, { link: flyer.url, caption: flyer.label || school.schoolName });
-          continue;
-        } catch (_) { /* fall through to sendDocument */ }
-      }
-      await sendDocument(from, {
-        link:     flyer.url,
-        filename: (flyer.label || "flyer").replace(/[^a-zA-Z0-9 ]/g, "_").slice(0, 40) + ".jpg",
-        caption:  flyer.label || school.schoolName
-      });
-    } catch (_) { /* non-fatal - one bad flyer shouldn't block the rest */ }
+      const meta = await import("./metaSender.js");
+      if (typeof meta.sendImage === "function") sendImage = meta.sendImage;
+    } catch (_) {}
+
+    for (const flyer of flyers) {
+      if (!flyer.url) continue;
+      try {
+        if (sendImage) {
+          try {
+            await sendImage(from, { link: flyer.url, caption: flyer.label || school.schoolName });
+            continue;
+          } catch (_) {}
+        }
+        const { sendDocument } = await import("./metaSender.js");
+        await sendDocument(from, {
+          link:     flyer.url,
+          filename: (flyer.label || "flyer").replace(/[^a-zA-Z0-9 ]/g, "_").slice(0, 40) + ".jpg",
+          caption:  flyer.label || school.schoolName
+        });
+      } catch (_) {}
+    }
   }
 
-  // ── MESSAGE 4: Brochures / PDFs — sent as WhatsApp documents ─────────────────
-  const allDocs = [
-    school.profilePdfUrl     && { label: "School Prospectus",  url: school.profilePdfUrl },
-    school.feeSchedulePdfUrl && { label: "Fee Schedule",        url: school.feeSchedulePdfUrl },
-    school.applicationFormUrl && { label: "Application Form",   url: school.applicationFormUrl },
-    ...(school.brochures || []).map(b => ({ label: b.label || "School Brochure", url: b.url }))
-  ].filter(Boolean);
-
-  for (const doc of allDocs) {
-    if (!doc.url) continue;
-    try {
-      const safeName = (doc.label || "document")
-        .replace(/[^a-zA-Z0-9 ]/g, "")
-        .replace(/\s+/g, "_")
-        .slice(0, 40) + ".pdf";
-      await sendDocument(from, { link: doc.url, filename: safeName, caption: doc.label });
-    } catch (_) { /* non-fatal */ }
+  // ── MESSAGE 4: All documents (PDFs + brochures) ─────────────────────────────
+  // Reads from ALL storage locations: profilePdfUrl, feeSchedulePdfUrl,
+  // applicationForm.brochureUrl, applicationForm.rawFormUrl, brochures[]
+  const allDocs = _getAllDocs(school);
+  if (allDocs.length > 0) {
+    const { sendDocument } = await import("./metaSender.js");
+    for (const doc of allDocs) {
+      if (!doc.url) continue;
+      try {
+        const safeName = (doc.label || "document")
+          .replace(/[^a-zA-Z0-9 ]/g, "")
+          .replace(/\s+/g, "_")
+          .slice(0, 40);
+        // Detect if it's an image by URL extension or mime
+        const isImage = /\.(jpg|jpeg|png|webp)$/i.test(doc.url);
+        if (isImage) {
+          let sendImage = null;
+          try {
+            const meta = await import("./metaSender.js");
+            if (typeof meta.sendImage === "function") sendImage = meta.sendImage;
+          } catch (_) {}
+          if (sendImage) {
+            try { await sendImage(from, { link: doc.url, caption: doc.label }); continue; } catch (_) {}
+          }
+        }
+        await sendDocument(from, {
+          link:     doc.url,
+          filename: safeName + (isImage ? ".jpg" : ".pdf"),
+          caption:  doc.label
+        });
+      } catch (_) {}
+    }
   }
 
-  // ── MESSAGE 5: Action buttons ─────────────────────────────────────────────────
-  // Always show 3 buttons: Apply (or Interest if closed) | Book Tour | Ask Question
+  // ── MESSAGE 5: Action buttons ────────────────────────────────────────────────
   const applyBtn = school.admissionsOpen
-    ? { id: `sfaq_act_apply_${sid}`,   title: _btn("📋 Apply Now") }
+    ? { id: `sfaq_act_apply_${sid}`,    title: _btn("📋 Apply Now") }
     : { id: `sfaq_act_interest_${sid}`, title: _btn("📝 Register Interest") };
 
   const actionText = school.admissionsOpen
@@ -334,12 +354,8 @@ export async function showSchoolSmartCard(from, schoolId, biz, saveBiz, { source
   });
 }
 
-// Keep showSchoolFAQMenu as an alias so existing call sites in chatbotEngine
-// and schoolSearch that haven't been updated yet still work.
-export const showSchoolFAQMenu = showSchoolSmartCard;
-
 // ─────────────────────────────────────────────────────────────────────────────
-// ACTION ROUTER — handles button taps after the smart card
+// ACTION ROUTER
 // ─────────────────────────────────────────────────────────────────────────────
 export async function handleSchoolFAQAction({ from, action, biz, saveBiz }) {
   const a = String(action || "").trim();
@@ -348,7 +364,7 @@ export async function handleSchoolFAQAction({ from, action, biz, saveBiz }) {
   // Back to smart card
   const backMatch = a.match(/^sfaq_back_([a-f0-9]{24})$/i);
   if (backMatch) {
-    return showSchoolSmartCard(from, backMatch[1], biz, saveBiz);
+    return showSchoolFAQMenu(from, backMatch[1], biz, saveBiz);
   }
 
   // Action buttons: sfaq_act_<act>_<schoolId>
@@ -360,21 +376,19 @@ export async function handleSchoolFAQAction({ from, action, biz, saveBiz }) {
     return _handleAction(from, schoolId, act, biz, saveBiz);
   }
 
-  // Legacy category/item/page taps — redirect to smart card (no longer needed
-  // for navigation, but keep so old sessions don't error)
+  // Legacy category / item / page taps — redirect to smart card
   const catMatch  = a.match(/^sfaq_cat_([a-zA-Z0-9_-]+)_([a-f0-9]{24})$/i);
   const itemMatch = a.match(/^sfaq_item_(.+)_([a-f0-9]{24})$/i);
   const pageMatch = a.match(/^sfaq_page_([a-zA-Z0-9_-]+)_(\d+)_([a-f0-9]{24})$/i);
-
-  if (catMatch)  return showSchoolSmartCard(from, catMatch[2],  biz, saveBiz);
-  if (itemMatch) return showSchoolSmartCard(from, itemMatch[2], biz, saveBiz);
-  if (pageMatch) return showSchoolSmartCard(from, pageMatch[3], biz, saveBiz);
+  if (catMatch)  return showSchoolFAQMenu(from, catMatch[2],  biz, saveBiz);
+  if (itemMatch) return showSchoolFAQMenu(from, itemMatch[2], biz, saveBiz);
+  if (pageMatch) return showSchoolFAQMenu(from, pageMatch[3], biz, saveBiz);
 
   return false;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ACTION HANDLERS — Apply / Tour / Message / Interest
+// ACTION HANDLERS
 // ─────────────────────────────────────────────────────────────────────────────
 async function _handleAction(from, schoolId, act, biz, saveBiz) {
   const school = await SchoolProfile.findById(schoolId).lean();
@@ -388,7 +402,7 @@ async function _handleAction(from, schoolId, act, biz, saveBiz) {
     case "enquire":
       await _sess(biz, saveBiz, "sfaq_awaiting_message", { faqSchoolId: sid }, from);
       return sendText(from,
-        `✉️ *Message ${school.schoolName}*\n\nType your question below — the school will reply on WhatsApp.\n\n_Type *cancel* to go back._`
+        `✉️ *Message ${school.schoolName}*\n\nType your question — the school will reply on WhatsApp.\n\n_Type *cancel* to go back._`
       );
 
     case "tour":
@@ -401,12 +415,11 @@ async function _handleAction(from, schoolId, act, biz, saveBiz) {
       notifySchoolApplicationInterest(school.phone, school.schoolName, from).catch(() => {});
       _saveLead(from, school, "apply", "whatsapp_link");
 
-      // If there's an online form link, send it immediately
       if (school.registrationLink) {
         return sendButtons(from, {
           text:
             `📋 *Apply to ${school.schoolName}*\n\n` +
-            `${school.admissionsOpen ? "🟢 Admissions are OPEN." : "🔴 Admissions closed — you can still register interest."}\n\n` +
+            `${school.admissionsOpen ? "🟢 Admissions OPEN." : "🔴 Admissions closed — you can still register interest."}\n\n` +
             `👉 *${school.registrationLink}*\n\n📞 ${phone}`,
           buttons: [
             { id: `sfaq_act_tour_${sid}`,    title: _btn("📅 Book a Tour") },
@@ -415,25 +428,22 @@ async function _handleAction(from, schoolId, act, biz, saveBiz) {
         });
       }
 
-      // If there's a WhatsApp application form (multi-step chatbot form)
       if (school.applicationForm?.active) {
-        // Start the WhatsApp application form flow
         try {
           const { startSchoolApplicationForm } = await import("./schoolApplicationForm.js");
-          await startSchoolApplicationForm({ from, school, UserSession: (await import("../models/userSession.js")).default });
+          const { default: UserSession } = await import("../models/userSession.js");
+          await startSchoolApplicationForm({ from, school, UserSession });
           return true;
         } catch (_) {}
       }
 
-      // Fallback: ask for grade interest
       await _sess(biz, saveBiz, "sfaq_awaiting_grade", { faqSchoolId: sid }, from);
       return sendText(from,
-        `📝 *Enrollment enquiry — ${school.schoolName}*\n\nWhich level or grade are you enquiring for?\n\n_e.g. "Nursery", "ECD A", "Grade 3", "Form 1"_\n\n_Type *cancel* to go back._`
+        `📝 *Apply — ${school.schoolName}*\n\nWhich level or grade are you enquiring for?\n\n_e.g. "Grade 1", "Form 1", "ECD B"_\n\n_Type *cancel* to go back._`
       );
     }
 
     case "interest":
-      // Admissions closed — capture interest
       await _sess(biz, saveBiz, "sfaq_awaiting_grade", { faqSchoolId: sid }, from);
       return sendText(from,
         `📝 *Register Interest — ${school.schoolName}*\n\nWe'll notify you when admissions open.\n\nWhich grade or level are you interested in?\n\n_e.g. "Grade 1", "Form 1", "ECD B"_\n_Type *cancel* to go back._`
@@ -441,19 +451,14 @@ async function _handleAction(from, schoolId, act, biz, saveBiz) {
 
     case "docs": {
       _saveLead(from, school, "pdf", "whatsapp_link");
-      const docs = [
-        school.profilePdfUrl      && { label: "Prospectus",       url: school.profilePdfUrl },
-        school.feeSchedulePdfUrl  && { label: "Fee Schedule",      url: school.feeSchedulePdfUrl },
-        school.applicationFormUrl && { label: "Application Form",  url: school.applicationFormUrl },
-        ...(school.brochures || []).map(b => ({ label: b.label, url: b.url }))
-      ].filter(Boolean);
-
+      const docs = _getAllDocs(school);
       if (!docs.length) {
         return sendButtons(from, {
           text: `📄 No documents available yet.\n📞 ${phone}`,
           buttons: [{ id: `sfaq_act_message_${sid}`, title: _btn("✉️ Ask us") }]
         });
       }
+      const { sendDocument } = await import("./metaSender.js");
       for (const d of docs) {
         try {
           await sendDocument(from, {
@@ -473,17 +478,16 @@ async function _handleAction(from, schoolId, act, biz, saveBiz) {
     }
 
     default:
-      return showSchoolSmartCard(from, schoolId, biz, saveBiz);
+      return showSchoolFAQMenu(from, schoolId, biz, saveBiz);
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// STATE HANDLER — processes typed text replies (tour date, message, grade)
+// STATE HANDLER — processes typed replies (tour date, message, grade)
 // ─────────────────────────────────────────────────────────────────────────────
 export async function handleSchoolFAQState({ state, from, text, biz, saveBiz }) {
   if (!state?.startsWith("sfaq_")) return false;
 
-  // Resolve schoolId from biz session or UserSession
   let schoolId = biz?.sessionData?.faqSchoolId;
   if (!schoolId) {
     try {
@@ -498,7 +502,7 @@ export async function handleSchoolFAQState({ state, from, text, biz, saveBiz }) 
   const raw = (text || "").trim();
   if (["cancel","back","menu"].includes(raw.toLowerCase())) {
     await _sess(biz, saveBiz, "sfaq_menu", {}, from);
-    return showSchoolSmartCard(from, schoolId, biz, saveBiz);
+    return showSchoolFAQMenu(from, schoolId, biz, saveBiz);
   }
 
   switch (state) {
@@ -513,8 +517,7 @@ export async function handleSchoolFAQState({ state, from, text, biz, saveBiz }) 
       SchoolProfile.findByIdAndUpdate(schoolId, { $inc: { inquiries: 1 } }).catch(() => {});
       await _sess(biz, saveBiz, "sfaq_menu", {}, from);
       return sendButtons(from, {
-        text:
-          `✅ *Message sent to ${school.schoolName}*\n\n_"${raw}"_\n\nThey will reply on WhatsApp.\n📞 ${school.contactPhone || school.phone}`,
+        text: `✅ *Message sent to ${school.schoolName}*\n\n_"${raw}"_\n\nThey will reply on WhatsApp.\n📞 ${school.contactPhone || school.phone}`,
         buttons: [
           { id: `sfaq_act_tour_${sid}`,    title: _btn("📅 Book a Tour") },
           { id: `sfaq_act_apply_${sid}`,   title: _btn("📋 Apply Now") },
@@ -532,8 +535,7 @@ export async function handleSchoolFAQState({ state, from, text, biz, saveBiz }) 
       _saveLead(from, school, "visit", "whatsapp_link");
       await _sess(biz, saveBiz, "sfaq_menu", {}, from);
       return sendButtons(from, {
-        text:
-          `✅ *Tour request sent!*\n\n*${school.schoolName}*\nPreferred: _${raw}_\n\nThey will confirm and send directions.\n📞 ${school.contactPhone || school.phone}`,
+        text: `✅ *Tour request sent!*\n\n*${school.schoolName}*\nPreferred: _${raw}_\n\nThey will confirm and send directions.\n📞 ${school.contactPhone || school.phone}`,
         buttons: [
           { id: `sfaq_act_apply_${sid}`,   title: _btn("📋 Apply Now") },
           { id: `sfaq_act_message_${sid}`, title: _btn("✉️ Ask a Question") },
@@ -550,10 +552,9 @@ export async function handleSchoolFAQState({ state, from, text, biz, saveBiz }) 
       _saveLead(from, school, "place", "whatsapp_link", { gradeInterest: raw, levelInterest: raw });
       await _sess(biz, saveBiz, "sfaq_menu", {}, from);
       return sendButtons(from, {
-        text:
-          school.admissionsOpen
-            ? `📝 *Enquiry received*\n\n🟢 Your enquiry for *${raw}* has been sent to ${school.schoolName}.\n\nThey will contact you on WhatsApp.`
-            : `📝 *Interest registered*\n\n🔴 Admissions are currently closed. Your interest in *${raw}* at ${school.schoolName} has been recorded.\n\nWe will notify you when admissions open.`,
+        text: school.admissionsOpen
+          ? `📝 *Enquiry received*\n\n🟢 Your enquiry for *${raw}* has been sent to ${school.schoolName}.\n\nThey will contact you on WhatsApp.`
+          : `📝 *Interest registered*\n\n🔴 Admissions are currently closed. Your interest in *${raw}* at ${school.schoolName} has been recorded.\n\nWe will notify you when admissions open.`,
         buttons: [
           { id: `sfaq_act_tour_${sid}`,    title: _btn("📅 Book a Tour") },
           { id: `sfaq_act_message_${sid}`, title: _btn("✉️ Ask More") },
