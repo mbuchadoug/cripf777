@@ -1008,6 +1008,96 @@ router.get("/schools/:id", requireSupplierAdmin, async (req, res) => {
             <p style="font-size:11px;color:var(--muted);margin-top:8px">📁 PDF is stored on the server and sent directly to parents on WhatsApp - no Google Drive or data needed.</p>
             <p style="font-size:11px;color:var(--muted);margin-top:4px">⚠ Max file size: 10MB. Keep PDFs under 5MB for best WhatsApp delivery.</p>
           </div>
+
+        <!-- ── SMART LINK CARD ────────────────────────────── -->
+        <div class="panel" style="border:2px solid #bbf7d0;background:#f0fdf4">
+          <div class="panel-head" style="margin-bottom:4px">
+            <h3 style="color:#16a34a">📲 WhatsApp Smart Link — What Parents See First</h3>
+          </div>
+          <p style="font-size:12px;color:#64748b;margin-bottom:16px;line-height:1.6">
+            When a parent scans your QR code or opens your WhatsApp link they <strong>instantly receive</strong>
+            everything below — no menus to tap through.
+            They get: (1) your school description, (2) the full fee schedule, (3) these flyers as images,
+            (4) all brochures/PDFs above as documents, then (5) three buttons: Apply, Book Tour, Ask Question.
+          </p>
+
+          <!-- School Description / Pitch -->
+          <form method="POST" action="/zq-admin/schools/${school._id}/smartlink-pitch">
+            <div style="margin-bottom:12px">
+              <label style="font-size:13px;font-weight:700;display:block;margin-bottom:6px;color:#16a34a">
+                ✏️ School Description
+                <span style="font-weight:400;font-size:11px;color:#64748b"> — type or paste your school pitch here. Shown to every parent who opens your link.</span>
+              </label>
+              <textarea name="smartLinkPitch" rows="5"
+                style="width:100%;padding:10px 12px;border:1px solid #86efac;border-radius:8px;font-size:13px;background:white;color:var(--text);line-height:1.6;resize:vertical"
+                placeholder="e.g. We are a co-educational day and boarding school offering quality education from ECD to A-Level. Our 2024 O-Level pass rate was 94%. We have small class sizes, qualified teachers, a modern science lab, swimming pool, and a fully catered boarding house. Applications for 2026 Form 1 and Grade 1 are now open.">${esc(school.smartLinkPitch || "")}</textarea>
+              <p style="font-size:11px;color:#64748b;margin-top:4px">
+                💡 Tip: mention your exam results, key facilities, grades, and what makes your school special. Keep it under 600 characters for best readability.
+              </p>
+            </div>
+            <button type="submit" class="btn btn-green">💾 Save Description</button>
+          </form>
+
+          <hr style="margin:20px 0;border:none;border-top:1px solid #bbf7d0">
+
+          <!-- Smart Link Flyers (images) -->
+          <p style="font-size:13px;font-weight:700;color:#16a34a;margin-bottom:6px">
+            🖼️ Promotional Flyers
+            <span style="font-weight:400;font-size:11px;color:#64748b"> — PNG/JPG images sent to parents as WhatsApp images when they open your link</span>
+          </p>
+
+          ${(school.smartLinkFlyers || []).length ? `
+          <table style="width:100%;border-collapse:collapse;margin-bottom:14px;font-size:13px">
+            <thead>
+              <tr style="background:#dcfce7">
+                <th style="padding:8px 10px;text-align:left;border-bottom:1px solid #bbf7d0">Label</th>
+                <th style="padding:8px 10px;text-align:left;border-bottom:1px solid #bbf7d0">Preview</th>
+                <th style="padding:8px 10px;border-bottom:1px solid #bbf7d0"></th>
+              </tr>
+            </thead>
+            <tbody>
+              ${(school.smartLinkFlyers || []).map((f, i) => `
+              <tr>
+                <td style="padding:8px 10px;border-bottom:1px solid #bbf7d0;font-weight:500">${esc(f.label || 'Flyer')}</td>
+                <td style="padding:8px 10px;border-bottom:1px solid #bbf7d0">
+                  <a href="${esc(f.url)}" target="_blank">
+                    <img src="${esc(f.url)}" alt="${esc(f.label)}"
+                         style="height:64px;border-radius:6px;object-fit:cover;border:1px solid #bbf7d0;display:block"
+                         onerror="this.style.display='none'" />
+                  </a>
+                </td>
+                <td style="padding:8px 10px;border-bottom:1px solid #bbf7d0">
+                  <form method="POST" action="/zq-admin/schools/${school._id}/flyer/${i}/delete"
+                        onsubmit="return confirm('Remove this flyer?')">
+                    <button type="submit" class="btn btn-sm btn-red">🗑 Remove</button>
+                  </form>
+                </td>
+              </tr>`).join('')}
+            </tbody>
+          </table>` : `<p style="font-size:13px;color:#64748b;margin-bottom:14px">📭 No flyers uploaded yet. Upload your enrolment flyer or open-day poster below.</p>`}
+
+          <form method="POST" action="/zq-admin/schools/${school._id}/flyer/add"
+                enctype="multipart/form-data"
+                style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
+            <div style="flex:1;min-width:180px">
+              <label style="font-size:12px;display:block;margin-bottom:4px;font-weight:600;color:#16a34a">Label</label>
+              <input name="label" type="text" placeholder="e.g. 2025 Enrolment Flyer"
+                     style="width:100%;padding:8px 10px;border:1px solid #86efac;border-radius:6px;font-size:13px;background:white" />
+            </div>
+            <div style="flex:2;min-width:220px">
+              <label style="font-size:12px;display:block;margin-bottom:4px;font-weight:600;color:#16a34a">Image (PNG, JPG or WEBP — max 5MB)</label>
+              <input name="flyerFile" type="file" accept="image/png,image/jpeg,image/webp"
+                     style="width:100%;padding:8px 10px;border:1px solid #86efac;border-radius:6px;font-size:13px;background:white" required />
+            </div>
+            <div>
+              <button type="submit" class="btn btn-green">⬆️ Upload Flyer</button>
+            </div>
+          </form>
+          <p style="font-size:11px;color:#64748b;margin-top:8px">
+            📁 Images are stored on the server and sent to parents as WhatsApp images — no external hosting needed.
+          </p>
+        </div>
+
         <div>
           <div class="panel">
             <div class="panel-head">
@@ -2115,6 +2205,22 @@ router.post("/schools/:id/fees/:feeId/delete", requireSupplierAdmin, async (req,
 
 
 // ─────────────────────────────────────────────────────────────────────────────
+// POST /zq-admin/schools/:id/smartlink-pitch
+// Saves the school description / pitch text for the WhatsApp smart link.
+router.post("/schools/:id/smartlink-pitch", requireSupplierAdmin, async (req, res) => {
+  try {
+    const school = await SchoolProfile.findById(req.params.id);
+    if (!school) return res.redirect("/zq-admin/schools");
+    school.smartLinkPitch = (req.body.smartLinkPitch || "").trim().slice(0, 800);
+    school.markModified("smartLinkPitch");
+    await school.save();
+    res.redirect(`/zq-admin/schools/${req.params.id}?success=` +
+      encodeURIComponent("School description saved. Parents will see it the next time they open your WhatsApp link."));
+  } catch (err) {
+    res.redirect(`/zq-admin/schools/${req.params.id}?error=${encodeURIComponent(err.message)}`);
+  }
+});
+
 // ADD BROCHURE
 // POST /zq-admin/schools/:id/brochure/add
 // ─────────────────────────────────────────────────────────────────────────────
