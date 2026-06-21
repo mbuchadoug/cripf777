@@ -14,7 +14,7 @@ import { requireSupplierAdmin } from "../middleware/supplierAdminAuth.js";
 import SchoolProfile from "../models/schoolProfile.js";
 import SchoolSubscriptionPayment from "../models/schoolSubscriptionPayment.js";
 import { sendDocument, sendText } from "../services/metaSender.js";
-import { generatePDF } from "../routes/twilio_biz.js";
+import { generatePDF } from "./twilio_biz.js";
 import SchoolLead from "../models/schoolLead.js";
 import {
   SCHOOL_CITIES,
