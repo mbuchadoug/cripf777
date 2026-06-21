@@ -1557,51 +1557,6 @@ router.get("/schools/:id/edit", requireSupplierAdmin, async (req, res) => {
             <span style="font-size:11px;color:var(--muted)">Tip: mention your results, key facilities, grades offered, and what makes your school special. Max ~600 characters recommended.</span>
           </div>
 
-          <!-- Smart Link Flyers (images) -->
-          <p style="font-size:13px;font-weight:600;margin-bottom:10px">
-            🖼️ Smart Link Flyers
-            <span style="font-weight:400;font-size:11px;color:var(--muted)"> — PNG/JPG promotional images sent to parents as WhatsApp images</span>
-          </p>
-          ${(school.smartLinkFlyers || []).length
-            ? `<table style="width:100%;border-collapse:collapse;margin-bottom:12px;font-size:13px">
-                <tr style="background:var(--bg)">
-                  <th style="padding:8px 10px;text-align:left;border-bottom:1px solid var(--border)">Label</th>
-                  <th style="padding:8px 10px;text-align:left;border-bottom:1px solid var(--border)">Preview</th>
-                  <th style="padding:8px 10px;border-bottom:1px solid var(--border)"></th>
-                </tr>
-                ${(school.smartLinkFlyers || []).map((f, i) => `
-                  <tr>
-                    <td style="padding:8px 10px;border-bottom:1px solid var(--border)">${esc(f.label || "Flyer")}</td>
-                    <td style="padding:8px 10px;border-bottom:1px solid var(--border)">
-                      <a href="${esc(f.url)}" target="_blank">
-                        <img src="${esc(f.url)}" alt="${esc(f.label)}" style="height:48px;border-radius:4px;object-fit:cover;border:1px solid var(--border)" onerror="this.style.display='none'" />
-                      </a>
-                    </td>
-                    <td style="padding:8px 10px;border-bottom:1px solid var(--border)">
-                      <form method="POST" action="/zq-admin/schools/${school._id}/flyer/${i}/delete" style="display:inline" onsubmit="return confirm('Remove this flyer?')">
-                        <button type="submit" class="btn btn-sm btn-red">🗑 Remove</button>
-                      </form>
-                    </td>
-                  </tr>`).join("")}
-              </table>`
-            : `<p style="color:var(--muted);font-size:13px;margin-bottom:14px">No flyers uploaded yet.</p>`}
-          <form method="POST" action="/zq-admin/schools/${school._id}/flyer/add" enctype="multipart/form-data"
-                style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:20px">
-            <div style="flex:1;min-width:180px">
-              <label style="font-size:12px;display:block;margin-bottom:4px">Label (e.g. "2025 Open Day Flyer")</label>
-              <input name="label" type="text" placeholder="e.g. 2025 Enrolment Flyer"
-                     style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--white);color:var(--text)" />
-            </div>
-            <div style="flex:2;min-width:220px">
-              <label style="font-size:12px;display:block;margin-bottom:4px">Image file (PNG, JPG or WEBP, max 5MB)</label>
-              <input name="flyerFile" type="file" accept="image/png,image/jpeg,image/webp"
-                     style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--white);color:var(--text)" required />
-            </div>
-            <div>
-              <button type="submit" class="btn btn-green" style="white-space:nowrap">⬆️ Upload Flyer</button>
-            </div>
-          </form>
-
           <hr style="margin:24px 0;border:none;border-top:1px solid var(--border)">
           <div class="form-grid">
             <div class="fg">
@@ -1640,6 +1595,65 @@ router.get("/schools/:id/edit", requireSupplierAdmin, async (req, res) => {
           </div>
         </form>
       </div>
+
+      <!-- ── SMART LINK FLYERS ─ separate panel outside the main edit form ──── -->
+      <div class="panel" style="max-width:900px;margin-top:24px">
+        <h3>🖼️ Smart Link Flyers</h3>
+        <p style="font-size:13px;color:var(--muted);margin-bottom:16px">
+          Promotional images (PNG/JPG/WEBP) sent automatically to parents as WhatsApp images
+          when they open your school link. Upload your enrolment flyer, open-day poster, or
+          any promotional image here.
+        </p>
+        ${(school.smartLinkFlyers || []).length
+          ? `<table style="width:100%;border-collapse:collapse;margin-bottom:16px;font-size:13px">
+              <thead>
+                <tr style="background:var(--bg)">
+                  <th style="padding:10px 12px;text-align:left;border-bottom:1px solid var(--border)">Label</th>
+                  <th style="padding:10px 12px;text-align:left;border-bottom:1px solid var(--border)">Preview</th>
+                  <th style="padding:10px 12px;border-bottom:1px solid var(--border)"></th>
+                </tr>
+              </thead>
+              <tbody>
+                ${(school.smartLinkFlyers || []).map((f, i) => `
+                  <tr>
+                    <td style="padding:10px 12px;border-bottom:1px solid var(--border);font-weight:500">${esc(f.label || 'Flyer')}</td>
+                    <td style="padding:10px 12px;border-bottom:1px solid var(--border)">
+                      <a href="${esc(f.url)}" target="_blank" title="Open full size">
+                        <img src="${esc(f.url)}" alt="${esc(f.label)}"
+                             style="height:60px;border-radius:6px;object-fit:cover;border:1px solid var(--border);display:block"
+                             onerror="this.style.display='none'" />
+                      </a>
+                    </td>
+                    <td style="padding:10px 12px;border-bottom:1px solid var(--border)">
+                      <form method="POST" action="/zq-admin/schools/${school._id}/flyer/${i}/delete"
+                            onsubmit="return confirm('Remove this flyer?')">
+                        <button type="submit" class="btn btn-sm btn-red">🗑 Remove</button>
+                      </form>
+                    </td>
+                  </tr>`).join('')}
+              </tbody>
+            </table>`
+          : '<p style="color:var(--muted);font-size:13px;margin-bottom:16px">No flyers uploaded yet. Upload your first flyer below.</p>'}
+
+        <form method="POST" action="/zq-admin/schools/${school._id}/flyer/add"
+              enctype="multipart/form-data"
+              style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
+          <div style="flex:1;min-width:180px">
+            <label style="font-size:12px;display:block;margin-bottom:4px;font-weight:600">Label</label>
+            <input name="label" type="text" placeholder="e.g. 2025 Enrolment Flyer"
+                   style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--white);color:var(--text)" />
+          </div>
+          <div style="flex:2;min-width:220px">
+            <label style="font-size:12px;display:block;margin-bottom:4px;font-weight:600">Image (PNG, JPG or WEBP — max 5MB)</label>
+            <input name="flyerFile" type="file" accept="image/png,image/jpeg,image/webp"
+                   style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--white);color:var(--text)" required />
+          </div>
+          <div>
+            <button type="submit" class="btn btn-green">⬆️ Upload Flyer</button>
+          </div>
+        </form>
+      </div>
+
     `));
   } catch (err) {
     res.send(layout("Error", `<div class="alert red">${err.message}</div>`));
