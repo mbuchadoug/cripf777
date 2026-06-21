@@ -245,9 +245,13 @@ export async function showSchoolFAQMenu(from, schoolId, biz, saveBiz, { source =
   if (school.grades?.from && school.grades?.to) msg1 += `\n📚 Grades: ${school.grades.from} – ${school.grades.to}`;
   if (school.boarding === "boarding" || school.boarding === "both") msg1 += " · 🛏️ Boarding";
 
-  // Admin pitch — what the school typed in the "School Description" field
-  if (school.smartLinkPitch && school.smartLinkPitch.trim()) {
-    msg1 += `\n\n${school.smartLinkPitch.trim()}`;
+  // Admin pitch — reads from three possible locations in priority order:
+  // 1. school.smartLinkPitch  — set via the green "📲 Smart Link" panel (new schoolAdmin.js)
+  // 2. school.description     — set via the inline "Edit School Profile" form in supplierAdmin.js
+  // 3. Auto-generated from facilities/results if neither is set
+  const _pitch = (school.smartLinkPitch || school.description || "").trim();
+  if (_pitch) {
+    msg1 += `\n\n${_pitch}`;
   } else {
     // Auto-generate highlights when no pitch is set
     const lines = [];

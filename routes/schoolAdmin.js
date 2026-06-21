@@ -1030,7 +1030,7 @@ router.get("/schools/:id", requireSupplierAdmin, async (req, res) => {
               </label>
               <textarea name="smartLinkPitch" rows="5"
                 style="width:100%;padding:10px 12px;border:1px solid #86efac;border-radius:8px;font-size:13px;background:white;color:var(--text);line-height:1.6;resize:vertical"
-                placeholder="e.g. We are a co-educational day and boarding school offering quality education from ECD to A-Level. Our 2024 O-Level pass rate was 94%. We have small class sizes, qualified teachers, a modern science lab, swimming pool, and a fully catered boarding house. Applications for 2026 Form 1 and Grade 1 are now open.">${esc(school.smartLinkPitch || "")}</textarea>
+                placeholder="e.g. We are a co-educational day and boarding school offering quality education from ECD to A-Level. Our 2024 O-Level pass rate was 94%. We have small class sizes, qualified teachers, a modern science lab, swimming pool, and a fully catered boarding house. Applications for 2026 Form 1 and Grade 1 are now open.">${esc(school.smartLinkPitch || school.description || "")}</textarea>
               <p style="font-size:11px;color:#64748b;margin-top:4px">
                 💡 Tip: mention your exam results, key facilities, grades, and what makes your school special. Keep it under 600 characters for best readability.
               </p>
@@ -1643,7 +1643,7 @@ router.get("/schools/:id/edit", requireSupplierAdmin, async (req, res) => {
             </label>
             <textarea name="smartLinkPitch" rows="5"
               placeholder="e.g. We are a co-educational day and boarding school offering quality education from ECD to A-Level. Our 2024 O-Level pass rate was 94%. We have small class sizes, qualified and experienced teachers, a modern science lab, swimming pool, and a fully catered boarding house. Applications for 2026 Form 1 and Grade 1 are now open."
-              style="font-size:13px">${esc(school.smartLinkPitch || "")}</textarea>
+              style="font-size:13px">${esc(school.smartLinkPitch || school.description || "")}</textarea>
             <span style="font-size:11px;color:var(--muted)">Tip: mention your results, key facilities, grades offered, and what makes your school special. Max ~600 characters recommended.</span>
           </div>
 
@@ -1878,6 +1878,7 @@ router.post("/schools/:id/edit", requireSupplierAdmin, async (req, res) => {
     school.bursaryInfo          = (req.body.bursaryInfo || "").trim();
     school.feeSchedulePdfUrl    = (req.body.feeSchedulePdfUrl || "").trim();
     school.smartLinkPitch       = (req.body.smartLinkPitch || "").trim().slice(0, 800);
+    school.description          = school.smartLinkPitch; // keep in sync with supplierAdmin.js field
     school.uniformEstimate      = parseFloat(req.body.uniformEstimate) || 0;
     school.tier                 = tier || school.tier;
     school.active               = active === "true";
@@ -2211,8 +2212,15 @@ router.post("/schools/:id/smartlink-pitch", requireSupplierAdmin, async (req, re
   try {
     const school = await SchoolProfile.findById(req.params.id);
     if (!school) return res.redirect("/zq-admin/schools");
-    school.smartLinkPitch = (req.body.smartLinkPitch || "").trim().slice(0, 800);
+    const pitch = (req.body.smartLinkPitch || "").trim().slice(0, 800);
+    // Save to both fields:
+    // - smartLinkPitch: read by schoolFAQ.js smart card (new field)
+    // - description:    read by supplierAdmin.js inline edit form (existing field)
+    // Keeping them in sync means whichever form the admin uses, the description always shows.
+    school.smartLinkPitch = pitch;
+    school.description    = pitch;
     school.markModified("smartLinkPitch");
+    school.markModified("description");
     await school.save();
     res.redirect(`/zq-admin/schools/${req.params.id}?success=` +
       encodeURIComponent("School description saved. Parents will see it the next time they open your WhatsApp link."));
