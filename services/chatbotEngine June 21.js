@@ -18600,57 +18600,6 @@ if (!isMetaAction && text && text.trim().length > 1) {
   }
 }
 
-// ── REQUEST SELLERS (interactive button tap) ────────────────────────────────
-// sup_request_sellers arrives as an interactive list_reply (isMetaAction=true).
-// The original handler for this action was buried inside an
-// `if (!isMetaAction && text && ...)` block which never fires for button taps.
-// This top-level block is the canonical handler for ALL users — with or without
-// a biz — who tap ⚡ Request Sellers.
-if (a === "sup_request_sellers") {
-  await UserSession.findOneAndUpdate(
-    { phone },
-    {
-      $set: {
-        "tempData.buyerRequestState": "awaiting_items",
-        "tempData.buyerRequestMode":  "simple",
-        "tempData.pendingBuyerRequest": {
-          requestType: "simple",
-          profileType: "product",
-          items: []
-        }
-      }
-    },
-    { upsert: true }
-  );
-
-  return sendButtons(from, {
-    text:
-      `⚡ *Request Sellers*\n\n` +
-      `Type what you need - *any way you like.*\n` +
-      `You can write a full sentence, a short phrase, or a list.\n\n` +
-      `─────────────────\n` +
-      `*💬 Write naturally:*\n` +
-      `_I need a Bill of Quantities for a 4-bed house in Ruwa, 280m², drawings available_\n` +
-      `_Need an electrician for DB board fault in Borrowdale Harare_\n` +
-      `_Please quote for architectural drawings, 3-bedroom single storey, Greendale_\n\n` +
-      `*🔧 Short service request:*\n` +
-      `_house rewiring 4 bedroom 280sqm, Borrowdale_\n` +
-      `_plumber burst pipe Avondale Harare_\n` +
-      `_glass repair 600x900mm, Eastlea_\n\n` +
-      `*📦 Products:*\n` +
-      `_copper pipe 15mm x5 lengths, Msasa Harare_\n` +
-      `_cement 50kg x20 bags, river sand 3m3, Mbare_\n` +
-      `_10kw growatt inverter x2, Glen View Harare_\n\n` +
-      `*📋 Big list?* Tap *Bulk List* below.\n\n` +
-      `💡 _Include your suburb/city so we can find nearby sellers._\n` +
-      `_Type *0* for main menu · *00* to cancel_`,
-    buttons: [
-      { id: "sup_request_mode_bulk", title: "📋 Bulk List" },
-      { id: "find_supplier",         title: "🔍 Browse & Shop" }
-    ]
-  });
-}
-
 if (a === "sup_request_mode_simple" || a === "sup_request_mode_bulk") {
   const requestType = a === "sup_request_mode_bulk" ? "bulk" : "simple";
 
