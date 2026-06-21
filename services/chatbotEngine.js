@@ -11170,7 +11170,13 @@ const shortcodeBlockedStates = [
   "school_admin_update_reg_link",
   "school_admin_update_email",
   "school_admin_update_website",
-  "school_admin_awaiting_brochure"
+  "school_admin_awaiting_brochure",
+
+  // Service rate update states (text entry: "1x50/job, 2x100/job")
+  // Without these, typed rate strings hit the shortcode search and trigger "Which city?"
+  "service_update_rates",
+  "service_update_rates_confirm_unit",
+  "service_update_rates_confirm"
 ];
 
 if (
@@ -18616,7 +18622,9 @@ if (!isMetaAction && text && text.trim().length > 1) {
     "settings_currency", "settings_terms", "settings_inv_prefix",
     "settings_qt_prefix", "settings_rcpt_prefix",
     "branch_add_name", "invite_user_phone",
-    "subscription_payment_pending", "subscription_enter_ecocash"
+    "subscription_payment_pending", "subscription_enter_ecocash",
+    // Service rate update - text entry states must not be hijacked by Request Sellers
+    "service_update_rates", "service_update_rates_confirm_unit", "service_update_rates_confirm"
   ]);
 
   if (biz && _bizActiveStates.has(biz.sessionState)) {
