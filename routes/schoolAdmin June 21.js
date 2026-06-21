@@ -116,22 +116,6 @@ const brochureUpload = multer({
   }
 });
 
-// ── Multer for smart link flyers (PNG / JPG / JPEG / WEBP images) ─────────────
-const flyerUpload = multer({
-  storage: multer.memoryStorage(),
-  limits:  { fileSize: 5 * 1024 * 1024 }, // 5MB max per flyer
-  fileFilter: (req, file, cb) => {
-    const ALLOWED = ["image/png", "image/jpeg", "image/webp"];
-    if (ALLOWED.includes(file.mimetype)) cb(null, true);
-    else cb(new Error("Only PNG, JPG or WEBP image files are allowed for flyers."));
-  }
-});
-
-// ── GridFS bucket for smart link flyers ───────────────────────────────────────
-function getFlyerBucket() {
-  return new GridFSBucket(mongoose.connection.db, { bucketName: "schoolFlyers" });
-}
-
 // ── GridFS bucket for FAQ attachments (PDF, PNG, JPG, JPEG, WEBP) ────────────
 function getFaqBucket() {
   return new GridFSBucket(mongoose.connection.db, { bucketName: "faqAttachments" });
@@ -1537,72 +1521,11 @@ router.get("/schools/:id/edit", requireSupplierAdmin, async (req, res) => {
             <textarea name="adminNote" rows="2">${esc(school.adminNote || "")}</textarea>
           </div>
 
-          <!-- ── Smart Link Profile Card ──────────────────────────────── -->
+          <!-- ── Application Form Settings ─────────────────────────────── -->
           <hr style="margin:24px 0;border:none;border-top:1px solid var(--border)">
-          <p style="font-weight:700;font-size:13px;margin-bottom:6px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">
-            📲 WhatsApp Smart Link — What Parents See First
+          <p style="font-weight:700;font-size:13px;margin-bottom:14px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">
+            📝 WhatsApp &amp; Web Application Form Settings
           </p>
-          <p style="font-size:12px;color:var(--muted);margin-bottom:14px">
-            When a parent opens your school's WhatsApp link they instantly receive: your school description below,
-            the full fee schedule, any flyers you upload (as images), and all brochures (as PDFs) — all sent
-            automatically before they tap anything. Keep the description clear and welcoming.
-          </p>
-          <div class="fg" style="margin-bottom:16px">
-            <label>School Description / Pitch
-              <span style="font-weight:400;font-size:11px;color:var(--muted)"> — shown to parents the moment they open your link</span>
-            </label>
-            <textarea name="smartLinkPitch" rows="5"
-              placeholder="e.g. We are a co-educational day and boarding school offering quality education from ECD to A-Level. Our 2024 O-Level pass rate was 94%. We have small class sizes, qualified and experienced teachers, a modern science lab, swimming pool, and a fully catered boarding house. Applications for 2026 Form 1 and Grade 1 are now open."
-              style="font-size:13px">${esc(school.smartLinkPitch || "")}</textarea>
-            <span style="font-size:11px;color:var(--muted)">Tip: mention your results, key facilities, grades offered, and what makes your school special. Max ~600 characters recommended.</span>
-          </div>
-
-          <!-- Smart Link Flyers (images) -->
-          <p style="font-size:13px;font-weight:600;margin-bottom:10px">
-            🖼️ Smart Link Flyers
-            <span style="font-weight:400;font-size:11px;color:var(--muted)"> — PNG/JPG promotional images sent to parents as WhatsApp images</span>
-          </p>
-          ${(school.smartLinkFlyers || []).length
-            ? `<table style="width:100%;border-collapse:collapse;margin-bottom:12px;font-size:13px">
-                <tr style="background:var(--bg)">
-                  <th style="padding:8px 10px;text-align:left;border-bottom:1px solid var(--border)">Label</th>
-                  <th style="padding:8px 10px;text-align:left;border-bottom:1px solid var(--border)">Preview</th>
-                  <th style="padding:8px 10px;border-bottom:1px solid var(--border)"></th>
-                </tr>
-                ${(school.smartLinkFlyers || []).map((f, i) => `
-                  <tr>
-                    <td style="padding:8px 10px;border-bottom:1px solid var(--border)">${esc(f.label || "Flyer")}</td>
-                    <td style="padding:8px 10px;border-bottom:1px solid var(--border)">
-                      <a href="${esc(f.url)}" target="_blank">
-                        <img src="${esc(f.url)}" alt="${esc(f.label)}" style="height:48px;border-radius:4px;object-fit:cover;border:1px solid var(--border)" onerror="this.style.display='none'" />
-                      </a>
-                    </td>
-                    <td style="padding:8px 10px;border-bottom:1px solid var(--border)">
-                      <form method="POST" action="/zq-admin/schools/${school._id}/flyer/${i}/delete" style="display:inline" onsubmit="return confirm('Remove this flyer?')">
-                        <button type="submit" class="btn btn-sm btn-red">🗑 Remove</button>
-                      </form>
-                    </td>
-                  </tr>`).join("")}
-              </table>`
-            : `<p style="color:var(--muted);font-size:13px;margin-bottom:14px">No flyers uploaded yet.</p>`}
-          <form method="POST" action="/zq-admin/schools/${school._id}/flyer/add" enctype="multipart/form-data"
-                style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:20px">
-            <div style="flex:1;min-width:180px">
-              <label style="font-size:12px;display:block;margin-bottom:4px">Label (e.g. "2025 Open Day Flyer")</label>
-              <input name="label" type="text" placeholder="e.g. 2025 Enrolment Flyer"
-                     style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--white);color:var(--text)" />
-            </div>
-            <div style="flex:2;min-width:220px">
-              <label style="font-size:12px;display:block;margin-bottom:4px">Image file (PNG, JPG or WEBP, max 5MB)</label>
-              <input name="flyerFile" type="file" accept="image/png,image/jpeg,image/webp"
-                     style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--white);color:var(--text)" required />
-            </div>
-            <div>
-              <button type="submit" class="btn btn-green" style="white-space:nowrap">⬆️ Upload Flyer</button>
-            </div>
-          </form>
-
-          <hr style="margin:24px 0;border:none;border-top:1px solid var(--border)">
           <div class="form-grid">
             <div class="fg">
               <label>Intake Year / Label</label>
@@ -1773,7 +1696,6 @@ router.post("/schools/:id/edit", requireSupplierAdmin, async (req, res) => {
     school.feeDiscounts         = (req.body.feeDiscounts || "").trim();
     school.bursaryInfo          = (req.body.bursaryInfo || "").trim();
     school.feeSchedulePdfUrl    = (req.body.feeSchedulePdfUrl || "").trim();
-    school.smartLinkPitch       = (req.body.smartLinkPitch || "").trim().slice(0, 800);
     school.uniformEstimate      = parseFloat(req.body.uniformEstimate) || 0;
     school.tier                 = tier || school.tier;
     school.active               = active === "true";
@@ -3860,106 +3782,6 @@ router.post("/schools/:id/faq/q/:qId/move", requireSupplierAdmin, async (req, re
   }
 });
 
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SMART LINK FLYER UPLOAD
-// POST /zq-admin/schools/:id/flyer/add
-// Accepts PNG/JPG/WEBP. Stores in GridFS bucket "schoolFlyers".
-// The serving URL is public so WhatsApp/Meta can fetch it.
-// ─────────────────────────────────────────────────────────────────────────────
-router.post("/schools/:id/flyer/add",
-  requireSupplierAdmin,
-  flyerUpload.single("flyerFile"),
-  async (req, res) => {
-    try {
-      const school = await SchoolProfile.findById(req.params.id);
-      if (!school) return res.redirect("/zq-admin/schools");
-      if (!req.file) throw new Error("Please select an image file to upload.");
-
-      const label    = (req.body.label?.trim()) || "School Flyer";
-      const ext      = req.file.mimetype === "image/png" ? "png" : req.file.mimetype === "image/webp" ? "webp" : "jpg";
-      const filename = `${school._id}_flyer_${Date.now()}.${ext}`;
-      const bucket   = getFlyerBucket();
-
-      await new Promise((resolve, reject) => {
-        const uploadStream = bucket.openUploadStream(filename, {
-          contentType: req.file.mimetype,
-          metadata: { schoolId: school._id.toString(), schoolName: school.schoolName, label, mimeType: req.file.mimetype }
-        });
-        uploadStream.on("finish", resolve);
-        uploadStream.on("error",  reject);
-        uploadStream.end(req.file.buffer);
-      });
-
-      const baseUrl = process.env.APP_BASE_URL || `https://${req.headers.host}`;
-      const fileUrl = `${baseUrl}/zq-admin/schools/flyer/${filename}`;
-
-      school.smartLinkFlyers = school.smartLinkFlyers || [];
-      school.smartLinkFlyers.push({ label, url: fileUrl, mimeType: req.file.mimetype, addedAt: new Date() });
-      school.markModified("smartLinkFlyers");
-      await school.save();
-
-      const sizeMB = (req.file.size / 1024 / 1024).toFixed(2);
-      res.redirect(`/zq-admin/schools/${req.params.id}?success=` +
-        encodeURIComponent(`Flyer "${label}" uploaded (${sizeMB} MB). Parents will see it when they open your WhatsApp link.`));
-    } catch (err) {
-      res.redirect(`/zq-admin/schools/${req.params.id}?error=${encodeURIComponent(err.message)}`);
-    }
-  }
-);
-
-// ── GET /zq-admin/schools/flyer/:filename — serves the image publicly ─────────
-router.get("/schools/flyer/:filename", async (req, res) => {
-  try {
-    const bucket = getFlyerBucket();
-    const files  = await bucket.find({ filename: req.params.filename }).toArray();
-    if (!files || files.length === 0) return res.status(404).send("File not found.");
-
-    const file = files[0];
-    const mime = file.metadata?.mimeType || "image/jpeg";
-    res.setHeader("Content-Type",        mime);
-    res.setHeader("Content-Disposition", `inline; filename="${file.filename}"`);
-    res.setHeader("Cache-Control",       "public, max-age=86400");
-
-    const downloadStream = bucket.openDownloadStreamByName(req.params.filename);
-    downloadStream.on("error", () => res.status(404).send("File not found."));
-    downloadStream.pipe(res);
-  } catch (err) {
-    console.error("[Flyer Serve]", err.message);
-    res.status(500).send("Error serving file.");
-  }
-});
-
-// ── POST /zq-admin/schools/:id/flyer/:index/delete ───────────────────────────
-router.post("/schools/:id/flyer/:index/delete", requireSupplierAdmin, async (req, res) => {
-  try {
-    const school = await SchoolProfile.findById(req.params.id);
-    if (!school) return res.redirect("/zq-admin/schools");
-
-    const idx = parseInt(req.params.index);
-    if (!isNaN(idx) && school.smartLinkFlyers?.[idx]) {
-      const flyer = school.smartLinkFlyers[idx];
-      // Delete from GridFS
-      try {
-        const urlParts = flyer.url.split("/flyer/");
-        if (urlParts.length > 1) {
-          const filename = urlParts[1];
-          const bucket   = getFlyerBucket();
-          const files    = await bucket.find({ filename }).toArray();
-          if (files.length > 0) await bucket.delete(files[0]._id);
-        }
-      } catch (gfsErr) {
-        console.error("[Flyer GFS Delete]", gfsErr.message);
-      }
-      school.smartLinkFlyers.splice(idx, 1);
-      school.markModified("smartLinkFlyers");
-      await school.save();
-    }
-    res.redirect(`/zq-admin/schools/${req.params.id}?success=${encodeURIComponent("Flyer removed.")}`);
-  } catch (err) {
-    res.redirect(`/zq-admin/schools/${req.params.id}?error=${encodeURIComponent(err.message)}`);
-  }
-});
 
 // [Apply routes moved to routes/schoolApplyRouter.js - mount at root: app.use('/', schoolApplyRouter)]
 

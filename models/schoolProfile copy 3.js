@@ -209,22 +209,6 @@ const schoolProfileSchema = new mongoose.Schema({
     addedAt: { type: Date, default: Date.now }
   }],
 
-  // ── Smart Link Profile Card ────────────────────────────────────────────────
-  // smartLinkPitch: free-text school description/pitch shown instantly when
-  // a parent opens the WhatsApp smart link. Admin pastes this in the portal.
-  // Max ~800 chars (WhatsApp text message limit is 4096 but keep it readable).
-  smartLinkPitch: { type: String, default: "" },
-
-  // smartLinkFlyers: promotional images (PNG/JPG) auto-sent as WhatsApp images
-  // right after the pitch text. Distinct from brochures[] (PDFs) so admins
-  // can upload both flyers (visual/image) and documents (PDF) separately.
-  smartLinkFlyers: [{
-    label:    { type: String, default: "School Flyer" },
-    url:      { type: String, required: true },
-    mimeType: { type: String, default: "image/jpeg" },
-    addedAt:  { type: Date, default: Date.now }
-  }],
-
   // ── ZimQuote tracking ─────────────────────────────────────────────────────
   zqSlug:            { type: String, unique: true, sparse: true },
   zqLinkViews:       { type: Number, default: 0 },
