@@ -2785,7 +2785,7 @@ if (!requestKey) {
         for (const key of Object.keys(_map)) {
           if ((_map[key]?.storedAt || 0) < _cutoff) delete _map[key];
         }
-        _map[_reqId] = { state: "awaiting_offer_intro", storedAt: Date.now(), requestId: _reqId };
+        _map[_reqId] = { state: "awaiting_offer_intro", storedAt: Date.now(), requestId: _reqId, role: "primary" };
 
         await UserSession.findOneAndUpdate(
           { phone: targetPhone },
@@ -2814,8 +2814,22 @@ if (!requestKey) {
           const _ncNorm = String(nc).replace(/\D+/g, "");
           const _ncPhone = _ncNorm.startsWith("0") && _ncNorm.length === 10
             ? "263" + _ncNorm.slice(1) : _ncNorm;
+          // Tag this session entry as notification_only so the engine knows this phone
+          // is a watcher, not the quoting supplier. The Map entry role is checked in
+          // the awaiting_offer_intro block to suppress auto-open for notification contacts.
           await _setSellerRequestSession(_ncPhone);
-          console.log(`[BUYER REQ] Session set to awaiting_offer_intro for notif contact ${_ncPhone} (req ${_reqId})`);
+          // Override the role to notification_only AFTER the session is set
+          const _ncExisting = await UserSession.findOne({ phone: _ncPhone }).lean();
+          const _ncMap = { ...(_ncExisting?.tempData?.sellerPendingRequests || {}) };
+          if (_ncMap[_reqId]) {
+            _ncMap[_reqId].role = "notification_only";
+            await UserSession.findOneAndUpdate(
+              { phone: _ncPhone },
+              { $set: { "tempData.sellerPendingRequests": _ncMap } },
+              { upsert: true }
+            );
+          }
+          console.log(`[BUYER REQ] Session set to awaiting_offer_intro for notif contact ${_ncPhone} (req ${_reqId}) [notification_only]`);
         }));
       }
       notifiedIds.push(supplier._id);
@@ -5103,6 +5117,36 @@ if (_introRequest.status === "closed") {
       const _introItems     = (_introRequest.items || []);
       const _introIsService = _introSupplier?.profileType === "service";
 
+      // ── NOTIFICATION CONTACT GUARD ─────────────────────────────────────
+      // If this phone is a notification contact (not the primary supplier),
+      // do NOT show the quote flow. They received the notification for awareness
+      // only. Only the primary supplier phone can quote.
+      // Check by looking at the sellerPendingRequests map role field.
+      try {
+        const _ncCheckSess = await UserSession.findOne({ phone }).lean();
+        const _ncCheckMap  = _ncCheckSess?.tempData?.sellerPendingRequests || {};
+        const _ncCheckIds  = Object.keys(_ncCheckMap).filter(Boolean);
+        const _allNotifOnly = _ncCheckIds.length > 0 &&
+          _ncCheckIds.every(id => _ncCheckMap[id]?.role === "notification_only");
+        if (_allNotifOnly && !_isBuyerReqAction) {
+          // This phone only got request notifications as a watcher - don't intercept
+          console.log(`[OFFER INTRO] ${phone} is notification_only contact - skipping quote flow`);
+          // Clear the stale session state so this never fires again for this phone
+          await UserSession.findOneAndUpdate(
+            { phone },
+            { $unset: {
+                "tempData.sellerRequestReplyState": "",
+                "tempData.sellerRequestId":          "",
+                "tempData.sellerPendingRequests":    ""
+            }},
+            { upsert: true }
+          );
+          // Fall through to normal command processing (menu, biz tools, etc.)
+        } else {
+          // Not a pure notification_only - proceed to quote flow below
+        }
+      } catch (_ncErr) { /* non-fatal */ }
+
       // ── FIX: when seller types something generic (not a specific button tap),
       // check if they have multiple pending requests and show a picker so they
       // can choose which one to open - preventing the wrong request from auto-opening.
@@ -5122,29 +5166,29 @@ if (_introRequest.status === "closed") {
         } catch (_) { _pendingMap = {}; }
 
         const _pendingIds = Object.keys(_pendingMap).filter(Boolean);
-        if (_pendingIds.length > 1) {
+        if (_pendingIds.length >= 1) {
           const _reqDocs = await Promise.all(
-          _pendingIds.map(id =>
-  findBuyerRequestByIdOrRef(id)
-    .then(r => r?.lean ? r.lean() : r)
-    .catch(() => null)
-)
+            _pendingIds.map(id =>
+              findBuyerRequestByIdOrRef(id)
+                .then(r => r?.lean ? r.lean() : r)
+                .catch(() => null)
+            )
           );
-          // FIX: filter out requests where this supplier already responded or declined
+          // Filter out requests where this supplier already responded, declined, or closed
           const _myPhone = String(phone).replace(/\D+/g, "");
           const _validDocs = _reqDocs.filter(req => {
             if (!req) return false;
             if (req.status === "closed") return false;
-            // Skip if this phone is in declinedBy
             if ((req.declinedBy || []).some(p => String(p).replace(/\D+/g,"") === _myPhone)) return false;
-            // Skip if this supplier already submitted a response
             if ((req.responses || []).some(r =>
               String(r.supplierPhone || "").replace(/\D+/g,"") === _myPhone ||
               String(r.supplierId || "") === String(_introSupplier?._id || "")
             )) return false;
             return true;
           });
+
           if (_validDocs.length > 1) {
+            // Multiple pending requests → show picker
             const _reqLines = _validDocs.map((req, i) => {
               const _ref   = buildBuyerRequestRef(req);
               const _items = (req.items || []).map(it => it.product || it.service).slice(0, 2).join(", ");
@@ -5161,7 +5205,30 @@ if (_introRequest.status === "closed") {
                 title: buildBuyerRequestRef(req)
               }))
             });
+          } else if (_validDocs.length === 1) {
+            // Exactly 1 pending request — do NOT auto-open it.
+            // Show a nudge with explicit buttons so the supplier chooses to open it.
+            // This prevents "hi" or any unrelated command from hijacking into the quote flow.
+            const _nudgeReq   = _validDocs[0];
+            const _nudgeRef   = buildBuyerRequestRef(_nudgeReq);
+            const _nudgeItems = (_nudgeReq.items || []).map(it => it.product || it.service).slice(0, 2).join(", ");
+            const _nudgeLoc   = _nudgeReq.area
+              ? `${_nudgeReq.area}, ${_nudgeReq.city || ""}`
+              : (_nudgeReq.city || "Harare");
+            return sendButtons(from, {
+              text:
+                `📬 *You have a pending quote request:*\n\n` +
+                `📦 ${_nudgeItems}\n` +
+                `📍 ${_nudgeLoc}\n` +
+                `Ref: *${_nudgeRef}*\n\n` +
+                `Tap *View & Quote* to open it and send your price, or *Not Available* to decline.`,
+              buttons: [
+                { id: `req_offer_${String(_nudgeReq._id)}`,   title: "⚡ View & Quote" },
+                { id: `req_unavail_${String(_nudgeReq._id)}`, title: "❌ Not Available" }
+              ]
+            });
           }
+          // _validDocs.length === 0 → all stale/closed, fall through to clear state
         }
       }
 
