@@ -4566,8 +4566,40 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
     }
 
     
-    const sellerRequestReplyState = flowSess?.tempData?.sellerRequestReplyState || null;
+    let sellerRequestReplyState = flowSess?.tempData?.sellerRequestReplyState || null;
     const sellerRequestId = flowSess?.tempData?.sellerRequestId || null;
+
+    // NOTIFICATION CONTACT EARLY EXIT
+    // Must run immediately after reading sellerRequestReplyState, BEFORE
+    // _hasBuyerReqContext is computed. If every pending request entry for this
+    // phone is tagged notification_only, this phone is a watcher only - not the
+    // quoting supplier. Clear state + null out sellerRequestReplyState so
+    // _hasBuyerReqContext becomes false and the quote block is never entered.
+    //
+    // This fixes the case where the same phone is BOTH the buyer who created
+    // the request AND a notification contact on other matched suppliers.
+    // Without this, the block enters, finds _introRequest (the buyer's own
+    // request), finds _introSupplier (via notificationContacts lookup), and
+    // shows the nudge on every message indefinitely.
+    if (sellerRequestReplyState && !_isBuyerReqAction) {
+      try {
+        const _earlyNcMap = flowSess?.tempData?.sellerPendingRequests || {};
+        const _earlyNcIds = Object.keys(_earlyNcMap).filter(Boolean);
+        if (_earlyNcIds.length > 0 && _earlyNcIds.every(id => _earlyNcMap[id]?.role === 'notification_only')) {
+          console.log('[NOTIF-ONLY EARLY EXIT] ' + phone + ' - all entries notification_only, clearing session');
+          await UserSession.findOneAndUpdate(
+            { phone },
+            { $unset: {
+                'tempData.sellerRequestReplyState': '',
+                'tempData.sellerRequestId':         '',
+                'tempData.sellerPendingRequests':   ''
+            }},
+            { upsert: true }
+          );
+          sellerRequestReplyState = null;
+        }
+      } catch (_earlyNcErr) { console.warn('[NOTIF-ONLY EARLY EXIT]', _earlyNcErr.message); }
+    }
     let pendingDraftQuote = null;
     try {
       const _rawDraft = flowSess?.tempData?.pendingDraftQuote;
@@ -5117,35 +5149,7 @@ if (_introRequest.status === "closed") {
       const _introItems     = (_introRequest.items || []);
       const _introIsService = _introSupplier?.profileType === "service";
 
-      // ── NOTIFICATION CONTACT GUARD ─────────────────────────────────────
-      // If this phone is a notification contact (not the primary supplier),
-      // do NOT show the quote flow. They received the notification for awareness
-      // only. Only the primary supplier phone can quote.
-      // Check by looking at the sellerPendingRequests map role field.
-      try {
-        const _ncCheckSess = await UserSession.findOne({ phone }).lean();
-        const _ncCheckMap  = _ncCheckSess?.tempData?.sellerPendingRequests || {};
-        const _ncCheckIds  = Object.keys(_ncCheckMap).filter(Boolean);
-        const _allNotifOnly = _ncCheckIds.length > 0 &&
-          _ncCheckIds.every(id => _ncCheckMap[id]?.role === "notification_only");
-        if (_allNotifOnly && !_isBuyerReqAction) {
-          // This phone only got request notifications as a watcher - don't intercept
-          console.log(`[OFFER INTRO] ${phone} is notification_only contact - skipping quote flow`);
-          // Clear the stale session state so this never fires again for this phone
-          await UserSession.findOneAndUpdate(
-            { phone },
-            { $unset: {
-                "tempData.sellerRequestReplyState": "",
-                "tempData.sellerRequestId":          "",
-                "tempData.sellerPendingRequests":    ""
-            }},
-            { upsert: true }
-          );
-          // Fall through to normal command processing (menu, biz tools, etc.)
-        } else {
-          // Not a pure notification_only - proceed to quote flow below
-        }
-      } catch (_ncErr) { /* non-fatal */ }
+      // [notification_only: handled by early-exit block before _hasBuyerReqContext]
 
       // ── FIX: when seller types something generic (not a specific button tap),
       // check if they have multiple pending requests and show a picker so they
