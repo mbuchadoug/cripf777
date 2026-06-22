@@ -13,7 +13,7 @@ import { ACTIONS } from "./actions.js";
 import { sendList } from "./metaSender.js";
 import InvoicePayment from "../models/invoicePayment.js";
 
-import { runDailyReportMetaEnhanced, runWeeklyReportMetaEnhanced, runMonthlyReportMetaEnhanced } from "./dailyReportEnhanced.js";
+import { runDailyReportMetaEnhanced, runWeeklyReportMetaEnhanced, runMonthlyReportMetaEnhanced, runDetailedLedgerReport, runClerkStatementReport } from "./dailyReportEnhanced.js";
 import {
   parseCommaNames,
   parsePickEntries,
@@ -309,10 +309,15 @@ const restrictedStateMap = {
     settings_qt_prefix: "settings",
     settings_rcpt_prefix: "settings",
     branch_add_name: "branches",
-    report_daily: "reports",
-    report_weekly: "reports",
-    report_monthly: "reports",
-    report_choose_branch: "reports",
+    report_daily:            "reports",
+    report_weekly:           "reports",
+    report_monthly:          "reports",
+    report_choose_branch:    "reports",
+    report_detailed:         "reports",
+    report_detailed_week:    "reports",
+    report_detailed_month:   "reports",
+    report_clerk_statement:  "reports",
+    report_clerk_pick:       "reports",
     payment_amount: "payments",
     payment_method: "payments",
     expense_amount: "payments",
@@ -649,9 +654,53 @@ if (state === "payment_invoice_search") {
     if (client) { biz.sessionData.client = client; await saveBizSafe(biz); }
   }
 
-  if (state === "report_daily") return runDailyReportMetaEnhanced({ biz, from });
-  if (state === "report_weekly") return runWeeklyReportMetaEnhanced({ biz, from });
+  if (state === "report_daily")   return runDailyReportMetaEnhanced({ biz, from });
+  if (state === "report_weekly")  return runWeeklyReportMetaEnhanced({ biz, from });
   if (state === "report_monthly") return runMonthlyReportMetaEnhanced({ biz, from });
+
+  // ── Detailed Ledger states ────────────────────────────────────────────────
+  if (state === "report_detailed")       return runDetailedLedgerReport({ biz, from, period: "day"   });
+  if (state === "report_detailed_week")  return runDetailedLedgerReport({ biz, from, period: "week"  });
+  if (state === "report_detailed_month") return runDetailedLedgerReport({ biz, from, period: "month" });
+
+  // ── Clerk statement: pick a clerk then show their statement ──────────────
+  if (state === "report_clerk_pick") {
+    // If clerkPhone already chosen (second pass), run the statement
+    if (biz.sessionData?.clerkPhone) {
+      const clerkPhone = biz.sessionData.clerkPhone;
+      const period     = biz.sessionData.clerkPeriod || "day";
+      biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
+      return runClerkStatementReport({ biz, from, clerkPhone, period });
+    }
+    // First pass: show list of staff for this business
+    const UserRoleModel = (await import("../models/userRole.js")).default;
+    const Branch        = (await import("../models/branch.js")).default;
+    const branchId      = caller?.role !== "owner" ? caller?.branchId : null;
+    const q = { businessId: biz._id, pending: false };
+    if (branchId) q.branchId = branchId;
+    const staff = await UserRoleModel.find(q).lean();
+    if (!staff.length) {
+      await sendText(from, "❌ No staff found for this business.");
+      biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
+      return sendMainMenu(from);
+    }
+    const items = staff.map((u, i) => {
+      const name = u.name || u.phone;
+      return { id: `clerk_stmt_pick_${u.phone}`, title: `👤 ${name} (${u.role || "clerk"})` };
+    });
+    items.push({ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" });
+    await sendList(from, "👤 Select clerk for statement:", items);
+    return true;
+  }
+
+  // ── Self clerk statement (clerk views own statement) ──────────────────────
+  if (state === "report_clerk_statement") {
+    let phone2 = from.replace(/\D+/g, "");
+    if (phone2.startsWith("0")) phone2 = "263" + phone2.slice(1);
+    const period = biz.sessionData?.clerkPeriod || "day";
+    biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
+    return runClerkStatementReport({ biz, from, clerkPhone: phone2, period });
+  }
 
   /* ===========================
      BRANCH REPORT - CHOOSE BRANCH

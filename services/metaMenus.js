@@ -432,10 +432,12 @@ export async function sendReportsMenu(to, isGold = false, isSilver = false) {
   // Clerk or manager: branch-scoped daily report only
   if (caller?.role === "manager" || caller?.role === "clerk") {
     const items = [
-      { id: ACTIONS.DAILY_REPORT, title: "📅 Daily Report" },
+      { id: ACTIONS.DAILY_REPORT,    title: "📅 Daily Summary"         },
+      { id: ACTIONS.DETAILED_REPORT, title: "📋 Detailed Ledger"       },
+      { id: ACTIONS.CLERK_STATEMENT, title: "👤 My Statement"          },
       ...(canSeeAdvanced ? [
-        { id: ACTIONS.WEEKLY_REPORT,  title: "📊 Weekly Report" },
-        { id: ACTIONS.MONTHLY_REPORT, title: "📆 Monthly Report" }
+        { id: ACTIONS.WEEKLY_REPORT,   title: "📊 Weekly Summary"      },
+        { id: ACTIONS.MONTHLY_REPORT,  title: "📆 Monthly Summary"     }
       ] : []),
       { id: ACTIONS.BACK, title: "⬅ Back" }
     ];
@@ -453,10 +455,12 @@ export async function sendReportsMenu(to, isGold = false, isSilver = false) {
 export async function sendOverallReportsMenu(to, isGold = false, isSilver = false) {
   const canSeeAdvanced = isGold || isSilver;
   const items = [
-    { id: ACTIONS.DAILY_REPORT, title: "📅 Daily Report" },
+    { id: ACTIONS.DAILY_REPORT,    title: "📅 Daily Summary"     },
+    { id: ACTIONS.DETAILED_REPORT, title: "📋 Detailed Ledger"   },
+    { id: ACTIONS.CLERK_STATEMENT, title: "👤 Clerk Statement"   },
     ...(canSeeAdvanced ? [
-      { id: ACTIONS.WEEKLY_REPORT,  title: "📊 Weekly Report"  },
-      { id: ACTIONS.MONTHLY_REPORT, title: "📆 Monthly Report" }
+      { id: ACTIONS.WEEKLY_REPORT,  title: "📊 Weekly Summary"   },
+      { id: ACTIONS.MONTHLY_REPORT, title: "📆 Monthly Summary"  }
     ] : []),
     { id: ACTIONS.BACK, title: "⬅ Back to Reports" }
   ];
@@ -466,10 +470,12 @@ export async function sendOverallReportsMenu(to, isGold = false, isSilver = fals
 export async function sendBranchReportsMenu(to, isGold = false, isSilver = false) {
   const canSeeAdvanced = isGold || isSilver;
   const items = [
-    { id: "branch_daily", title: "📅 Daily Report" },
+    { id: "branch_daily",    title: "📅 Daily Summary"   },
+    { id: "branch_detailed", title: "📋 Detailed Ledger" },
+    { id: "branch_clerk",    title: "👤 Clerk Statement" },
     ...(canSeeAdvanced ? [
-      { id: "branch_weekly",  title: "📊 Weekly Report"  },
-      { id: "branch_monthly", title: "📆 Monthly Report" }
+      { id: "branch_weekly",  title: "📊 Weekly Summary"  },
+      { id: "branch_monthly", title: "📆 Monthly Summary" }
     ] : []),
     { id: ACTIONS.BACK, title: "⬅ Back to Reports" }
   ];

@@ -10383,6 +10383,56 @@ Type *done* to save`,
     return continueTwilioFlow({ from, text: "auto" });
   }
 
+  if (a === ACTIONS.DETAILED_REPORT) {
+    if (!biz) return sendMainMenu(from);
+    biz.sessionState = "report_detailed";
+    biz.sessionData  = {};
+    await saveBizSafe(biz);
+    return continueTwilioFlow({ from, text: "auto" });
+  }
+
+  if (a === ACTIONS.CLERK_STATEMENT) {
+    if (!biz) return sendMainMenu(from);
+    // Clerks see their own statement; owners/managers pick a clerk
+    if (caller?.role === "owner" || caller?.role === "manager") {
+      biz.sessionState = "report_clerk_pick";
+      biz.sessionData  = {};
+    } else {
+      // Clerk: see own statement for today
+      biz.sessionState = "report_clerk_statement";
+      biz.sessionData  = { clerkPeriod: "day" };
+    }
+    await saveBizSafe(biz);
+    return continueTwilioFlow({ from, text: "auto" });
+  }
+
+  // Handle clerk picker result: clerk_stmt_pick_{phone}
+  if (a?.startsWith("clerk_stmt_pick_")) {
+    if (!biz) return sendMainMenu(from);
+    const clerkPhone = a.replace("clerk_stmt_pick_", "");
+    biz.sessionData  = { clerkPhone, clerkPeriod: "day" };
+    biz.sessionState = "report_clerk_pick";
+    await saveBizSafe(biz);
+    return continueTwilioFlow({ from, text: "auto" });
+  }
+
+  // Handle branch_detailed and branch_clerk for branch reports menu
+  if (a === "branch_detailed") {
+    if (!biz) return sendMainMenu(from);
+    biz.sessionState = "report_detailed";
+    biz.sessionData  = {};
+    await saveBizSafe(biz);
+    return continueTwilioFlow({ from, text: "auto" });
+  }
+
+  if (a === "branch_clerk") {
+    if (!biz) return sendMainMenu(from);
+    biz.sessionState = "report_clerk_pick";
+    biz.sessionData  = {};
+    await saveBizSafe(biz);
+    return continueTwilioFlow({ from, text: "auto" });
+  }
+
   // ── Product text input states ──────────────────────────────────────────────
 
  if (biz?.sessionState === "product_add_name") {

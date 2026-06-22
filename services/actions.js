@@ -64,10 +64,12 @@ EXPENSE_METHOD: "expense_method",
 BULK_EXPENSE_MODE: "bulk_expense_mode",
 
 // REPORTS
-DAILY_REPORT: "daily_report",
-WEEKLY_REPORT: "weekly_report",
-MONTHLY_REPORT: "monthly_report",
-BRANCH_REPORT: "branch_report",
+DAILY_REPORT:    "daily_report",
+WEEKLY_REPORT:   "weekly_report",
+MONTHLY_REPORT:  "monthly_report",
+BRANCH_REPORT:   "branch_report",
+DETAILED_REPORT: "detailed_report",    // transaction-by-transaction ledger
+CLERK_STATEMENT: "clerk_statement",    // per-clerk custody statement
 
 
 // ✅ ADD THESE NEW ONES:
