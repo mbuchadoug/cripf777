@@ -79,7 +79,7 @@ function _buildFeeBlock(school) {
   const levies   = _levyFees(school);
   const onceOff  = _onceOffFees(school);
 
-  let text = `💵 *Fee Schedule — ${school.schoolName}*\n\n`;
+  let text = `💵 *Fee Schedule - ${school.schoolName}*\n\n`;
 
   if (tuition.length > 0) {
     text += "*Tuition (per term):*\n";
@@ -155,14 +155,14 @@ function _getAllDocs(school) {
   return [
     school.profilePdfUrl       && { label: "School Prospectus",  url: school.profilePdfUrl },
     school.feeSchedulePdfUrl   && { label: "Fee Schedule",        url: school.feeSchedulePdfUrl },
-    // applicationForm.brochureUrl — set via the Apply QR / Application Form Settings page
+    // applicationForm.brochureUrl - set via the Apply QR / Application Form Settings page
     af.brochureUrl             && { label: af.brochureName || "School Brochure", url: af.brochureUrl },
-    // applicationForm.rawFormUrl — printable application form PDF
+    // applicationForm.rawFormUrl - printable application form PDF
     af.rawFormUrl              && { label: af.rawFormName  || "Application Form", url: af.rawFormUrl },
     // legacy top-level applicationFormUrl
     (!af.rawFormUrl && school.applicationFormUrl)
                                && { label: "Application Form",    url: school.applicationFormUrl },
-    // brochures[] — PDFs uploaded via the Brochures panel
+    // brochures[] - PDFs uploaded via the Brochures panel
     ...(school.brochures || []).map(b => ({ label: b.label || "School Brochure", url: b.url }))
   ].filter(Boolean);
 }
@@ -199,7 +199,7 @@ function _saveLead(from, school, action, source, extra = {}) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// MAIN ENTRY — called when parent opens ZQ:SCHOOL:<id> link
+// MAIN ENTRY - called when parent opens ZQ:SCHOOL:<id> link
 // Sends everything immediately. Zero navigation required.
 // ─────────────────────────────────────────────────────────────────────────────
 export async function showSchoolFAQMenu(from, schoolId, biz, saveBiz, { source = "direct", parentName = "" } = {}) {
@@ -245,9 +245,9 @@ export async function showSchoolFAQMenu(from, schoolId, biz, saveBiz, { source =
   if (school.grades?.from && school.grades?.to) msg1 += `\n📚 Grades: ${school.grades.from} – ${school.grades.to}`;
   if (school.boarding === "boarding" || school.boarding === "both") msg1 += " · 🛏️ Boarding";
 
-  // Admin pitch — reads from three possible locations in priority order:
-  // 1. school.smartLinkPitch  — set via the green "📲 Smart Link" panel (new schoolAdmin.js)
-  // 2. school.description     — set via the inline "Edit School Profile" form in supplierAdmin.js
+  // Admin pitch - reads from three possible locations in priority order:
+  // 1. school.smartLinkPitch  - set via the green "📲 Smart Link" panel (new schoolAdmin.js)
+  // 2. school.description     - set via the inline "Edit School Profile" form in supplierAdmin.js
   // 3. Auto-generated from facilities/results if neither is set
   const _pitch = (school.smartLinkPitch || school.description || "").trim();
   if (_pitch) {
@@ -380,7 +380,7 @@ export async function handleSchoolFAQAction({ from, action, biz, saveBiz }) {
     return _handleAction(from, schoolId, act, biz, saveBiz);
   }
 
-  // Legacy category / item / page taps — redirect to smart card
+  // Legacy category / item / page taps - redirect to smart card
   const catMatch  = a.match(/^sfaq_cat_([a-zA-Z0-9_-]+)_([a-f0-9]{24})$/i);
   const itemMatch = a.match(/^sfaq_item_(.+)_([a-f0-9]{24})$/i);
   const pageMatch = a.match(/^sfaq_page_([a-zA-Z0-9_-]+)_(\d+)_([a-f0-9]{24})$/i);
@@ -406,13 +406,13 @@ async function _handleAction(from, schoolId, act, biz, saveBiz) {
     case "enquire":
       await _sess(biz, saveBiz, "sfaq_awaiting_message", { faqSchoolId: sid }, from);
       return sendText(from,
-        `✉️ *Message ${school.schoolName}*\n\nType your question — the school will reply on WhatsApp.\n\n_Type *cancel* to go back._`
+        `✉️ *Message ${school.schoolName}*\n\nType your question - the school will reply on WhatsApp.\n\n_Type *cancel* to go back._`
       );
 
     case "tour":
       await _sess(biz, saveBiz, "sfaq_awaiting_tour_date", { faqSchoolId: sid }, from);
       return sendText(from,
-        `📅 *Book a Tour — ${school.schoolName}*\n\nType your preferred date and time:\n\n_e.g. "Monday 9am", "Any weekday morning"_\n\n_Type *cancel* to go back._`
+        `📅 *Book a Tour - ${school.schoolName}*\n\nType your preferred date and time:\n\n_e.g. "Monday 9am", "Any weekday morning"_\n\n_Type *cancel* to go back._`
       );
 
     case "apply": {
@@ -423,7 +423,7 @@ async function _handleAction(from, schoolId, act, biz, saveBiz) {
         return sendButtons(from, {
           text:
             `📋 *Apply to ${school.schoolName}*\n\n` +
-            `${school.admissionsOpen ? "🟢 Admissions OPEN." : "🔴 Admissions closed — you can still register interest."}\n\n` +
+            `${school.admissionsOpen ? "🟢 Admissions OPEN." : "🔴 Admissions closed - you can still register interest."}\n\n` +
             `👉 *${school.registrationLink}*\n\n📞 ${phone}`,
           buttons: [
             { id: `sfaq_act_tour_${sid}`,    title: _btn("📅 Book a Tour") },
@@ -443,14 +443,14 @@ async function _handleAction(from, schoolId, act, biz, saveBiz) {
 
       await _sess(biz, saveBiz, "sfaq_awaiting_grade", { faqSchoolId: sid }, from);
       return sendText(from,
-        `📝 *Apply — ${school.schoolName}*\n\nWhich level or grade are you enquiring for?\n\n_e.g. "Grade 1", "Form 1", "ECD B"_\n\n_Type *cancel* to go back._`
+        `📝 *Apply - ${school.schoolName}*\n\nWhich level or grade are you enquiring for?\n\n_e.g. "Grade 1", "Form 1", "ECD B"_\n\n_Type *cancel* to go back._`
       );
     }
 
     case "interest":
       await _sess(biz, saveBiz, "sfaq_awaiting_grade", { faqSchoolId: sid }, from);
       return sendText(from,
-        `📝 *Register Interest — ${school.schoolName}*\n\nWe'll notify you when admissions open.\n\nWhich grade or level are you interested in?\n\n_e.g. "Grade 1", "Form 1", "ECD B"_\n_Type *cancel* to go back._`
+        `📝 *Register Interest - ${school.schoolName}*\n\nWe'll notify you when admissions open.\n\nWhich grade or level are you interested in?\n\n_e.g. "Grade 1", "Form 1", "ECD B"_\n_Type *cancel* to go back._`
       );
 
     case "docs": {
@@ -487,7 +487,7 @@ async function _handleAction(from, schoolId, act, biz, saveBiz) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// STATE HANDLER — processes typed replies (tour date, message, grade)
+// STATE HANDLER - processes typed replies (tour date, message, grade)
 // ─────────────────────────────────────────────────────────────────────────────
 export async function handleSchoolFAQState({ state, from, text, biz, saveBiz }) {
   if (!state?.startsWith("sfaq_")) return false;

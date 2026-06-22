@@ -1012,11 +1012,11 @@ router.get("/schools/:id", requireSupplierAdmin, async (req, res) => {
         <!-- ── SMART LINK CARD ────────────────────────────── -->
         <div class="panel" style="border:2px solid #bbf7d0;background:#f0fdf4">
           <div class="panel-head" style="margin-bottom:4px">
-            <h3 style="color:#16a34a">📲 WhatsApp Smart Link — What Parents See First</h3>
+            <h3 style="color:#16a34a">📲 WhatsApp Smart Link - What Parents See First</h3>
           </div>
           <p style="font-size:12px;color:#64748b;margin-bottom:16px;line-height:1.6">
             When a parent scans your QR code or opens your WhatsApp link they <strong>instantly receive</strong>
-            everything below — no menus to tap through.
+            everything below - no menus to tap through.
             They get: (1) your school description, (2) the full fee schedule, (3) these flyers as images,
             (4) all brochures/PDFs above as documents, then (5) three buttons: Apply, Book Tour, Ask Question.
           </p>
@@ -1026,7 +1026,7 @@ router.get("/schools/:id", requireSupplierAdmin, async (req, res) => {
             <div style="margin-bottom:12px">
               <label style="font-size:13px;font-weight:700;display:block;margin-bottom:6px;color:#16a34a">
                 ✏️ School Description
-                <span style="font-weight:400;font-size:11px;color:#64748b"> — type or paste your school pitch here. Shown to every parent who opens your link.</span>
+                <span style="font-weight:400;font-size:11px;color:#64748b"> - type or paste your school pitch here. Shown to every parent who opens your link.</span>
               </label>
               <textarea name="smartLinkPitch" rows="5"
                 style="width:100%;padding:10px 12px;border:1px solid #86efac;border-radius:8px;font-size:13px;background:white;color:var(--text);line-height:1.6;resize:vertical"
@@ -1043,7 +1043,7 @@ router.get("/schools/:id", requireSupplierAdmin, async (req, res) => {
           <!-- Smart Link Flyers (images) -->
           <p style="font-size:13px;font-weight:700;color:#16a34a;margin-bottom:6px">
             🖼️ Promotional Flyers
-            <span style="font-weight:400;font-size:11px;color:#64748b"> — PNG/JPG images sent to parents as WhatsApp images when they open your link</span>
+            <span style="font-weight:400;font-size:11px;color:#64748b"> - PNG/JPG images sent to parents as WhatsApp images when they open your link</span>
           </p>
 
           ${(school.smartLinkFlyers || []).length ? `
@@ -1085,7 +1085,7 @@ router.get("/schools/:id", requireSupplierAdmin, async (req, res) => {
                      style="width:100%;padding:8px 10px;border:1px solid #86efac;border-radius:6px;font-size:13px;background:white" />
             </div>
             <div style="flex:2;min-width:220px">
-              <label style="font-size:12px;display:block;margin-bottom:4px;font-weight:600;color:#16a34a">Image (PNG, JPG or WEBP — max 5MB)</label>
+              <label style="font-size:12px;display:block;margin-bottom:4px;font-weight:600;color:#16a34a">Image (PNG, JPG or WEBP - max 5MB)</label>
               <input name="flyerFile" type="file" accept="image/png,image/jpeg,image/webp"
                      style="width:100%;padding:8px 10px;border:1px solid #86efac;border-radius:6px;font-size:13px;background:white" required />
             </div>
@@ -1094,7 +1094,7 @@ router.get("/schools/:id", requireSupplierAdmin, async (req, res) => {
             </div>
           </form>
           <p style="font-size:11px;color:#64748b;margin-top:8px">
-            📁 Images are stored on the server and sent to parents as WhatsApp images — no external hosting needed.
+            📁 Images are stored on the server and sent to parents as WhatsApp images - no external hosting needed.
           </p>
         </div>
 
@@ -1630,16 +1630,16 @@ router.get("/schools/:id/edit", requireSupplierAdmin, async (req, res) => {
           <!-- ── Smart Link Profile Card ──────────────────────────────── -->
           <hr style="margin:24px 0;border:none;border-top:1px solid var(--border)">
           <p style="font-weight:700;font-size:13px;margin-bottom:6px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">
-            📲 WhatsApp Smart Link — What Parents See First
+            📲 WhatsApp Smart Link - What Parents See First
           </p>
           <p style="font-size:12px;color:var(--muted);margin-bottom:14px">
             When a parent opens your school's WhatsApp link they instantly receive: your school description below,
-            the full fee schedule, any flyers you upload (as images), and all brochures (as PDFs) — all sent
+            the full fee schedule, any flyers you upload (as images), and all brochures (as PDFs) - all sent
             automatically before they tap anything. Keep the description clear and welcoming.
           </p>
           <div class="fg" style="margin-bottom:16px">
             <label>School Description / Pitch
-              <span style="font-weight:400;font-size:11px;color:var(--muted)"> — shown to parents the moment they open your link</span>
+              <span style="font-weight:400;font-size:11px;color:var(--muted)"> - shown to parents the moment they open your link</span>
             </label>
             <textarea name="smartLinkPitch" rows="5"
               placeholder="e.g. We are a co-educational day and boarding school offering quality education from ECD to A-Level. Our 2024 O-Level pass rate was 94%. We have small class sizes, qualified and experienced teachers, a modern science lab, swimming pool, and a fully catered boarding house. Applications for 2026 Form 1 and Grade 1 are now open."
@@ -1734,7 +1734,7 @@ router.get("/schools/:id/edit", requireSupplierAdmin, async (req, res) => {
                    style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--white);color:var(--text)" />
           </div>
           <div style="flex:2;min-width:220px">
-            <label style="font-size:12px;display:block;margin-bottom:4px;font-weight:600">Image (PNG, JPG or WEBP — max 5MB)</label>
+            <label style="font-size:12px;display:block;margin-bottom:4px;font-weight:600">Image (PNG, JPG or WEBP - max 5MB)</label>
             <input name="flyerFile" type="file" accept="image/png,image/jpeg,image/webp"
                    style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--white);color:var(--text)" required />
           </div>
@@ -4036,7 +4036,7 @@ router.post("/schools/:id/flyer/add",
   }
 );
 
-// ── GET /zq-admin/schools/flyer/:filename — serves the image publicly ─────────
+// ── GET /zq-admin/schools/flyer/:filename - serves the image publicly ─────────
 router.get("/schools/flyer/:filename", async (req, res) => {
   try {
     const bucket = getFlyerBucket();

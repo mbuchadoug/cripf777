@@ -3027,7 +3027,7 @@ _Cash balance updated._`
   }
 
 /* ===========================
-   CASH HANDOVER: STEP 1 — AMOUNT COUNTED
+   CASH HANDOVER: STEP 1 - AMOUNT COUNTED
    =========================== */
   if (state === "cash_handover_amount") {
     if (trimmed.toLowerCase() === "cancel") {
@@ -3077,7 +3077,7 @@ _Cash balance updated._`
   }
 
 /* ===========================
-   CASH HANDOVER: STEP 2 — INCOMING STAFF
+   CASH HANDOVER: STEP 2 - INCOMING STAFF
    =========================== */
   if (state === "cash_handover_incoming") {
     if (trimmed.toLowerCase() === "cancel") {
@@ -3117,7 +3117,7 @@ _Cash balance updated._`
   }
 
 /* ===========================
-   CASH HANDOVER: STEP 3 — NOTES + SAVE
+   CASH HANDOVER: STEP 3 - NOTES + SAVE
    =========================== */
   if (state === "cash_handover_note") {
     if (trimmed.toLowerCase() === "cancel") {
@@ -3194,7 +3194,7 @@ _This handover is logged and will appear in today's report._`
         phone: { $ne: phone }
       }).lean();
       const notifMsg =
-        `🔄 *Shift Handover — ${biz.name}*\n\n` +
+        `🔄 *Shift Handover - ${biz.name}*\n\n` +
         `   💵 Cash: ${amount} ${cur}\n` +
         `   Out: ${outgoingName} (${outgoingRole})\n` +
         `   In:  ${incomingName} (${incomingRole})\n` +
@@ -3215,7 +3215,7 @@ _This handover is logged and will appear in today's report._`
 
 
   /* ===========================
-     REPORT DATE FILTER — user types custom date range
+     REPORT DATE FILTER - user types custom date range
   =========================== */
   if (state === "report_date_filter") {
     const reportAction = biz.sessionData?.filterFor || "detailed";

@@ -241,7 +241,7 @@ function reportHeader({ bizName, logoSrc, address, title, subtitle, branch, gene
 function reportFooter(bizName, reportType) {
   return `
   <div class="rpt-footer">
-    <span>${esc(bizName)} — ${esc(reportType)}</span>
+    <span>${esc(bizName)} - ${esc(reportType)}</span>
     <span>Powered by ZimQuote · ${new Date().toLocaleDateString("en-GB")}</span>
   </div>`;
 }
@@ -318,7 +318,7 @@ function buildSummaryHTML({ biz, reportType, periodLabel, branchName, data, tota
   const weekRows = weeks?.length
     ? weeks.map((w, i) => `
       <tr class="${i % 2 === 1 ? "stripe" : ""}">
-        <td>Week ${i + 1} — ${esc(w.label)}</td>
+        <td>Week ${i + 1} - ${esc(w.label)}</td>
         <td class="r">${money(w.in, cur)}</td>
         <td class="r">${money(w.out, cur)}</td>
         <td class="r ${w.profit >= 0 ? "flag-ok" : "flag-short"}">${money(w.profit, cur)}</td>
@@ -326,7 +326,7 @@ function buildSummaryHTML({ biz, reportType, periodLabel, branchName, data, tota
 
   // vs previous period (weekly/monthly)
   const prevSection = prevTotals ? `
-    <div class="section-title">Comparison — Previous Period</div>
+    <div class="section-title">Comparison - Previous Period</div>
     <table>
       <thead><tr>
         <th>Metric</th><th class="r">Previous</th><th class="r">Current</th><th class="r">Change</th>
@@ -351,7 +351,7 @@ function buildSummaryHTML({ biz, reportType, periodLabel, branchName, data, tota
     </table>` : "";
 
   return `<!doctype html><html><head><meta charset="utf-8"/>
-  <title>${esc(reportType)} — ${esc(biz.name)}</title>
+  <title>${esc(reportType)} - ${esc(biz.name)}</title>
   <style>${baseCSS()}</style></head><body>
 
   ${reportHeader({
@@ -492,7 +492,7 @@ function buildLedgerHTML({ biz, periodLabel, branchName, ledgerRows, openingBala
       return `<tr class="handover-row ${cls}">
         <td colspan="2">🔄 SHIFT HANDOVER</td>
         <td colspan="2">${esc(row.description)}</td>
-        <td>—</td>
+        <td>-</td>
         <td class="r">Counted: ${money(row.amountCounted, cur)}</td>
         <td></td>
         <td class="r">${money(row.balance, cur)}</td>
@@ -519,7 +519,7 @@ function buildLedgerHTML({ biz, periodLabel, branchName, ledgerRows, openingBala
   const netClass  = netChange >= 0 ? "flag-ok" : "flag-short";
 
   return `<!doctype html><html><head><meta charset="utf-8"/>
-  <title>Detailed Ledger — ${esc(biz.name)}</title>
+  <title>Detailed Ledger - ${esc(biz.name)}</title>
   <style>
     ${baseCSS()}
     body { font-size: 11px; padding: 20px 24px; }
@@ -556,7 +556,7 @@ function buildLedgerHTML({ biz, periodLabel, branchName, ledgerRows, openingBala
   </div>
 
   <!-- LEDGER TABLE -->
-  <div class="section-title">Transaction Ledger — ${esc(periodLabel)}</div>
+  <div class="section-title">Transaction Ledger - ${esc(periodLabel)}</div>
   <table>
     <thead>
       <tr>
@@ -648,14 +648,14 @@ function buildClerkStatementHTML({ biz, periodLabel, branchName, clerkData, logo
 
   const reconcile = handedOver !== null
     ? (Math.abs(discrepancy) < 0.01
-        ? `<div class="verdict profit">✅ BALANCED — Expected ${money(expectedClosing, cur)}, Counted ${money(handedOver, cur)}</div>`
+        ? `<div class="verdict profit">✅ BALANCED - Expected ${money(expectedClosing, cur)}, Counted ${money(handedOver, cur)}</div>`
         : discrepancy > 0
-          ? `<div class="verdict" style="background:#fffbeb;color:#b45309;border-left:4px solid #d97706">⚠️ SURPLUS — Counted ${money(handedOver, cur)}, Expected ${money(expectedClosing, cur)}. Difference: +${money(discrepancy, cur)}</div>`
-          : `<div class="verdict loss">❌ SHORT — Counted ${money(handedOver, cur)}, Expected ${money(expectedClosing, cur)}. Difference: ${money(discrepancy, cur)}</div>`)
-    : `<div class="verdict even">⏳ Shift still open — Current balance in custody: ${money(expectedClosing, cur)}</div>`;
+          ? `<div class="verdict" style="background:#fffbeb;color:#b45309;border-left:4px solid #d97706">⚠️ SURPLUS - Counted ${money(handedOver, cur)}, Expected ${money(expectedClosing, cur)}. Difference: +${money(discrepancy, cur)}</div>`
+          : `<div class="verdict loss">❌ SHORT - Counted ${money(handedOver, cur)}, Expected ${money(expectedClosing, cur)}. Difference: ${money(discrepancy, cur)}</div>`)
+    : `<div class="verdict even">⏳ Shift still open - Current balance in custody: ${money(expectedClosing, cur)}</div>`;
 
   return `<!doctype html><html><head><meta charset="utf-8"/>
-  <title>Clerk Statement — ${esc(clerkName)}</title>
+  <title>Clerk Statement - ${esc(clerkName)}</title>
   <style>
     ${baseCSS()}
     body { font-size: 12px; }
@@ -754,12 +754,12 @@ export async function generateReportPDF({
   data,             // { invoices, receipts, payments, expenses }
   totals,           // calcTotals result
   prevTotals,       // optional
-  weeks,            // optional — monthly week-by-week array
+  weeks,            // optional - monthly week-by-week array
   incomeStatement,  // pre-built IS object (optional, built here if not provided)
-  ledgerRows,       // for Detailed Ledger — pre-built ledger.rows
+  ledgerRows,       // for Detailed Ledger - pre-built ledger.rows
   openingBalance,   // for Detailed Ledger
   closingBalance,   // for Detailed Ledger
-  clerkData,        // for Clerk Statement — buildClerkStatement result
+  clerkData,        // for Clerk Statement - buildClerkStatement result
 }) {
   const dir      = await ensureReportDir();
   const slug     = reportType.toLowerCase().replace(/\s+/g, "-");

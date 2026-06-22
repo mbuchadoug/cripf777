@@ -5206,7 +5206,7 @@ if (_introRequest.status === "closed") {
               }))
             });
           } else if (_validDocs.length === 1) {
-            // Exactly 1 pending request — do NOT auto-open it.
+            // Exactly 1 pending request - do NOT auto-open it.
             // Show a nudge with explicit buttons so the supplier chooses to open it.
             // This prevents "hi" or any unrelated command from hijacking into the quote flow.
             const _nudgeReq   = _validDocs[0];
@@ -18679,8 +18679,8 @@ if (!isMetaAction && text && text.trim().length > 1) {
 // sup_request_sellers arrives as an interactive list_reply (isMetaAction=true).
 // The original handler for this action was buried inside an
 // `if (!isMetaAction && text && ...)` block which never fires for button taps.
-// This top-level block is the canonical handler for ALL users — with or without
-// a biz — who tap ⚡ Request Sellers.
+// This top-level block is the canonical handler for ALL users - with or without
+// a biz - who tap ⚡ Request Sellers.
 if (a === "sup_request_sellers") {
   await UserSession.findOneAndUpdate(
     { phone },

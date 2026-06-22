@@ -5206,7 +5206,7 @@ if (_introRequest.status === "closed") {
               }))
             });
           } else if (_validDocs.length === 1) {
-            // Exactly 1 pending request — do NOT auto-open it.
+            // Exactly 1 pending request - do NOT auto-open it.
             // Show a nudge with explicit buttons so the supplier chooses to open it.
             // This prevents "hi" or any unrelated command from hijacking into the quote flow.
             const _nudgeReq   = _validDocs[0];
@@ -10388,7 +10388,7 @@ Type *done* to save`,
     // Show period picker
     biz.sessionData = { ...(biz.sessionData||{}) };
     await saveBizSafe(biz);
-    return sendList(from, "📋 Detailed Ledger — Choose Period:", [
+    return sendList(from, "📋 Detailed Ledger - Choose Period:", [
       { id: "rpt_det_day",    title: "📅 Today"          },
       { id: "rpt_det_week",   title: "📊 This Week"       },
       { id: "rpt_det_month",  title: "📆 This Month"      },
@@ -10415,7 +10415,7 @@ Type *done* to save`,
     if (!biz) return sendMainMenu(from);
     // Period picker first, then clerk picker
     await saveBizSafe(biz);
-    return sendList(from, "👤 Clerk Statement — Choose Period:", [
+    return sendList(from, "👤 Clerk Statement - Choose Period:", [
       { id: "rpt_clk_day",    title: "📅 Today"         },
       { id: "rpt_clk_week",   title: "📊 This Week"      },
       { id: "rpt_clk_month",  title: "📆 This Month"     },
@@ -18779,8 +18779,8 @@ if (!isMetaAction && text && text.trim().length > 1) {
 // sup_request_sellers arrives as an interactive list_reply (isMetaAction=true).
 // The original handler for this action was buried inside an
 // `if (!isMetaAction && text && ...)` block which never fires for button taps.
-// This top-level block is the canonical handler for ALL users — with or without
-// a biz — who tap ⚡ Request Sellers.
+// This top-level block is the canonical handler for ALL users - with or without
+// a biz - who tap ⚡ Request Sellers.
 if (a === "sup_request_sellers") {
   await UserSession.findOneAndUpdate(
     { phone },
@@ -20244,7 +20244,7 @@ _Type *cancel* to go back._`
             ...branches.map(b => ({ id: `cashbal_branch_${b._id}`, title: `🏬 ${b.name}` }))
           ]);
         }
-        // Single branch owner — skip picker
+        // Single branch owner - skip picker
         const branchId = branches[0]?._id?.toString() || null;
         biz.sessionState = "cash_handover_amount";
         biz.sessionData  = { targetBranchId: branchId };
@@ -20254,7 +20254,7 @@ _Type *cancel* to go back._`
           buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
         });
       }
-      // Clerk / manager — use their assigned branch
+      // Clerk / manager - use their assigned branch
       if (!caller?.branchId) {
         await sendText(from, "❌ No branch assigned. Contact your manager.");
         return sendMainMenu(from);

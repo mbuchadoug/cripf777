@@ -1,11 +1,11 @@
 /**
- * services/reportHelpers.js  — FULL REPLACEMENT
+ * services/reportHelpers.js  - FULL REPLACEMENT
  * ─────────────────────────────────────────────────────────────
  * Builds all data structures consumed by the three report types:
  *
- *   SUMMARY REPORT    — totals, P&L, staff table, overdue
- *   DETAILED LEDGER   — every transaction as a running-balance row
- *   CLERK STATEMENT   — one clerk's shift: custody, transactions, handover
+ *   SUMMARY REPORT    - totals, P&L, staff table, overdue
+ *   DETAILED LEDGER   - every transaction as a running-balance row
+ *   CLERK STATEMENT   - one clerk's shift: custody, transactions, handover
  *
  * ─────────────────────────────────────────────────────────────
  * EXPORTS
@@ -177,15 +177,15 @@ export function calculateKeyMetrics({ invoiced, cashReceived, spent, invoiceCoun
 // ═══════════════════════════════════════════════════════════════
 export function generateInsights({ profitMargin, collectionRate, topProduct, overdueCount, overdueAmount, netProfit, currency }) {
   const i = [];
-  if      (profitMargin > 50) i.push(`✅ Excellent — keeping ${profitMargin}% of revenue as profit`);
-  else if (profitMargin > 30) i.push(`✅ Healthy — ${profitMargin}% profit margin`);
-  else if (profitMargin > 0)  i.push(`⚠️ Thin margin (${profitMargin}%) — review costs`);
+  if      (profitMargin > 50) i.push(`✅ Excellent - keeping ${profitMargin}% of revenue as profit`);
+  else if (profitMargin > 30) i.push(`✅ Healthy - ${profitMargin}% profit margin`);
+  else if (profitMargin > 0)  i.push(`⚠️ Thin margin (${profitMargin}%) - review costs`);
   else                         i.push(`❌ Operating at a loss`);
   if (topProduct) i.push(`📦 Best seller: ${topProduct.name}`);
-  if      (collectionRate < 60) i.push(`⚠️ Only ${collectionRate}% of invoices collected — urgent`);
-  else if (collectionRate < 80) i.push(`💡 ${collectionRate}% collection — aim for 80%+`);
+  if      (collectionRate < 60) i.push(`⚠️ Only ${collectionRate}% of invoices collected - urgent`);
+  else if (collectionRate < 80) i.push(`💡 ${collectionRate}% collection - aim for 80%+`);
   else                           i.push(`✅ Strong collection rate: ${collectionRate}%`);
-  if (overdueCount > 0) i.push(`⚠️ ${overdueCount} overdue invoice${overdueCount > 1 ? "s" : ""} — ${currency} ${overdueAmount.toFixed(2)} owed`);
+  if (overdueCount > 0) i.push(`⚠️ ${overdueCount} overdue invoice${overdueCount > 1 ? "s" : ""} - ${currency} ${overdueAmount.toFixed(2)} owed`);
   if      (netProfit > 0) i.push(`📈 Net profit: ${currency} ${netProfit.toFixed(2)}`);
   else if (netProfit < 0) i.push(`📉 Net loss: ${currency} ${Math.abs(netProfit).toFixed(2)}`);
   else                     i.push(`⚖️ Break-even`);
@@ -199,13 +199,13 @@ export function generateInsights({ profitMargin, collectionRate, topProduct, ove
 export function generateActionItems({ overdueInvoices, currentOutstanding, collectionRate, profitMargin }) {
   const a = [];
   overdueInvoices.slice(0, 2).forEach(inv =>
-    a.push(`📞 Call ${inv.clientName} — ${inv.number} (${inv.daysOverdue}d overdue, bal ${inv.balance})`)
+    a.push(`📞 Call ${inv.clientName} - ${inv.number} (${inv.daysOverdue}d overdue, bal ${inv.balance})`)
   );
   if (collectionRate < 70 && currentOutstanding.length > 0)
     a.push(`💰 Send ${currentOutstanding.length} payment reminder${currentOutstanding.length > 1 ? "s" : ""}`);
   if (profitMargin < 20 && profitMargin > 0)
-    a.push(`📊 Review pricing — margin only ${profitMargin}%`);
-  if (!a.length) a.push(`✅ All good — keep it up!`);
+    a.push(`📊 Review pricing - margin only ${profitMargin}%`);
+  if (!a.length) a.push(`✅ All good - keep it up!`);
   return a;
 }
 
@@ -222,13 +222,13 @@ export function formatActionsList(actions) {
 export function formatOverdueList(list, currency, limit = 3) {
   if (!list?.length) return "  ✅ No overdue invoices\n";
   return list.slice(0, limit).map(inv =>
-    `  ⚠️ ${inv.clientName.slice(0, 20).padEnd(20)} ${fmtMoney(inv.balance, currency)} — ${inv.number} (${inv.daysOverdue}d)`
+    `  ⚠️ ${inv.clientName.slice(0, 20).padEnd(20)} ${fmtMoney(inv.balance, currency)} - ${inv.number} (${inv.daysOverdue}d)`
   ).join("\n") + (list.length > limit ? `\n  ...and ${list.length - limit} more` : "") + "\n";
 }
 export function formatCurrentList(list, currency, limit = 3) {
   if (!list?.length) return "  No current outstanding\n";
   return list.slice(0, limit).map(inv =>
-    `  ${inv.clientName.slice(0, 20).padEnd(20)} ${fmtMoney(inv.balance, currency)} — ${inv.number}`
+    `  ${inv.clientName.slice(0, 20).padEnd(20)} ${fmtMoney(inv.balance, currency)} - ${inv.number}`
   ).join("\n") + (list.length > limit ? `\n  ...and ${list.length - limit} more` : "") + "\n";
 }
 export function formatProductList(products, currency) {
@@ -403,7 +403,7 @@ export async function buildLedger({ biz, data, branchId, start, end, openingBala
     if (inv?.clientId) {
       try {
         const c = await Client.findById(inv.clientId).lean();
-        if (c) description = `${description} — ${c.name || c.phone}`;
+        if (c) description = `${description} - ${c.name || c.phone}`;
       } catch (_) {}
     }
     const { name, role } = await resolveStaff(pay.createdBy || null);
@@ -426,7 +426,7 @@ export async function buildLedger({ biz, data, branchId, start, end, openingBala
     rows.push({
       at: new Date(rec.createdAt),
       type: "CASH_SALE", typeLabel: "Cash Sale",
-      description: `${rec.number ? rec.number + " — " : ""}${description}`,
+      description: `${rec.number ? rec.number + " - " : ""}${description}`,
       recorder: name, role,
       credit: rec.total || 0, debit: 0,
       ref: rec.number,
@@ -436,12 +436,12 @@ export async function buildLedger({ biz, data, branchId, start, end, openingBala
 
   // ── Expenses (money OUT, specific name) ─────────────────────────────────────
   for (const exp of expenses) {
-    // Use the actual description/notes as the item name — "Fuel 40L diesel" not "Transport"
+    // Use the actual description/notes as the item name - "Fuel 40L diesel" not "Transport"
     const description = exp.description || exp.notes || exp.category || "Expense";
     const { name, role } = await resolveStaff(exp.createdBy || exp.recordedBy || null);
     rows.push({
       at: new Date(exp.createdAt),
-      type: "EXPENSE", typeLabel: `Expense — ${exp.category || ""}`,
+      type: "EXPENSE", typeLabel: `Expense - ${exp.category || ""}`,
       description,
       recorder: name, role,
       credit: 0, debit: exp.amount || 0,
@@ -474,7 +474,7 @@ export async function buildLedger({ biz, data, branchId, start, end, openingBala
     }
   }
 
-  // ── Shift handovers (custody transfers — no monetary change) ────────────────
+  // ── Shift handovers (custody transfers - no monetary change) ────────────────
   let CashHandover;
   try { CashHandover = (await import("../models/cashHandover.js")).default; } catch (_) {}
   if (CashHandover) {
@@ -609,14 +609,14 @@ export async function buildClerkStatement({ biz, clerkPhone, branchId, start, en
     const inv = invoices.find(i => i._id?.toString() === pay.invoiceId?.toString());
     let desc = inv ? `Inv ${inv.number}` : "Invoice payment";
     if (inv?.clientId) {
-      try { const c = await Client.findById(inv.clientId).lean(); if (c) desc += ` — ${c.name || c.phone}`; } catch (_) {}
+      try { const c = await Client.findById(inv.clientId).lean(); if (c) desc += ` - ${c.name || c.phone}`; } catch (_) {}
     }
     txRows.push({ at: new Date(pay.createdAt), typeLabel: "Invoice Payment", description: desc, credit: pay.amount || 0, debit: 0 });
   }
 
   for (const rec of receipts) {
     const items = (rec.items || []).slice(0, 2).map(it => it.item || it.name || "Item").join(", ");
-    txRows.push({ at: new Date(rec.createdAt), typeLabel: "Cash Sale", description: `${rec.number ? rec.number + " — " : ""}${items || "Sale"}`, credit: rec.total || 0, debit: 0 });
+    txRows.push({ at: new Date(rec.createdAt), typeLabel: "Cash Sale", description: `${rec.number ? rec.number + " - " : ""}${items || "Sale"}`, credit: rec.total || 0, debit: 0 });
   }
 
   for (const exp of expenses) {
