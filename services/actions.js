@@ -48,7 +48,8 @@ VIEW_EXPENSE_RECEIPTS: "view_expense_receipts",
   // ✅ CASH BALANCE MANAGEMENT (NEW)
   CASH_BALANCE_MENU: "cash_balance_menu",
   SET_OPENING_BALANCE: "set_opening_balance",
-  RECORD_PAYOUT: "record_payout",
+    RECORD_PAYOUT:   "record_payout",
+    RECORD_HANDOVER: "record_handover",
   VIEW_CASH_BALANCE: "view_cash_balance",
 
   INV_ADD_ANOTHER_ITEM: "inv_add_item",

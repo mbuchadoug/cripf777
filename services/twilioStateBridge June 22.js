@@ -13,7 +13,9 @@ import { ACTIONS } from "./actions.js";
 import { sendList } from "./metaSender.js";
 import InvoicePayment from "../models/invoicePayment.js";
 
-import { runDailyReportMetaEnhanced, runWeeklyReportMetaEnhanced, runMonthlyReportMetaEnhanced } from "./dailyReportEnhanced.js";
+import { runDailyReportMetaEnhanced } from "./dailyReportEnhanced.js";
+import { runWeeklyReportMetaEnhanced } from "./weeklyReportEnhanced.js";
+import { runMonthlyReportMetaEnhanced } from "./monthlyReportEnhanced.js";
 import {
   parseCommaNames,
   parsePickEntries,
@@ -318,11 +320,8 @@ const restrictedStateMap = {
     expense_amount: "payments",
     expense_category: "payments",
     cash_set_opening_balance: "payments",
-    cash_payout_amount:   "payments",
-    cash_payout_reason:   "payments",
-    cash_handover_amount:   "payments",
-    cash_handover_incoming: "payments",
-    cash_handover_note:     "payments",
+    cash_payout_amount: "payments",
+    cash_payout_reason: "payments",
   invite_user_phone: "users",
     sales_doc_search: "sales",
     sales_doc_list: "sales",
@@ -2967,193 +2966,6 @@ _Cash balance updated._`
         branchId:   targetBranchId
       });
     } catch (_n) { console.error("[PAYOUT NOTIF]", _n.message); }
-
-    const { sendCashBalanceMenu } = await import("./metaMenus.js");
-    return sendCashBalanceMenu(from);
-  }
-
-/* ===========================
-   CASH HANDOVER: STEP 1 — AMOUNT COUNTED
-   =========================== */
-  if (state === "cash_handover_amount") {
-    if (trimmed.toLowerCase() === "cancel") {
-      biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
-      const { sendCashBalanceMenu } = await import("./metaMenus.js");
-      return sendCashBalanceMenu(from);
-    }
-
-    const amount = Number(trimmed.replace(/[^0-9.]/g, ""));
-    if (isNaN(amount) || amount < 0) {
-      await sendPromptWithMenu(from, "❌ Invalid amount. Enter the cash total in the till (e.g. *340.50*):");
-      return true;
-    }
-
-    biz.sessionData.handoverAmount = amount;
-
-    // Fetch branch colleagues for the incoming-staff picker
-    const targetBranchId = biz.sessionData?.targetBranchId || caller?.branchId || null;
-    let colleagues = [];
-    try {
-      const UserRoleModel = (await import("../models/userRole.js")).default;
-      const q = { businessId: biz._id, pending: false, phone: { $ne: phone } };
-      if (targetBranchId) q.branchId = targetBranchId;
-      colleagues = await UserRoleModel.find(q).select("phone name firstName lastName role").lean();
-    } catch (_) {}
-
-    let colleagueMsg = "";
-    if (colleagues.length > 0) {
-      const list = colleagues.map((u, i) => {
-        const name = u.name || `${u.firstName || ""} ${u.lastName || ""}`.trim() || u.phone;
-        return `${i + 1}. ${name} (${u.role || "clerk"})`;
-      });
-      biz.sessionData.handoverColleagues = colleagues.map(u => ({
-        phone: u.phone,
-        name:  u.name || `${u.firstName || ""} ${u.lastName || ""}`.trim() || u.phone,
-        role:  u.role || "clerk"
-      }));
-      colleagueMsg = `*Who are you handing over to?*\n\n${list.join("\n")}\n\nReply with a number, or type *owner* if handing to the owner.\nType *cancel* to abort.`;
-    } else {
-      colleagueMsg = `*Who are you handing over to?*\n\nNo other staff found. Type the person's name, or *owner*.`;
-    }
-
-    biz.sessionState = "cash_handover_incoming";
-    await saveBizSafe(biz);
-    await sendPromptWithMenu(from, `✅ Cash counted: *${amount} ${biz.currency || "USD"}*\n\n${colleagueMsg}`);
-    return true;
-  }
-
-/* ===========================
-   CASH HANDOVER: STEP 2 — INCOMING STAFF
-   =========================== */
-  if (state === "cash_handover_incoming") {
-    if (trimmed.toLowerCase() === "cancel") {
-      biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
-      const { sendCashBalanceMenu } = await import("./metaMenus.js");
-      return sendCashBalanceMenu(from);
-    }
-
-    const colleagues     = biz.sessionData?.handoverColleagues || [];
-    let incomingPhone    = null;
-    let incomingName     = "Unknown";
-    let incomingRole     = "clerk";
-
-    if (trimmed.toLowerCase() === "owner") {
-      incomingName = "Owner"; incomingRole = "owner"; incomingPhone = null;
-    } else {
-      const idx = parseInt(trimmed, 10) - 1;
-      if (!isNaN(idx) && colleagues[idx]) {
-        incomingPhone = colleagues[idx].phone;
-        incomingName  = colleagues[idx].name;
-        incomingRole  = colleagues[idx].role;
-      } else {
-        incomingName = trimmed.slice(0, 40); // free-text name
-      }
-    }
-
-    biz.sessionData.handoverIncomingPhone = incomingPhone;
-    biz.sessionData.handoverIncomingName  = incomingName;
-    biz.sessionData.handoverIncomingRole  = incomingRole;
-    biz.sessionState = "cash_handover_note";
-    await saveBizSafe(biz);
-
-    await sendPromptWithMenu(from,
-      `📝 *Any notes?* (discrepancies, pending transactions, float left, etc.)\n\nType your note or reply *none* to skip.`
-    );
-    return true;
-  }
-
-/* ===========================
-   CASH HANDOVER: STEP 3 — NOTES + SAVE
-   =========================== */
-  if (state === "cash_handover_note") {
-    if (trimmed.toLowerCase() === "cancel") {
-      biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
-      const { sendCashBalanceMenu } = await import("./metaMenus.js");
-      return sendCashBalanceMenu(from);
-    }
-
-    const notes          = (trimmed.toLowerCase() === "none" || !trimmed) ? "" : trimmed;
-    const amount         = biz.sessionData?.handoverAmount        || 0;
-    const incomingPhone  = biz.sessionData?.handoverIncomingPhone || null;
-    const incomingName   = biz.sessionData?.handoverIncomingName  || "Unknown";
-    const incomingRole   = biz.sessionData?.handoverIncomingRole  || "clerk";
-    const targetBranchId = biz.sessionData?.targetBranchId        || caller?.branchId || null;
-
-    // Resolve outgoing staff name
-    let outgoingName = phone;
-    let outgoingRole = caller?.role || "clerk";
-    try {
-      const UserRoleModel = (await import("../models/userRole.js")).default;
-      const me = await UserRoleModel.findOne({ phone, pending: false }).lean();
-      if (me) {
-        outgoingName = me.name || `${me.firstName || ""} ${me.lastName || ""}`.trim() || phone;
-        outgoingRole = me.role || "clerk";
-      }
-    } catch (_) {}
-
-    // Save handover record
-    try {
-      const CashHandover = (await import("../models/cashHandover.js")).default;
-      const now   = new Date();
-      const today = new Date(now); today.setHours(0, 0, 0, 0);
-      await CashHandover.create({
-        businessId:    biz._id,
-        branchId:      targetBranchId,
-        outgoingPhone: phone,
-        outgoingName,
-        outgoingRole,
-        incomingPhone,
-        incomingName,
-        incomingRole,
-        amountCounted: amount,
-        notes,
-        handoverAt:    now,
-        date:          today
-      });
-    } catch (dbErr) {
-      console.error("[HANDOVER SAVE]", dbErr.message);
-      await sendText(from, "❌ Error saving handover. Please try again.");
-      return true;
-    }
-
-    biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
-
-    const cur    = biz.currency || "USD";
-    const Branch = (await import("../models/branch.js")).default;
-    const branch = targetBranchId ? await Branch.findById(targetBranchId).lean() : null;
-
-    await sendText(from,
-`✅ *Shift Handover Recorded*
-
-   💵 Cash counted:  *${amount} ${cur}*
-   👤 Outgoing:  ${outgoingName} (${outgoingRole})
-   👤 Incoming:  ${incomingName} (${incomingRole})${branch ? `\n   🏬 Branch: ${branch.name}` : ""}${notes ? `\n   📝 ${notes}` : ""}
-
-_This handover is logged and will appear in today's report._`
-    );
-
-    // Notify owner(s) and incoming clerk
-    try {
-      const UserRoleModel = (await import("../models/userRole.js")).default;
-      const owners = await UserRoleModel.find({
-        businessId: biz._id, role: "owner", pending: false,
-        phone: { $ne: phone }
-      }).lean();
-      const notifMsg =
-        `🔄 *Shift Handover — ${biz.name}*\n\n` +
-        `   💵 Cash: ${amount} ${cur}\n` +
-        `   Out: ${outgoingName} (${outgoingRole})\n` +
-        `   In:  ${incomingName} (${incomingRole})\n` +
-        (branch ? `   Branch: ${branch.name}\n` : "") +
-        (notes  ? `   Notes: ${notes}\n` : "") +
-        `\n_${new Date().toLocaleTimeString("en-GB")}_`;
-      for (const o of owners) {
-        try { await sendText(o.phone, notifMsg); } catch (_) {}
-      }
-      if (incomingPhone && incomingPhone !== phone) {
-        try { await sendText(incomingPhone, notifMsg); } catch (_) {}
-      }
-    } catch (_n) { console.error("[HANDOVER NOTIF]", _n.message); }
 
     const { sendCashBalanceMenu } = await import("./metaMenus.js");
     return sendCashBalanceMenu(from);

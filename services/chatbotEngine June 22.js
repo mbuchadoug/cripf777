@@ -12201,13 +12201,6 @@ Paid: $${Number(doc.amountPaid || 0).toFixed(2)} | Balance: $${Number(doc.balanc
       biz.sessionState = "cash_payout_amount"; await saveBizSafe(biz);
       return sendButtons(from, { text: "💸 *Record Payout*\n\nEnter payout amount:", buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }] });
     }
-    if (cashAction === "handover") {
-      biz.sessionState = "cash_handover_amount"; await saveBizSafe(biz);
-      return sendButtons(from, {
-        text: "🔄 *Shift Cash Handover*\n\nCount the cash in the till and enter the total amount:",
-        buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
-      });
-    }
     if (cashAction === "view") {
       return showBranchCashBalance(from, biz, targetBranchId);
     }
@@ -20137,42 +20130,6 @@ _Type *cancel* to go back._`
       biz.sessionData = { targetBranchId: caller.branchId.toString() };
       await saveBizSafe(biz);
       return sendButtons(from, { text: `💸 *Record Payout/Drawing*\n\nEnter the amount taken out of the till:`, buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }] });
-    }
-
-    case ACTIONS.RECORD_HANDOVER: {
-      if (!biz) return sendMainMenu(from);
-      // Owner with multiple branches → pick branch first
-      if (caller?.role === "owner") {
-        const branches = await Branch.find({ businessId: biz._id }).lean();
-        if (branches.length > 1) {
-          biz.sessionData = { ...(biz.sessionData || {}), cashBalAction: "handover" };
-          await saveBizSafe(biz);
-          return sendList(from, "🏬 Select branch for handover:", [
-            ...branches.map(b => ({ id: `cashbal_branch_${b._id}`, title: `🏬 ${b.name}` }))
-          ]);
-        }
-        // Single branch owner — skip picker
-        const branchId = branches[0]?._id?.toString() || null;
-        biz.sessionState = "cash_handover_amount";
-        biz.sessionData  = { targetBranchId: branchId };
-        await saveBizSafe(biz);
-        return sendButtons(from, {
-          text: "🔄 *Shift Cash Handover*\n\nCount the cash in the till and enter the total amount:",
-          buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
-        });
-      }
-      // Clerk / manager — use their assigned branch
-      if (!caller?.branchId) {
-        await sendText(from, "❌ No branch assigned. Contact your manager.");
-        return sendMainMenu(from);
-      }
-      biz.sessionState = "cash_handover_amount";
-      biz.sessionData  = { targetBranchId: caller.branchId.toString() };
-      await saveBizSafe(biz);
-      return sendButtons(from, {
-        text: "🔄 *Shift Cash Handover*\n\nCount the cash in the till and enter the total amount:",
-        buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
-      });
     }
 
   case ACTIONS.REPORTS_MENU: {

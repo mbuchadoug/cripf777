@@ -353,11 +353,10 @@ export async function sendPaymentsMenu(to) {
 ============================================================================= */
 export async function sendCashBalanceMenu(to) {
   return sendList(to, "💰 Cash Management", [
-    { id: ACTIONS.VIEW_CASH_BALANCE,   title: "💵 View cash balance"      },
-    { id: ACTIONS.SET_OPENING_BALANCE, title: "📝 Set opening balance"     },
-    { id: ACTIONS.RECORD_PAYOUT,       title: "💸 Record payout/drawing"   },
-    { id: ACTIONS.RECORD_HANDOVER,     title: "🔄 Shift cash handover"     },
-    { id: ACTIONS.BACK,                title: "⬅ Back"                    }
+    { id: ACTIONS.VIEW_CASH_BALANCE, title: "💵 View cash balance" },
+    { id: ACTIONS.SET_OPENING_BALANCE, title: "📝 Set opening balance" },
+    { id: ACTIONS.RECORD_PAYOUT, title: "💸 Record payout/drawing" },
+    { id: ACTIONS.BACK, title: "⬅ Back" }
   ]);
 }
 
