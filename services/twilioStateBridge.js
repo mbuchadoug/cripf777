@@ -13,7 +13,7 @@ import { ACTIONS } from "./actions.js";
 import { sendList } from "./metaSender.js";
 import InvoicePayment from "../models/invoicePayment.js";
 
-import { runDailyReportMetaEnhanced, runWeeklyReportMetaEnhanced, runMonthlyReportMetaEnhanced, runDetailedLedgerReport, runClerkStatementReport } from "./dailyReportEnhanced.js";
+import { runDailyReportMetaEnhanced, runWeeklyReportMetaEnhanced, runMonthlyReportMetaEnhanced, runDetailedLedgerReport, runClerkStatementReport, parseCustomDateRange } from "./dailyReportEnhanced.js";
 import {
   parseCommaNames,
   parsePickEntries,
@@ -662,6 +662,11 @@ if (state === "payment_invoice_search") {
   if (state === "report_detailed")       return runDetailedLedgerReport({ biz, from, period: "day"   });
   if (state === "report_detailed_week")  return runDetailedLedgerReport({ biz, from, period: "week"  });
   if (state === "report_detailed_month") return runDetailedLedgerReport({ biz, from, period: "month" });
+  if (state === "report_detailed_custom") {
+    const { customStart, customEnd } = biz.sessionData || {};
+    if (!customStart || !customEnd) { biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz); return sendMainMenu(from); }
+    return runDetailedLedgerReport({ biz, from, period: "custom", customStart: new Date(customStart), customEnd: new Date(customEnd) });
+  }
 
   // ── Clerk statement: pick a clerk then show their statement ──────────────
   if (state === "report_clerk_pick") {
@@ -3206,6 +3211,46 @@ _This handover is logged and will appear in today's report._`
 
     const { sendCashBalanceMenu } = await import("./metaMenus.js");
     return sendCashBalanceMenu(from);
+  }
+
+
+  /* ===========================
+     REPORT DATE FILTER — user types custom date range
+  =========================== */
+  if (state === "report_date_filter") {
+    const reportAction = biz.sessionData?.filterFor || "detailed";
+    const raw = (trimmed || "").trim();
+
+    if (raw.toLowerCase() === "cancel") {
+      biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
+      return sendMainMenu(from);
+    }
+
+    const range = parseCustomDateRange(raw);
+    if (!range) {
+      await sendText(from,
+        "❌ Couldn't understand that date range.\n\n" +
+        "Try one of these formats:\n" +
+        "  *01 Jun - 22 Jun*\n" +
+        "  *01/06 - 22/06*\n" +
+        "  *2026-06-01 - 2026-06-22*\n\n" +
+        "Or type *cancel* to go back."
+      );
+      return true;
+    }
+
+    biz.sessionData.customStart = range.start.toISOString();
+    biz.sessionData.customEnd   = range.end.toISOString();
+
+    if (reportAction === "clerk") {
+      const clerkPhone = biz.sessionData?.clerkPhone;
+      if (!clerkPhone) { biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz); return sendMainMenu(from); }
+      biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
+      return runClerkStatementReport({ biz, from, clerkPhone, period: "custom", customStart: range.start, customEnd: range.end });
+    }
+
+    biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
+    return runDetailedLedgerReport({ biz, from, period: "custom", customStart: range.start, customEnd: range.end });
   }
 
 /* ===========================
