@@ -1,5 +1,5 @@
 /**
- * services/dailyReportEnhanced.js  - FULL REPLACEMENT
+ * services/dailyReportEnhanced.js  — FULL REPLACEMENT
  * ─────────────────────────────────────────────────────────────
  * Report runners called by twilioStateBridge.js
  *
@@ -116,28 +116,50 @@ async function fetchOpeningBalance(biz, branchId, date) {
 // ─── Parse custom date range from text ───────────────────────────────────────
 // Accepts: "01 Jun - 22 Jun" | "01/06 - 22/06" | "2026-06-01 - 2026-06-22"
 export function parseCustomDateRange(text) {
-  const parts = text.split(/\s*[-–-to]\s*/i).map(s => s.trim()).filter(Boolean);
-  if (parts.length < 2) return null;
+  // Split on space-surrounded separators first (preserves ISO date hyphens)
+  // e.g. "01 Jun - 22 Jun", "2026-06-01 - 2026-06-22", "01 Jun to 22 Jun"
+  let parts = (text || "").trim().split(/\s+(?:[-\u2013\u2014]|to)\s+/i).map(s => s.trim()).filter(Boolean);
+
+  // Fallback: split on bare en-dash / em-dash (no spaces)
+  if (parts.length !== 2) {
+    parts = (text || "").trim().split(/[\u2013\u2014]/).map(s => s.trim()).filter(Boolean);
+  }
+
+  if (parts.length !== 2) return null;
+
   const now = new Date();
 
   function parseOne(s) {
-    // Try ISO
-    const iso = Date.parse(s);
-    if (!isNaN(iso)) return new Date(iso);
-    // Try "01 Jun" or "01 Jun 2026"
-    const m1 = s.match(/(\d{1,2})\s+([A-Za-z]+)(?:\s+(\d{4}))?/);
-    if (m1) return new Date(`${m1[1]} ${m1[2]} ${m1[3] || now.getFullYear()}`);
-    // Try "01/06" or "01/06/2026"
-    const m2 = s.match(/(\d{1,2})\/(\d{1,2})(?:\/(\d{4}))?/);
-    if (m2) return new Date(`${m2[3] || now.getFullYear()}-${m2[2].padStart(2,"0")}-${m2[1].padStart(2,"0")}`);
-    return null;
+    s = s.trim();
+    // ISO: 2026-06-01
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+      const d = new Date(s);
+      return isNaN(d) ? null : d;
+    }
+    // "01 Jun" or "01 Jun 2026" or "1 June 2026"
+    const m1 = s.match(/^(\d{1,2})\s+([A-Za-z]+)(?:\s+(\d{4}))?$/);
+    if (m1) {
+      const d = new Date(`${m1[1]} ${m1[2]} ${m1[3] || now.getFullYear()}`);
+      return isNaN(d) ? null : d;
+    }
+    // "01/06" or "01/06/2026" (day/month/year)
+    const m2 = s.match(/^(\d{1,2})\/(\d{1,2})(?:\/(\d{4}))?$/);
+    if (m2) {
+      const d = new Date(`${m2[3] || now.getFullYear()}-${m2[2].padStart(2,"0")}-${m2[1].padStart(2,"0")}`);
+      return isNaN(d) ? null : d;
+    }
+    // Last resort: let Date parse it
+    const fallback = new Date(s);
+    return isNaN(fallback) ? null : fallback;
   }
 
   const start = parseOne(parts[0]);
   const end   = parseOne(parts[1]);
-  if (!start || !end || isNaN(start) || isNaN(end)) return null;
+  if (!start || !end) return null;
   start.setHours(0, 0, 0, 0);
   end.setHours(23, 59, 59, 999);
+  // Sanity: start must be before end
+  if (start > end) return null;
   return { start, end };
 }
 
@@ -161,7 +183,7 @@ export async function buildWhatsAppSummary({ biz, label, periodLabel, data, tota
   const staffLines = staffActivity.slice(0,3)
     .map(s => `  ${s.name.slice(0,16).padEnd(16)} (${s.role||"clerk"}) · ${s.invoiceCount}inv ${s.receiptCount}rcpt · Rev: ${fmtMoney(s.totalRevenue,cur)}`).join("\n") || "  No activity";
   const insights = generateInsights({ profitMargin: margin, collectionRate: collRate, topProduct: topProducts[0]||null, overdueCount: overdueData.overdue.length, overdueAmount: overdueData.totalOverdue, netProfit: profit.netProfit, currency: cur });
-  return `📊 *${(biz.name||"").toUpperCase()}* - ${label}
+  return `📊 *${(biz.name||"").toUpperCase()}* — ${label}
 ${periodLabel}
 ${branchLine}
 ━━━━━━━━━━━━━━━━━━━━
@@ -235,7 +257,7 @@ export async function runWeeklyReportMetaEnhanced({ biz, from }) {
   const prevEnd   = new Date(end);   prevEnd.setDate(prevEnd.getDate()   - 7);
   const prevTotals = calcTotals(await fetchReportData({ biz, start: prevStart, end: prevEnd, branchId }));
   const openingBalance = await fetchOpeningBalance(biz, branchId, start);
-  const periodLabel = `${shortDate(start)} - ${shortDate(end)}`;
+  const periodLabel = `${shortDate(start)} — ${shortDate(end)}`;
   biz.sessionState = "ready"; biz.sessionData = {}; await biz.save();
   await sendReport({ biz, from, label: "Weekly Report", periodLabel, branchName, branchId, data, totals, prevTotals, weeks: null, start, end, openingBalance });
   await sendMainMenu(from);
@@ -275,12 +297,12 @@ export async function runDetailedLedgerReport({ biz, from, period = "day", custo
 
   if (period === "custom" && customStart && customEnd) {
     start = customStart; end = customEnd;
-    periodLabel = `${shortDate(start)} - ${shortDate(end)}`;
+    periodLabel = `${shortDate(start)} — ${shortDate(end)}`;
   } else if (period === "week") {
     const now = new Date(); const dow = now.getDay(); const diff = dow === 0 ? -6 : 1 - dow;
     start = new Date(now); start.setDate(now.getDate() + diff); start.setHours(0, 0, 0, 0);
     end   = new Date(start); end.setDate(start.getDate() + 6); end.setHours(23, 59, 59, 999);
-    periodLabel = `${shortDate(start)} - ${shortDate(end)}`;
+    periodLabel = `${shortDate(start)} — ${shortDate(end)}`;
   } else if (period === "month") {
     const now = new Date();
     start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
@@ -301,7 +323,7 @@ export async function runDetailedLedgerReport({ biz, from, period = "day", custo
   const cur = biz.currency || "USD";
   const net = ledger.closingBalance - openingBalance;
 
-  // Short WhatsApp message - full detail is in the PDF
+  // Short WhatsApp message — full detail is in the PDF
   await sendText(from,
 `📋 *DETAILED LEDGER*
 ${biz.name}${branchName ? ` · ${branchName}` : ""}
@@ -339,12 +361,12 @@ export async function runClerkStatementReport({ biz, from, clerkPhone, period = 
   let start, end, periodLabel;
   if (period === "custom" && customStart && customEnd) {
     start = customStart; end = customEnd;
-    periodLabel = `${shortDate(start)} - ${shortDate(end)}`;
+    periodLabel = `${shortDate(start)} — ${shortDate(end)}`;
   } else if (period === "week") {
     const now = new Date(); const dow = now.getDay(); const diff = dow === 0 ? -6 : 1 - dow;
     start = new Date(now); start.setDate(now.getDate() + diff); start.setHours(0, 0, 0, 0);
     end   = new Date(start); end.setDate(start.getDate() + 6); end.setHours(23, 59, 59, 999);
-    periodLabel = `${shortDate(start)} - ${shortDate(end)}`;
+    periodLabel = `${shortDate(start)} — ${shortDate(end)}`;
   } else if (period === "month") {
     const now = new Date();
     start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
@@ -364,11 +386,11 @@ export async function runClerkStatementReport({ biz, from, clerkPhone, period = 
 
   const recLine = handedOver !== null
     ? (Math.abs(discrepancy) < 0.01
-        ? `✅ Balanced - Counted ${fmtMoney(handedOver, cur)}`
+        ? `✅ Balanced — Counted ${fmtMoney(handedOver, cur)}`
         : discrepancy > 0
           ? `⚠️ Surplus +${fmtMoney(discrepancy, cur)}`
           : `❌ Short ${fmtMoney(Math.abs(discrepancy), cur)}`)
-    : `⏳ Shift open - Balance: ${fmtMoney(expectedClosing, cur)}`;
+    : `⏳ Shift open — Balance: ${fmtMoney(expectedClosing, cur)}`;
 
   await sendText(from,
 `👤 *CLERK STATEMENT*
