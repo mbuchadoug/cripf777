@@ -10323,19 +10323,20 @@ router.get("/suppliers/:id/staff-cards", requireSupplierAdmin, async (req, res) 
           <span>👥 Active: <strong>${cards.filter(c=>c.active).length}/${cards.length}</strong></span>
         </div>
       </div>` : "";
-    // ── Inline QR builder for staff cards (avoids dependency on staffSmartLink.js export) ──
+    // ── Inline QR builder — matches buildStaffQrImageUrl() exactly ───────────────
+    // Payload: ZQ:STAFF:<id>:SRC:qr  (NOT ZQ:S: — that routes to supplier resolver)
+    // Service: chart.googleapis.com  (same as buildStaffQrImageUrl in staffSmartLink.js)
     const _STAFF_BOT = (process.env.WHATSAPP_BOT_NUMBER || "263771143904").replace(/\D/g, "");
     function _staffQrUrl(cardId, size) {
-      const payload = "ZQ:STAFF:" + cardId;
-      return "https://api.qrserver.com/v1/create-qr-code/?size=" + size + "x" + size
-        + "&data=" + encodeURIComponent("https://wa.me/" + _STAFF_BOT + "?text=" + encodeURIComponent(payload))
-        + "&color=7c3aed&bgcolor=FFFFFF&qzone=2";
+      const rawPayload = "ZQ:STAFF:" + cardId + ":SRC:qr";
+      const rawWaLink  = "https://wa.me/" + _STAFF_BOT + "?text=" + rawPayload;
+      return "https://chart.googleapis.com/chart?cht=qr&chs=" + size + "x" + size
+        + "&chl=" + encodeURIComponent(rawWaLink) + "&choe=UTF-8";
     }
     const cardRows = cards.map(card => {
       const stats  = buildStaffAnalyticsSummary(card);
       const cardId = String(card._id);
-      // Use safe inline builder first; fall back to module function if it exists and returns a value
-      const qrUrl = _staffQrUrl(cardId, 80);
+      const qrUrl  = _staffQrUrl(cardId, 80);
       return `<tr style="border-bottom:1px solid #f0f0f0">
         <td style="padding:12px 8px;vertical-align:middle">
           <span style="display:inline-block;width:32px;height:32px;border-radius:50%;background:#e0e7ff;color:#4f46e5;text-align:center;line-height:32px;font-size:13px;font-weight:700;margin-right:8px;vertical-align:middle">${esc(card.name.charAt(0).toUpperCase())}</span>
@@ -10509,14 +10510,15 @@ router.get("/suppliers/:id/staff-cards/:cid/smart-link", requireSupplierAdmin, a
     const cardId     = String(card._id);
     const allLinks   = buildAllStaffLinks(cardId);
     const directLink = buildStaffDeepLink(cardId, null);
-    // ── Build QR URLs unconditionally from inline builder — do NOT use buildStaffQrImageUrl ──
-    // (the service module function returns a broken URL that esc() or its own encoding mangles)
-    const _DETAIL_BOT   = (process.env.WHATSAPP_BOT_NUMBER || "263771143904").replace(/\D/g, "");
-    const _staffPayload = card.zqSlug ? "ZQ:S:" + card.zqSlug : "ZQ:STAFF:" + cardId;
+    // ── Build QR URLs matching buildStaffQrImageUrl() exactly ────────────────────
+    // Payload: ZQ:STAFF:<id>:SRC:qr  (NOT ZQ:S: — that routes to supplier resolver)
+    // Service: chart.googleapis.com
+    const _DETAIL_BOT = (process.env.WHATSAPP_BOT_NUMBER || "263771143904").replace(/\D/g, "");
     function _detailQr(size) {
-      return "https://api.qrserver.com/v1/create-qr-code/?size=" + size + "x" + size
-        + "&data=" + encodeURIComponent("https://wa.me/" + _DETAIL_BOT + "?text=" + encodeURIComponent(_staffPayload))
-        + "&color=7c3aed&bgcolor=FFFFFF&qzone=2";
+      const rawPayload = "ZQ:STAFF:" + cardId + ":SRC:qr";
+      const rawWaLink  = "https://wa.me/" + _DETAIL_BOT + "?text=" + rawPayload;
+      return "https://chart.googleapis.com/chart?cht=qr&chs=" + size + "x" + size
+        + "&chl=" + encodeURIComponent(rawWaLink) + "&choe=UTF-8";
     }
     const qrUrl400 = _detailQr(400);
     const qrUrl600 = _detailQr(600);
@@ -10614,12 +10616,13 @@ router.get("/suppliers/:id/staff-cards/:cid/business-card", requireSupplierAdmin
     const supplier = await SupplierProfile.findById(req.params.id).lean();
     const card     = await StaffCard.findById(req.params.cid).lean();
     if (!supplier||!card) return res.status(404).send("Not found");
-    // ── Build QR URL unconditionally from inline builder ─────────────────────
+    // ── Build QR URL matching buildStaffQrImageUrl() exactly ─────────────────────
+    // Payload: ZQ:STAFF:<id>:SRC:qr  (chart.googleapis.com — same as the service function)
     const _BC_BOT    = (process.env.WHATSAPP_BOT_NUMBER || "263771143904").replace(/\D/g, "");
-    const _bcPayload = card.zqSlug ? "ZQ:S:" + card.zqSlug : "ZQ:STAFF:" + String(card._id);
-    const qrUrl      = "https://api.qrserver.com/v1/create-qr-code/?size=300x300"
-                     + "&data=" + encodeURIComponent("https://wa.me/" + _BC_BOT + "?text=" + encodeURIComponent(_bcPayload))
-                     + "&color=ffd700&bgcolor=0f1f3d&qzone=1";
+    const _bcRawPayload = "ZQ:STAFF:" + String(card._id) + ":SRC:qr";
+    const _bcRawWaLink  = "https://wa.me/" + _BC_BOT + "?text=" + _bcRawPayload;
+    const qrUrl      = "https://chart.googleapis.com/chart?cht=qr&chs=300x300"
+                     + "&chl=" + encodeURIComponent(_bcRawWaLink) + "&choe=UTF-8";
     const location = card.locationLabel || [supplier.location?.area, supplier.location?.city].filter(Boolean).join(", ");
     const phone    = (() => { const p=card.phone; return p.length>=11?`+${p.slice(0,3)} ${p.slice(3,5)} ${p.slice(5,8)} ${p.slice(8)}`:p; })();
     const tagline  = card.tagline || supplier.businessName;

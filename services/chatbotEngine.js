@@ -3960,6 +3960,25 @@ if (!isMetaAction && /^ZQ:SGROUP:[a-z0-9_-]{1,60}$/i.test(text.trim())) {
 }
 if (!isMetaAction && /^ZQ:S:[a-z0-9_-]{1,60}$/i.test(text.trim())) {
   console.log(`[ZQ:S TOP LEVEL] from=${from} text=${text.trim()}`);
+  // ── Staff slugs use the same ZQ:S: prefix as supplier slugs ─────────────────
+  // Check if this slug belongs to a staff card FIRST, before the supplier resolver.
+  // Staff cards store their slug in zqSlug; we route them to handleStaffDeepLink
+  // by rewriting the text to ZQ:STAFF:SLUG:<slug> which parseStaffSlugLink() handles.
+  try {
+    const _slug = text.trim().slice(4).toLowerCase(); // strip "ZQ:S:"
+    const _StaffCardModel = (await import("../models/staffCard.js")).default;
+    const _staffBySlug = await _StaffCardModel.findOne({ zqSlug: _slug }).lean();
+    if (_staffBySlug) {
+      console.log(`[ZQ:S TOP LEVEL] slug=${_slug} → staff card ${_staffBySlug._id}`);
+      const _staffHandled = await handleStaffDeepLink({
+        from, text: "ZQ:STAFF:SLUG:" + _slug, biz, saveBiz: saveBizSafe.bind(null, biz)
+      });
+      if (_staffHandled) return;
+    }
+  } catch (_slErr) {
+    console.warn("[ZQ:S STAFF SLUG CHECK]", _slErr.message);
+  }
+  // Not a staff slug — try as supplier slug
   const _zqsTopHandled = await handleZqDeepLink({
     from, text: text.trim(), biz, saveBiz: saveBizSafe.bind(null, biz)
   });
@@ -7044,6 +7063,16 @@ const supplierRegState = sess?.supplierRegState;
 // treated as product queries, producing the "Which city?" prompt instead of
 // the correct group list or supplier profile.
 if (!isMetaAction && /^ZQ:S:[a-z0-9_-]{1,60}$/i.test(text.trim())) {
+  // Check staff slug first before supplier resolver
+  try {
+    const _slug2 = text.trim().slice(4).toLowerCase();
+    const _StaffCardModel2 = (await import("../models/staffCard.js")).default;
+    const _staffBySlug2 = await _StaffCardModel2.findOne({ zqSlug: _slug2 }).lean();
+    if (_staffBySlug2) {
+      const _sh2 = await handleStaffDeepLink({ from, text: "ZQ:STAFF:SLUG:" + _slug2, biz, saveBiz: saveBizSafe.bind(null, biz) });
+      if (_sh2) return;
+    }
+  } catch (_) {}
   const _handled = await handleZqDeepLink({ from, text: text.trim(), biz, saveBiz: saveBizSafe.bind(null, biz) });
   if (_handled) return;
 }
@@ -7588,11 +7617,19 @@ if (a.startsWith("zqg_sel_") || a.startsWith("zqg_register_")) {
 // These must be handled HERE - before the shortcode block - for visitors who
 // have no business account (the common case for smart link visitors).
 if (!isMetaAction && /^ZQ:S:[a-z0-9_-]{1,60}$/i.test(text.trim())) {
+  // Check staff slug first before supplier resolver
+  try {
+    const _slug3 = text.trim().slice(4).toLowerCase();
+    const _StaffCardModel3 = (await import("../models/staffCard.js")).default;
+    const _staffBySlug3 = await _StaffCardModel3.findOne({ zqSlug: _slug3 }).lean();
+    if (_staffBySlug3) {
+      const _sh3 = await handleStaffDeepLink({ from, text: "ZQ:STAFF:SLUG:" + _slug3, biz, saveBiz: saveBizSafe.bind(null, biz) });
+      if (_sh3) return;
+    }
+  } catch (_) {}
   const _handled = await handleZqDeepLink({ from, text: text.trim(), biz, saveBiz: saveBizSafe.bind(null, biz) });
   if (_handled) return;
 }
-
-// ── ZQ:GROUP:<slug> early intercept (no-biz path) ─────────────────────────
 // FIX: ZQ:GROUP: links were falling through to parseShortcodeSearch and
 // triggering the "Which city?" prompt for visitors without a business account.
 if (!isMetaAction && /^ZQ:GROUP:[a-z0-9_-]{1,60}$/i.test(text.trim())) {
@@ -13095,8 +13132,18 @@ if (!isMetaAction && /ZQ:STAFF:/i.test(text)) {
   if (_handled) return;
 }
 
-// ── ZQ:S:<slug> - human-readable named supplier link ─────────────────────────
+// ── ZQ:S:<slug> - human-readable named supplier OR staff link ────────────────
 if (!isMetaAction && /^ZQ:S:[a-z0-9_-]{1,60}$/i.test(text.trim())) {
+  // Check staff slug first — staff cards use the same ZQ:S: prefix
+  try {
+    const _slug4 = text.trim().slice(4).toLowerCase();
+    const _StaffCardModel4 = (await import("../models/staffCard.js")).default;
+    const _staffBySlug4 = await _StaffCardModel4.findOne({ zqSlug: _slug4 }).lean();
+    if (_staffBySlug4) {
+      const _sh4 = await handleStaffDeepLink({ from, text: "ZQ:STAFF:SLUG:" + _slug4, biz, saveBiz: saveBizSafe.bind(null, biz) });
+      if (_sh4) return;
+    }
+  } catch (_) {}
   const _handled = await handleZqDeepLink({ from, text: text.trim(), biz, saveBiz: saveBizSafe.bind(null, biz) });
   if (_handled) return;
 }
