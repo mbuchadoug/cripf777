@@ -820,6 +820,85 @@ router.post("/schools/new", requireSupplierAdmin, async (req, res) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SCHOOL DETAIL PAGE
+
+// ── PUBLIC FILE ROUTES — must be before /schools/:id ─────────────────────────
+
+// ── GET /zq-admin/schools/brochure/:filename ──────────────────────────────────
+// Serves the PDF directly - no login required so WhatsApp/Meta can fetch it
+// and parents receive it as a native WhatsApp document
+router.get("/schools/brochure/:filename", async (req, res) => {
+  try {
+    const bucket = getBucket();
+    const files  = await bucket.find({ filename: req.params.filename }).toArray();
+
+    if (!files || files.length === 0) {
+      return res.status(404).send("File not found.");
+    }
+
+    const file = files[0];
+    res.setHeader("Content-Type",        "application/pdf");
+    res.setHeader("Content-Disposition", `inline; filename="${file.filename}"`);
+    res.setHeader("Cache-Control",       "public, max-age=86400"); // cache 24h
+
+    const downloadStream = bucket.openDownloadStreamByName(req.params.filename);
+    downloadStream.on("error", () => res.status(404).send("File not found."));
+    downloadStream.pipe(res);
+
+  } catch (err) {
+    console.error("[Brochure Serve]", err.message);
+    res.status(500).send("Error serving file.");
+  }
+});
+
+// ── GET /zq-admin/schools/faq-attach/:filename ────────────────────────────────
+// Serves FAQ attachments (PDF / image) - public so WhatsApp/Meta can fetch them.
+router.get("/schools/faq-attach/:filename", async (req, res) => {
+  try {
+    const bucket = getFaqBucket();
+    const files  = await bucket.find({ filename: req.params.filename }).toArray();
+
+    if (!files || files.length === 0) {
+      return res.status(404).send("File not found.");
+    }
+
+    const file = files[0];
+    const mime = file.metadata?.mimeType || "application/octet-stream";
+    res.setHeader("Content-Type",        mime);
+    res.setHeader("Content-Disposition", `inline; filename="${file.filename}"`);
+    res.setHeader("Cache-Control",       "public, max-age=86400");
+
+    const downloadStream = bucket.openDownloadStreamByName(req.params.filename);
+    downloadStream.on("error", () => res.status(404).send("File not found."));
+    downloadStream.pipe(res);
+  } catch (err) {
+    console.error("[FAQ Attach Serve]", err.message);
+    res.status(500).send("Error serving file.");
+  }
+});
+// ─────────────────────────────────────────────────────────────────────────────
+// ── GET /zq-admin/schools/flyer/:filename - serves the image publicly ─────────
+router.get("/schools/flyer/:filename", async (req, res) => {
+  try {
+    const bucket = getFlyerBucket();
+    const files  = await bucket.find({ filename: req.params.filename }).toArray();
+    if (!files || files.length === 0) return res.status(404).send("File not found.");
+
+    const file = files[0];
+    const mime = file.metadata?.mimeType || "image/jpeg";
+    res.setHeader("Content-Type",        mime);
+    res.setHeader("Content-Disposition", `inline; filename="${file.filename}"`);
+    res.setHeader("Cache-Control",       "public, max-age=86400");
+
+    const downloadStream = bucket.openDownloadStreamByName(req.params.filename);
+    downloadStream.on("error", () => res.status(404).send("File not found."));
+    downloadStream.pipe(res);
+  } catch (err) {
+    console.error("[Flyer Serve]", err.message);
+    res.status(500).send("Error serving file.");
+  }
+});
+
+
 // GET /zq-admin/schools/:id
 // ─────────────────────────────────────────────────────────────────────────────
 router.get("/schools/:id", requireSupplierAdmin, async (req, res) => {
@@ -2283,59 +2362,6 @@ router.post("/schools/:id/brochure/add",
 
 
 
-// ── GET /zq-admin/schools/brochure/:filename ──────────────────────────────────
-// Serves the PDF directly - no login required so WhatsApp/Meta can fetch it
-// and parents receive it as a native WhatsApp document
-router.get("/schools/brochure/:filename", async (req, res) => {
-  try {
-    const bucket = getBucket();
-    const files  = await bucket.find({ filename: req.params.filename }).toArray();
-
-    if (!files || files.length === 0) {
-      return res.status(404).send("File not found.");
-    }
-
-    const file = files[0];
-    res.setHeader("Content-Type",        "application/pdf");
-    res.setHeader("Content-Disposition", `inline; filename="${file.filename}"`);
-    res.setHeader("Cache-Control",       "public, max-age=86400"); // cache 24h
-
-    const downloadStream = bucket.openDownloadStreamByName(req.params.filename);
-    downloadStream.on("error", () => res.status(404).send("File not found."));
-    downloadStream.pipe(res);
-
-  } catch (err) {
-    console.error("[Brochure Serve]", err.message);
-    res.status(500).send("Error serving file.");
-  }
-});
-
-// ── GET /zq-admin/schools/faq-attach/:filename ────────────────────────────────
-// Serves FAQ attachments (PDF / image) - public so WhatsApp/Meta can fetch them.
-router.get("/schools/faq-attach/:filename", async (req, res) => {
-  try {
-    const bucket = getFaqBucket();
-    const files  = await bucket.find({ filename: req.params.filename }).toArray();
-
-    if (!files || files.length === 0) {
-      return res.status(404).send("File not found.");
-    }
-
-    const file = files[0];
-    const mime = file.metadata?.mimeType || "application/octet-stream";
-    res.setHeader("Content-Type",        mime);
-    res.setHeader("Content-Disposition", `inline; filename="${file.filename}"`);
-    res.setHeader("Cache-Control",       "public, max-age=86400");
-
-    const downloadStream = bucket.openDownloadStreamByName(req.params.filename);
-    downloadStream.on("error", () => res.status(404).send("File not found."));
-    downloadStream.pipe(res);
-  } catch (err) {
-    console.error("[FAQ Attach Serve]", err.message);
-    res.status(500).send("Error serving file.");
-  }
-});
-// ─────────────────────────────────────────────────────────────────────────────
 // DELETE BROCHURE
 // POST /zq-admin/schools/:id/brochure/:index/delete
 // ─────────────────────────────────────────────────────────────────────────────
@@ -4035,28 +4061,6 @@ router.post("/schools/:id/flyer/add",
     }
   }
 );
-
-// ── GET /zq-admin/schools/flyer/:filename - serves the image publicly ─────────
-router.get("/schools/flyer/:filename", async (req, res) => {
-  try {
-    const bucket = getFlyerBucket();
-    const files  = await bucket.find({ filename: req.params.filename }).toArray();
-    if (!files || files.length === 0) return res.status(404).send("File not found.");
-
-    const file = files[0];
-    const mime = file.metadata?.mimeType || "image/jpeg";
-    res.setHeader("Content-Type",        mime);
-    res.setHeader("Content-Disposition", `inline; filename="${file.filename}"`);
-    res.setHeader("Cache-Control",       "public, max-age=86400");
-
-    const downloadStream = bucket.openDownloadStreamByName(req.params.filename);
-    downloadStream.on("error", () => res.status(404).send("File not found."));
-    downloadStream.pipe(res);
-  } catch (err) {
-    console.error("[Flyer Serve]", err.message);
-    res.status(500).send("Error serving file.");
-  }
-});
 
 // ── POST /zq-admin/schools/:id/flyer/:index/delete ───────────────────────────
 router.post("/schools/:id/flyer/:index/delete", requireSupplierAdmin, async (req, res) => {
