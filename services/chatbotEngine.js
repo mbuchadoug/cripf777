@@ -11521,6 +11521,60 @@ if (
   // ── School text-input states (MUST be here - excluded from block below) ──────
   if (schoolTextStates.includes(biz.sessionState)) {
     console.log("[REG-DISPATCH-TOPLVL] school text state:", biz.sessionState, "from:", from);
+
+    // ── school_reg_fees: permissive parser prevents the stuck loop ──────────────
+    // schoolRegistration.js expects a clean number or "500/600/700" format.
+    // If the school types "$500 per term" or "USD 500", the handler may return
+    // false leaving the user with no response and stuck in the same state.
+    // We clean the input here, show a clear error with examples if no number
+    // found, and force-advance the state if the handler still returns false.
+    if (biz.sessionState === "school_reg_fees") {
+      const _rawFeeText = (text || "").trim();
+      // Skip = no fees / don't know
+      const _skipWords = ["skip", "no", "none", "0", "don't know", "not sure", "later"];
+      const _isSkip = _skipWords.some(w => _rawFeeText.toLowerCase() === w);
+
+      // Extract all numbers from the input (handles "$500", "USD500", "500/term", "500 600 700")
+      const _feeNums = _rawFeeText.replace(/[^0-9./]/g, " ").trim().match(/\d+(\.\d{1,2})?/g);
+
+      if (!_isSkip && (!_feeNums || !_feeNums.length)) {
+        // Nothing numeric — show a clear prompt with examples and stop here
+        await sendText(from,
+`❌ I couldn't read that as a fee amount.
+
+Please enter your school's *term fee in USD* — just the number:
+
+   *500*          → $500 per term (all terms same)
+   *500/600/700*  → different per term
+   *skip*         → I don't know yet
+
+How much is your school's term fee?`);
+        return; // keep state = school_reg_fees
+      }
+
+      // Clean the text to the first number (or slash-separated numbers) before passing to handler
+      const _cleanedFeeText = _isSkip ? "0" : _feeNums.join("/");
+
+      const _schoolFeesHandled = await handleSchoolRegistrationStates({
+        state: biz.sessionState, from, text: _cleanedFeeText, biz, saveBiz: saveBizSafe.bind(null, biz)
+      });
+      if (_schoolFeesHandled) return;
+
+      // Handler returned false even with clean input — force-advance past fees
+      console.warn("[SCHOOL_REG_FEES] handler returned false after cleaning. Force-advancing to school_reg_principal.");
+      biz.sessionData = {
+        ...(biz.sessionData || {}),
+        fees: { term1: Number(_feeNums?.[0]) || 0, term2: Number(_feeNums?.[1]) || Number(_feeNums?.[0]) || 0, term3: Number(_feeNums?.[2]) || Number(_feeNums?.[0]) || 0 }
+      };
+      biz.sessionState = "school_reg_principal";
+      await saveBizSafe(biz);
+      await sendText(from, `✅ Fees noted.
+
+👤 What is the *principal's name*? (or type *skip*)`);
+      return;
+    }
+
+    // All other school text states pass through normally
     const _schoolHandled = await handleSchoolRegistrationStates({
       state: biz.sessionState, from, text, biz, saveBiz: saveBizSafe.bind(null, biz)
     });

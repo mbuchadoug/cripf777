@@ -4091,4 +4091,158 @@ router.post("/schools/:id/flyer/:index/delete", requireSupplierAdmin, async (req
 
 // [Apply routes moved to routes/schoolApplyRouter.js - mount at root: app.use('/', schoolApplyRouter)]
 
+// ─────────────────────────────────────────────────────────────────────────────
+// APPLY QR & SETTINGS
+// GET  /zq-admin/schools/:id/apply-qr  → show application link & QR settings
+// POST /zq-admin/schools/:id/apply-qr  → save changes
+// ─────────────────────────────────────────────────────────────────────────────
+router.get("/schools/:id/apply-qr", requireSupplierAdmin, async (req, res) => {
+  try {
+    const school = await SchoolProfile.findById(req.params.id).lean();
+    if (!school) return res.redirect("/zq-admin/schools");
+
+    const ok  = req.query.success ? `<div style="background:#dcfce7;color:#16a34a;padding:14px;border-radius:8px;margin-bottom:16px">✅ ${esc(req.query.success)}</div>` : "";
+    const err = req.query.error   ? `<div style="background:#fee2e2;color:#dc2626;padding:14px;border-radius:8px;margin-bottom:16px">❌ ${esc(req.query.error)}</div>`   : "";
+
+    const af        = school.applicationForm || {};
+    const webFormUrl = `https://cripfcnt.com/apply/school/${school._id}`;
+    const waLink    = "https://wa.me/" + (process.env.WHATSAPP_BOT_NUMBER || "263771143904").replace(/\D/g,"")
+                      + "?text=" + encodeURIComponent("ZQ:SCHOOL:" + school._id);
+    const qrApi     = "https://api.qrserver.com/v1/create-qr-code/?size=200x200&data="
+                      + encodeURIComponent(waLink) + "&color=085041&bgcolor=FFFFFF&qzone=2";
+
+    const gradeOpts = (af.gradeOptions || []).join(", ");
+
+    res.send(layout(`Apply QR: ${esc(school.schoolName)}`, `
+      <a href="/zq-admin/schools/${school._id}" class="back-link">← Back to ${esc(school.schoolName)}</a>
+      ${ok}${err}
+
+      <!-- ── APPLICATION LINKS ─────────────────────────────────────────── -->
+      <div class="panel" style="margin-bottom:16px">
+        <h3>📝 Application Links &amp; QR Code</h3>
+
+        <div style="display:grid;grid-template-columns:1fr auto;gap:16px;align-items:start;margin-bottom:20px">
+          <div>
+            <p style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Web Application Form URL</p>
+            <code style="display:block;background:#f0fdf4;padding:10px 14px;border-radius:8px;font-size:13px;word-break:break-all;border:1px solid #bbf7d0">${webFormUrl}</code>
+            <div style="display:flex;gap:8px;margin-top:8px">
+              <button onclick="navigator.clipboard.writeText('${webFormUrl}');this.textContent='✅ Copied!';setTimeout(()=>this.textContent='📋 Copy URL',1800)"
+                style="padding:6px 14px;background:#16a34a;color:white;border:none;border-radius:6px;font-size:12px;cursor:pointer">📋 Copy URL</button>
+              <a href="${webFormUrl}" target="_blank" style="padding:6px 14px;background:#1d4ed8;color:white;border-radius:6px;font-size:12px;text-decoration:none">🔗 Open Form</a>
+            </div>
+            <p style="font-size:11px;color:var(--muted);margin-top:6px">Share this URL with parents via email, social media, or website.</p>
+          </div>
+          <div style="text-align:center">
+            <img src="${qrApi}" alt="Apply QR Code" style="width:120px;height:120px;border:1px solid #bbf7d0;border-radius:8px;padding:4px">
+            <div style="margin-top:6px">
+              <a href="https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(waLink)}&color=085041&bgcolor=FFFFFF&qzone=2" download="apply-qr.png" target="_blank"
+                style="font-size:11px;color:#1d4ed8;text-decoration:none">⬇ Download QR</a>
+            </div>
+            <p style="font-size:10px;color:var(--muted);margin-top:3px">Scan to apply on WhatsApp</p>
+          </div>
+        </div>
+
+        <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px 16px;margin-top:4px">
+          <p style="font-size:12px;color:#1e40af;margin:0">
+            💡 <strong>How it works:</strong> Parents scan the QR code or open the web URL.
+            The web form collects name, phone, grade and submits to your school.
+            The WhatsApp link opens the ZimQuote bot where they can apply, ask questions and view fees.
+          </p>
+        </div>
+      </div>
+
+      <!-- ── APPLICATION FORM SETTINGS ─────────────────────────────────── -->
+      <div class="panel" style="max-width:800px">
+        <h3>⚙️ Application Form Settings</h3>
+        <p style="font-size:13px;color:var(--muted);margin-bottom:20px">
+          These settings control the web application form and the WhatsApp apply flow shown to parents.
+        </p>
+
+        <form method="POST" action="/zq-admin/schools/${school._id}/apply-qr" class="edit-form">
+
+          <div class="form-grid">
+            <div class="fg">
+              <label>Intake Year / Label</label>
+              <input name="afIntakeYear" value="${esc(af.intakeYear || "")}" placeholder="e.g. 2027 Form 1 Intake" />
+              <span style="font-size:11px;color:var(--muted)">Shown at top of apply form</span>
+            </div>
+            <div class="fg">
+              <label>Notify Email (receives completed applications)</label>
+              <input name="afNotifyEmail" type="email"
+                     value="${esc(af.notifyEmail || school.email || "")}" placeholder="admin@school.co.zw" />
+              <span style="font-size:11px;color:var(--muted)">We send form submissions here</span>
+            </div>
+            <div class="fg full">
+              <label>Grade / Form Options (comma-separated)</label>
+              <input name="afGradeOptions" value="${esc(gradeOpts)}"
+                     placeholder="e.g. ECD A, Grade 1, Form 1, Form 2, Form 3, Form 4" />
+              <span style="font-size:11px;color:var(--muted)">Shown as a selection list to parents on WhatsApp</span>
+            </div>
+            <div class="fg full">
+              <label>Online Application / Registration Link</label>
+              <input name="registrationLink" value="${esc(school.registrationLink || "")}"
+                     placeholder="e.g. https://forms.gle/abc123 or https://stjohns.ac.zw/apply" />
+              <span style="font-size:11px;color:var(--muted)">Optional external form link. Parents who tap "Apply Online" are sent here.</span>
+            </div>
+            <div class="fg full">
+              <label>Application Form PDF URL (printable — sent to parents via WhatsApp)</label>
+              <input name="afRawFormUrl" value="${esc(af.rawFormUrl || school.applicationFormUrl || "")}"
+                     placeholder="https://..." />
+              ${(af.rawFormUrl || school.applicationFormUrl)
+                ? `<span style="font-size:11px;color:#16a34a">✅ PDF set — <a href="${esc(af.rawFormUrl || school.applicationFormUrl)}" target="_blank">Preview</a></span>`
+                : `<span style="font-size:11px;color:var(--muted)">Paste a public PDF URL or upload via the Brochures panel</span>`}
+            </div>
+          </div>
+
+          <div style="margin-top:4px;padding:12px 16px;background:#fefce8;border:1px solid #fde68a;border-radius:8px;margin-bottom:16px">
+            <p style="font-size:12px;color:#92400e;margin:0">
+              ⚠️ <strong>Admissions Open/Closed</strong> is controlled from the school profile page.
+              <a href="/zq-admin/schools/${school._id}" style="color:#1d4ed8">Go to profile →</a>
+            </p>
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" class="btn btn-green">💾 Save Settings</button>
+            <a href="/zq-admin/schools/${school._id}" class="btn btn-gray">Cancel</a>
+          </div>
+        </form>
+      </div>
+    `));
+  } catch (err) {
+    res.send(layout("Error", `<div class="alert red">${esc(err.message)}</div>`));
+  }
+});
+
+router.post("/schools/:id/apply-qr", requireSupplierAdmin, async (req, res) => {
+  try {
+    const school = await SchoolProfile.findById(req.params.id);
+    if (!school) return res.redirect("/zq-admin/schools");
+
+    const afIntakeYear   = (req.body.afIntakeYear   || "").trim();
+    const afNotifyEmail  = (req.body.afNotifyEmail  || "").trim();
+    const afGradeOptions = (req.body.afGradeOptions || "").split(",").map(s => s.trim()).filter(Boolean);
+    const afRawFormUrl   = (req.body.afRawFormUrl   || "").trim();
+    const registrationLink = (req.body.registrationLink || "").trim();
+
+    const existingAf = school.applicationForm || {};
+    school.applicationForm = {
+      ...existingAf,
+      intakeYear:   afIntakeYear   || existingAf.intakeYear   || "",
+      notifyEmail:  afNotifyEmail  || existingAf.notifyEmail  || "",
+      gradeOptions: afGradeOptions.length ? afGradeOptions : (existingAf.gradeOptions || []),
+      rawFormUrl:   afRawFormUrl   || existingAf.rawFormUrl   || ""
+    };
+    school.markModified("applicationForm");
+    if (afRawFormUrl) school.applicationFormUrl = afRawFormUrl;
+    if (registrationLink) school.registrationLink = registrationLink;
+
+    await school.save();
+
+    res.redirect(`/zq-admin/schools/${school._id}/apply-qr?success=${encodeURIComponent("Application settings saved successfully!")}`);
+  } catch (err) {
+    res.redirect(`/zq-admin/schools/${req.params.id}/apply-qr?error=${encodeURIComponent(err.message)}`);
+  }
+});
+
+
 export default router;

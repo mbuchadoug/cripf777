@@ -9812,6 +9812,7 @@ router.get("/suppliers/:id/staff", requireSupplierAdmin, async (req, res) => {
       <table style="width:100%;border-collapse:collapse;font-size:13px">
         <thead>
           <tr style="background:#f8fafc;border-bottom:2px solid var(--border)">
+            <th style="padding:10px 12px;text-align:left">Name</th>
             <th style="padding:10px 12px;text-align:left">Phone</th>
             <th style="padding:10px 12px;text-align:left">Role</th>
             <th style="padding:10px 12px;text-align:left">Branch</th>
@@ -9822,13 +9823,14 @@ router.get("/suppliers/:id/staff", requireSupplierAdmin, async (req, res) => {
         <tbody>
           ${users.map(u => `
           <tr style="border-bottom:1px solid var(--border)">
+            <td style="padding:10px 12px"><strong>${esc(u.name || "-")}</strong></td>
             <td style="padding:10px 12px"><strong>${esc(u.phone)}</strong></td>
             <td style="padding:10px 12px">${roleBadge(u.role)}</td>
             <td style="padding:10px 12px">${esc(branchMap[u.branchId?.toString()] || (u.role === "owner" ? "All branches" : "-"))}</td>
             <td style="padding:10px 12px">${u.suspended ? badge("Suspended","red") : badge("Active","green")}</td>
             <td style="padding:10px 12px;display:flex;gap:6px;flex-wrap:wrap">
-              <!-- Edit role/branch -->
-              <button onclick="openEditUser('${u._id}','${esc(u.phone)}','${u.role}','${u.branchId?.toString()||""}')"
+              <!-- Edit role/branch/name -->
+              <button onclick="openEditUser('${u._id}','${esc(u.phone)}','${u.role}','${u.branchId?.toString()||""}','${esc(u.name||"")}')"
                 style="background:#e0f2fe;color:#0369a1;border:none;padding:4px 10px;border-radius:6px;font-size:12px;cursor:pointer">✏️ Edit</button>
               <!-- Suspend/unsuspend -->
               <form method="POST" action="/zq-admin/suppliers/${supplier._id}/users/${u._id}/suspend" style="display:inline">
@@ -9980,6 +9982,13 @@ router.get("/suppliers/:id/staff", requireSupplierAdmin, async (req, res) => {
           <form method="POST" id="editUserForm">
             <p id="editUserPhone" style="font-size:13px;color:var(--muted);margin-bottom:14px"></p>
             <div style="margin-bottom:12px">
+              <label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px;text-transform:uppercase">Full Name</label>
+              <input name="name" id="editUserName" maxlength="60"
+                placeholder="e.g. Tendai Moyo"
+                style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px" />
+              <span style="font-size:11px;color:var(--muted)">Shown on reports, receipts, and handover logs</span>
+            </div>
+            <div style="margin-bottom:12px">
               <label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px;text-transform:uppercase">Role</label>
               <select name="role" id="editUserRole"
                 style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px">
@@ -10030,10 +10039,12 @@ router.get("/suppliers/:id/staff", requireSupplierAdmin, async (req, res) => {
       </div>
 
       <script>
-        function openEditUser(id, phone, role, branchId) {
+        function openEditUser(id, phone, role, branchId, name) {
           document.getElementById("editUserPhone").textContent = "Editing: " + phone;
           document.getElementById("editUserForm").action = "/zq-admin/suppliers/${supplier._id}/users/" + id + "/edit-role";
           document.getElementById("editUserRole").value = role;
+          const nameFld = document.getElementById("editUserName");
+          if (nameFld) nameFld.value = name || "";
           const bSel = document.getElementById("editUserForm").querySelector("select[name=branchId]");
           if (bSel) bSel.value = branchId || "";
           const modal = document.getElementById("editUserModal");
@@ -10202,10 +10213,11 @@ router.post("/suppliers/:id/users/:uid/edit-role", requireSupplierAdmin, async (
       }
     }
 
+    const staffName = (req.body.name || "").trim().slice(0, 60);
     await UserRole.findByIdAndUpdate(req.params.uid, {
-      $set: { role, branchId: branchId || null }
+      $set: { role, branchId: branchId || null, ...(staffName ? { name: staffName } : {}) }
     });
-    res.redirect(`/zq-admin/suppliers/${req.params.id}/staff?success=${encodeURIComponent("User role updated")}`);
+    res.redirect(`/zq-admin/suppliers/${req.params.id}/staff?success=${encodeURIComponent("User updated" + (staffName ? " — " + staffName : ""))}`);
   } catch (err) {
     res.redirect(`/zq-admin/suppliers/${req.params.id}/staff?error=${encodeURIComponent(err.message)}`);
   }
