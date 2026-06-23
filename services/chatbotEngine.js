@@ -3965,7 +3965,7 @@ if (!isMetaAction && /^ZQ:S:[a-z0-9_-]{1,60}$/i.test(text.trim())) {
   // Staff cards store their slug in zqSlug; we route them to handleStaffDeepLink
   // by rewriting the text to ZQ:STAFF:SLUG:<slug> which parseStaffSlugLink() handles.
   try {
-    const _slug = text.trim().slice(4).toLowerCase(); // strip "ZQ:S:"
+    const _slug = text.trim().slice(5).toLowerCase(); // strip "ZQ:S:" (5 chars)
     const _StaffCardModel = (await import("../models/staffCard.js")).default;
     const _staffBySlug = await _StaffCardModel.findOne({ zqSlug: _slug }).lean();
     if (_staffBySlug) {
@@ -7065,7 +7065,7 @@ const supplierRegState = sess?.supplierRegState;
 if (!isMetaAction && /^ZQ:S:[a-z0-9_-]{1,60}$/i.test(text.trim())) {
   // Check staff slug first before supplier resolver
   try {
-    const _slug2 = text.trim().slice(4).toLowerCase();
+    const _slug2 = text.trim().slice(5).toLowerCase(); // strip "ZQ:S:"
     const _StaffCardModel2 = (await import("../models/staffCard.js")).default;
     const _staffBySlug2 = await _StaffCardModel2.findOne({ zqSlug: _slug2 }).lean();
     if (_staffBySlug2) {
@@ -7619,7 +7619,7 @@ if (a.startsWith("zqg_sel_") || a.startsWith("zqg_register_")) {
 if (!isMetaAction && /^ZQ:S:[a-z0-9_-]{1,60}$/i.test(text.trim())) {
   // Check staff slug first before supplier resolver
   try {
-    const _slug3 = text.trim().slice(4).toLowerCase();
+    const _slug3 = text.trim().slice(5).toLowerCase(); // strip "ZQ:S:"
     const _StaffCardModel3 = (await import("../models/staffCard.js")).default;
     const _staffBySlug3 = await _StaffCardModel3.findOne({ zqSlug: _slug3 }).lean();
     if (_staffBySlug3) {
@@ -13136,7 +13136,7 @@ if (!isMetaAction && /ZQ:STAFF:/i.test(text)) {
 if (!isMetaAction && /^ZQ:S:[a-z0-9_-]{1,60}$/i.test(text.trim())) {
   // Check staff slug first — staff cards use the same ZQ:S: prefix
   try {
-    const _slug4 = text.trim().slice(4).toLowerCase();
+    const _slug4 = text.trim().slice(5).toLowerCase(); // strip "ZQ:S:"
     const _StaffCardModel4 = (await import("../models/staffCard.js")).default;
     const _staffBySlug4 = await _StaffCardModel4.findOne({ zqSlug: _slug4 }).lean();
     if (_staffBySlug4) {
