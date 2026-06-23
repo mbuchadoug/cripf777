@@ -1,19 +1,19 @@
 /**
  * certificateTemplate.js
  * ──────────────────────────────────────────────────────────────────────────────
- * CRIPFCNT — LinkedIn-inspired modern certificate.
+ * CRIPFCNT — Option C certificate design.
  *
- * Design language:
- *  ✅ Clean white background, mint/teal (#1DE9B6) brand accent
- *  ✅ Thin mint top bar — brand anchor
- *  ✅ CRIPFCNT logo mark + wordmark header
- *  ✅ Quiz title as the main headline (LinkedIn "course title" equivalent)
- *  ✅ "Course completed by" → "Awarded to" learner name centrepiece
- *  ✅ Module/category row below name
+ * Layout anatomy (inspired by Afreximbank):
+ *  ✅ Teal sidebar spine — CRIPFCNT brand mark + vertical wordmark + chevron texture
+ *  ✅ Dark teal header band — logo left, cert type + date right
+ *  ✅ "This is to certify that" → recipient name centrepiece
+ *  ✅ Quiz title in mint left-accent block
  *  ✅ Skill/topic tags (pill chips)
- *  ✅ Score + Grade stats row (no duration)
- *  ✅ Signature line + completion badge footer
- *  ✅ Credential strip with serial / verify URL
+ *  ✅ Score + Grade + Achievement stats row
+ *  ✅ SVG signature of director + signature line
+ *  ✅ Completion badge (circle with checkmark)
+ *  ✅ Credential strip — ID + verify URL
+ *  ✅ CRIPFCNT logo watermark behind content
  *
  * Portrait A4 (210 × 297 mm).
  * Puppeteer call should use:
@@ -44,8 +44,9 @@ export function buildCertificateHtml({
   });
 
   const moduleTitle   = esc(quizTitle || moduleName || "Assessment");
-  const categoryLabel = esc(moduleName && quizTitle && moduleName !== quizTitle ? moduleName : "");
-  const recipientName = esc(name || "Recipient");
+  const categoryLabel = (moduleName && quizTitle && moduleName !== quizTitle)
+    ? esc(moduleName) : "";
+  const recipientName = esc(name  || "Recipient");
   const orgLabel      = esc(orgName || "CRIPFCNT");
   const pctDisplay    = percentage != null ? esc(String(percentage)) : null;
   const scoreDisplay  = score      != null ? esc(String(score))      : null;
@@ -59,68 +60,89 @@ export function buildCertificateHtml({
     else if (p >= 50) gradeLabel = "Pass";
   }
 
-  /* ── brand ── */
-  const MINT       = "#1DE9B6";
-  const MINT_DARK  = "#0D9B77";
-  const MINT_BG    = "#E1F5EE";
-  const MINT_BORDER= "#9FE1CB";
-  const INK        = "#111111";
-  const MUTED      = "#777777";
-  const LIGHT      = "#AAAAAA";
-  const DIVIDER    = "#E8E8E8";
-  const STRIP_BG   = "#F7F7F7";
-
-  /* org-specific overrides (keep existing orgs working) */
+  /* ── brand defaults (CRIPFCNT) ── */
   const orgLow = (orgName || "").toLowerCase();
-  let accentMain = MINT;
-  let accentDark = MINT_DARK;
-  let accentBg   = MINT_BG;
-  let accentBdr  = MINT_BORDER;
-  let sig1Name   = "Donald Mataranyika";
-  let sig1Role   = "Chair, Board of Directors";
-  let abbrev     = "CRIPFCNT";
-  let series     = "CRIPFCNT Learning Management System";
 
+  let SIDEBAR_BG  = "#0B4F45";
+  let HEADER_BG   = "#0B4F45";
+  let MINT        = "#1DE9B6";
+  let MINT_DARK   = "#0D9B77";
+  let MINT_BG     = "#E1F5EE";
+  let MINT_BORDER = "#9FE1CB";
+  let abbrev      = "CRIPFCNT";
+  let series      = "CRIPFCNT Learning &amp; Assessment Platform";
+  let sig1Name    = "Donald Mataranyika";
+  let sig1Role    = "Chair, Board of Directors";
+
+  /* org-specific overrides */
   if (/nyaradzo/.test(orgLow)) {
-    accentMain = "#C9A227"; accentDark = "#7A5F0A"; accentBg = "#FBF3DA"; accentBdr = "#E8CC7E";
+    SIDEBAR_BG = "#062A5E"; HEADER_BG = "#062A5E";
+    MINT = "#C9A227"; MINT_DARK = "#7A5F0A"; MINT_BG = "#FBF3DA"; MINT_BORDER = "#E8CC7E";
     abbrev = "NGT"; series = "Nyaradzo Group Training";
   }
   if (/winchester/.test(orgLow)) {
-    accentMain = "#1F3C88"; accentDark = "#0F1F4A"; accentBg = "#E8EDF8"; accentBdr = "#8DA0D1";
+    SIDEBAR_BG = "#1F3C88"; HEADER_BG = "#1F3C88";
+    MINT = "#E8C95A"; MINT_DARK = "#7A5F0A"; MINT_BG = "#FBF5DA"; MINT_BORDER = "#E8CC7E";
     abbrev = "WS"; series = "Winchester School";
   }
   if (/st[\s-]?eurit|eurit/.test(orgLow)) {
-    accentMain = "#D4AF37"; accentDark = "#7A5F0A"; accentBg = "#FBF5DA"; accentBdr = "#E8CC7E";
+    SIDEBAR_BG = "#111111"; HEADER_BG = "#111111";
+    MINT = "#D4AF37"; MINT_DARK = "#7A5F0A"; MINT_BG = "#FBF5DA"; MINT_BORDER = "#E8CC7E";
     abbrev = "SEIS"; series = "St Eurit International School";
   }
 
   /* ── Credential ID ── */
   const credId = `${abbrev}-${dateStr.replace(/-/g,"")}-${(name||"X").replace(/\s+/g,"").toUpperCase().slice(0,6).padEnd(6,"0")}`;
 
-  /* ── CRIPFCNT logo mark SVG (inline, no external fetch) ── */
-  const logoMark = `<svg width="32" height="32" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="M20 10 L20 90 Q20 90 50 90 Q80 90 80 60 L80 52 L54 52 L54 70 Q54 74 50 74 Q46 74 46 70 L46 30 Q46 26 50 26 Q54 26 54 30 L54 48 L80 48 L80 40 Q80 10 50 10 Z" fill="${accentMain}"/>
-  </svg>`;
-
-  /* ── Completion badge SVG ── */
-  const badge = `<svg width="72" height="72" viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <circle cx="36" cy="36" r="34" stroke="${accentMain}" stroke-width="2" fill="none"/>
-    <circle cx="36" cy="36" r="28" stroke="${accentMain}" stroke-width="0.8" fill="none" stroke-dasharray="3 2" opacity="0.5"/>
-    <text x="36" y="33" font-family="'Inter',Arial,sans-serif" font-size="7.5" font-weight="600" fill="${accentMain}" text-anchor="middle" letter-spacing="1">COURSE</text>
-    <text x="36" y="44" font-family="'Inter',Arial,sans-serif" font-size="7.5" font-weight="600" fill="${accentMain}" text-anchor="middle" letter-spacing="1">COMPLETE</text>
-    <path d="M28 38 L33.5 43.5 L44.5 32" stroke="${accentMain}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
-  </svg>`;
-
-  /* ── Skill tags — derive from moduleName / quizTitle ── */
-  const tagSources = [
-    quizTitle   || null,
-    moduleName  || null,
-    orgName     || null,
-  ].filter(Boolean);
+  /* ── Skill tags ── */
+  const tagSources = [quizTitle || null, moduleName || null, orgName || null]
+    .filter(Boolean);
   const tags = [...new Set(tagSources)].slice(0, 3);
   const tagHtml = tags.map(t =>
     `<span class="tag">${esc(t)}</span>`
-  ).join("\n          ");
+  ).join("\n              ");
+
+  /* ── SVG: CRIPFCNT logo mark ── */
+  const logoMark = (color = "#1DE9B6", w = 28, h = 28) =>
+    `<svg width="${w}" height="${h}" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M20 10 L20 90 Q20 90 50 90 Q80 90 80 60 L80 52 L54 52 L54 70 Q54 74 50 74 Q46 74 46 70 L46 30 Q46 26 50 26 Q54 26 54 30 L54 48 L80 48 L80 40 Q80 10 50 10 Z" fill="${color}"/>
+    </svg>`;
+
+  /* ── SVG: Director signature (Donald Mataranyika — stylised cursive path) ── */
+  const signatureSvg = `<svg width="140" height="48" viewBox="0 0 140 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M8 34 C12 20 18 14 26 16 C32 17 34 24 30 30 C26 36 20 36 18 32 C16 28 22 22 30 26 C38 30 44 24 50 18"
+      stroke="#1a1a2e" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    <path d="M50 18 C56 12 60 14 62 20 C64 26 60 32 56 30 C52 28 54 22 60 24 C68 27 74 20 80 16"
+      stroke="#1a1a2e" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    <path d="M80 16 C86 12 90 16 88 24 C86 30 82 34 84 38 C86 42 92 40 96 36"
+      stroke="#1a1a2e" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    <path d="M96 36 C100 32 106 28 110 32 C114 36 110 42 106 40 C102 38 104 32 110 30 C118 28 124 34 130 38"
+      stroke="#1a1a2e" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    <path d="M8 40 C30 38 80 38 130 40"
+      stroke="#1a1a2e" stroke-width="0.5" stroke-linecap="round" fill="none" opacity="0.3"/>
+  </svg>`;
+
+  /* ── SVG: Completion badge ── */
+  const completionBadge = `<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="32" cy="32" r="30" stroke="${MINT}" stroke-width="2" fill="none"/>
+    <circle cx="32" cy="32" r="24" stroke="${MINT}" stroke-width="0.8" stroke-dasharray="3 2.5" fill="none" opacity="0.5"/>
+    <path d="M21 32 L28 39 L43 24" stroke="${MINT}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="32" y="56" font-family="'Inter',Arial,sans-serif" font-size="6" font-weight="600"
+      fill="${MINT}" text-anchor="middle" letter-spacing="1.5">CERTIFIED</text>
+  </svg>`;
+
+  /* ── SVG: Sidebar chevron texture pattern ── */
+  const chevronPattern = `<svg width="52" height="300" viewBox="0 0 52 300" fill="none" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
+    ${Array.from({length: 18}, (_, i) => {
+      const y = 10 + i * 16;
+      return `<polyline points="8,${y} 26,${y+8} 44,${y}" stroke="${MINT}" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" opacity="0.22"/>`;
+    }).join("\n    ")}
+  </svg>`;
+
+  /* ── Watermark logo (large, faint, behind content) ── */
+  const watermark = `<svg width="220" height="220" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M20 10 L20 90 Q20 90 50 90 Q80 90 80 60 L80 52 L54 52 L54 70 Q54 74 50 74 Q46 74 46 70 L46 30 Q46 26 50 26 Q54 26 54 30 L54 48 L80 48 L80 40 Q80 10 50 10 Z" fill="${SIDEBAR_BG}"/>
+  </svg>`;
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -128,247 +150,322 @@ export function buildCertificateHtml({
 <meta charset="utf-8"/>
 <title>Certificate — ${recipientName}</title>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
 @page{margin:0;size:A4 portrait;}
 
 html,body{
   width:210mm;height:297mm;overflow:hidden;
-  background:#F0F0F0;
+  background:#E8E8E8;
   display:flex;align-items:center;justify-content:center;
   font-family:'Inter',Arial,sans-serif;
   -webkit-font-smoothing:antialiased;
 }
 
-/* ── CARD SHELL ── */
+/* ── OUTER CARD ── */
 .card{
-  width:184mm;
-  min-height:260mm;
-  background:#FFFFFF;
-  border:0.5px solid #DEDEDE;
-  border-radius:3px;
+  width:192mm;
+  height:272mm;
+  background:#ffffff;
+  border:0.5px solid #D0D0D0;
+  border-radius:2px;
   overflow:hidden;
   display:flex;
-  flex-direction:column;
+  flex-direction:row;
   -webkit-print-color-adjust:exact;
   print-color-adjust:exact;
 }
 
-/* ── TOP ACCENT BAR ── */
-.top-bar{
-  height:5px;
-  background:${accentMain};
+/* ── SIDEBAR ── */
+.sidebar{
+  width:52px;
+  background:${SIDEBAR_BG};
   flex-shrink:0;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  padding:0;
+  position:relative;
+  overflow:hidden;
+}
+.sidebar-pattern{
+  position:absolute;
+  top:0;left:0;right:0;bottom:0;
+}
+.sidebar-bottom{
+  position:absolute;
+  bottom:0;left:0;right:0;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  padding-bottom:16px;
+  z-index:2;
+}
+.sidebar-wordmark{
+  writing-mode:vertical-rl;
+  transform:rotate(180deg);
+  font-family:'Inter',Arial,sans-serif;
+  font-size:9px;
+  font-weight:700;
+  color:${MINT};
+  letter-spacing:3px;
+  opacity:0.85;
+  margin-bottom:10px;
+}
+.sidebar-mark{
+  opacity:0.6;
+}
+
+/* ── MAIN COLUMN ── */
+.main{
+  flex:1;
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+}
+
+/* ── HEADER BAND ── */
+.header{
+  background:${HEADER_BG};
+  padding:16px 28px 14px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  flex-shrink:0;
+}
+.header-left{
+  display:flex;
+  align-items:center;
+  gap:10px;
+}
+.header-wordmark{
+  font-family:'Inter',Arial,sans-serif;
+  font-size:15px;
+  font-weight:700;
+  color:${MINT};
+  letter-spacing:1.5px;
+}
+.header-sub{
+  font-family:'Inter',Arial,sans-serif;
+  font-size:8px;
+  color:rgba(255,255,255,0.38);
+  letter-spacing:2px;
+  text-transform:uppercase;
+  margin-top:2px;
+}
+.header-right{
+  text-align:right;
+}
+.header-cert-label{
+  font-family:'Inter',Arial,sans-serif;
+  font-size:8px;
+  color:rgba(255,255,255,0.42);
+  letter-spacing:2px;
+  text-transform:uppercase;
+  margin-bottom:3px;
+}
+.header-cert-type{
+  font-family:'Inter',Arial,sans-serif;
+  font-size:11px;
+  font-weight:600;
+  color:rgba(255,255,255,0.88);
+  letter-spacing:0.5px;
+}
+.header-date{
+  font-family:'Inter',Arial,sans-serif;
+  font-size:9px;
+  color:${MINT};
+  margin-top:3px;
+  font-weight:500;
 }
 
 /* ── BODY ── */
 .body{
   flex:1;
-  padding:36px 56px 28px;
+  padding:28px 32px 0 28px;
+  position:relative;
+  overflow:hidden;
   display:flex;
   flex-direction:column;
-  align-items:center;
-  text-align:center;
+}
+.watermark{
+  position:absolute;
+  right:-30px;
+  bottom:-30px;
+  opacity:0.035;
+  pointer-events:none;
 }
 
-/* ── LOGO HEADER ── */
-.logo-row{
-  display:flex;
-  align-items:center;
-  gap:10px;
-  margin-bottom:32px;
-}
-.logo-text{
-  font-size:19px;
-  font-weight:600;
-  color:${accentMain};
+/* ── CERTIFY BLOCK ── */
+.certify-label{
+  font-family:'Inter',Arial,sans-serif;
+  font-size:10px;
+  color:#AAAAAA;
   letter-spacing:1.5px;
+  text-transform:uppercase;
+  margin-bottom:6px;
+}
+.recipient{
+  font-family:'Inter',Arial,sans-serif;
+  font-size:30px;
+  font-weight:600;
+  color:#0B1F1A;
+  line-height:1.15;
+  margin-bottom:4px;
+  max-width:420px;
+  word-break:break-word;
+}
+.succeed-line{
+  font-family:'Inter',Arial,sans-serif;
+  font-size:12px;
+  color:#888888;
+  margin-bottom:20px;
+}
+
+/* ── QUIZ TITLE BLOCK (accent left border) ── */
+.quiz-block{
+  border-left:3px solid ${MINT};
+  padding:10px 16px;
+  background:${MINT_BG};
+  border-radius:0 4px 4px 0;
+  margin-bottom:20px;
+  max-width:100%;
+}
+.quiz-category{
+  font-family:'Inter',Arial,sans-serif;
+  font-size:9px;
+  font-weight:600;
+  color:${MINT_DARK};
+  letter-spacing:1.5px;
+  text-transform:uppercase;
+  margin-bottom:4px;
+}
+.quiz-title{
+  font-family:'Inter',Arial,sans-serif;
+  font-size:15px;
+  font-weight:600;
+  color:#0B1F1A;
+  line-height:1.35;
 }
 
 /* ── DIVIDER ── */
 .divider{
-  width:100%;
   height:0.5px;
-  background:${DIVIDER};
-  margin:20px 0;
-}
-.divider-short{
-  width:60px;
-  height:2px;
-  background:${accentMain};
-  border-radius:2px;
-  margin:0 auto 20px;
+  background:#EBEBEB;
+  margin:0 0 18px;
 }
 
-/* ── QUIZ TITLE (main headline) ── */
-.quiz-title{
-  font-size:22px;
-  font-weight:600;
-  color:${INK};
-  line-height:1.3;
-  margin-bottom:6px;
-  max-width:420px;
-}
-
-/* ── CATEGORY ── */
-.category{
-  font-size:12px;
-  color:${accentDark};
-  font-weight:500;
-  letter-spacing:0.4px;
-  margin-bottom:20px;
-  text-transform:uppercase;
-}
-
-/* ── AWARDED LABEL ── */
-.awarded-label{
-  font-size:11px;
-  color:${LIGHT};
-  letter-spacing:1px;
-  text-transform:uppercase;
-  margin-bottom:6px;
-}
-
-/* ── RECIPIENT NAME ── */
-.recipient{
-  font-size:30px;
-  font-weight:500;
-  color:${INK};
-  line-height:1.15;
-  margin-bottom:6px;
-  max-width:400px;
-  word-break:break-word;
-}
-
-/* ── ORG + DATE ── */
-.org-date{
-  font-size:12.5px;
-  color:${MUTED};
-  margin-bottom:20px;
-}
-.sep{ color:${DIVIDER}; margin:0 8px; }
-
-/* ── ACHIEVEMENT SENTENCE ── */
-.achieve{
-  font-size:12.5px;
-  color:${MUTED};
-  line-height:1.7;
-  max-width:360px;
-  margin-bottom:20px;
-}
-
-/* ── SKILL TAGS ── */
+/* ── TAGS ── */
 .tags{
   display:flex;
   flex-wrap:wrap;
-  justify-content:center;
-  gap:8px;
+  gap:7px;
   margin-bottom:20px;
 }
 .tag{
-  font-size:11.5px;
-  color:${accentDark};
-  background:${accentBg};
-  border:0.5px solid ${accentBdr};
+  font-family:'Inter',Arial,sans-serif;
+  font-size:10.5px;
+  color:${MINT_DARK};
+  background:${MINT_BG};
+  border:0.5px solid ${MINT_BORDER};
   border-radius:20px;
-  padding:5px 14px;
+  padding:4px 13px;
   letter-spacing:0.2px;
 }
 
 /* ── STATS ROW ── */
 .stats{
   display:flex;
-  align-items:center;
-  justify-content:center;
+  align-items:stretch;
   gap:0;
-  margin-bottom:20px;
+  margin-bottom:22px;
 }
 .stat{
-  padding:0 28px;
-  text-align:center;
+  padding:0 24px 0 0;
+  margin-right:24px;
+  border-right:0.5px solid #E8E8E8;
+}
+.stat:last-child{
+  border-right:none;
+  margin-right:0;
 }
 .stat-val{
+  font-family:'Inter',Arial,sans-serif;
   font-size:22px;
-  font-weight:600;
-  color:${accentMain};
+  font-weight:700;
+  color:${MINT};
   line-height:1;
   margin-bottom:4px;
 }
-.stat-lbl{
-  font-size:10px;
-  color:${LIGHT};
-  letter-spacing:0.8px;
-  text-transform:uppercase;
+.stat-val-sm{
+  font-family:'Inter',Arial,sans-serif;
+  font-size:13px;
+  font-weight:700;
+  color:${MINT};
+  line-height:1;
+  margin-bottom:4px;
+  padding-top:4px;
 }
-.stat-sep{
-  width:0.5px;
-  height:36px;
-  background:${DIVIDER};
-}
-
-/* ── GRADE BADGE inline ── */
-.grade-chip{
-  display:inline-block;
-  font-size:10px;
-  font-weight:600;
-  color:${accentDark};
-  background:${accentBg};
-  border:0.5px solid ${accentBdr};
-  border-radius:20px;
-  padding:3px 12px;
-  letter-spacing:0.4px;
+.stat-label{
+  font-family:'Inter',Arial,sans-serif;
+  font-size:9px;
+  color:#AAAAAA;
+  letter-spacing:1px;
   text-transform:uppercase;
-  margin-bottom:20px;
 }
 
 /* ── FOOTER ── */
 .footer{
-  border-top:0.5px solid ${DIVIDER};
-  padding:18px 56px 0;
+  border-top:0.5px solid #EBEBEB;
+  padding:16px 32px 16px 28px;
   display:flex;
   align-items:flex-end;
   justify-content:space-between;
   flex-shrink:0;
+  margin-top:auto;
 }
 .sig-block{ text-align:left; }
-.sig-line{
-  width:120px;
+.sig-svg{ display:block; margin-bottom:0px; }
+.sig-rule{
+  width:130px;
   height:0.5px;
   background:#CCCCCC;
   margin-bottom:5px;
 }
 .sig-name{
-  font-size:11.5px;
-  font-weight:500;
-  color:${INK};
+  font-family:'Inter',Arial,sans-serif;
+  font-size:10.5px;
+  font-weight:600;
+  color:#1a1a2e;
   margin-bottom:2px;
 }
 .sig-role{
-  font-size:10.5px;
-  color:${MUTED};
+  font-family:'Inter',Arial,sans-serif;
+  font-size:9.5px;
+  color:#888888;
 }
-.badge-wrap{ flex-shrink:0; }
 
 /* ── CREDENTIAL STRIP ── */
 .cstrip{
-  background:${STRIP_BG};
-  border-top:0.5px solid ${DIVIDER};
-  padding:9px 56px;
+  background:#F6F6F6;
+  border-top:0.5px solid #E8E8E8;
+  padding:8px 28px;
   display:flex;
   align-items:center;
   justify-content:space-between;
   flex-shrink:0;
-  margin-top:18px;
 }
 .cstrip-id{
-  font-size:9px;
-  color:${LIGHT};
-  letter-spacing:0.5px;
+  font-family:'Inter',Arial,sans-serif;
+  font-size:8.5px;
+  color:#BBBBBB;
+  letter-spacing:0.4px;
 }
 .cstrip-verify{
-  font-size:9px;
-  color:${accentDark};
+  font-family:'Inter',Arial,sans-serif;
+  font-size:8.5px;
+  color:${MINT_DARK};
   font-weight:500;
   letter-spacing:0.3px;
 }
@@ -377,79 +474,100 @@ html,body{
 <body>
 
 <div class="card">
-  <div class="top-bar"></div>
 
-  <div class="body">
+  <!-- SIDEBAR SPINE -->
+  <div class="sidebar">
+    <div class="sidebar-pattern">${chevronPattern}</div>
+    <div class="sidebar-bottom">
+      <div class="sidebar-wordmark">${abbrev}</div>
+      <div class="sidebar-mark">${logoMark(MINT, 22, 22)}</div>
+    </div>
+  </div>
 
-    <!-- LOGO -->
-    <div class="logo-row">
-      ${logoMark}
-      <span class="logo-text">${abbrev}</span>
+  <!-- MAIN CONTENT -->
+  <div class="main">
+
+    <!-- HEADER BAND -->
+    <div class="header">
+      <div class="header-left">
+        ${logoMark(MINT, 30, 30)}
+        <div>
+          <div class="header-wordmark">${abbrev}</div>
+          <div class="header-sub">${series}</div>
+        </div>
+      </div>
+      <div class="header-right">
+        <div class="header-cert-label">Official Document</div>
+        <div class="header-cert-type">Certificate of Completion</div>
+        <div class="header-date">${dateLong}</div>
+      </div>
     </div>
 
-    <!-- QUIZ TITLE -->
-    <p class="quiz-title">${moduleTitle}</p>
-    ${categoryLabel ? `<p class="category">${categoryLabel}</p>` : `<div style="height:16px;"></div>`}
+    <!-- BODY -->
+    <div class="body">
 
-    <div class="divider"></div>
+      <!-- WATERMARK -->
+      <div class="watermark">${watermark}</div>
 
-    <!-- AWARDED TO -->
-    <p class="awarded-label">Awarded to</p>
-    <p class="recipient">${recipientName}</p>
-    <p class="org-date">
-      ${orgLabel}<span class="sep">·</span>${dateLong}
-    </p>
+      <!-- RECIPIENT -->
+      <p class="certify-label">This is to certify that</p>
+      <p class="recipient">${recipientName}</p>
+      <p class="succeed-line">has successfully completed the assessment</p>
 
-    <!-- ACHIEVEMENT TEXT -->
-    <p class="achieve">
-      Has successfully completed the assessment and demonstrated
-      proficiency in this subject area on the CRIPFCNT platform.
-    </p>
+      <!-- QUIZ TITLE BLOCK -->
+      <div class="quiz-block">
+        ${categoryLabel ? `<div class="quiz-category">${categoryLabel}</div>` : ""}
+        <div class="quiz-title">${moduleTitle}</div>
+      </div>
 
-    <!-- SKILL TAGS -->
-    <div class="tags">
-      ${tagHtml}
-    </div>
+      <div class="divider"></div>
 
-    <div class="divider-short"></div>
+      <!-- TAGS -->
+      <div class="tags">
+        ${tagHtml}
+        <span class="tag">${orgLabel}</span>
+      </div>
 
-    <!-- GRADE CHIP -->
-    ${gradeLabel ? `<div class="grade-chip">${esc(gradeLabel)}</div>` : ""}
-
-    <!-- STATS -->
-    ${(scoreDisplay || pctDisplay) ? `
-    <div class="stats">
-      ${scoreDisplay ? `
+      <!-- STATS -->
+      ${(scoreDisplay || pctDisplay || gradeLabel) ? `
+      <div class="stats">
+        ${scoreDisplay ? `
         <div class="stat">
           <div class="stat-val">${scoreDisplay}</div>
-          <div class="stat-lbl">Final Score</div>
-        </div>
-        <div class="stat-sep"></div>` : ""}
-      ${pctDisplay ? `
+          <div class="stat-label">Final Score</div>
+        </div>` : ""}
+        ${pctDisplay ? `
         <div class="stat">
           <div class="stat-val">${pctDisplay}%</div>
-          <div class="stat-lbl">Grade</div>
+          <div class="stat-label">Grade</div>
         </div>` : ""}
-    </div>` : ""}
+        ${gradeLabel ? `
+        <div class="stat">
+          <div class="stat-val-sm">${esc(gradeLabel).toUpperCase()}</div>
+          <div class="stat-label">Achievement</div>
+        </div>` : ""}
+      </div>` : ""}
 
-  </div><!-- /body -->
+    </div><!-- /body -->
 
-  <!-- FOOTER -->
-  <div class="footer">
-    <div class="sig-block">
-      <div class="sig-line"></div>
-      <div class="sig-name">${esc(sig1Name)}</div>
-      <div class="sig-role">${esc(sig1Role)}</div>
+    <!-- FOOTER: signature + badge -->
+    <div class="footer">
+      <div class="sig-block">
+        <div class="sig-svg">${signatureSvg}</div>
+        <div class="sig-rule"></div>
+        <div class="sig-name">${esc(sig1Name)}</div>
+        <div class="sig-role">${esc(sig1Role)}</div>
+      </div>
+      ${completionBadge}
     </div>
-    <div class="badge-wrap">${badge}</div>
-  </div>
 
-  <!-- CREDENTIAL STRIP -->
-  <div class="cstrip">
-    <span class="cstrip-id">Certificate ID: ${credId} &nbsp;·&nbsp; ${esc(series)}</span>
-    <span class="cstrip-verify">cripfcnt.com/verify</span>
-  </div>
+    <!-- CREDENTIAL STRIP -->
+    <div class="cstrip">
+      <span class="cstrip-id">Certificate ID: ${credId} &nbsp;·&nbsp; ${series}</span>
+      <span class="cstrip-verify">cripfcnt.com/verify</span>
+    </div>
 
+  </div><!-- /main -->
 </div><!-- /card -->
 
 </body>
