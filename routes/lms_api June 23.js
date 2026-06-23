@@ -760,7 +760,6 @@ async function generateCertificatePdf({ name, orgName, moduleName, quizTitle, sc
         await page.pdf({
           path: filepath,
           format: "A4",
-          landscape: true,
           printBackground: true,
           margin: { top: "0", bottom: "0", left: "0", right: "0" }
         });

@@ -3,21 +3,21 @@
  * ──────────────────────────────────────────────────────────────────────────────
  * CRIPFCNT — Option C certificate design.
  *
- * Layout anatomy (inspired by Afreximbank):
- *  ✅ Teal sidebar spine — CRIPFCNT brand mark + vertical wordmark + chevron texture
+ * SIZE: A4 LANDSCAPE (297 × 210 mm) — standard printable certificate format.
+ *
+ * Layout anatomy:
+ *  ✅ Teal sidebar spine left — chevron texture + vertical CRIPFCNT wordmark
  *  ✅ Dark teal header band — logo left, cert type + date right
- *  ✅ "This is to certify that" → recipient name centrepiece
+ *  ✅ "This is to certify that" → recipient name → assessment line
  *  ✅ Quiz title in mint left-accent block
- *  ✅ Skill/topic tags (pill chips)
+ *  ✅ Skill/topic pill tags
  *  ✅ Score + Grade + Achievement stats row
- *  ✅ SVG signature of director + signature line
- *  ✅ Completion badge (circle with checkmark)
+ *  ✅ SVG cursive signature + sig line + completion badge footer
  *  ✅ Credential strip — ID + verify URL
  *  ✅ CRIPFCNT logo watermark behind content
  *
- * Portrait A4 (210 × 297 mm).
- * Puppeteer call should use:
- *   format: "A4", printBackground: true,
+ * Puppeteer call MUST use:
+ *   format: "A4", landscape: true, printBackground: true,
  *   margin: { top:"0", bottom:"0", left:"0", right:"0" }
  */
 
@@ -74,7 +74,6 @@ export function buildCertificateHtml({
   let sig1Name    = "Donald Mataranyika";
   let sig1Role    = "Chair, Board of Directors";
 
-  /* org-specific overrides */
   if (/nyaradzo/.test(orgLow)) {
     SIDEBAR_BG = "#062A5E"; HEADER_BG = "#062A5E";
     MINT = "#C9A227"; MINT_DARK = "#7A5F0A"; MINT_BG = "#FBF3DA"; MINT_BORDER = "#E8CC7E";
@@ -97,50 +96,46 @@ export function buildCertificateHtml({
   /* ── Skill tags ── */
   const tagSources = [quizTitle || null, moduleName || null, orgName || null]
     .filter(Boolean);
-  const tags = [...new Set(tagSources)].slice(0, 3);
+  const tags = [...new Set(tagSources)].slice(0, 4);
   const tagHtml = tags.map(t =>
     `<span class="tag">${esc(t)}</span>`
   ).join("\n              ");
 
   /* ── SVG: CRIPFCNT logo mark ── */
-  const logoMark = (color = "#1DE9B6", w = 28, h = 28) =>
+  const logoMark = (color, w, h) =>
     `<svg width="${w}" height="${h}" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
       <path d="M20 10 L20 90 Q20 90 50 90 Q80 90 80 60 L80 52 L54 52 L54 70 Q54 74 50 74 Q46 74 46 70 L46 30 Q46 26 50 26 Q54 26 54 30 L54 48 L80 48 L80 40 Q80 10 50 10 Z" fill="${color}"/>
     </svg>`;
 
-  /* ── SVG: Director signature (Donald Mataranyika — stylised cursive path) ── */
-  const signatureSvg = `<svg width="140" height="48" viewBox="0 0 140 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="M8 34 C12 20 18 14 26 16 C32 17 34 24 30 30 C26 36 20 36 18 32 C16 28 22 22 30 26 C38 30 44 24 50 18"
-      stroke="#1a1a2e" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-    <path d="M50 18 C56 12 60 14 62 20 C64 26 60 32 56 30 C52 28 54 22 60 24 C68 27 74 20 80 16"
-      stroke="#1a1a2e" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-    <path d="M80 16 C86 12 90 16 88 24 C86 30 82 34 84 38 C86 42 92 40 96 36"
-      stroke="#1a1a2e" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-    <path d="M96 36 C100 32 106 28 110 32 C114 36 110 42 106 40 C102 38 104 32 110 30 C118 28 124 34 130 38"
-      stroke="#1a1a2e" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-    <path d="M8 40 C30 38 80 38 130 40"
-      stroke="#1a1a2e" stroke-width="0.5" stroke-linecap="round" fill="none" opacity="0.3"/>
+  /* ── SVG: Director signature ── */
+  const signatureSvg = `<svg width="130" height="44" viewBox="0 0 130 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M6 32 C10 20 16 13 24 15 C30 17 32 24 28 30 C24 36 18 35 16 31 C14 27 20 21 28 25 C36 29 42 23 48 17"
+      stroke="#1a1a2e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    <path d="M48 17 C54 11 58 13 60 19 C62 25 58 31 54 29 C50 27 52 21 58 23 C66 26 72 19 78 15"
+      stroke="#1a1a2e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    <path d="M78 15 C84 11 88 15 86 23 C84 29 80 33 82 37 C84 40 90 38 94 34"
+      stroke="#1a1a2e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    <path d="M94 34 C98 30 104 27 108 31 C112 35 108 40 104 38 C100 36 103 30 109 29 C117 27 122 33 126 36"
+      stroke="#1a1a2e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
   </svg>`;
 
   /* ── SVG: Completion badge ── */
-  const completionBadge = `<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <circle cx="32" cy="32" r="30" stroke="${MINT}" stroke-width="2" fill="none"/>
-    <circle cx="32" cy="32" r="24" stroke="${MINT}" stroke-width="0.8" stroke-dasharray="3 2.5" fill="none" opacity="0.5"/>
-    <path d="M21 32 L28 39 L43 24" stroke="${MINT}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-    <text x="32" y="56" font-family="'Inter',Arial,sans-serif" font-size="6" font-weight="600"
-      fill="${MINT}" text-anchor="middle" letter-spacing="1.5">CERTIFIED</text>
+  const completionBadge = `<svg width="60" height="60" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="30" cy="30" r="28" stroke="${MINT}" stroke-width="1.8" fill="none"/>
+    <circle cx="30" cy="30" r="22" stroke="${MINT}" stroke-width="0.8" stroke-dasharray="3 2" fill="none" opacity="0.45"/>
+    <path d="M19 30 L26 37 L41 22" stroke="${MINT}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="30" y="53" font-family="'Inter',Arial,sans-serif" font-size="5.5" font-weight="600"
+      fill="${MINT}" text-anchor="middle" letter-spacing="1.2">CERTIFIED</text>
   </svg>`;
 
-  /* ── SVG: Sidebar chevron texture pattern ── */
-  const chevronPattern = `<svg width="52" height="300" viewBox="0 0 52 300" fill="none" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
-    ${Array.from({length: 18}, (_, i) => {
-      const y = 10 + i * 16;
-      return `<polyline points="8,${y} 26,${y+8} 44,${y}" stroke="${MINT}" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" opacity="0.22"/>`;
-    }).join("\n    ")}
-  </svg>`;
+  /* ── SVG: Sidebar chevron texture ── */
+  const chevronPattern = Array.from({length: 22}, (_, i) => {
+    const y = 8 + i * 14;
+    return `<polyline points="7,${y} 23,${y+7} 39,${y}" stroke="${MINT}" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round" opacity="0.2"/>`;
+  }).join("\n    ");
 
-  /* ── Watermark logo (large, faint, behind content) ── */
-  const watermark = `<svg width="220" height="220" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+  /* ── SVG: Watermark ── */
+  const watermark = `<svg width="200" height="200" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
     <path d="M20 10 L20 90 Q20 90 50 90 Q80 90 80 60 L80 52 L54 52 L54 70 Q54 74 50 74 Q46 74 46 70 L46 30 Q46 26 50 26 Q54 26 54 30 L54 48 L80 48 L80 40 Q80 10 50 10 Z" fill="${SIDEBAR_BG}"/>
   </svg>`;
 
@@ -153,22 +148,25 @@ export function buildCertificateHtml({
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
-@page{margin:0;size:A4 portrait;}
+@page{margin:0;size:A4 landscape;}
 
 html,body{
-  width:210mm;height:297mm;overflow:hidden;
-  background:#E8E8E8;
-  display:flex;align-items:center;justify-content:center;
+  width:297mm;
+  height:210mm;
+  overflow:hidden;
+  background:#E0E0E0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
   font-family:'Inter',Arial,sans-serif;
   -webkit-font-smoothing:antialiased;
 }
 
-/* ── OUTER CARD ── */
 .card{
-  width:192mm;
-  height:272mm;
+  width:285mm;
+  height:198mm;
   background:#ffffff;
-  border:0.5px solid #D0D0D0;
+  border:0.5px solid #C8C8C8;
   border-radius:2px;
   overflow:hidden;
   display:flex;
@@ -177,47 +175,42 @@ html,body{
   print-color-adjust:exact;
 }
 
-/* ── SIDEBAR ── */
+/* SIDEBAR */
 .sidebar{
-  width:52px;
+  width:46px;
   background:${SIDEBAR_BG};
   flex-shrink:0;
   display:flex;
   flex-direction:column;
   align-items:center;
-  padding:0;
   position:relative;
   overflow:hidden;
 }
-.sidebar-pattern{
+.sb-chevrons{
   position:absolute;
   top:0;left:0;right:0;bottom:0;
 }
-.sidebar-bottom{
+.sb-bottom{
   position:absolute;
   bottom:0;left:0;right:0;
   display:flex;
   flex-direction:column;
   align-items:center;
-  padding-bottom:16px;
+  padding-bottom:14px;
   z-index:2;
 }
-.sidebar-wordmark{
+.sb-wordmark{
   writing-mode:vertical-rl;
   transform:rotate(180deg);
-  font-family:'Inter',Arial,sans-serif;
-  font-size:9px;
+  font-size:8px;
   font-weight:700;
   color:${MINT};
   letter-spacing:3px;
-  opacity:0.85;
-  margin-bottom:10px;
-}
-.sidebar-mark{
-  opacity:0.6;
+  opacity:0.8;
+  margin-bottom:8px;
 }
 
-/* ── MAIN COLUMN ── */
+/* MAIN */
 .main{
   flex:1;
   display:flex;
@@ -225,335 +218,214 @@ html,body{
   overflow:hidden;
 }
 
-/* ── HEADER BAND ── */
-.header{
+/* HEADER */
+.hdr{
   background:${HEADER_BG};
-  padding:16px 28px 14px;
+  padding:13px 26px 11px;
   display:flex;
   align-items:center;
   justify-content:space-between;
   flex-shrink:0;
 }
-.header-left{
-  display:flex;
-  align-items:center;
-  gap:10px;
-}
-.header-wordmark{
-  font-family:'Inter',Arial,sans-serif;
-  font-size:15px;
-  font-weight:700;
-  color:${MINT};
-  letter-spacing:1.5px;
-}
-.header-sub{
-  font-family:'Inter',Arial,sans-serif;
-  font-size:8px;
-  color:rgba(255,255,255,0.38);
-  letter-spacing:2px;
-  text-transform:uppercase;
-  margin-top:2px;
-}
-.header-right{
-  text-align:right;
-}
-.header-cert-label{
-  font-family:'Inter',Arial,sans-serif;
-  font-size:8px;
-  color:rgba(255,255,255,0.42);
-  letter-spacing:2px;
-  text-transform:uppercase;
-  margin-bottom:3px;
-}
-.header-cert-type{
-  font-family:'Inter',Arial,sans-serif;
-  font-size:11px;
-  font-weight:600;
-  color:rgba(255,255,255,0.88);
-  letter-spacing:0.5px;
-}
-.header-date{
-  font-family:'Inter',Arial,sans-serif;
-  font-size:9px;
-  color:${MINT};
-  margin-top:3px;
-  font-weight:500;
-}
+.hdr-left{display:flex;align-items:center;gap:9px;}
+.hdr-wordmark{font-size:14px;font-weight:700;color:${MINT};letter-spacing:1.5px;}
+.hdr-sub{font-size:7.5px;color:rgba(255,255,255,0.35);letter-spacing:2px;text-transform:uppercase;margin-top:2px;}
+.hdr-right{text-align:right;}
+.hdr-cert-lbl{font-size:7px;color:rgba(255,255,255,0.4);letter-spacing:2px;text-transform:uppercase;margin-bottom:3px;}
+.hdr-cert-type{font-size:11px;font-weight:600;color:rgba(255,255,255,0.9);letter-spacing:0.4px;}
+.hdr-date{font-size:8.5px;color:${MINT};margin-top:3px;font-weight:500;}
 
-/* ── BODY ── */
+/* BODY */
 .body{
   flex:1;
-  padding:28px 32px 0 28px;
+  padding:20px 26px 0 24px;
   position:relative;
   overflow:hidden;
   display:flex;
   flex-direction:column;
 }
-.watermark{
+.wm{
   position:absolute;
-  right:-30px;
-  bottom:-30px;
-  opacity:0.035;
+  right:-24px;
+  bottom:-24px;
+  opacity:0.03;
   pointer-events:none;
 }
 
-/* ── CERTIFY BLOCK ── */
-.certify-label{
-  font-family:'Inter',Arial,sans-serif;
-  font-size:10px;
-  color:#AAAAAA;
-  letter-spacing:1.5px;
-  text-transform:uppercase;
-  margin-bottom:6px;
+/* CERTIFY */
+.certify-lbl{
+  font-size:9px;color:#AAAAAA;
+  letter-spacing:1.5px;text-transform:uppercase;
+  margin-bottom:4px;
 }
 .recipient{
-  font-family:'Inter',Arial,sans-serif;
-  font-size:30px;
-  font-weight:600;
-  color:#0B1F1A;
-  line-height:1.15;
-  margin-bottom:4px;
-  max-width:420px;
-  word-break:break-word;
+  font-size:26px;font-weight:600;color:#0B1F1A;
+  line-height:1.1;margin-bottom:3px;
+  max-width:100%;word-break:break-word;
 }
-.succeed-line{
-  font-family:'Inter',Arial,sans-serif;
-  font-size:12px;
-  color:#888888;
-  margin-bottom:20px;
+.succeed{
+  font-size:11px;color:#888;margin-bottom:14px;
 }
 
-/* ── QUIZ TITLE BLOCK (accent left border) ── */
+/* QUIZ BLOCK */
 .quiz-block{
   border-left:3px solid ${MINT};
-  padding:10px 16px;
+  padding:8px 14px;
   background:${MINT_BG};
-  border-radius:0 4px 4px 0;
-  margin-bottom:20px;
-  max-width:100%;
+  border-radius:0 3px 3px 0;
+  margin-bottom:14px;
 }
-.quiz-category{
-  font-family:'Inter',Arial,sans-serif;
-  font-size:9px;
-  font-weight:600;
-  color:${MINT_DARK};
-  letter-spacing:1.5px;
-  text-transform:uppercase;
-  margin-bottom:4px;
+.quiz-cat{
+  font-size:8px;font-weight:600;color:${MINT_DARK};
+  letter-spacing:1.5px;text-transform:uppercase;margin-bottom:3px;
 }
 .quiz-title{
-  font-family:'Inter',Arial,sans-serif;
-  font-size:15px;
-  font-weight:600;
-  color:#0B1F1A;
-  line-height:1.35;
+  font-size:13px;font-weight:600;color:#0B1F1A;line-height:1.3;
 }
 
-/* ── DIVIDER ── */
-.divider{
-  height:0.5px;
-  background:#EBEBEB;
-  margin:0 0 18px;
-}
+/* DIVIDER */
+.div{height:0.5px;background:#EBEBEB;margin:0 0 12px;}
 
-/* ── TAGS ── */
-.tags{
-  display:flex;
-  flex-wrap:wrap;
-  gap:7px;
-  margin-bottom:20px;
-}
+/* TWO COLUMN LAYOUT */
+.cols{display:flex;gap:24px;flex:1;min-height:0;}
+.col-left{flex:1;display:flex;flex-direction:column;}
+.col-right{width:160px;flex-shrink:0;display:flex;flex-direction:column;justify-content:space-between;}
+
+/* TAGS */
+.tags{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;}
 .tag{
-  font-family:'Inter',Arial,sans-serif;
-  font-size:10.5px;
-  color:${MINT_DARK};
+  font-size:9.5px;color:${MINT_DARK};
+  background:${MINT_BG};border:0.5px solid ${MINT_BORDER};
+  border-radius:20px;padding:3px 11px;
+}
+
+/* STATS */
+.stats{display:flex;align-items:stretch;gap:0;margin-bottom:0;}
+.stat{padding:0 18px 0 0;margin-right:18px;border-right:0.5px solid #E8E8E8;}
+.stat:last-child{border-right:none;margin-right:0;}
+.stat-val{font-size:20px;font-weight:700;color:${MINT};line-height:1;margin-bottom:3px;}
+.stat-val-sm{font-size:11px;font-weight:700;color:${MINT};line-height:1;margin-bottom:3px;padding-top:4px;}
+.stat-lbl{font-size:8px;color:#AAAAAA;letter-spacing:0.8px;text-transform:uppercase;}
+
+/* RIGHT COLUMN: org info box */
+.org-box{
   background:${MINT_BG};
   border:0.5px solid ${MINT_BORDER};
-  border-radius:20px;
-  padding:4px 13px;
-  letter-spacing:0.2px;
+  border-radius:4px;
+  padding:10px 12px;
+  margin-bottom:10px;
 }
+.org-box-lbl{font-size:7.5px;color:${MINT_DARK};letter-spacing:1.5px;text-transform:uppercase;margin-bottom:3px;}
+.org-box-val{font-size:11px;font-weight:600;color:#0B1F1A;}
 
-/* ── STATS ROW ── */
-.stats{
-  display:flex;
-  align-items:stretch;
-  gap:0;
-  margin-bottom:22px;
-}
-.stat{
-  padding:0 24px 0 0;
-  margin-right:24px;
-  border-right:0.5px solid #E8E8E8;
-}
-.stat:last-child{
-  border-right:none;
-  margin-right:0;
-}
-.stat-val{
-  font-family:'Inter',Arial,sans-serif;
-  font-size:22px;
-  font-weight:700;
-  color:${MINT};
-  line-height:1;
-  margin-bottom:4px;
-}
-.stat-val-sm{
-  font-family:'Inter',Arial,sans-serif;
-  font-size:13px;
-  font-weight:700;
-  color:${MINT};
-  line-height:1;
-  margin-bottom:4px;
-  padding-top:4px;
-}
-.stat-label{
-  font-family:'Inter',Arial,sans-serif;
-  font-size:9px;
-  color:#AAAAAA;
-  letter-spacing:1px;
-  text-transform:uppercase;
-}
-
-/* ── FOOTER ── */
+/* FOOTER */
 .footer{
   border-top:0.5px solid #EBEBEB;
-  padding:16px 32px 16px 28px;
+  padding:11px 26px 11px 24px;
   display:flex;
   align-items:flex-end;
   justify-content:space-between;
   flex-shrink:0;
-  margin-top:auto;
 }
-.sig-block{ text-align:left; }
-.sig-svg{ display:block; margin-bottom:0px; }
-.sig-rule{
-  width:130px;
-  height:0.5px;
-  background:#CCCCCC;
-  margin-bottom:5px;
-}
-.sig-name{
-  font-family:'Inter',Arial,sans-serif;
-  font-size:10.5px;
-  font-weight:600;
-  color:#1a1a2e;
-  margin-bottom:2px;
-}
-.sig-role{
-  font-family:'Inter',Arial,sans-serif;
-  font-size:9.5px;
-  color:#888888;
-}
+.sig-block{text-align:left;}
+.sig-rule{width:120px;height:0.5px;background:#CCCCCC;margin-bottom:4px;}
+.sig-name{font-size:9.5px;font-weight:600;color:#1a1a2e;margin-bottom:1px;}
+.sig-role{font-size:8.5px;color:#888;}
 
-/* ── CREDENTIAL STRIP ── */
+/* CREDENTIAL STRIP */
 .cstrip{
   background:#F6F6F6;
   border-top:0.5px solid #E8E8E8;
-  padding:8px 28px;
+  padding:6px 24px;
   display:flex;
   align-items:center;
   justify-content:space-between;
   flex-shrink:0;
 }
-.cstrip-id{
-  font-family:'Inter',Arial,sans-serif;
-  font-size:8.5px;
-  color:#BBBBBB;
-  letter-spacing:0.4px;
-}
-.cstrip-verify{
-  font-family:'Inter',Arial,sans-serif;
-  font-size:8.5px;
-  color:${MINT_DARK};
-  font-weight:500;
-  letter-spacing:0.3px;
-}
+.cstrip-id{font-size:7.5px;color:#BBBBBB;letter-spacing:0.3px;}
+.cstrip-verify{font-size:7.5px;color:${MINT_DARK};font-weight:500;}
 </style>
 </head>
 <body>
-
 <div class="card">
 
-  <!-- SIDEBAR SPINE -->
+  <!-- SIDEBAR -->
   <div class="sidebar">
-    <div class="sidebar-pattern">${chevronPattern}</div>
-    <div class="sidebar-bottom">
-      <div class="sidebar-wordmark">${abbrev}</div>
-      <div class="sidebar-mark">${logoMark(MINT, 22, 22)}</div>
+    <svg width="46" height="100%" viewBox="0 0 46 750" fill="none" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMin slice" style="position:absolute;top:0;left:0;width:100%;height:100%;">
+      ${chevronPattern}
+    </svg>
+    <div class="sb-bottom">
+      <span class="sb-wordmark">${abbrev}</span>
+      ${logoMark(MINT, 20, 20)}
     </div>
   </div>
 
-  <!-- MAIN CONTENT -->
+  <!-- MAIN -->
   <div class="main">
 
-    <!-- HEADER BAND -->
-    <div class="header">
-      <div class="header-left">
-        ${logoMark(MINT, 30, 30)}
+    <!-- HEADER -->
+    <div class="hdr">
+      <div class="hdr-left">
+        ${logoMark(MINT, 28, 28)}
         <div>
-          <div class="header-wordmark">${abbrev}</div>
-          <div class="header-sub">${series}</div>
+          <div class="hdr-wordmark">${abbrev}</div>
+          <div class="hdr-sub">${series}</div>
         </div>
       </div>
-      <div class="header-right">
-        <div class="header-cert-label">Official Document</div>
-        <div class="header-cert-type">Certificate of Completion</div>
-        <div class="header-date">${dateLong}</div>
+      <div class="hdr-right">
+        <div class="hdr-cert-lbl">Official Document</div>
+        <div class="hdr-cert-type">Certificate of Completion</div>
+        <div class="hdr-date">${dateLong}</div>
       </div>
     </div>
 
     <!-- BODY -->
     <div class="body">
+      <div class="wm">${watermark}</div>
 
-      <!-- WATERMARK -->
-      <div class="watermark">${watermark}</div>
-
-      <!-- RECIPIENT -->
-      <p class="certify-label">This is to certify that</p>
+      <p class="certify-lbl">This is to certify that</p>
       <p class="recipient">${recipientName}</p>
-      <p class="succeed-line">has successfully completed the assessment</p>
+      <p class="succeed">has successfully completed the assessment</p>
 
-      <!-- QUIZ TITLE BLOCK -->
       <div class="quiz-block">
-        ${categoryLabel ? `<div class="quiz-category">${categoryLabel}</div>` : ""}
+        ${categoryLabel ? `<div class="quiz-cat">${categoryLabel}</div>` : ""}
         <div class="quiz-title">${moduleTitle}</div>
       </div>
 
-      <div class="divider"></div>
+      <div class="div"></div>
 
-      <!-- TAGS -->
-      <div class="tags">
-        ${tagHtml}
-        <span class="tag">${orgLabel}</span>
+      <!-- TWO-COLUMN LOWER BODY -->
+      <div class="cols">
+        <div class="col-left">
+          <div class="tags">
+            ${tagHtml}
+          </div>
+          ${(scoreDisplay || pctDisplay || gradeLabel) ? `
+          <div class="stats">
+            ${scoreDisplay ? `<div class="stat"><div class="stat-val">${scoreDisplay}</div><div class="stat-lbl">Score</div></div>` : ""}
+            ${pctDisplay  ? `<div class="stat"><div class="stat-val">${pctDisplay}%</div><div class="stat-lbl">Grade</div></div>` : ""}
+            ${gradeLabel  ? `<div class="stat"><div class="stat-val-sm">${esc(gradeLabel).toUpperCase()}</div><div class="stat-lbl">Achievement</div></div>` : ""}
+          </div>` : ""}
+        </div>
+
+        <div class="col-right">
+          <div class="org-box">
+            <div class="org-box-lbl">Organisation</div>
+            <div class="org-box-val">${orgLabel}</div>
+          </div>
+          <div class="org-box">
+            <div class="org-box-lbl">Issued by</div>
+            <div class="org-box-val">${abbrev}</div>
+          </div>
+        </div>
       </div>
-
-      <!-- STATS -->
-      ${(scoreDisplay || pctDisplay || gradeLabel) ? `
-      <div class="stats">
-        ${scoreDisplay ? `
-        <div class="stat">
-          <div class="stat-val">${scoreDisplay}</div>
-          <div class="stat-label">Final Score</div>
-        </div>` : ""}
-        ${pctDisplay ? `
-        <div class="stat">
-          <div class="stat-val">${pctDisplay}%</div>
-          <div class="stat-label">Grade</div>
-        </div>` : ""}
-        ${gradeLabel ? `
-        <div class="stat">
-          <div class="stat-val-sm">${esc(gradeLabel).toUpperCase()}</div>
-          <div class="stat-label">Achievement</div>
-        </div>` : ""}
-      </div>` : ""}
 
     </div><!-- /body -->
 
-    <!-- FOOTER: signature + badge -->
+    <!-- FOOTER -->
     <div class="footer">
       <div class="sig-block">
-        <div class="sig-svg">${signatureSvg}</div>
+        ${signatureSvg}
         <div class="sig-rule"></div>
         <div class="sig-name">${esc(sig1Name)}</div>
         <div class="sig-role">${esc(sig1Role)}</div>
@@ -569,7 +441,6 @@ html,body{
 
   </div><!-- /main -->
 </div><!-- /card -->
-
 </body>
 </html>`;
 }
