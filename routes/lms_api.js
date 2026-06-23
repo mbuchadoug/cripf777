@@ -695,509 +695,137 @@ async function ensureCertificatesDir() {
 }
 
 /**
- * Helper: generate certificate HTML given details
- * World-class luxury design - navy + gold, Cinzel + Cormorant Garamond
+ * buildCertificateHtml — CRIPFCNT Option A (table layout, no gaps)
+ * A4 landscape: sidebar | content | dark right panel
  */
-function buildCertificateHtml({
-  name,
-  orgName,
-  moduleName,
-  quizTitle,
-  score,
-  percentage,
-  date,
-}) {
-  const esc = (s) =>
-    s == null
-      ? ""
-      : String(s)
-          .replace(/&/g, "&amp;")
-          .replace(/</g, "&lt;")
-          .replace(/>/g, "&gt;");
+function buildCertificateHtml({name,orgName,moduleName,quizTitle,score,percentage,date}){
+  const esc=(s)=>s==null?'':String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const dateObj=date?new Date(date):new Date();
+  const dateStr=dateObj.toISOString().slice(0,10);
+  const dateLong=dateObj.toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});
+  const moduleTitle=esc(quizTitle||moduleName||'Assessment');
+  const categoryLabel=(moduleName&&quizTitle&&moduleName!==quizTitle)?esc(moduleName):'';
+  const recipientName=esc(name||'Recipient');
+  const orgLabel=esc(orgName||'CRIPFCNT');
+  const pctDisplay=percentage!=null?esc(String(percentage)):null;
+  const scoreDisplay=score!=null?esc(String(score)):null;
+  let gradeLabel='';
+  if(percentage!=null){const p=Number(percentage);if(p>=90)gradeLabel='Distinction';else if(p>=75)gradeLabel='Merit';else if(p>=50)gradeLabel='Pass';}
+  const orgLow=(orgName||'').toLowerCase();
+  let DARK='#0B4F45',MINT='#1DE9B6',MINT_DARK='#0D9B77',MINT_BG='#E1F5EE',MINT_BORDER='#9FE1CB',abbrev='CRIPFCNT',series='CRIPFCNT Learning &amp; Assessment Platform',sig1Name='Donald Mataranyika',sig1Role='Chair, Board of Directors';
+  if(/nyaradzo/.test(orgLow)){DARK='#062A5E';MINT='#C9A227';MINT_DARK='#7A5F0A';MINT_BG='#FBF3DA';MINT_BORDER='#E8CC7E';abbrev='NGT';series='Nyaradzo Group Training';}
+  if(/winchester/.test(orgLow)){DARK='#1F3C88';MINT='#E8C95A';MINT_DARK='#7A5F0A';MINT_BG='#FBF5DA';MINT_BORDER='#E8CC7E';abbrev='WS';series='Winchester School';}
+  if(/st[\s-]?eurit|eurit/.test(orgLow)){DARK='#111111';MINT='#D4AF37';MINT_DARK='#7A5F0A';MINT_BG='#FBF5DA';MINT_BORDER='#E8CC7E';abbrev='SEIS';series='St Eurit International School';}
+  const credId=abbrev+'-'+dateStr.replace(/-/g,'')+'-'+(name||'X').replace(/\s+/g,'').toUpperCase().slice(0,6).padEnd(6,'0');
+  const tagSources=[quizTitle||null,moduleName||null].filter(Boolean);
+  const tags=[...new Set(tagSources)].slice(0,3);
+  const tagHtml=tags.map(t=>'<span class="tag">'+esc(t)+'</span>').join(' ');
 
-  const dateStr = date
-    ? new Date(date).toISOString().slice(0, 10)
-    : new Date().toISOString().slice(0, 10);
+  const logo=(color,w,h)=>`<svg width="${w}" height="${h}" viewBox="0 0 100 100" fill="none"><path d="M20 10 L20 90 Q20 90 50 90 Q80 90 80 60 L80 52 L54 52 L54 70 Q54 74 50 74 Q46 74 46 70 L46 30 Q46 26 50 26 Q54 26 54 30 L54 48 L80 48 L80 40 Q80 10 50 10 Z" fill="${color}"/></svg>`;
 
-  const moduleTitle = esc(quizTitle || moduleName || "Module");
-  const recipientName = esc(name || "Recipient");
-  const institution = esc(orgName || "CRIPFCnt Institute");
-  const scoreDisplay = esc(score != null ? String(score) : "-");
-  const pctDisplay = esc(percentage != null ? String(percentage) : "-");
+  const sbStripes=Array.from({length:60},(_,i)=>{const y=4+i*13;return `<polyline points="2,${y} 21,${y+9} 40,${y}" stroke="${MINT}" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" opacity="0.18"/>`;}).join('');
+  const rpStripes=Array.from({length:60},(_,i)=>{const y=4+i*13;return `<polyline points="0,${y} 65,${y+21} 130,${y}" stroke="${MINT}" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" opacity="0.09"/>`;}).join('');
 
-  /* ── brand config by org ── */
-  const orgLow = (orgName || "").toLowerCase();
-  let brand = {
-    primary: "#0a1628",
-    accent:  "#b8973a",
-    accent2: "#c9a84c",
-    cream:   "#fdf8ee",
-    series:  "CRIPFCnt Learning Management System",
-  };
+  const sig=`<svg width="124" height="40" viewBox="0 0 128 42" fill="none"><path d="M5 30 C9 19 15 12 23 14 C29 16 31 23 27 29 C23 35 17 34 15 30 C13 26 19 20 27 24 C35 28 41 22 47 16" stroke="#1a1a2e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M47 16 C53 10 57 12 59 18 C61 24 57 30 53 28 C49 26 51 20 57 22 C65 25 71 18 77 14" stroke="#1a1a2e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M77 14 C83 10 87 14 85 22 C83 28 79 32 81 36 C83 39 89 37 93 33" stroke="#1a1a2e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M93 33 C97 29 103 26 107 30 C111 34 107 39 103 37 C99 35 102 29 108 28 C116 26 121 32 125 35" stroke="#1a1a2e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>`;
+  const badge=`<svg width="50" height="50" viewBox="0 0 60 60" fill="none"><circle cx="30" cy="30" r="28" stroke="${MINT}" stroke-width="1.8" fill="none"/><circle cx="30" cy="30" r="22" stroke="${MINT}" stroke-width="0.8" stroke-dasharray="3 2" fill="none" opacity="0.4"/><path d="M19 30 L26 37 L41 22" stroke="${MINT}" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/><text x="30" y="53" font-family="Inter,Arial,sans-serif" font-size="5.5" font-weight="600" fill="${MINT}" text-anchor="middle" letter-spacing="1">CERTIFIED</text></svg>`;
+  const wm=`<svg width="190" height="190" viewBox="0 0 100 100" fill="none" style="position:absolute;right:-20px;bottom:-20px;opacity:0.03;pointer-events:none;"><path d="M20 10 L20 90 Q20 90 50 90 Q80 90 80 60 L80 52 L54 52 L54 70 Q54 74 50 74 Q46 74 46 70 L46 30 Q46 26 50 26 Q54 26 54 30 L54 48 L80 48 L80 40 Q80 10 50 10 Z" fill="${DARK}"/></svg>`;
 
-  if (/nyaradzo/.test(orgLow)) {
-    brand = { ...brand, primary: "#0a2e5c", accent: "#c9a227", accent2: "#dbb84a", series: "Nyaradzo Group Training" };
-  } else if (/winchester/.test(orgLow)) {
-    brand = { ...brand, primary: "#1F3C88", accent: "#8B1E2D", accent2: "#a83040", series: "Winchester School" };
-  } else if (/st[\s-]?eurit|eurit/.test(orgLow)) {
-    brand = { ...brand, primary: "#111111", accent: "#D4AF37", accent2: "#e8c95a", series: "St Eurit International School" };
-  }
-
-  /* ── short certificate ID ── */
-  const certId = `CERT-${dateStr.replace(/-/g, "")}-${(name || "X")
-    .replace(/\s+/g, "")
-    .toUpperCase()
-    .slice(0, 6)
-    .padEnd(6, "0")}`;
+  const statsHtml=(scoreDisplay||pctDisplay||gradeLabel)?`<div class="stats">${scoreDisplay?`<div class="stat"><div class="stat-val">${scoreDisplay}</div><div class="stat-lbl">Score</div></div>`:''}${pctDisplay?`<div class="stat"><div class="stat-val">${pctDisplay}%</div><div class="stat-lbl">Grade</div></div>`:''}${gradeLabel?`<div class="stat"><div class="stat-val-sm">${esc(gradeLabel).toUpperCase()}</div><div class="stat-lbl">Achievement</div></div>`:''}</div>`:'';
 
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
-<title>Certificate of Completion</title>
+<title>Certificate</title>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400;1,600&family=Cinzel:wght@400;600;700&display=swap');
-
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-@page { margin: 0; size: A4; }
-
-html, body {
-  width: 210mm;
-  height: 297mm;
-  overflow: hidden;
-  background: ${brand.primary};
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: 'Cormorant Garamond', Georgia, serif;
-}
-
-.frame-outer {
-  width: 190mm;
-  min-height: 277mm;
-  background: ${brand.cream};
-  padding: 5px;
-  position: relative;
-}
-
-.frame-border-1 {
-  border: 2.5px solid ${brand.accent};
-  padding: 6px;
-  position: relative;
-  min-height: calc(277mm - 10px);
-}
-
-.frame-border-2 {
-  border: 1px solid ${brand.accent};
-  padding: 32px 44px 36px;
-  position: relative;
-  min-height: calc(277mm - 22px);
-  background: ${brand.cream};
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.watermark {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%) rotate(-30deg);
-  font-family: 'Cinzel', serif;
-  font-size: 80px;
-  font-weight: 700;
-  color: ${brand.accent};
-  opacity: 0.04;
-  white-space: nowrap;
-  letter-spacing: 10px;
-  pointer-events: none;
-  text-transform: uppercase;
-  z-index: 0;
-}
-
-.corner {
-  position: absolute;
-  width: 52px;
-  height: 52px;
-  z-index: 2;
-}
-.corner svg { width: 100%; height: 100%; }
-.corner.tl { top: -2px; left: -2px; }
-.corner.tr { top: -2px; right: -2px; transform: scaleX(-1); }
-.corner.bl { bottom: -2px; left: -2px; transform: scaleY(-1); }
-.corner.br { bottom: -2px; right: -2px; transform: scale(-1); }
-
-.cert-content {
-  position: relative;
-  z-index: 1;
-  width: 100%;
-  text-align: center;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  flex: 1;
-}
-
-.org-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  background: ${brand.primary};
-  color: ${brand.accent2};
-  padding: 5px 22px 5px 16px;
-  font-family: 'Cinzel', serif;
-  font-size: 8px;
-  letter-spacing: 3.5px;
-  text-transform: uppercase;
-  margin-bottom: 20px;
-}
-.org-badge .dot {
-  width: 6px; height: 6px;
-  background: ${brand.accent};
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.cert-title {
-  font-family: 'Cinzel', serif;
-  font-size: 36px;
-  font-weight: 700;
-  color: ${brand.primary};
-  letter-spacing: 4px;
-  text-transform: uppercase;
-  line-height: 1.05;
-  margin-bottom: 5px;
-}
-
-.cert-subtitle {
-  font-family: 'Cormorant Garamond', serif;
-  font-size: 16px;
-  font-style: italic;
-  color: #7a6a3a;
-  letter-spacing: 2px;
-  margin-bottom: 18px;
-}
-
-.divider {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 320px;
-  margin-bottom: 20px;
-}
-.divider-line {
-  flex: 1;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, ${brand.accent} 40%, ${brand.accent} 60%, transparent);
-}
-
-.certifies {
-  font-family: 'Cormorant Garamond', serif;
-  font-size: 13px;
-  color: #7a6040;
-  letter-spacing: 2.5px;
-  text-transform: uppercase;
-  margin-bottom: 8px;
-}
-
-.recipient-name {
-  font-family: 'Cormorant Garamond', serif;
-  font-size: 46px;
-  font-weight: 600;
-  font-style: italic;
-  color: ${brand.primary};
-  line-height: 1.1;
-  letter-spacing: 1px;
-  margin-bottom: 16px;
-  max-width: 480px;
-  word-break: break-word;
-}
-
-.completed-text {
-  font-family: 'Cormorant Garamond', serif;
-  font-size: 13px;
-  color: #7a6040;
-  letter-spacing: 2.5px;
-  text-transform: uppercase;
-  margin-bottom: 14px;
-}
-
-.module-box {
-  background: ${brand.primary};
-  padding: 14px 30px 16px;
-  width: 90%;
-  max-width: 480px;
-  margin-bottom: 22px;
-  position: relative;
-}
-.module-box::before,
-.module-box::after {
-  content: '';
-  position: absolute;
-  left: 0; right: 0;
-  height: 2px;
-  background: linear-gradient(90deg, transparent, ${brand.accent} 20%, ${brand.accent} 80%, transparent);
-}
-.module-box::before { top: 0; }
-.module-box::after  { bottom: 0; }
-
-.module-series {
-  font-family: 'Cinzel', serif;
-  font-size: 7.5px;
-  letter-spacing: 4px;
-  color: ${brand.accent};
-  text-transform: uppercase;
-  margin-bottom: 7px;
-}
-
-.module-title {
-  font-family: 'Cinzel', serif;
-  font-size: 11.5px;
-  font-weight: 600;
-  color: ${brand.cream};
-  letter-spacing: 1.5px;
-  line-height: 1.6;
-  text-transform: uppercase;
-}
-
-.stats {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  margin-bottom: 26px;
-  width: 80%;
-  max-width: 420px;
-}
-
-.stat { flex: 1; text-align: center; }
-
-.stat-value {
-  font-family: 'Cinzel', serif;
-  font-size: 22px;
-  font-weight: 700;
-  color: ${brand.primary};
-  line-height: 1;
-  margin-bottom: 5px;
-}
-.stat-value.gold { color: ${brand.accent}; }
-
-.stat-label {
-  font-family: 'Cormorant Garamond', serif;
-  font-size: 10px;
-  color: #7a6040;
-  letter-spacing: 2px;
-  text-transform: uppercase;
-}
-
-.stat-sep {
-  width: 1px;
-  height: 40px;
-  background: linear-gradient(180deg, transparent, ${brand.accent} 30%, ${brand.accent} 70%, transparent);
-}
-
-.cert-bottom {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  width: 100%;
-  margin-top: auto;
-  padding-top: 18px;
-  border-top: 1px solid #d4c89a;
-}
-
-.sig { flex: 1; text-align: center; }
-
-.sig-script {
-  font-family: 'Cormorant Garamond', serif;
-  font-size: 24px;
-  font-style: italic;
-  color: ${brand.primary};
-  margin-bottom: 4px;
-  line-height: 1;
-}
-
-.sig-line {
-  width: 130px;
-  height: 1px;
-  background: ${brand.primary};
-  margin: 0 auto 5px;
-}
-
-.sig-name {
-  font-family: 'Cinzel', serif;
-  font-size: 8px;
-  letter-spacing: 2px;
-  color: ${brand.primary};
-  text-transform: uppercase;
-  margin-bottom: 2px;
-}
-
-.sig-role {
-  font-family: 'Cormorant Garamond', serif;
-  font-size: 10px;
-  font-style: italic;
-  color: #7a6040;
-}
-
-.seal {
-  flex-shrink: 0;
-  width: 80px;
-  height: 80px;
-  margin: 0 12px;
-}
-.seal svg { width: 100%; height: 100%; }
-
-.cert-id {
-  font-family: 'Cormorant Garamond', serif;
-  font-size: 9px;
-  color: #aaa090;
-  letter-spacing: 1.2px;
-  text-align: center;
-  margin-top: 12px;
-  width: 100%;
-}
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+@page{margin:0;size:A4 landscape;}
+html,body{width:297mm;height:210mm;overflow:hidden;background:${DARK};font-family:'Inter',Arial,sans-serif;-webkit-font-smoothing:antialiased;}
+table.cert{width:297mm;height:210mm;display:table;table-layout:fixed;border-collapse:collapse;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+tr.r-hdr>td{height:48px;}
+tr.r-foot>td{height:62px;}
+tr.r-strip>td{height:22px;}
+td{padding:0;vertical-align:top;}
+td.c-sb{width:44px;background:${DARK};position:relative;overflow:hidden;}
+td.c-rp{width:132px;}
+.sb-svg{position:absolute;top:0;left:0;width:44px;height:100%;}
+.sb-foot{position:absolute;bottom:0;left:0;right:0;display:flex;flex-direction:column;align-items:center;padding-bottom:10px;gap:5px;z-index:2;}
+.sb-word{writing-mode:vertical-rl;transform:rotate(180deg);font-size:7.5px;font-weight:700;color:${MINT};letter-spacing:3px;opacity:0.75;}
+tr.r-hdr td.c-sb,tr.r-hdr td.c-main,tr.r-hdr td.c-rp{background:${DARK};}
+tr.r-hdr td.c-main{vertical-align:middle;padding:0 20px;}
+tr.r-hdr td.c-rp{vertical-align:middle;padding:0 14px;text-align:right;}
+.hdr-logo{display:flex;align-items:center;gap:9px;}
+.hdr-wm{font-size:13px;font-weight:700;color:${MINT};letter-spacing:1.5px;}
+.hdr-sub{font-size:6.5px;color:rgba(255,255,255,0.3);letter-spacing:2px;text-transform:uppercase;margin-top:2px;}
+.hdr-lbl{font-size:6px;color:rgba(255,255,255,0.35);letter-spacing:2px;text-transform:uppercase;margin-bottom:2px;}
+.hdr-type{font-size:10.5px;font-weight:600;color:rgba(255,255,255,0.92);}
+.hdr-date{font-size:7.5px;color:${MINT};margin-top:3px;font-weight:500;}
+tr.r-body td.c-sb{background:${DARK};}
+tr.r-body td.c-main{background:#fff;vertical-align:top;padding:20px 22px 16px 20px;position:relative;overflow:hidden;}
+tr.r-body td.c-rp{background:${DARK};vertical-align:middle;padding:0 14px;position:relative;overflow:hidden;}
+.rp-svg{position:absolute;top:0;left:0;width:132px;height:100%;}
+.rp-inner{position:relative;z-index:2;}
+.rp-item{padding:10px 0;border-bottom:0.5px solid rgba(255,255,255,0.1);}
+.rp-item:last-child{border-bottom:none;}
+.rp-lbl{font-size:6.5px;color:rgba(255,255,255,0.38);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:4px;}
+.rp-val{font-size:10.5px;font-weight:600;color:${MINT};line-height:1.3;}
+.rp-val-sm{font-size:7.5px;font-weight:600;color:${MINT};line-height:1.4;word-break:break-word;}
+.certify-lbl{font-size:8.5px;color:#AAA;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:5px;}
+.recipient{font-size:28px;font-weight:600;color:#0B1F1A;line-height:1.1;margin-bottom:3px;word-break:break-word;}
+.succeed{font-size:10.5px;color:#888;margin-bottom:16px;}
+.quiz-block{border-left:3px solid ${MINT};padding:8px 12px;background:${MINT_BG};border-radius:0 3px 3px 0;margin-bottom:12px;}
+.quiz-cat{font-size:7px;font-weight:600;color:${MINT_DARK};letter-spacing:1.5px;text-transform:uppercase;margin-bottom:3px;}
+.quiz-title{font-size:13px;font-weight:600;color:#0B1F1A;line-height:1.25;}
+.tags{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:16px;}
+.tag{font-size:9px;color:${MINT_DARK};background:${MINT_BG};border:0.5px solid ${MINT_BORDER};border-radius:20px;padding:3px 10px;}
+.divider{height:0.5px;background:#E8E8E8;margin-bottom:13px;}
+.stats{display:flex;align-items:flex-end;gap:0;}
+.stat{padding-right:18px;margin-right:18px;border-right:0.5px solid #E0E0E0;}
+.stat:last-child{border-right:none;padding-right:0;margin-right:0;}
+.stat-val{font-size:24px;font-weight:700;color:${MINT};line-height:1;margin-bottom:3px;}
+.stat-val-sm{font-size:13px;font-weight:700;color:${MINT};line-height:1;margin-bottom:3px;padding-top:5px;}
+.stat-lbl{font-size:7.5px;color:#AAA;letter-spacing:0.8px;text-transform:uppercase;}
+tr.r-foot td.c-sb,tr.r-foot td.c-rp{background:${DARK};}
+tr.r-foot td.c-main{background:#fff;vertical-align:middle;padding:0 22px 0 20px;border-top:0.5px solid #E8E8E8;}
+.foot-inner{display:flex;align-items:center;justify-content:space-between;}
+.sig-rule{width:115px;height:0.5px;background:#CCC;margin-bottom:4px;}
+.sig-name{font-size:9px;font-weight:600;color:#1a1a2e;margin-bottom:1px;}
+.sig-role{font-size:8px;color:#888;}
+tr.r-strip td.c-sb{background:${DARK};}
+tr.r-strip td.c-main{background:#F5F5F5;vertical-align:middle;padding:0 20px;border-top:0.5px solid #E8E8E8;}
+tr.r-strip td.c-rp{background:#F5F5F5;vertical-align:middle;padding:0 14px;text-align:right;border-top:0.5px solid #E8E8E8;}
+.strip-id{font-size:6.5px;color:#BBB;letter-spacing:0.3px;}
+.strip-verify{font-size:6.5px;color:${MINT_DARK};font-weight:500;}
 </style>
 </head>
 <body>
-
-<div class="frame-outer">
-  <div class="frame-border-1">
-
-    <div class="corner tl">
-      <svg viewBox="0 0 52 52" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M2 50V7C2 4.2 4.2 2 7 2H50" stroke="${brand.accent}" stroke-width="1.5"/>
-        <path d="M2 30V7C2 4.2 4.2 2 7 2H30" stroke="${brand.accent2}" stroke-width="0.5"/>
-        <circle cx="7" cy="7" r="3" fill="${brand.accent}"/>
-        <circle cx="2" cy="2" r="1.8" fill="${brand.accent2}"/>
-        <path d="M13 2H18M2 13V18" stroke="${brand.accent}" stroke-width="0.8"/>
-      </svg>
-    </div>
-    <div class="corner tr">
-      <svg viewBox="0 0 52 52" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M2 50V7C2 4.2 4.2 2 7 2H50" stroke="${brand.accent}" stroke-width="1.5"/>
-        <path d="M2 30V7C2 4.2 4.2 2 7 2H30" stroke="${brand.accent2}" stroke-width="0.5"/>
-        <circle cx="7" cy="7" r="3" fill="${brand.accent}"/>
-        <circle cx="2" cy="2" r="1.8" fill="${brand.accent2}"/>
-        <path d="M13 2H18M2 13V18" stroke="${brand.accent}" stroke-width="0.8"/>
-      </svg>
-    </div>
-    <div class="corner bl">
-      <svg viewBox="0 0 52 52" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M2 50V7C2 4.2 4.2 2 7 2H50" stroke="${brand.accent}" stroke-width="1.5"/>
-        <path d="M2 30V7C2 4.2 4.2 2 7 2H30" stroke="${brand.accent2}" stroke-width="0.5"/>
-        <circle cx="7" cy="7" r="3" fill="${brand.accent}"/>
-        <circle cx="2" cy="2" r="1.8" fill="${brand.accent2}"/>
-        <path d="M13 2H18M2 13V18" stroke="${brand.accent}" stroke-width="0.8"/>
-      </svg>
-    </div>
-    <div class="corner br">
-      <svg viewBox="0 0 52 52" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M2 50V7C2 4.2 4.2 2 7 2H50" stroke="${brand.accent}" stroke-width="1.5"/>
-        <path d="M2 30V7C2 4.2 4.2 2 7 2H30" stroke="${brand.accent2}" stroke-width="0.5"/>
-        <circle cx="7" cy="7" r="3" fill="${brand.accent}"/>
-        <circle cx="2" cy="2" r="1.8" fill="${brand.accent2}"/>
-        <path d="M13 2H18M2 13V18" stroke="${brand.accent}" stroke-width="0.8"/>
-      </svg>
-    </div>
-
-    <div class="frame-border-2">
-      <div class="watermark">CRIPFCNT</div>
-
-      <div class="cert-content">
-
-        <div class="org-badge">
-          <span class="dot"></span>
-          ${brand.series}
-          <span class="dot"></span>
-        </div>
-
-        <h1 class="cert-title">Certificate</h1>
-        <p class="cert-subtitle">of Completion</p>
-
-        <div class="divider">
-          <div class="divider-line"></div>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-            <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6L12 2z"
-                  fill="${brand.accent}"/>
-          </svg>
-          <div class="divider-line"></div>
-        </div>
-
-        <p class="certifies">This Certifies That</p>
-
-        <h2 class="recipient-name">${recipientName}</h2>
-
-        <p class="completed-text">Has Successfully Completed the Module</p>
-
-        <div class="module-box">
-          <p class="module-series">${institution} &nbsp;&middot;&nbsp; Official Record</p>
-          <p class="module-title">${moduleTitle}</p>
-        </div>
-
-        <div class="stats">
-          <div class="stat">
-            <div class="stat-value">${scoreDisplay}</div>
-            <div class="stat-label">Final Score</div>
-          </div>
-          <div class="stat-sep"></div>
-          <div class="stat">
-            <div class="stat-value gold">${pctDisplay}%</div>
-            <div class="stat-label">Distinction</div>
-          </div>
-          <div class="stat-sep"></div>
-          <div class="stat">
-            <div class="stat-value">${dateStr}</div>
-            <div class="stat-label">Date Awarded</div>
-          </div>
-        </div>
-
-        <div class="cert-bottom">
-          <div class="sig">
-            <div class="sig-script">Director</div>
-            <div class="sig-line"></div>
-            <div class="sig-name">Director of Learning</div>
-            <div class="sig-role">${institution}</div>
-          </div>
-
-          <div class="seal">
-            <svg viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <circle cx="40" cy="40" r="37" fill="${brand.primary}" stroke="${brand.accent}" stroke-width="1.5"/>
-              <circle cx="40" cy="40" r="32" fill="none" stroke="${brand.accent2}" stroke-width="0.5"/>
-              <circle cx="40" cy="40" r="27" fill="none" stroke="${brand.accent}" stroke-width="0.5" stroke-dasharray="2.5 2"/>
-              <path d="M40 16l2.8 8.5H51l-7 5.2 2.7 8.5L40 33l-6.7 5.2 2.7-8.5-7-5.2h8.2L40 16z"
-                    fill="${brand.accent2}"/>
-              <text x="40" y="52" text-anchor="middle"
-                    font-family="'Cinzel', serif" font-size="6.5" font-weight="600"
-                    fill="${brand.accent2}" letter-spacing="2">CRIPFCNT</text>
-              <text x="40" y="60" text-anchor="middle"
-                    font-family="'Cinzel', serif" font-size="5"
-                    fill="${brand.accent}" letter-spacing="1.5">VERIFIED</text>
-              <circle cx="40" cy="65" r="2" fill="${brand.accent}" opacity="0.7"/>
-            </svg>
-          </div>
-
-          <div class="sig">
-            <div class="sig-script">Academic</div>
-            <div class="sig-line"></div>
-            <div class="sig-name">Chief Academic Officer</div>
-            <div class="sig-role">${institution}</div>
-          </div>
-        </div>
-
-        <p class="cert-id">
-          Certificate ID: ${certId}
-          &nbsp;&middot;&nbsp;
-          Awarded by ${institution}
-        </p>
-
-      </div>
-    </div>
-  </div>
-</div>
-
+<table class="cert">
+<tr class="r-hdr">
+  <td class="c-sb"></td>
+  <td class="c-main"><div class="hdr-logo">${logo(MINT,26,26)}<div><div class="hdr-wm">${abbrev}</div><div class="hdr-sub">${series}</div></div></div></td>
+  <td class="c-rp"><div class="hdr-lbl">Official Document</div><div class="hdr-type">Certificate of Completion</div><div class="hdr-date">${dateLong}</div></td>
+</tr>
+<tr class="r-body">
+  <td class="c-sb"><svg class="sb-svg" viewBox="0 0 44 800" fill="none" preserveAspectRatio="xMidYMin slice">${sbStripes}</svg><div class="sb-foot"><span class="sb-word">${abbrev}</span>${logo(MINT,18,18)}</div></td>
+  <td class="c-main">${wm}<p class="certify-lbl">This is to certify that</p><p class="recipient">${recipientName}</p><p class="succeed">has successfully completed the assessment</p><div class="quiz-block">${categoryLabel?'<div class="quiz-cat">'+categoryLabel+'</div>':''}<div class="quiz-title">${moduleTitle}</div></div><div class="tags">${tagHtml}</div><div class="divider"></div>${statsHtml}</td>
+  <td class="c-rp"><svg class="rp-svg" viewBox="0 0 132 800" fill="none" preserveAspectRatio="xMidYMin slice">${rpStripes}</svg><div class="rp-inner"><div class="rp-item"><div class="rp-lbl">Organisation</div><div class="rp-val">${orgLabel}</div></div><div class="rp-item"><div class="rp-lbl">Issued by</div><div class="rp-val">${abbrev}</div></div><div class="rp-item"><div class="rp-lbl">Date issued</div><div class="rp-val" style="font-size:9px;">${dateLong}</div></div><div class="rp-item"><div class="rp-lbl">Credential ID</div><div class="rp-val-sm">${credId}</div></div></div></td>
+</tr>
+<tr class="r-foot">
+  <td class="c-sb"></td>
+  <td class="c-main"><div class="foot-inner"><div>${sig}<div class="sig-rule"></div><div class="sig-name">${esc(sig1Name)}</div><div class="sig-role">${esc(sig1Role)}</div></div>${badge}</div></td>
+  <td class="c-rp"></td>
+</tr>
+<tr class="r-strip">
+  <td class="c-sb"></td>
+  <td class="c-main"><span class="strip-id">Certificate ID: ${credId} &nbsp;&middot;&nbsp; ${series}</span></td>
+  <td class="c-rp"><span class="strip-verify">cripfcnt.com/verify</span></td>
+</tr>
+</table>
 </body>
 </html>`;
 }
+
 
 
 
