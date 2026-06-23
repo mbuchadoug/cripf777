@@ -703,31 +703,19 @@ function buildCertificateHtml({name,orgName,moduleName,quizTitle,score,percentag
   const dateObj=date?new Date(date):new Date();
   const dateStr=dateObj.toISOString().slice(0,10);
   const dateLong=dateObj.toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});
-
   const moduleTitle=esc(quizTitle||moduleName||'Assessment');
   const categoryLabel=(moduleName&&quizTitle&&moduleName!==quizTitle)?esc(moduleName):'';
   const recipientName=esc(name||'Recipient');
   const orgLabel=esc(orgName||'CRIPFCNT');
   const pctDisplay=percentage!=null?esc(String(percentage)):null;
   const scoreDisplay=score!=null?esc(String(score)):null;
-
   let gradeLabel='';
-  if(percentage!=null){
-    const p=Number(percentage);
-    if(p>=90)gradeLabel='Distinction';
-    else if(p>=75)gradeLabel='Merit';
-    else if(p>=50)gradeLabel='Pass';
-  }
-
+  if(percentage!=null){const p=Number(percentage);if(p>=90)gradeLabel='Distinction';else if(p>=75)gradeLabel='Merit';else if(p>=50)gradeLabel='Pass';}
   const orgLow=(orgName||'').toLowerCase();
-  let DARK='#0B4F45',MINT='#1DE9B6',MINT_DARK='#0D9B77',MINT_BG='#E1F5EE',MINT_BORDER='#9FE1CB',
-      abbrev='CRIPFCNT',series='CRIPFCNT Learning &amp; Assessment Platform',
-      sig1Name='Donald Mataranyika',sig1Role='Chair, Board of Directors';
-
+  let DARK='#0B4F45',MINT='#1DE9B6',MINT_DARK='#0D9B77',MINT_BG='#E1F5EE',MINT_BORDER='#9FE1CB',abbrev='CRIPFCNT',series='CRIPFCNT Learning &amp; Assessment Platform',sig1Name='Donald Mataranyika',sig1Role='Chair, Board of Directors';
   if(/nyaradzo/.test(orgLow)){DARK='#062A5E';MINT='#C9A227';MINT_DARK='#7A5F0A';MINT_BG='#FBF3DA';MINT_BORDER='#E8CC7E';abbrev='NGT';series='Nyaradzo Group Training';}
   if(/winchester/.test(orgLow)){DARK='#1F3C88';MINT='#E8C95A';MINT_DARK='#7A5F0A';MINT_BG='#FBF5DA';MINT_BORDER='#E8CC7E';abbrev='WS';series='Winchester School';}
   if(/st[\s-]?eurit|eurit/.test(orgLow)){DARK='#111111';MINT='#D4AF37';MINT_DARK='#7A5F0A';MINT_BG='#FBF5DA';MINT_BORDER='#E8CC7E';abbrev='SEIS';series='St Eurit International School';}
-
   const credId=abbrev+'-'+dateStr.replace(/-/g,'')+'-'+(name||'X').replace(/\s+/g,'').toUpperCase().slice(0,6).padEnd(6,'0');
   const tagSources=[quizTitle||null,moduleName||null].filter(Boolean);
   const tags=[...new Set(tagSources)].slice(0,3);
@@ -739,10 +727,8 @@ function buildCertificateHtml({name,orgName,moduleName,quizTitle,score,percentag
   const rpStripes=Array.from({length:60},(_,i)=>{const y=4+i*13;return `<polyline points="0,${y} 65,${y+21} 130,${y}" stroke="${MINT}" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" opacity="0.09"/>`;}).join('');
 
   const sig=`<svg width="124" height="40" viewBox="0 0 128 42" fill="none"><path d="M5 30 C9 19 15 12 23 14 C29 16 31 23 27 29 C23 35 17 34 15 30 C13 26 19 20 27 24 C35 28 41 22 47 16" stroke="#1a1a2e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M47 16 C53 10 57 12 59 18 C61 24 57 30 53 28 C49 26 51 20 57 22 C65 25 71 18 77 14" stroke="#1a1a2e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M77 14 C83 10 87 14 85 22 C83 28 79 32 81 36 C83 39 89 37 93 33" stroke="#1a1a2e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M93 33 C97 29 103 26 107 30 C111 34 107 39 103 37 C99 35 102 29 108 28 C116 26 121 32 125 35" stroke="#1a1a2e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>`;
-
   const badge=`<svg width="50" height="50" viewBox="0 0 60 60" fill="none"><circle cx="30" cy="30" r="28" stroke="${MINT}" stroke-width="1.8" fill="none"/><circle cx="30" cy="30" r="22" stroke="${MINT}" stroke-width="0.8" stroke-dasharray="3 2" fill="none" opacity="0.4"/><path d="M19 30 L26 37 L41 22" stroke="${MINT}" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/><text x="30" y="53" font-family="Inter,Arial,sans-serif" font-size="5.5" font-weight="600" fill="${MINT}" text-anchor="middle" letter-spacing="1">CERTIFIED</text></svg>`;
-
-  const wm=`<svg width="190" height="190" viewBox="0 0 100 100" fill="none" style="position:absolute;right:-20px;bottom:-20px;opacity:0.035;pointer-events:none;"><path d="M20 10 L20 90 Q20 90 50 90 Q80 90 80 60 L80 52 L54 52 L54 70 Q54 74 50 74 Q46 74 46 70 L46 30 Q46 26 50 26 Q54 26 54 30 L54 48 L80 48 L80 40 Q80 10 50 10 Z" fill="${DARK}"/></svg>`;
+  const wm=`<svg width="190" height="190" viewBox="0 0 100 100" fill="none" style="position:absolute;right:-20px;bottom:-20px;opacity:0.03;pointer-events:none;"><path d="M20 10 L20 90 Q20 90 50 90 Q80 90 80 60 L80 52 L54 52 L54 70 Q54 74 50 74 Q46 74 46 70 L46 30 Q46 26 50 26 Q54 26 54 30 L54 48 L80 48 L80 40 Q80 10 50 10 Z" fill="${DARK}"/></svg>`;
 
   const statsHtml=(scoreDisplay||pctDisplay||gradeLabel)?`<div class="stats">${scoreDisplay?`<div class="stat"><div class="stat-val">${scoreDisplay}</div><div class="stat-lbl">Score</div></div>`:''}${pctDisplay?`<div class="stat"><div class="stat-val">${pctDisplay}%</div><div class="stat-lbl">Grade</div></div>`:''}${gradeLabel?`<div class="stat"><div class="stat-val-sm">${esc(gradeLabel).toUpperCase()}</div><div class="stat-lbl">Achievement</div></div>`:''}</div>`:'';
 
@@ -785,14 +771,6 @@ tr.r-body td.c-rp{background:${DARK};vertical-align:middle;padding:0 14px;positi
 .rp-lbl{font-size:6.5px;color:rgba(255,255,255,0.38);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:4px;}
 .rp-val{font-size:10.5px;font-weight:600;color:${MINT};line-height:1.3;}
 .rp-val-sm{font-size:7.5px;font-weight:600;color:${MINT};line-height:1.4;word-break:break-word;}
-.cert-main-content{position:relative;z-index:3;}
-.blank-fill{position:absolute;left:20px;right:22px;top:205px;bottom:16px;border:0.5px solid ${MINT_BORDER};background:linear-gradient(135deg,${MINT_BG} 0%,#ffffff 58%,${MINT_BG} 100%);border-radius:8px;overflow:hidden;z-index:1;}
-.blank-fill:before{content:"CERTIFIED";position:absolute;left:24px;top:24px;font-size:46px;line-height:1;font-weight:700;letter-spacing:8px;color:${DARK};opacity:0.045;}
-.blank-fill:after{content:"CRIPFCNT LEARNING & ASSESSMENT PLATFORM";position:absolute;left:28px;bottom:28px;font-size:9px;font-weight:700;letter-spacing:3px;color:${MINT_DARK};opacity:0.45;}
-.fill-lines{position:absolute;inset:0;background:repeating-linear-gradient(135deg,rgba(13,155,119,0.055) 0,rgba(13,155,119,0.055) 1px,transparent 1px,transparent 13px);}
-.fill-credential{position:absolute;right:28px;top:30px;width:210px;border-left:3px solid ${MINT};padding-left:14px;}
-.fill-credential-label{font-size:7px;letter-spacing:1.8px;text-transform:uppercase;color:${MINT_DARK};font-weight:700;margin-bottom:7px;}
-.fill-credential-text{font-size:10px;line-height:1.55;color:#35524B;}
 .certify-lbl{font-size:8.5px;color:#AAA;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:5px;}
 .recipient{font-size:28px;font-weight:600;color:#0B1F1A;line-height:1.1;margin-bottom:3px;word-break:break-word;}
 .succeed{font-size:10.5px;color:#888;margin-bottom:16px;}
@@ -830,25 +808,7 @@ tr.r-strip td.c-rp{background:#F5F5F5;vertical-align:middle;padding:0 14px;text-
 </tr>
 <tr class="r-body">
   <td class="c-sb"><svg class="sb-svg" viewBox="0 0 44 800" fill="none" preserveAspectRatio="xMidYMin slice">${sbStripes}</svg><div class="sb-foot"><span class="sb-word">${abbrev}</span>${logo(MINT,18,18)}</div></td>
-  <td class="c-main">
-    ${wm}
-    <div class="blank-fill">
-      <div class="fill-lines"></div>
-      <div class="fill-credential">
-        <div class="fill-credential-label">Verified Achievement</div>
-        <div class="fill-credential-text">This credential confirms successful completion and is recorded under Certificate ID ${credId}.</div>
-      </div>
-    </div>
-    <div class="cert-main-content">
-      <p class="certify-lbl">This is to certify that</p>
-      <p class="recipient">${recipientName}</p>
-      <p class="succeed">has successfully completed the assessment</p>
-      <div class="quiz-block">${categoryLabel?'<div class="quiz-cat">'+categoryLabel+'</div>':''}<div class="quiz-title">${moduleTitle}</div></div>
-      <div class="tags">${tagHtml}</div>
-      <div class="divider"></div>
-      ${statsHtml}
-    </div>
-  </td>
+  <td class="c-main">${wm}<p class="certify-lbl">This is to certify that</p><p class="recipient">${recipientName}</p><p class="succeed">has successfully completed the assessment</p><div class="quiz-block">${categoryLabel?'<div class="quiz-cat">'+categoryLabel+'</div>':''}<div class="quiz-title">${moduleTitle}</div></div><div class="tags">${tagHtml}</div><div class="divider"></div>${statsHtml}</td>
   <td class="c-rp"><svg class="rp-svg" viewBox="0 0 132 800" fill="none" preserveAspectRatio="xMidYMin slice">${rpStripes}</svg><div class="rp-inner"><div class="rp-item"><div class="rp-lbl">Organisation</div><div class="rp-val">${orgLabel}</div></div><div class="rp-item"><div class="rp-lbl">Issued by</div><div class="rp-val">${abbrev}</div></div><div class="rp-item"><div class="rp-lbl">Date issued</div><div class="rp-val" style="font-size:9px;">${dateLong}</div></div><div class="rp-item"><div class="rp-lbl">Credential ID</div><div class="rp-val-sm">${credId}</div></div></div></td>
 </tr>
 <tr class="r-foot">
