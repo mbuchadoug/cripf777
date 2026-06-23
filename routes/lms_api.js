@@ -861,7 +861,7 @@ async function generateCertificatePdf({ name, orgName, moduleName,quizTitle,  sc
         await page.setContent(html, { waitUntil: "networkidle0", timeout: 45000 });
         // Give Google Fonts an extra moment to fully render before capture
         await new Promise((r) => setTimeout(r, 1200));
-        await page.emulateMediaType("screen");
+        await page.emulateMediaType("print");
         await page.pdf({ path: filepath, format: "A4", landscape: true, printBackground: true, margin: { top: "0", bottom: "0", left: "0", right: "0" } });
         return { filepath, filename, method: "puppeteer" };
       } finally {
