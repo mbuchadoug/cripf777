@@ -446,10 +446,6 @@ mongoose
 }
 
 // ---------- SESSIONS ----------
-// FIX: trust reverse proxy (Nginx/Cloudflare) so Express sees real protocol.
-// Without this, secure cookies are never sent → session lost → redirect loop.
-app.set("trust proxy", 1);
-
 const sessionSecret = process.env.SESSION_SECRET || "change_this_secret_for_dev_only";
 app.use(
   session({
@@ -460,8 +456,7 @@ app.use(
     cookie: {
       maxAge: 1000 * 60 * 60 * 24 * 30, // 30 days
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production", // works correctly now with trust proxy
-      sameSite: "lax", // FIX: prevents cookie being blocked on same-site nav
+      secure: process.env.NODE_ENV === "production",
     },
   })
 );
