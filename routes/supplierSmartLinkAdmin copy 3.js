@@ -64,19 +64,13 @@ router.get("/", requireSupplierAdmin, async (req, res) => {
     const slug       = supplier.zqSlug || null;
     const allLinks   = buildAllLinks(supplierId);
     const directLink = buildDeepLink(supplierId, null);
-    const BOT_NUM    = (process.env.WHATSAPP_BOT_NUMBER || "263771143904").replace(/\D/g, "");
-    const slugLink   = slug ? `https://wa.me/${BOT_NUM}?text=${encodeURIComponent("ZQ:S:" + slug)}` : null;
-
-    // ── Build QR URLs directly — avoids fragile .replace() on the encoded data param ──
-    // Use slug payload if available (shorter, human-readable), else fall back to ID-based.
-    function _buildQr(payload, size) {
-      return "https://api.qrserver.com/v1/create-qr-code/?size=" + size + "x" + size
-        + "&data=" + encodeURIComponent("https://wa.me/" + BOT_NUM + "?text=" + encodeURIComponent(payload))
-        + "&color=085041&bgcolor=FFFFFF&qzone=2";
-    }
-    const qrPayload  = slug ? "ZQ:S:" + slug : "ZQ:SUPPLIER:" + supplierId;
-    const qrUrl      = _buildQr(qrPayload, 400);
-    const qrUrlLarge = _buildQr(qrPayload, 600);
+    const slugLink   = slug ? `https://wa.me/${(process.env.WHATSAPP_BOT_NUMBER || "263771143904").replace(/\D/g, "")}?text=${encodeURIComponent("ZQ:S:" + slug)}` : null;
+    const qrUrl      = slug
+      ? buildQrImageUrl(supplierId, 400).replace(encodeURIComponent(`ZQ:SUPPLIER:${supplierId}`), encodeURIComponent(`ZQ:S:${slug}`))
+      : buildQrImageUrl(supplierId, 400);
+    const qrUrlLarge = slug
+      ? buildQrImageUrl(supplierId, 600).replace(encodeURIComponent(`ZQ:SUPPLIER:${supplierId}`), encodeURIComponent(`ZQ:S:${slug}`))
+      : buildQrImageUrl(supplierId, 600);
 
     // Per-source analytics (from zqSourceViews map in DB)
     const sourceViews       = supplier.zqSourceViews       || {};
@@ -495,14 +489,8 @@ router.get("/qr", requireSupplierAdmin, async (req, res) => {
     const supplier = await SupplierProfile.findById(req.params.id).lean();
     if (!supplier) return res.redirect("/zq-admin/suppliers");
 
-    const suppId    = String(supplier._id);
-    const slug2     = supplier.zqSlug || null;
-    const BOT_QR2   = (process.env.WHATSAPP_BOT_NUMBER || "263771143904").replace(/\D/g, "");
-    const qrPayload2 = slug2 ? "ZQ:S:" + slug2 : "ZQ:SUPPLIER:" + suppId;
-    const qrUrl    = "https://api.qrserver.com/v1/create-qr-code/?size=500x500"
-                   + "&data=" + encodeURIComponent("https://wa.me/" + BOT_QR2 + "?text=" + encodeURIComponent(qrPayload2))
-                   + "&color=085041&bgcolor=FFFFFF&qzone=2";
-    const directLk = buildDeepLink(suppId, null);
+    const qrUrl    = buildQrImageUrl(String(supplier._id), 500);
+    const directLk = buildDeepLink(String(supplier._id), null);
     const name     = supplier.businessName || "Seller";
     const location = [supplier.location?.area, supplier.location?.city].filter(Boolean).join(", ");
 

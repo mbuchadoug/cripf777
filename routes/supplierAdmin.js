@@ -10323,9 +10323,21 @@ router.get("/suppliers/:id/staff-cards", requireSupplierAdmin, async (req, res) 
           <span>👥 Active: <strong>${cards.filter(c=>c.active).length}/${cards.length}</strong></span>
         </div>
       </div>` : "";
+    // ── Inline QR builder for staff cards (avoids dependency on staffSmartLink.js export) ──
+    const _STAFF_BOT = (process.env.WHATSAPP_BOT_NUMBER || "263771143904").replace(/\D/g, "");
+    function _staffQrUrl(cardId, size) {
+      const payload = "ZQ:STAFF:" + cardId;
+      return "https://api.qrserver.com/v1/create-qr-code/?size=" + size + "x" + size
+        + "&data=" + encodeURIComponent("https://wa.me/" + _STAFF_BOT + "?text=" + encodeURIComponent(payload))
+        + "&color=7c3aed&bgcolor=FFFFFF&qzone=2";
+    }
     const cardRows = cards.map(card => {
-      const stats = buildStaffAnalyticsSummary(card);
-      const qrUrl = buildStaffQrImageUrl(String(card._id), 80);
+      const stats  = buildStaffAnalyticsSummary(card);
+      const cardId = String(card._id);
+      // Use safe inline builder first; fall back to module function if it exists and returns a value
+      let qrUrl;
+      try { qrUrl = (typeof buildStaffQrImageUrl === "function" && buildStaffQrImageUrl(cardId, 80)) || _staffQrUrl(cardId, 80); }
+      catch (_) { qrUrl = _staffQrUrl(cardId, 80); }
       return `<tr style="border-bottom:1px solid #f0f0f0">
         <td style="padding:12px 8px;vertical-align:middle">
           <span style="display:inline-block;width:32px;height:32px;border-radius:50%;background:#e0e7ff;color:#4f46e5;text-align:center;line-height:32px;font-size:13px;font-weight:700;margin-right:8px;vertical-align:middle">${esc(card.name.charAt(0).toUpperCase())}</span>
@@ -10499,8 +10511,23 @@ router.get("/suppliers/:id/staff-cards/:cid/smart-link", requireSupplierAdmin, a
     const cardId     = String(card._id);
     const allLinks   = buildAllStaffLinks(cardId);
     const directLink = buildStaffDeepLink(cardId, null);
-    const qrUrl400   = buildStaffQrImageUrl(cardId, 400);
-    const qrUrl600   = buildStaffQrImageUrl(cardId, 600);
+    // ── Build QR URLs directly — same pattern as schools, avoids service-module dependency ──
+    const _DETAIL_BOT   = (process.env.WHATSAPP_BOT_NUMBER || "263771143904").replace(/\D/g, "");
+    const _staffPayload = card.zqSlug ? "ZQ:S:" + card.zqSlug : "ZQ:STAFF:" + cardId;
+    function _detailQr(size) {
+      return "https://api.qrserver.com/v1/create-qr-code/?size=" + size + "x" + size
+        + "&data=" + encodeURIComponent("https://wa.me/" + _DETAIL_BOT + "?text=" + encodeURIComponent(_staffPayload))
+        + "&color=7c3aed&bgcolor=FFFFFF&qzone=2";
+    }
+    // Try service module function first, fall back to inline builder
+    let qrUrl400, qrUrl600;
+    try {
+      qrUrl400 = (typeof buildStaffQrImageUrl === "function" && buildStaffQrImageUrl(cardId, 400)) || _detailQr(400);
+      qrUrl600 = (typeof buildStaffQrImageUrl === "function" && buildStaffQrImageUrl(cardId, 600)) || _detailQr(600);
+    } catch (_) {
+      qrUrl400 = _detailQr(400);
+      qrUrl600 = _detailQr(600);
+    }
     const stats      = buildStaffAnalyticsSummary(card);
     const srcViews   = card.zqSourceViews||{};
     const srcConvs   = card.zqSourceConversions||{};
@@ -10595,7 +10622,15 @@ router.get("/suppliers/:id/staff-cards/:cid/business-card", requireSupplierAdmin
     const supplier = await SupplierProfile.findById(req.params.id).lean();
     const card     = await StaffCard.findById(req.params.cid).lean();
     if (!supplier||!card) return res.status(404).send("Not found");
-    const qrUrl    = buildStaffQrImageUrl(String(card._id), 300);
+    // ── Build QR URL inline — safe against service module issues ──────────────
+    const _BC_BOT     = (process.env.WHATSAPP_BOT_NUMBER || "263771143904").replace(/\D/g, "");
+    const _bcPayload  = card.zqSlug ? "ZQ:S:" + card.zqSlug : "ZQ:STAFF:" + String(card._id);
+    const _bcQrDirect = "https://api.qrserver.com/v1/create-qr-code/?size=300x300"
+                      + "&data=" + encodeURIComponent("https://wa.me/" + _BC_BOT + "?text=" + encodeURIComponent(_bcPayload))
+                      + "&color=b8860b&bgcolor=0f1f3d&qzone=1";
+    let qrUrl;
+    try { qrUrl = (typeof buildStaffQrImageUrl === "function" && buildStaffQrImageUrl(String(card._id), 300)) || _bcQrDirect; }
+    catch (_) { qrUrl = _bcQrDirect; }
     const location = card.locationLabel || [supplier.location?.area, supplier.location?.city].filter(Boolean).join(", ");
     const phone    = (() => { const p=card.phone; return p.length>=11?`+${p.slice(0,3)} ${p.slice(3,5)} ${p.slice(5,8)} ${p.slice(8)}`:p; })();
     const tagline  = card.tagline || supplier.businessName;
