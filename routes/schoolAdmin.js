@@ -154,6 +154,7 @@ const faqAttachUpload = multer({
 });
 
 router.use(express.json());
+router.use(express.urlencoded({ extended: true })); // ← FIX: parse HTML form POST bodies
 
 // ─── Helpers (same as supplierAdmin.js) ───────────────────────────────────────
 function esc(str) {

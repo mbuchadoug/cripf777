@@ -259,6 +259,10 @@ const ADMIN_PASSWORD = process.env.SUPPLIER_ADMIN_PASSWORD || "zimquote_admin_20
 
 // ── Login ──────────────────────────────────────────────────────────────────
 router.get("/login", (req, res) => {
+  // ← FIX: if already logged in, go to dashboard (prevents redirect loop)
+  if (req.session && req.session.isSupplierAdmin) {
+    return res.redirect("/zq-admin");
+  }
   res.send(`<!DOCTYPE html><html><head><title>ZimQuote Admin</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
