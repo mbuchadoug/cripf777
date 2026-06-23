@@ -4899,10 +4899,7 @@ const _schApplyLink   = id => `https://wa.me/${_SCHOOL_BOT}?text=${encodeURIComp
 const _schQr = (data,size=300,col="1a3c5e") => `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(data)}&color=${col}&bgcolor=FFFFFF&qzone=2`;
 
 // GET /zq-admin/schools/:id - school profile + settings
-// GET /schools/new - guard: schoolAdmin.js handles this; redirect so supplierAdmin :id doesn't catch it
-router.get("/schools/new", requireSupplierAdmin, (req, res) => {
-  res.redirect("/zq-admin/schools/new");
-});
+
 
 router.get("/schools/:id", requireSupplierAdmin, async (req, res) => {
   // Guard: validate ObjectId before querying - "new" and other non-ID strings would cause CastError
