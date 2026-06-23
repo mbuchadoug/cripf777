@@ -475,11 +475,16 @@ app.use(trackPageView);
 
 app.use((req, res, next) => {
   if (process.env.NODE_ENV === "production") {
+    // FIX: skip HTTPS redirect for /zq-admin/* — auth redirects here cause loops
+    if (req.path.startsWith("/zq-admin")) return next();
     const host = req.headers.host;
+    // FIX: read X-Forwarded-Proto directly; req.protocol alone is unreliable
+    // when Nginx doesn't set proxy_set_header X-Forwarded-Proto.
+    const proto = req.headers["x-forwarded-proto"] || req.protocol;
     if (host !== "cripfcnt.com") {
       return res.redirect(301, "https://cripfcnt.com" + req.originalUrl);
     }
-    if (req.protocol !== "https") {
+    if (proto !== "https") {
       return res.redirect(301, "https://cripfcnt.com" + req.originalUrl);
     }
   }
