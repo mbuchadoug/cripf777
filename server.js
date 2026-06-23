@@ -498,8 +498,8 @@ app.use("/auth", authRoutes);
 app.use("/admin", adminRoutes);
 app.use("/admin", adminAnalyticsRoutes);
 app.use("/", schoolApplyRouter);          // Public apply form: /apply/school/:id
-app.use("/zq-admin", supplierAdminRoutes); // ← ADD THIS
 app.use("/zq-admin", schoolAdminRoutes);
+app.use("/zq-admin", supplierAdminRoutes);
 // API routes - keep LMS API on /api/lms so quiz UI fetches work
 app.use("/api/lms", lmsApiRoutes);
 app.use("/", creatorCampaignRoutes);
