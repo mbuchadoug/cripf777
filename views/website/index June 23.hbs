@@ -374,36 +374,6 @@
       .mobile-only { display:none !important; }
       .desktop-only { display:block !important; }
     }
-  /* ── 8QT PLACEMENT INTELLIGENCE SECTION ──────────────────────── */
-  .piq-section { padding:7rem 5%; background:linear-gradient(135deg,var(--navy-dark) 0%,var(--navy) 100%); color:var(--white); position:relative; overflow:hidden; }
-  .piq-section::before { content:'8QT'; position:absolute; right:-1rem; top:50%; transform:translateY(-50%); font-family:var(--font-serif); font-size:16rem; font-weight:700; color:rgba(201,169,97,0.04); pointer-events:none; line-height:1; }
-  .piq-inner { max-width:1400px; margin:0 auto; display:grid; grid-template-columns:1fr 1fr; gap:5rem; align-items:center; }
-  .piq-label { font-size:0.75rem; font-weight:700; letter-spacing:3px; text-transform:uppercase; color:var(--gold); margin-bottom:1rem; }
-  .piq-title { font-family:var(--font-serif); font-size:clamp(2rem,4vw,3rem); font-weight:700; color:var(--white); line-height:1.2; margin-bottom:1.25rem; }
-  .piq-title em { color:var(--gold); font-style:normal; }
-  .piq-desc { font-size:1.05rem; color:rgba(255,255,255,0.82); line-height:1.75; margin-bottom:2rem; }
-  .piq-meta { display:flex; gap:1.5rem; flex-wrap:wrap; margin-bottom:2.5rem; }
-  .piq-meta-item { display:flex; align-items:center; gap:0.5rem; font-size:0.85rem; color:var(--gold-light); }
-  .piq-meta-item::before { content:'✓'; color:var(--gold); font-weight:700; }
-  .piq-btn { display:inline-block; background:var(--gold); color:var(--navy-dark); padding:0.9rem 2rem; border-radius:4px; font-weight:700; font-size:1rem; text-decoration:none; transition:all 0.25s; }
-  .piq-btn:hover { background:var(--gold-light); transform:translateY(-2px); box-shadow:0 8px 24px rgba(201,169,97,0.3); }
-  .piq-btn-outline { display:inline-block; background:transparent; color:var(--white); border:1.5px solid rgba(255,255,255,0.4); padding:0.88rem 1.75rem; border-radius:4px; font-weight:600; font-size:0.9rem; text-decoration:none; transition:all 0.25s; margin-left:1rem; }
-  .piq-btn-outline:hover { border-color:var(--white); background:rgba(255,255,255,0.08); }
-  .piq-quotients { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
-  .piq-q { background:rgba(255,255,255,0.06); border:1px solid rgba(201,169,97,0.2); border-radius:8px; padding:14px 10px; text-align:center; transition:all 0.2s; }
-  .piq-q:hover { background:rgba(201,169,97,0.1); border-color:var(--gold); transform:translateY(-2px); }
-  .piq-q-code { font-size:0.65rem; font-weight:800; letter-spacing:2px; text-transform:uppercase; color:var(--gold); margin-bottom:6px; font-family:var(--font-sans); }
-  .piq-q-name { font-size:0.8rem; color:rgba(255,255,255,0.8); font-weight:500; line-height:1.3; }
-  .piq-q-bar { height:3px; border-radius:99px; background:rgba(201,169,97,0.3); margin:8px auto 0; width:60%; overflow:hidden; }
-  .piq-q-fill { height:100%; background:var(--gold); border-radius:99px; }
-  .piq-badge { display:inline-flex; align-items:center; gap:6px; background:rgba(201,169,97,0.12); border:1px solid rgba(201,169,97,0.3); color:var(--gold); padding:0.3rem 0.8rem; border-radius:20px; font-size:0.72rem; font-weight:600; letter-spacing:1.5px; text-transform:uppercase; margin-bottom:1.5rem; }
-  @media(max-width:900px) {
-    .piq-inner { grid-template-columns:1fr; gap:3rem; }
-    .piq-section::before { display:none; }
-    .piq-quotients { grid-template-columns:repeat(4,1fr); gap:8px; }
-    .piq-btn-outline { margin-left:0; margin-top:0.75rem; }
-  }
-  @media(max-width:480px) { .piq-quotients { grid-template-columns:repeat(2,1fr); } }
   </style>
 </head>
 <body>
@@ -421,17 +391,13 @@
       who rises, who is overlooked, and why. Then it shows you what to do about it.
     </p>
     <div class="hero-actions">
-      <a href="/8qt" class="btn btn-gold">Discover Your 8 Quotients ✦</a>
-      <a href="/scoi" class="btn btn-outline">Browse Intelligence Reports →</a>
+      <a href="/scoi" class="btn btn-gold">Browse Intelligence Reports →</a>
+      <a href="#videos" class="btn btn-outline">Watch the Insights</a>
     </div>
     <div class="hero-stats">
       <div class="stat-item">
         <div class="stat-number">8</div>
         <div class="stat-label">Core Pillars</div>
-      </div>
-      <div class="stat-item">
-        <div class="stat-number">8QT</div>
-        <div class="stat-label">Free Assessment</div>
       </div>
       <div class="stat-item">
         <div class="stat-number">SCOI</div>
@@ -440,6 +406,10 @@
       <div class="stat-item">
         <div class="stat-number">ERF</div>
         <div class="stat-label">Resilience Factor</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-number">Global</div>
+        <div class="stat-label">Reach &amp; Impact</div>
       </div>
     </div>
   </div>
@@ -544,82 +514,6 @@
       <div class="pillar-card reveal"><div class="pillar-number">07</div><h3 class="pillar-name">Negotiation</h3><p class="pillar-description">Every outcome is negotiated - in meetings, in silences, in who gets mentioned and who gets left out.</p></div>
       <div class="pillar-card reveal"><div class="pillar-number">08</div><h3 class="pillar-name">Technology</h3><p class="pillar-description">AI is reorganising who gets seen, hired, funded, and trusted. This pillar ensures you understand the new rules.</p></div>
     </div>
-  </div>
-</section>
-
-<!-- ── 8 QUOTIENTS TEST (PLACEMENT INTELLIGENCE) ──────────────────────── -->
-<section class="piq-section" id="8qt">
-  <div class="piq-inner">
-
-    <!-- LEFT: Copy -->
-    <div>
-      <span class="piq-badge">✦ New — Free Assessment</span>
-      <div class="piq-label">CRIPFCnt Placement Intelligence</div>
-      <h2 class="piq-title">Where do you actually<br><em>sit in the structure?</em></h2>
-      <p class="piq-desc">
-        The 8 Quotients Test maps your orientation across eight dimensions of how you
-        process the world — from Consciousness to Civilization. It is not an IQ test.
-        It does not ask what you know. It asks how you are placed — and why.
-      </p>
-      <div class="piq-meta">
-        <span class="piq-meta-item">Completely free to take</span>
-        <span class="piq-meta-item">No CRIPFCnt knowledge needed</span>
-        <span class="piq-meta-item">~20 minutes</span>
-        <span class="piq-meta-item">Instant radar chart results</span>
-      </div>
-      <a href="/8qt" class="piq-btn">Begin the Assessment →</a>
-      <a href="/8qt#framework" class="piq-btn-outline">See the 8 dimensions</a>
-    </div>
-
-    <!-- RIGHT: Quotient grid -->
-    <div>
-      <div class="piq-quotients">
-        <div class="piq-q">
-          <div class="piq-q-code">CsQ</div>
-          <div class="piq-q-name">Consciousness</div>
-          <div class="piq-q-bar"><div class="piq-q-fill" style="width:82%"></div></div>
-        </div>
-        <div class="piq-q">
-          <div class="piq-q-code">RQ</div>
-          <div class="piq-q-name">Responsibility</div>
-          <div class="piq-q-bar"><div class="piq-q-fill" style="width:70%"></div></div>
-        </div>
-        <div class="piq-q">
-          <div class="piq-q-code">IQ</div>
-          <div class="piq-q-name">Interpretation</div>
-          <div class="piq-q-bar"><div class="piq-q-fill" style="width:65%"></div></div>
-        </div>
-        <div class="piq-q">
-          <div class="piq-q-code">PQ</div>
-          <div class="piq-q-name">Purpose</div>
-          <div class="piq-q-bar"><div class="piq-q-fill" style="width:78%"></div></div>
-        </div>
-        <div class="piq-q">
-          <div class="piq-q-code">FQ</div>
-          <div class="piq-q-name">Frequencies</div>
-          <div class="piq-q-bar"><div class="piq-q-fill" style="width:55%"></div></div>
-        </div>
-        <div class="piq-q">
-          <div class="piq-q-code">CvQ</div>
-          <div class="piq-q-name">Civilization</div>
-          <div class="piq-q-bar"><div class="piq-q-fill" style="width:72%"></div></div>
-        </div>
-        <div class="piq-q">
-          <div class="piq-q-code">NQ</div>
-          <div class="piq-q-name">Negotiation</div>
-          <div class="piq-q-bar"><div class="piq-q-fill" style="width:60%"></div></div>
-        </div>
-        <div class="piq-q">
-          <div class="piq-q-code">TQ</div>
-          <div class="piq-q-name">Technology</div>
-          <div class="piq-q-bar"><div class="piq-q-fill" style="width:68%"></div></div>
-        </div>
-      </div>
-      <p style="margin-top:1.5rem;font-size:0.8rem;color:rgba(255,255,255,0.45);text-align:center;font-style:italic">
-        Illustrative scores — your radar chart will be unique to you
-      </p>
-    </div>
-
   </div>
 </section>
 
@@ -825,10 +719,9 @@
 <!-- ── CTA ────────────────────────────────────────────────────────────── -->
 <section class="cta-section" id="contact">
   <div class="cta-container">
-    <h2>Ready to understand the structure — and use it?</h2>
-    <p>Whether you want to map your quotients, buy an intelligence report, study the framework, enrol in the platform, or bring CRIPFCnt into your institution — the conversation starts here.</p>
+    <h2>Ready to understand the structure - and use it?</h2>
+    <p>Whether you want to buy an intelligence report, study the framework, enrol in the platform, or bring CRIPFCnt into your institution - the conversation starts here.</p>
     <div class="cta-buttons">
-      <a href="/8qt" class="btn btn-gold">Take the Free 8QT Assessment ✦</a>
       <a href="mailto:info@cripfcnt.com" class="btn btn-primary">Start the Conversation</a>
       <a href="/scoi" class="btn btn-secondary">Browse Intelligence Reports</a>
     </div>
@@ -867,7 +760,6 @@
       <div>
         <h4 class="footer-title">Platform</h4>
         <ul class="footer-links">
-          <li><a href="/8qt">✦ 8 Quotients Test</a></li>
           <li><a href="/lms">Learning Platform</a></li>
           <li><a href="/auth/school">Student Portal</a></li>
           <li><a href="/auth/parent">Parents &amp; Guardians</a></li>

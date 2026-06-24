@@ -1,0 +1,239 @@
+{{!-- views/8qt/results.hbs (STEP 6 — Results Page) --}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Your 8QT Profile — {{attempt.archetypeName}} | CRIPFCnt</title>
+  <meta property="og:title" content="My CRIPFCnt Placement Intelligence Profile — {{attempt.archetypeName}}">
+  <meta property="og:description" content="I completed the CRIPFCnt 8 Quotients Test. Discover your placement intelligence map.">
+  <meta property="og:url" content="{{shareUrl}}">
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    :root{--navy:#1E3A5F;--navy-dark:#0F1C2E;--gold:#C9A961;--gold-light:#E5D4A6;--white:#fff;--light:#F8F9FA;--border:#E9ECEF;--text:#212529;--dark:#495057}
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:'Inter',sans-serif;background:var(--light);color:var(--text)}
+
+    /* HEADER */
+    .header{background:linear-gradient(135deg,var(--navy-dark),var(--navy));color:var(--white);padding:48px 5% 56px;text-align:center}
+    .archetype-badge{display:inline-block;background:rgba(201,169,97,.15);border:1px solid var(--gold);color:var(--gold);padding:.35rem 1rem;border-radius:20px;font-size:.75rem;font-weight:600;letter-spacing:2px;text-transform:uppercase;margin-bottom:16px}
+    .archetype-name{font-family:'Crimson Pro',serif;font-size:clamp(1.8rem,4vw,2.8rem);font-weight:700;margin-bottom:8px}
+    .archetype-tagline{color:var(--gold-light);font-size:1rem;font-style:italic;margin-bottom:24px}
+    .congrats{color:rgba(255,255,255,.8);font-size:.9rem;max-width:500px;margin:0 auto}
+
+    /* SAVE CODE BANNER */
+    .code-banner{background:#fff3cd;border:1px solid #ffc107;border-radius:8px;padding:12px 20px;max-width:700px;margin:0 auto;text-align:center;font-size:.85rem;color:#856404}
+    .code-banner strong{font-family:monospace;font-size:1rem;letter-spacing:2px;color:#1E3A5F}
+
+    /* LAYOUT */
+    .page{max-width:1100px;margin:0 auto;padding:40px 5% 80px}
+    .two-col{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:24px}
+    @media(max-width:720px){.two-col{grid-template-columns:1fr}}
+    .card{background:var(--white);border-radius:12px;padding:28px;border:1px solid var(--border);box-shadow:0 2px 8px rgba(30,58,95,.06)}
+    .card-title{font-size:.7rem;letter-spacing:3px;text-transform:uppercase;color:var(--gold);font-weight:600;margin-bottom:16px}
+
+    /* RADAR */
+    .radar-wrap{display:flex;align-items:center;justify-content:center;padding:8px}
+    canvas#radar{max-width:340px;max-height:340px;width:100%!important;height:auto!important}
+
+    /* SCORES TABLE */
+    .score-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)}
+    .score-row:last-child{border-bottom:none}
+    .s-code{font-size:.7rem;font-weight:700;padding:.2rem .5rem;border-radius:3px;flex-shrink:0;width:40px;text-align:center}
+    .s-name{flex:1;font-size:.85rem;font-weight:500;color:var(--text)}
+    .s-bar-wrap{width:80px;height:6px;background:var(--border);border-radius:99px;overflow:hidden;flex-shrink:0}
+    .s-bar{height:100%;border-radius:99px;background:var(--navy)}
+    .s-score{font-size:.8rem;font-weight:700;color:var(--navy);width:40px;text-align:right;flex-shrink:0}
+    .s-band{font-size:.7rem;color:var(--dark);flex-shrink:0;width:90px;text-align:right}
+
+    /* DOMINANT / EDGE */
+    .insight-card{background:var(--white);border-radius:12px;padding:24px;border-left:4px solid var(--gold)}
+    .insight-card.edge{border-left-color:#6366f1}
+    .insight-label{font-size:.7rem;letter-spacing:2px;text-transform:uppercase;color:var(--gold);font-weight:600;margin-bottom:6px}
+    .insight-card.edge .insight-label{color:#6366f1}
+    .insight-name{font-family:'Crimson Pro',serif;font-size:1.4rem;font-weight:700;color:var(--navy);margin-bottom:8px}
+    .insight-desc{font-size:.875rem;color:var(--dark);line-height:1.65}
+
+    /* ARCHETYPE DESCRIPTION */
+    .archetype-full{background:linear-gradient(135deg,#fff9f0,var(--white));border:1px solid #f0e0c0;border-radius:12px;padding:28px}
+    .archetype-full h3{font-family:'Crimson Pro',serif;font-size:1.5rem;color:var(--navy);margin-bottom:12px}
+    .archetype-full p{font-size:.9rem;color:var(--dark);line-height:1.7;margin-bottom:16px}
+    .prompts{margin-top:16px;padding-top:16px;border-top:1px solid var(--border)}
+    .prompt-label{font-size:.7rem;letter-spacing:2px;text-transform:uppercase;color:var(--gold);font-weight:600;margin-bottom:12px}
+    .prompt-item{padding:10px 14px;background:var(--light);border-radius:6px;font-size:.875rem;color:var(--text);margin-bottom:8px;border-left:3px solid var(--gold);line-height:1.5}
+
+    /* SHARE */
+    .share-section{background:var(--white);border-radius:12px;padding:28px;border:1px solid var(--border);text-align:center}
+    .share-section h3{font-family:'Crimson Pro',serif;color:var(--navy);margin-bottom:8px;font-size:1.3rem}
+    .share-section p{font-size:.85rem;color:var(--dark);margin-bottom:20px}
+    .share-btns{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+    .share-btn{padding:.6rem 1.2rem;border-radius:6px;font-size:.85rem;font-weight:600;cursor:pointer;border:none;transition:all .2s;text-decoration:none;display:inline-flex;align-items:center;gap:6px}
+    .share-wa{background:#25D366;color:#fff}
+    .share-copy{background:var(--light);color:var(--navy);border:1px solid var(--border)}
+    .share-copy:hover{background:var(--border)}
+
+    /* CERT CTA */
+    .cert-cta{background:linear-gradient(135deg,var(--navy-dark),var(--navy));color:var(--white);border-radius:12px;padding:36px 32px;text-align:center;margin-top:24px}
+    .cert-cta h2{font-family:'Crimson Pro',serif;font-size:1.8rem;margin-bottom:8px}
+    .cert-cta p{color:var(--gold-light);font-size:.9rem;max-width:480px;margin:0 auto 24px;line-height:1.65}
+    .cert-cta .cert-note{font-size:.75rem;color:rgba(255,255,255,.5);margin-top:12px}
+    .btn-cert{display:inline-block;background:var(--gold);color:var(--navy-dark);padding:.9rem 2.2rem;border-radius:8px;font-weight:700;font-size:1rem;text-decoration:none;transition:all .2s;border:none;cursor:pointer}
+    .btn-cert:hover{background:#b8943a;transform:translateY(-2px)}
+    .cert-issued{background:#ecfdf5;border:1px solid #6ee7b7;border-radius:8px;padding:16px;color:#065f46;text-align:center;font-size:.9rem}
+  </style>
+</head>
+<body>
+
+<div class="header">
+  {{#if attempt.participantCode}}
+  <div class="code-banner" style="margin-bottom:20px">
+    Save your code: <strong>{{attempt.participantCode}}</strong> — use it to return to these results
+  </div>
+  {{/if}}
+  <div class="archetype-badge">Your Profile</div>
+  <div class="archetype-name">{{attempt.archetypeName}}</div>
+  {{#if archetype.tagline}}<div class="archetype-tagline">{{archetype.tagline}}</div>{{/if}}
+  <p class="congrats">Your 8 Quotients have been mapped. This is your Placement Intelligence profile.</p>
+</div>
+
+<div class="page">
+
+  <!-- TWO COL: Radar + Scores -->
+  <div class="two-col">
+    <div class="card">
+      <div class="card-title">Your Quotient Radar</div>
+      <div class="radar-wrap">
+        <canvas id="radar"></canvas>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">All 8 Scores</div>
+      {{#each quotientScores}}
+      <div class="score-row">
+        <span class="s-code" style="background:{{lookup ../configs code 'color'}}20;color:{{lookup ../configs code 'color'}}">{{code}}</span>
+        <span class="s-name">{{name}}</span>
+        <div class="s-bar-wrap"><div class="s-bar" style="width:{{score}}%;background:{{lookup ../configs code 'color'}}"></div></div>
+        <span class="s-score">{{score}}</span>
+        <span class="s-band">{{band}}</span>
+      </div>
+      {{/each}}
+    </div>
+  </div>
+
+  <!-- DOMINANT / EDGE -->
+  <div class="two-col" style="margin-bottom:24px">
+    <div class="insight-card">
+      <div class="insight-label">✦ Dominant Quotient</div>
+      <div class="insight-name">{{dominantConfig.name}}</div>
+      <p class="insight-desc">{{dominantConfig.dominantInterpretation}}</p>
+    </div>
+    <div class="insight-card edge">
+      <div class="insight-label">◈ Development Edge</div>
+      <div class="insight-name">{{edgeConfig.name}}</div>
+      <p class="insight-desc">{{edgeConfig.developmentEdge}}</p>
+    </div>
+  </div>
+
+  <!-- ARCHETYPE FULL DESCRIPTION + PROMPTS -->
+  {{#if archetype}}
+  <div class="archetype-full" style="margin-bottom:24px">
+    <h3>{{archetype.name}}</h3>
+    <p>{{archetype.description}}</p>
+    {{#if archetype.reflectionPrompts.length}}
+    <div class="prompts">
+      <div class="prompt-label">Reflection prompts for your profile</div>
+      {{#each archetype.reflectionPrompts}}
+      <div class="prompt-item">{{this}}</div>
+      {{/each}}
+    </div>
+    {{/if}}
+  </div>
+  {{/if}}
+
+  <!-- SHARE -->
+  <div class="share-section" style="margin-bottom:24px">
+    <h3>Share your profile</h3>
+    <p>Your radar chart is unique to you. Share it and invite others to discover their placement map.</p>
+    <div class="share-btns">
+      <a class="share-btn share-wa" href="https://wa.me/?text=I+completed+the+CRIPFCnt+8+Quotients+Test.+My+archetype+is+{{attempt.archetypeName}}+—+discover+yours+at+{{shareUrl}}" target="_blank">
+        📱 Share on WhatsApp
+      </a>
+      <button class="share-btn share-copy" onclick="copyLink()">🔗 Copy link</button>
+    </div>
+  </div>
+
+  <!-- CERTIFICATE CTA -->
+  {{#if (eq certStatus "issued")}}
+  <div class="cert-issued">
+    ✅ Your certificate has been issued and emailed to you.
+    <a href="/8qt/verify/{{attempt.certificateVerifyCode}}" style="color:#065f46;font-weight:600;margin-left:8px">Verify →</a>
+  </div>
+  {{else if (eq certStatus "paid")}}
+  <div class="cert-issued" style="background:#fff8e1;border-color:#ffc107;color:#856404">
+    ⏳ Payment received. Your certificate is being generated and will be emailed shortly.
+  </div>
+  {{else if (eq certStatus "requested")}}
+  <div class="cert-issued" style="background:#fff8e1;border-color:#ffc107;color:#856404">
+    ⏳ Payment pending. <a href="/8qt/checkout/{{attempt._id}}" style="color:#856404;font-weight:600">Complete payment →</a>
+  </div>
+  {{else}}
+  <div class="cert-cta">
+    <h2>Request Your Official Certificate</h2>
+    <p>
+      Your results are mapped. If you want an official CRIPFCnt Placement Intelligence Certificate
+      with your full quotient scores, archetype, and a unique verification code — request one below.
+    </p>
+    <a href="/8qt/certificate/{{attempt._id}}" class="btn-cert">Request Certificate</a>
+    <p class="cert-note">A small fee applies. Certificate is emailed as a PDF with a public verification link.</p>
+  </div>
+  {{/if}}
+
+</div>
+
+<script>
+// Radar chart
+const labels = [{{#each quotientScores}}'{{name}}'{{#unless @last}},{{/unless}}{{/each}}];
+const data = [{{#each quotientScores}}{{score}}{{#unless @last}},{{/unless}}{{/each}}];
+const colors = [{{#each quotientScores}}'{{lookup ../colorMap code}}'{{#unless @last}},{{/unless}}{{/each}}];
+
+new Chart(document.getElementById('radar'), {
+  type: 'radar',
+  data: {
+    labels,
+    datasets: [{
+      label: 'Your Profile',
+      data,
+      fill: true,
+      backgroundColor: 'rgba(201,169,97,0.15)',
+      borderColor: '#C9A961',
+      borderWidth: 2,
+      pointBackgroundColor: '#1E3A5F',
+      pointRadius: 4
+    }]
+  },
+  options: {
+    responsive: true,
+    scales: {
+      r: {
+        min: 0, max: 100,
+        ticks: { stepSize: 20, font: { size: 10 } },
+        pointLabels: { font: { size: 11, family: 'Inter', weight: '600' }, color: '#1E3A5F' },
+        grid: { color: 'rgba(30,58,95,0.08)' }
+      }
+    },
+    plugins: { legend: { display: false } }
+  }
+});
+
+function copyLink() {
+  navigator.clipboard.writeText('{{shareUrl}}').then(() => {
+    const btn = event.target;
+    btn.textContent = '✓ Copied!';
+    setTimeout(() => btn.textContent = '🔗 Copy link', 2000);
+  });
+}
+</script>
+</body>
+</html>

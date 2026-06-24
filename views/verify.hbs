@@ -1,0 +1,106 @@
+{{!-- views/8qt/verify.hbs (STEP 9 — Public certificate verification) --}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Certificate Verification — CRIPFCnt 8QT</title>
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root{--navy:#1E3A5F;--gold:#C9A961;--white:#fff;--light:#F8F9FA;--border:#E9ECEF;--dark:#495057;--green:#059669;--red:#dc2626}
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:'Inter',sans-serif;background:var(--light);min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px}
+    .logo{display:flex;align-items:center;gap:.6rem;text-decoration:none;margin-bottom:32px}
+    .logo-icon{width:38px;height:38px;background:var(--navy);display:flex;align-items:center;justify-content:center;font-family:'Crimson Pro',serif;font-weight:700;font-size:1.1rem;color:var(--gold);border:2px solid var(--gold)}
+    .logo-text{font-family:'Crimson Pro',serif;font-size:1.5rem;font-weight:700;color:var(--navy)}
+    .card{background:var(--white);border-radius:16px;padding:48px 40px;max-width:580px;width:100%;text-align:center;box-shadow:0 8px 32px rgba(30,58,95,.1)}
+    .valid-badge{display:inline-flex;align-items:center;gap:8px;background:#ecfdf5;border:1px solid #6ee7b7;border-radius:20px;padding:.4rem 1rem;font-size:.8rem;font-weight:600;color:#065f46;margin-bottom:20px}
+    .invalid-badge{background:#fef2f2;border:1px solid #fecaca;color:#dc2626}
+    h1{font-family:'Crimson Pro',serif;font-size:1.8rem;color:var(--navy);margin-bottom:24px}
+    .cert-details{background:var(--light);border-radius:10px;padding:24px;text-align:left;margin-bottom:24px}
+    .detail-row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:.875rem}
+    .detail-row:last-child{border-bottom:none}
+    .detail-label{font-weight:600;color:var(--navy)}
+    .detail-value{color:var(--dark)}
+    .verify-code{background:var(--navy);color:var(--gold);font-family:monospace;font-size:1.1rem;letter-spacing:3px;padding:.6rem 1.4rem;border-radius:6px;display:inline-block;margin:16px 0}
+    .scores-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:16px}
+    .score-pill{background:var(--white);border:1px solid var(--border);border-radius:8px;padding:8px 4px;text-align:center}
+    .sp-code{font-size:.65rem;font-weight:700;color:var(--navy);letter-spacing:1px}
+    .sp-score{font-size:1.1rem;font-weight:700;color:var(--navy)}
+    .sp-band{font-size:.6rem;color:var(--dark);margin-top:2px}
+    .footer-note{font-size:.75rem;color:var(--dark);opacity:.7;margin-top:20px;line-height:1.6}
+    .btn{display:inline-block;margin-top:20px;padding:.7rem 1.6rem;background:var(--navy);color:var(--white);border-radius:6px;font-weight:600;text-decoration:none;font-size:.875rem}
+  </style>
+</head>
+<body>
+<a href="/" class="logo">
+  <div class="logo-icon">C</div>
+  <span class="logo-text">CRIPFCnt</span>
+</a>
+
+<div class="card">
+
+  {{#if valid}}
+  <div class="valid-badge">✓ Verified Certificate</div>
+  <h1>Certificate Authentic</h1>
+
+  <div class="cert-details">
+    <div class="detail-row">
+      <span class="detail-label">Participant</span>
+      <span class="detail-value">{{participantName}}</span>
+    </div>
+    <div class="detail-row">
+      <span class="detail-label">Archetype</span>
+      <span class="detail-value">{{archetypeName}}</span>
+    </div>
+    <div class="detail-row">
+      <span class="detail-label">Dominant Quotient</span>
+      <span class="detail-value">{{dominantQuotient}}</span>
+    </div>
+    <div class="detail-row">
+      <span class="detail-label">Issued</span>
+      <span class="detail-value">{{formatDate issuedAt}}</span>
+    </div>
+    <div class="detail-row">
+      <span class="detail-label">Assessment</span>
+      <span class="detail-value">CRIPFCnt 8 Quotients Test</span>
+    </div>
+  </div>
+
+  <div class="verify-code">{{verifyCode}}</div>
+
+  {{#if scores}}
+  <div style="text-align:left;margin-top:20px">
+    <div style="font-size:.7rem;letter-spacing:2px;text-transform:uppercase;color:#C9A961;font-weight:600;margin-bottom:10px">Full Quotient Scores</div>
+    <div class="scores-grid">
+      {{#each scores}}
+      <div class="score-pill">
+        <div class="sp-code">{{code}}</div>
+        <div class="sp-score">{{score}}</div>
+        <div class="sp-band">{{band}}</div>
+      </div>
+      {{/each}}
+    </div>
+  </div>
+  {{/if}}
+
+  <p class="footer-note">
+    This certificate was issued by CRIPFCnt and represents a completed 8 Quotients Assessment
+    developed by Donald Mataranyika. It maps orientation across eight dimensions of Placement
+    Intelligence — not a graded academic qualification.
+  </p>
+
+  {{else}}
+  <div class="valid-badge invalid-badge">✗ Not Found</div>
+  <h1>Certificate Not Verified</h1>
+  <p style="color:var(--dark);font-size:.9rem;margin-bottom:20px">{{message}}</p>
+  <p style="color:var(--dark);font-size:.8rem;line-height:1.7">
+    If you believe this is an error, please ensure you are using the exact code
+    from your certificate. Codes are case-insensitive.
+  </p>
+  {{/if}}
+
+  <a href="/8qt" class="btn">Take the 8QT →</a>
+</div>
+</body>
+</html>

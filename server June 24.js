@@ -67,7 +67,6 @@ import lmsImportRoutes from "./routes/lms_Import.js";
 import adminCertificateRoutes from "./routes/admin_certificates.js";
 
 import stripeWebhookRoutes from "./routes/stripe_webhook.js";
-import { handle8QTCertificate } from "./routes/stripe_webhook_8qt.js";
 import billingRoutes from "./routes/billing.js";
 
 import adminPlacementImport from "./routes/admin_placement_import.js";
@@ -92,10 +91,6 @@ import webSubscription from "./routes/web_subscription.js"; // ← ADD
 
 
 import employeeUpgradeRoutes from "./routes/employee_upgrade.js";
-
-// ── 8 QUOTIENTS TEST ──────────────────────────────────────────
-import eightQTRoutes from "./routes/eightQT.js";
-import eightQTAdminRoutes from "./routes/eightQTAdmin.js";
 
 
 
@@ -393,18 +388,6 @@ add: (a, b) => {
     return new Handlebars.SafeString(html);
   },
 
-  // ── 8QT helpers ─────────────────────────────────────────────
-  letterFromIndex: (index) => ["A","B","C","D"][Number(index)] || String(Number(index) + 1),
-  round: (val) => Math.round(Number(val) || 0),
-  lookup: (obj, key) => {
-    if (!obj || !key) return "";
-    if (Array.isArray(obj)) {
-      const found = obj.find(item => item && item.code === key);
-      return found || "";
-    }
-    return obj[key] || "";
-  },
-
 };
 
 /*app.engine(
@@ -514,14 +497,6 @@ app.use("/auth", authRoutes);
 // ADMIN (single mount for admin UI & import routes)
 app.use("/admin", adminRoutes);
 app.use("/admin", adminAnalyticsRoutes);
-
-// ── 8 QUOTIENTS TEST ──────────────────────────────────────────
-// Public participant routes (no auth required)
-app.use("/8qt", eightQTRoutes);
-// Admin management (auth enforced inside the router)
-app.use("/admin/8qt", eightQTAdminRoutes);
-// Static: serve generated certificates
-app.use("/certificates", express.static(path.join(__dirname, "public", "certificates")));
 app.use("/", schoolApplyRouter);          // Public apply form: /apply/school/:id
 app.use("/zq-admin", schoolAdminRoutes);
 app.use("/zq-admin", supplierAdminRoutes);

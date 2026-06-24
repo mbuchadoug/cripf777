@@ -4,8 +4,6 @@ import Stripe from "stripe";
 import dotenv from "dotenv";
 import User from "../models/user.js";
 import AuditPurchase from "../models/auditPurchase.js";
-// ── 8QT certificate handler ──────────────────────────────────
-import { handle8QTCertificate } from "./stripe_webhook_8qt.js";
 
 dotenv.config();
 
@@ -116,16 +114,6 @@ router.post("/", async (req, res) => {
     // 3️⃣ EMPLOYEE UPGRADE
     if (meta.upgradeType === "employee_full_access" && meta.orgSlug === "cripfcnt-school") {
       // ... existing employee upgrade code ...
-    }
-
-    // 4️⃣ 8QT CERTIFICATE PURCHASE
-    if (meta.type === "8qt_certificate") {
-      try {
-        await handle8QTCertificate(session);
-      } catch (err) {
-        // Log but don't fail the webhook — Stripe needs a 200
-        console.error("[8qt webhook] certificate handler error:", err.message);
-      }
     }
   }
 
