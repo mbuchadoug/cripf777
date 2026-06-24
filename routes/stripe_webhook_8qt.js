@@ -1,7 +1,6 @@
 // routes/stripe_webhook_8qt.js
-// Extends the existing stripe_webhook.js with 8QT certificate handling.
-// In your main stripe_webhook.js, import and call handle8QTCertificate(session)
-// inside the "checkout.session.completed" handler.
+// Handles 8QT certificate generation using the existing CRIPFCnt green certificate template.
+// Called from stripe_webhook.js when meta.type === "8qt_certificate"
 
 import EightQTAttempt from "../models/eightQTAttempt.js";
 import EightQTCertPurchase from "../models/eightQTCertPurchase.js";
@@ -9,17 +8,80 @@ import EightQTCertTemplate from "../models/eightQTCertTemplate.js";
 import EightQTArchetype from "../models/eightQTArchetype.js";
 import User from "../models/user.js";
 import nodemailer from "nodemailer";
-import { generateEightQTCertPdf } from "../services/eightQTCertPdf.js";
+import puppeteer from "puppeteer";
+import path from "path";
+import fs from "fs";
+import crypto from "crypto";
+// ── Use the existing CRIPFCnt green certificate template ──────
+import { buildCertificateHtml } from "../utils/certificateTemplate.js";
+
+const OUTPUT_DIR = path.join(process.cwd(), "public", "certificates", "8qt");
 
 /**
- * Handle 8QT certificate purchase webhook event.
- * Called from the main stripe_webhook.js when meta.type === "8qt_certificate"
- *
- * @param {Object} session - Stripe checkout.session object
+ * Generate an 8QT certificate PDF using the existing green CRIPFCnt template.
+ */
+async function generate8QTCertPdf({ attempt, verifyCode }) {
+  if (!fs.existsSync(OUTPUT_DIR)) {
+    fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+  }
+
+  const participantName = attempt.certificateName ||
+    attempt.profile?.firstName ||
+    attempt.participantName ||
+    "Participant";
+
+  // Find the dominant score to show as "score"
+  const scores = attempt.quotientScores || [];
+  const dominant = scores.find(s => s.code === attempt.dominantQuotient);
+  const dominantScore = dominant ? dominant.score : null;
+
+  // Build a quiz title from archetype name
+  const quizTitle = attempt.archetypeName || "8 Quotients Assessment";
+  const moduleName = attempt.dominantQuotient
+    ? `${attempt.dominantQuotient} — Dominant Quotient`
+    : "Placement Intelligence";
+
+  // Build the HTML using the existing CRIPFCnt template
+  const html = buildCertificateHtml({
+    name: participantName,
+    orgName: "CRIPFCnt",
+    moduleName,
+    quizTitle,
+    score: dominantScore,
+    percentage: dominantScore,
+    date: new Date()
+  });
+
+  const browser = await puppeteer.launch({
+    headless: "new",
+    args: ["--no-sandbox", "--disable-setuid-sandbox"]
+  });
+
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1122, height: 794 });
+  await page.setContent(html, { waitUntil: "networkidle0" });
+
+  const filename = `8qt-cert-${verifyCode}.pdf`;
+  const outputPath = path.join(OUTPUT_DIR, filename);
+
+  await page.pdf({
+    path: outputPath,
+    format: "A4",
+    landscape: true,
+    printBackground: true,
+    margin: { top: "0", bottom: "0", left: "0", right: "0" }
+  });
+
+  await browser.close();
+
+  return `/certificates/8qt/${filename}`;
+}
+
+/**
+ * Main handler — called from stripe_webhook.js when meta.type === "8qt_certificate"
  */
 export async function handle8QTCertificate(session) {
   const meta = session.metadata || {};
-
   if (meta.type !== "8qt_certificate") return;
 
   const { attemptId, participantCode, userId, tier } = meta;
@@ -32,7 +94,8 @@ export async function handle8QTCertificate(session) {
   // ── Idempotency guard ──────────────────────────────────────
   const existingPurchase = await EightQTCertPurchase.findOne({
     stripeSessionId: session.id
-  });
+  }).lean();
+
   if (existingPurchase) {
     console.log(`[8qt webhook] Duplicate ignored: ${session.id}`);
     return;
@@ -60,22 +123,17 @@ export async function handle8QTCertificate(session) {
     return;
   }
 
-  // Update status
   attempt.certificateStatus = "paid";
   await attempt.save();
 
-  // ── Generate PDF ───────────────────────────────────────────
+  // ── Generate PDF using green CRIPFCnt template ─────────────
   try {
-    const template = await EightQTCertTemplate.findOne({ active: true }).lean();
-    let archetype = null;
-    if (attempt.archetypeId) {
-      archetype = await EightQTArchetype.findById(attempt.archetypeId).lean();
-    }
+    const verifyCode = attempt.certificateVerifyCode ||
+      crypto.randomBytes(6).toString("hex").toUpperCase();
 
-    const { url, verifyCode } = await generateEightQTCertPdf({
+    const url = await generate8QTCertPdf({
       attempt: attempt.toObject(),
-      template,
-      archetype
+      verifyCode
     });
 
     attempt.certificatePdfUrl = url;
@@ -86,7 +144,7 @@ export async function handle8QTCertificate(session) {
 
     console.log(`[8qt webhook] ✅ Certificate generated: ${url}`);
 
-    // ── Send email ─────────────────────────────────────────
+    // ── Send delivery email ─────────────────────────────────
     const recipientEmail = attempt.certificateEmail ||
       (userId ? (await User.findById(userId).lean())?.email : null);
 
@@ -99,17 +157,17 @@ export async function handle8QTCertificate(session) {
         pdfUrl: url,
         tier
       });
-      console.log(`[8qt webhook] ✅ Certificate email sent to ${recipientEmail}`);
+      console.log(`[8qt webhook] ✅ Email sent to ${recipientEmail}`);
     }
 
   } catch (err) {
     console.error("[8qt webhook] PDF/email error:", err.message);
-    // Don't re-throw - webhook must return 200 to Stripe
-    // The attempt is already marked "paid" so admin can manually re-trigger
+    // Don't re-throw — webhook must return 200 to Stripe
+    // attempt remains "paid" so admin can regenerate via panel
   }
 }
 
-// ── Email helper ──────────────────────────────────────────────────
+// ── Email delivery ─────────────────────────────────────────────
 
 async function sendCertificateEmail({ to, participantName, archetypeName, verifyCode, pdfUrl, tier }) {
   const transporter = nodemailer.createTransport({
@@ -126,56 +184,35 @@ async function sendCertificateEmail({ to, participantName, archetypeName, verify
   const verifyUrl = `${siteUrl}/8qt/verify/${verifyCode}`;
   const downloadUrl = pdfUrl.startsWith("http") ? pdfUrl : `${siteUrl}${pdfUrl}`;
 
-  const html = `
-<!DOCTYPE html>
+  const html = `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8">
 <style>
-  body{font-family:'Georgia',serif;background:#f8f9fa;margin:0;padding:20px}
-  .container{max-width:600px;margin:0 auto;background:#fff;padding:40px;
-    border:1px solid #e9ecef;border-radius:8px}
-  h1{color:#1E3A5F;font-size:26px;margin-bottom:4px}
-  .gold{color:#C9A961}
-  .btn{display:inline-block;background:#1E3A5F;color:#fff;padding:14px 28px;
-    border-radius:4px;text-decoration:none;font-family:'Inter',sans-serif;
-    font-weight:600;font-size:15px;margin:12px 8px 12px 0}
-  .btn-gold{background:#C9A961;color:#0F1C2E}
+  body{font-family:Georgia,serif;background:#f8f9fa;margin:0;padding:20px}
+  .container{max-width:600px;margin:0 auto;background:#fff;padding:40px;border:1px solid #e9ecef;border-radius:8px}
+  h1{color:#0B4F45;font-size:26px;margin-bottom:4px}
+  .green{color:#1DE9B6}
+  .btn{display:inline-block;background:#0B4F45;color:#fff;padding:14px 28px;border-radius:4px;text-decoration:none;font-family:Arial,sans-serif;font-weight:600;font-size:15px;margin:12px 8px 12px 0}
+  .btn-green{background:#1DE9B6;color:#0B4F45}
   p{color:#495057;line-height:1.7;font-size:15px}
-  .verify{background:#f8f9fa;padding:16px;border-radius:4px;margin:20px 0;
-    font-family:monospace;font-size:18px;letter-spacing:3px;color:#1E3A5F;
-    text-align:center;font-weight:bold}
-  .footer{margin-top:32px;padding-top:20px;border-top:1px solid #e9ecef;
-    font-size:12px;color:#6c757d;font-family:sans-serif}
+  .verify{background:#f8f9fa;padding:16px;border-radius:4px;margin:20px 0;font-family:monospace;font-size:18px;letter-spacing:3px;color:#0B4F45;text-align:center;font-weight:bold}
+  .footer{margin-top:32px;padding-top:20px;border-top:1px solid #e9ecef;font-size:12px;color:#6c757d;font-family:sans-serif}
 </style>
 </head>
 <body>
 <div class="container">
   <h1>Your CRIPFCnt Certificate</h1>
-  <p class="gold" style="font-size:18px;margin-top:4px">${archetypeName}</p>
+  <p class="green" style="font-size:18px;margin-top:4px">${archetypeName}</p>
   <p>Dear ${participantName},</p>
-  <p>
-    Your CRIPFCnt 8 Quotients Assessment certificate has been issued.
-    This document maps your profile across the eight dimensions of Placement Intelligence
-    as developed by Donald Mataranyika.
-  </p>
-  <a href="${downloadUrl}" class="btn btn-gold">Download Certificate (PDF)</a>
+  <p>Your CRIPFCnt 8 Quotients Assessment certificate has been issued. Download it using the button below.</p>
+  <a href="${downloadUrl}" class="btn btn-green">⬇ Download Certificate (PDF)</a>
   <a href="${verifyUrl}" class="btn">Verify Online</a>
-
   <p style="margin-top:24px">Your unique verification code:</p>
   <div class="verify">${verifyCode}</div>
-  <p>
-    Anyone can verify the authenticity of your certificate at:<br>
-    <a href="${verifyUrl}" style="color:#1E3A5F">${verifyUrl}</a>
-  </p>
-  <p>
-    To revisit your full results, return to:<br>
-    <a href="${siteUrl}/8qt" style="color:#1E3A5F">cripfcnt.com/8qt</a>
-    and enter your participant code if you registered anonymously.
-  </p>
+  <p>Verify at: <a href="${verifyUrl}" style="color:#0B4F45">${verifyUrl}</a></p>
   <div class="footer">
     CRIPFCnt &mdash; Recalibrating Intelligence &amp; Society<br>
-    This certificate was issued for a completed 8 Quotients Assessment.
-    It represents a mapping of orientation, not a graded academic result.
+    This certificate represents a mapping of placement intelligence orientation.
   </div>
 </div>
 </body>
@@ -184,17 +221,7 @@ async function sendCertificateEmail({ to, participantName, archetypeName, verify
   await transporter.sendMail({
     from: `"CRIPFCnt" <${process.env.SMTP_USER}>`,
     to,
-    subject: `Your CRIPFCnt 8 Quotients Certificate - ${archetypeName}`,
+    subject: `Your CRIPFCnt 8 Quotients Certificate — ${archetypeName}`,
     html
   });
 }
-
-// ── Integration snippet for stripe_webhook.js ─────────────────────
-// In your existing stripe_webhook.js, inside the checkout.session.completed handler,
-// add this after your existing type checks:
-//
-//   import { handle8QTCertificate } from "./stripe_webhook_8qt.js";
-//
-//   if (meta.type === "8qt_certificate") {
-//     await handle8QTCertificate(session);
-//   }

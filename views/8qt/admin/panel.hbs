@@ -540,15 +540,67 @@ async function loadAttempts(page = 1) {
     return;
   }
 
-  container.innerHTML = `<table>
-    <thead><tr><th>Participant</th><th>Archetype</th><th>Status</th><th>Cert</th><th>Date</th></tr></thead>
-    <tbody>${d.attempts.map(a=>`
+  function certBadge(a) {
+    const map = { issued:'badge-gold', paid:'badge-blue', requested:'badge-gold', none:'badge-gray' };
+    return `<span class="badge ${map[a.certificateStatus]||'badge-gray'}">${a.certificateStatus}</span>`;
+  }
+
+  function scoresSummary(a) {
+    if (!a.quotientScores || !a.quotientScores.length) return '<span style="color:#aaa;font-size:.75rem">—</span>';
+    return a.quotientScores.map(s =>
+      `<span title="${s.name}: ${s.score}/100 (${s.band})" style="display:inline-block;font-size:.65rem;font-weight:700;padding:1px 5px;border-radius:3px;margin:1px;background:#eef2ff;color:#1E3A5F">${s.code} ${s.score}</span>`
+    ).join('');
+  }
+
+  function certActions(a) {
+    let html = '';
+    if (a.certificateStatus === 'issued' && a.certificatePdfUrl) {
+      html += `<a href="${a.certificatePdfUrl}" target="_blank" class="btn btn-gold btn-sm" style="margin-right:4px">⬇ PDF</a>`;
+    }
+    if (['paid','requested','issued'].includes(a.certificateStatus)) {
+      html += `<button class="btn btn-outline btn-sm" onclick="regenCert('${a._id}', this)">↺ Re-gen</button>`;
+    }
+    if (a.certificateVerifyCode) {
+      html += `<a href="/8qt/verify/${a.certificateVerifyCode}" target="_blank" class="btn btn-outline btn-sm" style="margin-left:4px">Verify</a>`;
+    }
+    return html || '—';
+  }
+
+  container.innerHTML = `
+  <style>
+    .att-name{font-size:.78rem;font-weight:600;color:var(--navy)}
+    .att-email{font-size:.72rem;color:var(--dark)}
+    .att-code{font-size:.68rem;color:#aaa;font-family:monospace}
+    .att-arch{font-size:.78rem;color:var(--text)}
+    .att-dom{font-size:.68rem;color:var(--dark)}
+  </style>
+  <table>
+    <thead><tr>
+      <th>Participant</th>
+      <th>Archetype / Dominant</th>
+      <th>Status</th>
+      <th>Scores</th>
+      <th>Certificate</th>
+      <th>Date</th>
+    </tr></thead>
+    <tbody>${d.attempts.map(a => `
       <tr>
-        <td style="font-size:.8rem">${a.userId?.email||a.participantName||a.participantCode||'Anonymous'}</td>
-        <td style="font-size:.8rem">${a.archetypeName||'-'}</td>
-        <td><span class="badge ${a.status==='finished'?'badge-green':'badge-gray'}">${a.status}</span></td>
-        <td><span class="badge ${a.certificateStatus==='issued'?'badge-gold':a.certificateStatus==='paid'?'badge-blue':'badge-gray'}">${a.certificateStatus}</span></td>
-        <td style="font-size:.75rem;color:var(--dark)">${new Date(a.createdAt).toLocaleDateString()}</td>
+        <td>
+          <div class="att-name">${a.certificateName || a.userId?.displayName || a.participantName || 'Anonymous'}</div>
+          <div class="att-email">${a.userId?.email || a.certificateEmail || ''}</div>
+          ${a.participantCode ? `<div class="att-code">${a.participantCode}</div>` : ''}
+        </td>
+        <td>
+          <div class="att-arch">${a.archetypeName || '—'}</div>
+          ${a.dominantQuotient ? `<div class="att-dom">Dominant: ${a.dominantQuotient}</div>` : ''}
+        </td>
+        <td>
+          <span class="badge ${a.status==='finished'?'badge-green':'badge-gray'}">${a.status}</span>
+          ${certBadge(a)}
+        </td>
+        <td>${scoresSummary(a)}</td>
+        <td>${certActions(a)}</td>
+        <td style="font-size:.72rem;color:var(--dark);white-space:nowrap">${new Date(a.createdAt).toLocaleDateString()}</td>
       </tr>`).join('')}
     </tbody>
   </table>
@@ -556,6 +608,28 @@ async function loadAttempts(page = 1) {
     Showing ${d.attempts.length} of ${d.total} · Page ${d.page}/${d.pages}
     ${d.page < d.pages ? `<button class="btn btn-outline btn-sm" style="margin-left:10px" onclick="loadAttempts(${d.page+1})">Next →</button>`:''}
   </div>`;
+}
+
+async function regenCert(attemptId, btn) {
+  if (!confirm('Re-generate certificate for this attempt?')) return;
+  btn.textContent = '…';
+  btn.disabled = true;
+  try {
+    const r = await fetch(`/admin/8qt/attempts/${attemptId}/regenerate-cert`, { method: 'POST' });
+    const d = await r.json();
+    if (d.ok) {
+      alert('✅ Certificate generated: ' + d.url);
+      loadAttempts();
+    } else {
+      alert('Error: ' + (d.error || 'Unknown'));
+      btn.textContent = '↺ Re-gen';
+      btn.disabled = false;
+    }
+  } catch(e) {
+    alert('Network error');
+    btn.textContent = '↺ Re-gen';
+    btn.disabled = false;
+  }
 }
 </script>
 </body>

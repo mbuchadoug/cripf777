@@ -1,40 +1,124 @@
-{{!-- views/8qt/cert_success.hbs (Post-Stripe success page) --}}
-{{!-- Rendered inside main.hbs layout - no DOCTYPE/html/head/body tags here --}}
+{{!-- views/8qt/cert_success.hbs --}}
+{{!-- Rendered inside main.hbs — no DOCTYPE/html/head/body tags --}}
 
 <style>
-  .cert-success-wrap{min-height:70vh;display:flex;align-items:center;justify-content:center;padding:40px 20px}
-  .cert-success-card{background:#fff;border-radius:16px;padding:56px 48px;max-width:520px;width:100%;text-align:center;box-shadow:0 8px 32px rgba(30,58,95,.1);border:1px solid #E9ECEF}
-  .cert-success-check{width:72px;height:72px;background:#ecfdf5;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:2rem;margin:0 auto 24px}
-  .cert-success-card h1{font-family:'Crimson Pro',serif;font-size:2rem;color:#1E3A5F;margin-bottom:12px}
-  .cert-success-card p{font-size:.9rem;color:#495057;line-height:1.7;margin-bottom:16px}
-  .cert-detail-box{background:#F8F9FA;border-radius:8px;padding:16px;margin:24px 0;font-size:.85rem;color:#495057;text-align:left;line-height:1.8;border:1px solid #E9ECEF}
-  .cert-detail-box strong{color:#1E3A5F}
-  .cert-success-btn{display:inline-block;padding:.8rem 1.8rem;background:#1E3A5F;color:#fff;border-radius:8px;font-weight:600;text-decoration:none;margin:4px;font-size:.9rem;transition:background .2s}
-  .cert-success-btn:hover{background:#0F1C2E;color:#fff}
-  .cert-success-btn-outline{background:transparent;color:#1E3A5F;border:2px solid #1E3A5F}
-  .cert-success-btn-outline:hover{background:#F8F9FA;color:#1E3A5F}
+  .cs-wrap{min-height:70vh;display:flex;align-items:center;justify-content:center;padding:40px 20px}
+  .cs-card{background:#fff;border-radius:16px;padding:52px 44px;max-width:540px;width:100%;text-align:center;box-shadow:0 8px 32px rgba(30,58,95,.1);border:1px solid #E9ECEF}
+  .cs-icon{width:76px;height:76px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:2.2rem;margin:0 auto 24px}
+  .cs-icon-ok{background:#ecfdf5}
+  .cs-icon-wait{background:#fff8e1}
+  .cs-card h1{font-family:'Crimson Pro',serif;font-size:2rem;color:#1E3A5F;margin-bottom:12px}
+  .cs-card p{font-size:.9rem;color:#495057;line-height:1.7;margin-bottom:12px}
+  .cs-detail{background:#F8F9FA;border-radius:8px;padding:16px;margin:20px 0;font-size:.85rem;color:#495057;text-align:left;line-height:1.9;border:1px solid #E9ECEF}
+  .cs-detail strong{color:#1E3A5F}
+  .cs-btn{display:inline-block;padding:.85rem 2rem;background:#1E3A5F;color:#fff;border-radius:8px;font-weight:600;text-decoration:none;margin:6px;font-size:.9rem;transition:all .2s}
+  .cs-btn:hover{background:#0F1C2E;color:#fff;transform:translateY(-1px)}
+  .cs-btn-gold{background:#C9A961;color:#0F1C2E}
+  .cs-btn-gold:hover{background:#b8943a;color:#0F1C2E}
+  .cs-btn-outline{background:transparent;color:#1E3A5F;border:2px solid #1E3A5F}
+  .cs-btn-outline:hover{background:#F8F9FA}
+  .cs-spinner{width:20px;height:20px;border:2px solid #e9ecef;border-top-color:#C9A961;border-radius:50%;animation:spin .8s linear infinite;display:inline-block;margin-right:8px;vertical-align:middle}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .cs-poll-msg{font-size:.8rem;color:#6c757d;margin-top:12px}
+  .cs-download-section{display:none;margin-top:20px}
+  .cs-download-section.visible{display:block}
 </style>
 
-<div class="cert-success-wrap">
-  <div class="cert-success-card">
-    <div class="cert-success-check">✅</div>
-    <h1>Payment Confirmed</h1>
+<div class="cs-wrap">
+  <div class="cs-card" id="csCard">
+
+    {{#if pdfUrl}}
+    {{!-- PDF already ready (webhook was instant) --}}
+    <div class="cs-icon cs-icon-ok">✅</div>
+    <h1>Certificate Ready</h1>
+    <p>Your payment was confirmed and your certificate has been generated.</p>
+    <div class="cs-detail">
+      <strong>{{attempt.archetypeName}}</strong><br>
+      Issued to: {{attempt.certificateName}}<br>
+      Emailed to: {{attempt.certificateEmail}}
+    </div>
+    <a href="{{pdfUrl}}" class="cs-btn cs-btn-gold" download target="_blank">⬇ Download Certificate (PDF)</a>
+    <a href="/8qt/results/{{attempt._id}}" class="cs-btn cs-btn-outline">View My Results</a>
+
+    {{else}}
+    {{!-- Webhook not yet complete — show spinner and poll --}}
+    <div class="cs-icon cs-icon-wait" id="csIcon">⏳</div>
+    <h1 id="csHeadline">Payment Confirmed</h1>
     <p>{{message}}</p>
 
-    <div class="cert-detail-box">
+    <div class="cs-detail">
       <strong>What happens next:</strong><br>
       1. Your certificate is being generated now<br>
       2. It will be emailed to <strong>{{attempt.certificateEmail}}</strong><br>
-      3. You will receive a PDF and a unique verification link<br>
-      4. Delivery typically takes 2–5 minutes
+      3. A download link will appear here automatically<br>
+      4. Delivery typically takes 30–60 seconds
     </div>
 
-    <p style="font-size:.8rem;color:#495057;opacity:.7">
-      If you don't receive your email within 15 minutes, check your spam folder.
-      Your archetype was: <strong>{{attempt.archetypeName}}</strong>
-    </p>
+    <div id="csPollStatus">
+      <p class="cs-poll-msg">
+        <span class="cs-spinner"></span>Checking certificate status…
+      </p>
+    </div>
 
-    <a href="/8qt/results/{{attempt._id}}" class="cert-success-btn">View My Results</a>
-    <a href="/8qt" class="cert-success-btn cert-success-btn-outline">Back to 8QT Home</a>
+    <div class="cs-download-section" id="csDownloadSection">
+      <a href="#" class="cs-btn cs-btn-gold" id="csDownloadBtn" download target="_blank">⬇ Download Certificate (PDF)</a>
+    </div>
+
+    <a href="/8qt/results/{{attempt._id}}" class="cs-btn cs-btn-outline" style="margin-top:12px">View My Results</a>
+    {{/if}}
+
   </div>
 </div>
+
+{{#unless pdfUrl}}
+<script>
+const ATTEMPT_ID = '{{attempt._id}}';
+let pollCount = 0;
+const MAX_POLLS = 20; // 20 × 3s = 60 seconds
+
+async function pollCertStatus() {
+  try {
+    const r = await fetch('/8qt/api/attempt/' + ATTEMPT_ID + '/status');
+    const d = await r.json();
+
+    if (d.certificateStatus === 'issued' && d.pdfUrl) {
+      // Certificate ready — show download button
+      document.getElementById('csIcon').textContent = '✅';
+      document.getElementById('csIcon').className = 'cs-icon cs-icon-ok';
+      document.getElementById('csHeadline').textContent = 'Certificate Ready';
+      document.getElementById('csPollStatus').innerHTML =
+        '<p style="color:#059669;font-weight:600;font-size:.9rem">✓ Your certificate has been generated and emailed to you.</p>';
+
+      const dlSection = document.getElementById('csDownloadSection');
+      const dlBtn = document.getElementById('csDownloadBtn');
+      dlBtn.href = d.pdfUrl;
+      dlSection.classList.add('visible');
+
+      // Auto-trigger download
+      const link = document.createElement('a');
+      link.href = d.pdfUrl;
+      link.download = 'CRIPFCnt-8QT-Certificate.pdf';
+      link.target = '_blank';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      return; // stop polling
+    }
+
+    pollCount++;
+    if (pollCount < MAX_POLLS) {
+      setTimeout(pollCertStatus, 3000);
+    } else {
+      document.getElementById('csPollStatus').innerHTML =
+        '<p style="font-size:.8rem;color:#6c757d">Certificate is still being processed. Check your email — it will arrive shortly. You can also <a href="/8qt/results/' + ATTEMPT_ID + '" style="color:#1E3A5F">return to your results</a> to download it later.</p>';
+    }
+  } catch(e) {
+    pollCount++;
+    if (pollCount < MAX_POLLS) setTimeout(pollCertStatus, 3000);
+  }
+}
+
+// Start polling after 2 seconds
+setTimeout(pollCertStatus, 2000);
+</script>
+{{/unless}}
