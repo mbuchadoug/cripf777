@@ -266,9 +266,10 @@ router.post("/profile", async (req, res) => {
 
     const displayName = participantCode ? generateDisplayName(participantCode) : null;
 
-    const attempt = await EightQTAttempt.create({
+    // Build attempt doc — omit participantCode entirely for Google users
+    // (sparse index ignores absent fields, but fails on explicit null duplicates)
+    const attemptDoc = {
       userId,
-      participantCode,
       participantName: displayName,
       profile: {
         firstName: firstName?.trim() || "",
@@ -281,7 +282,9 @@ router.post("/profile", async (req, res) => {
       startedAt: new Date(),
       attemptIp: req.ip,
       referrer: req.get("referer") || null
-    });
+    };
+    if (participantCode) attemptDoc.participantCode = participantCode;
+    const attempt = await EightQTAttempt.create(attemptDoc);
 
     // Store attempt ID in session
     if (req.session) {
