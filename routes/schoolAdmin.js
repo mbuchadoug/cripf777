@@ -822,7 +822,7 @@ router.post("/schools/new", requireSupplierAdmin, async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // SCHOOL DETAIL PAGE
 
-// ── PUBLIC FILE ROUTES — must be before /schools/:id ─────────────────────────
+// ── PUBLIC FILE ROUTES - must be before /schools/:id ─────────────────────────
 
 // ── GET /zq-admin/schools/brochure/:filename ──────────────────────────────────
 // Serves the PDF directly - no login required so WhatsApp/Meta can fetch it
@@ -4190,11 +4190,11 @@ router.get("/schools/:id/apply-qr", requireSupplierAdmin, async (req, res) => {
               <span style="font-size:11px;color:var(--muted)">Optional external form link. Parents who tap "Apply Online" are sent here.</span>
             </div>
             <div class="fg full">
-              <label>Application Form PDF URL (printable — sent to parents via WhatsApp)</label>
+              <label>Application Form PDF URL (printable - sent to parents via WhatsApp)</label>
               <input name="afRawFormUrl" value="${esc(af.rawFormUrl || school.applicationFormUrl || "")}"
                      placeholder="https://..." />
               ${(af.rawFormUrl || school.applicationFormUrl)
-                ? `<span style="font-size:11px;color:#16a34a">✅ PDF set — <a href="${esc(af.rawFormUrl || school.applicationFormUrl)}" target="_blank">Preview</a></span>`
+                ? `<span style="font-size:11px;color:#16a34a">✅ PDF set - <a href="${esc(af.rawFormUrl || school.applicationFormUrl)}" target="_blank">Preview</a></span>`
                 : `<span style="font-size:11px;color:var(--muted)">Paste a public PDF URL or upload via the Brochures panel</span>`}
             </div>
           </div>

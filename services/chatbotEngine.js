@@ -3978,7 +3978,7 @@ if (!isMetaAction && /^ZQ:S:[a-z0-9_-]{1,60}$/i.test(text.trim())) {
   } catch (_slErr) {
     console.warn("[ZQ:S STAFF SLUG CHECK]", _slErr.message);
   }
-  // Not a staff slug — try as supplier slug
+  // Not a staff slug - try as supplier slug
   const _zqsTopHandled = await handleZqDeepLink({
     from, text: text.trim(), biz, saveBiz: saveBizSafe.bind(null, biz)
   });
@@ -11575,11 +11575,11 @@ if (
       const _feeNums = _rawFeeText.replace(/[^0-9./]/g, " ").trim().match(/\d+(\.\d{1,2})?/g);
 
       if (!_isSkip && (!_feeNums || !_feeNums.length)) {
-        // Nothing numeric — show a clear prompt with examples and stop here
+        // Nothing numeric - show a clear prompt with examples and stop here
         await sendText(from,
 `❌ I couldn't read that as a fee amount.
 
-Please enter your school's *term fee in USD* — just the number:
+Please enter your school's *term fee in USD* - just the number:
 
    *500*          → $500 per term (all terms same)
    *500/600/700*  → different per term
@@ -11597,7 +11597,7 @@ How much is your school's term fee?`);
       });
       if (_schoolFeesHandled) return;
 
-      // Handler returned false even with clean input — force-advance past fees
+      // Handler returned false even with clean input - force-advance past fees
       console.warn("[SCHOOL_REG_FEES] handler returned false after cleaning. Force-advancing to school_reg_principal.");
       biz.sessionData = {
         ...(biz.sessionData || {}),
@@ -13134,7 +13134,7 @@ if (!isMetaAction && /ZQ:STAFF:/i.test(text)) {
 
 // ── ZQ:S:<slug> - human-readable named supplier OR staff link ────────────────
 if (!isMetaAction && /^ZQ:S:[a-z0-9_-]{1,60}$/i.test(text.trim())) {
-  // Check staff slug first — staff cards use the same ZQ:S: prefix
+  // Check staff slug first - staff cards use the same ZQ:S: prefix
   try {
     const _slug4 = text.trim().slice(5).toLowerCase(); // strip "ZQ:S:"
     const _StaffCardModel4 = (await import("../models/staffCard.js")).default;

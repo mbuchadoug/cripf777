@@ -1,10 +1,10 @@
-{{!-- views/8qt/admin/panel.hbs — Admin Panel for 8 Quotients Test --}}
+{{!-- views/8qt/admin/panel.hbs - Admin Panel for 8 Quotients Test --}}
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>8QT Admin Panel — CRIPFCnt</title>
+  <title>8QT Admin Panel - CRIPFCnt</title>
   <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     :root{--navy:#1E3A5F;--navy-dk:#0F1C2E;--gold:#C9A961;--white:#fff;--light:#F8F9FA;--border:#E9ECEF;--dark:#495057;--text:#212529;--green:#059669;--red:#dc2626;--blue:#2f6ef7}
@@ -108,7 +108,7 @@
 <div class="topbar">
   <span class="topbar-brand">CRIPFCnt</span>
   <div class="topbar-sep"></div>
-  <span class="topbar-title">8 Quotients Test — Admin</span>
+  <span class="topbar-title">8 Quotients Test - Admin</span>
   <div class="topbar-sp"></div>
   <a href="/admin/8qt/analytics" class="topbar-link">Analytics</a>
   <div class="topbar-sep"></div>
@@ -383,7 +383,7 @@ async function updateConfig(code, data) {
 }
 
 function editConfig(code) {
-  // Simple inline — could be expanded to modal
+  // Simple inline - could be expanded to modal
   alert(`To edit full details for ${code}, use the PATCH /admin/8qt/config/${code} endpoint or implement an edit modal.`);
 }
 
@@ -482,8 +482,8 @@ async function loadArchetypes() {
       <tr>
         <td>${a.priority}</td>
         <td><strong>${a.name}</strong>${a.isDefault ? ' <span class="badge badge-gold">default</span>':''}</td>
-        <td style="font-size:.78rem;color:var(--dark);max-width:180px">${a.tagline || '—'}</td>
-        <td style="font-size:.72rem;color:var(--dark)">${(a.conditions||[]).map(c=>`${c.quotient} ${c.operator} ${c.value}`).join(', ')||'—'}</td>
+        <td style="font-size:.78rem;color:var(--dark);max-width:180px">${a.tagline || '-'}</td>
+        <td style="font-size:.72rem;color:var(--dark)">${(a.conditions||[]).map(c=>`${c.quotient} ${c.operator} ${c.value}`).join(', ')||'-'}</td>
         <td><span class="badge ${a.active?'badge-green':'badge-gray'}">${a.active?'Active':'Off'}</span></td>
         <td><button class="btn btn-danger btn-sm" onclick="toggleArchetype('${a._id}',${!a.active})">${a.active?'Disable':'Enable'}</button></td>
       </tr>`).join('')}
@@ -545,7 +545,7 @@ async function loadAttempts(page = 1) {
     <tbody>${d.attempts.map(a=>`
       <tr>
         <td style="font-size:.8rem">${a.userId?.email||a.participantName||a.participantCode||'Anonymous'}</td>
-        <td style="font-size:.8rem">${a.archetypeName||'—'}</td>
+        <td style="font-size:.8rem">${a.archetypeName||'-'}</td>
         <td><span class="badge ${a.status==='finished'?'badge-green':'badge-gray'}">${a.status}</span></td>
         <td><span class="badge ${a.certificateStatus==='issued'?'badge-gold':a.certificateStatus==='paid'?'badge-blue':'badge-gray'}">${a.certificateStatus}</span></td>
         <td style="font-size:.75rem;color:var(--dark)">${new Date(a.createdAt).toLocaleDateString()}</td>

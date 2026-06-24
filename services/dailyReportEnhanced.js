@@ -1,5 +1,5 @@
 /**
- * services/dailyReportEnhanced.js  — FULL REPLACEMENT
+ * services/dailyReportEnhanced.js  - FULL REPLACEMENT
  * ─────────────────────────────────────────────────────────────
  * Report runners called by twilioStateBridge.js
  *
@@ -183,7 +183,7 @@ export async function buildWhatsAppSummary({ biz, label, periodLabel, data, tota
   const staffLines = staffActivity.slice(0,3)
     .map(s => `  ${s.name.slice(0,16).padEnd(16)} (${s.role||"clerk"}) · ${s.invoiceCount}inv ${s.receiptCount}rcpt · Rev: ${fmtMoney(s.totalRevenue,cur)}`).join("\n") || "  No activity";
   const insights = generateInsights({ profitMargin: margin, collectionRate: collRate, topProduct: topProducts[0]||null, overdueCount: overdueData.overdue.length, overdueAmount: overdueData.totalOverdue, netProfit: profit.netProfit, currency: cur });
-  return `📊 *${(biz.name||"").toUpperCase()}* — ${label}
+  return `📊 *${(biz.name||"").toUpperCase()}* - ${label}
 ${periodLabel}
 ${branchLine}
 ━━━━━━━━━━━━━━━━━━━━
@@ -257,7 +257,7 @@ export async function runWeeklyReportMetaEnhanced({ biz, from }) {
   const prevEnd   = new Date(end);   prevEnd.setDate(prevEnd.getDate()   - 7);
   const prevTotals = calcTotals(await fetchReportData({ biz, start: prevStart, end: prevEnd, branchId }));
   const openingBalance = await fetchOpeningBalance(biz, branchId, start);
-  const periodLabel = `${shortDate(start)} — ${shortDate(end)}`;
+  const periodLabel = `${shortDate(start)} - ${shortDate(end)}`;
   biz.sessionState = "ready"; biz.sessionData = {}; await biz.save();
   await sendReport({ biz, from, label: "Weekly Report", periodLabel, branchName, branchId, data, totals, prevTotals, weeks: null, start, end, openingBalance });
   await sendMainMenu(from);
@@ -297,12 +297,12 @@ export async function runDetailedLedgerReport({ biz, from, period = "day", custo
 
   if (period === "custom" && customStart && customEnd) {
     start = customStart; end = customEnd;
-    periodLabel = `${shortDate(start)} — ${shortDate(end)}`;
+    periodLabel = `${shortDate(start)} - ${shortDate(end)}`;
   } else if (period === "week") {
     const now = new Date(); const dow = now.getDay(); const diff = dow === 0 ? -6 : 1 - dow;
     start = new Date(now); start.setDate(now.getDate() + diff); start.setHours(0, 0, 0, 0);
     end   = new Date(start); end.setDate(start.getDate() + 6); end.setHours(23, 59, 59, 999);
-    periodLabel = `${shortDate(start)} — ${shortDate(end)}`;
+    periodLabel = `${shortDate(start)} - ${shortDate(end)}`;
   } else if (period === "month") {
     const now = new Date();
     start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
@@ -323,7 +323,7 @@ export async function runDetailedLedgerReport({ biz, from, period = "day", custo
   const cur = biz.currency || "USD";
   const net = ledger.closingBalance - openingBalance;
 
-  // Short WhatsApp message — full detail is in the PDF
+  // Short WhatsApp message - full detail is in the PDF
   await sendText(from,
 `📋 *DETAILED LEDGER*
 ${biz.name}${branchName ? ` · ${branchName}` : ""}
@@ -361,12 +361,12 @@ export async function runClerkStatementReport({ biz, from, clerkPhone, period = 
   let start, end, periodLabel;
   if (period === "custom" && customStart && customEnd) {
     start = customStart; end = customEnd;
-    periodLabel = `${shortDate(start)} — ${shortDate(end)}`;
+    periodLabel = `${shortDate(start)} - ${shortDate(end)}`;
   } else if (period === "week") {
     const now = new Date(); const dow = now.getDay(); const diff = dow === 0 ? -6 : 1 - dow;
     start = new Date(now); start.setDate(now.getDate() + diff); start.setHours(0, 0, 0, 0);
     end   = new Date(start); end.setDate(start.getDate() + 6); end.setHours(23, 59, 59, 999);
-    periodLabel = `${shortDate(start)} — ${shortDate(end)}`;
+    periodLabel = `${shortDate(start)} - ${shortDate(end)}`;
   } else if (period === "month") {
     const now = new Date();
     start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
@@ -386,11 +386,11 @@ export async function runClerkStatementReport({ biz, from, clerkPhone, period = 
 
   const recLine = handedOver !== null
     ? (Math.abs(discrepancy) < 0.01
-        ? `✅ Balanced — Counted ${fmtMoney(handedOver, cur)}`
+        ? `✅ Balanced - Counted ${fmtMoney(handedOver, cur)}`
         : discrepancy > 0
           ? `⚠️ Surplus +${fmtMoney(discrepancy, cur)}`
           : `❌ Short ${fmtMoney(Math.abs(discrepancy), cur)}`)
-    : `⏳ Shift open — Balance: ${fmtMoney(expectedClosing, cur)}`;
+    : `⏳ Shift open - Balance: ${fmtMoney(expectedClosing, cur)}`;
 
   await sendText(from,
 `👤 *CLERK STATEMENT*

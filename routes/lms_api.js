@@ -695,7 +695,7 @@ async function ensureCertificatesDir() {
 }
 
 /**
- * buildCertificateHtml — CRIPFCNT Option A (table layout, no gaps)
+ * buildCertificateHtml - CRIPFCNT Option A (table layout, no gaps)
  * A4 landscape: sidebar | content | dark right panel
  */
 function buildCertificateHtml({name,orgName,moduleName,quizTitle,score,percentage,date}){

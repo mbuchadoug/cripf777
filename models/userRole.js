@@ -1,5 +1,5 @@
 /**
- * models/userRole.js  — UPDATED: added name field
+ * models/userRole.js  - UPDATED: added name field
  * ─────────────────────────────────────────────────────────────
  * The name field stores the staff member's full name.
  * It is:
@@ -27,7 +27,7 @@ const UserRoleSchema = new mongoose.Schema({
 
   phone: { type: String, index: true },
 
-  // ── Staff display name — shown on reports, drawings & handover logs ─────────
+  // ── Staff display name - shown on reports, drawings & handover logs ─────────
   // Set by admin on the Staff page (supplierAdmin.js).
   // Falls back to phone number in reports if not set.
   name: { type: String, default: "" },

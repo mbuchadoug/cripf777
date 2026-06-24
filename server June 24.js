@@ -475,7 +475,7 @@ app.use(trackPageView);
 
 app.use((req, res, next) => {
   if (process.env.NODE_ENV === "production") {
-    // FIX: skip HTTPS redirect for /zq-admin/* — auth redirects here cause loops
+    // FIX: skip HTTPS redirect for /zq-admin/* - auth redirects here cause loops
     if (req.path.startsWith("/zq-admin")) return next();
     const host = req.headers.host;
     // FIX: read X-Forwarded-Proto directly; req.protocol alone is unreliable

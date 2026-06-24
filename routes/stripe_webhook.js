@@ -123,7 +123,7 @@ router.post("/", async (req, res) => {
       try {
         await handle8QTCertificate(session);
       } catch (err) {
-        // Log but don't fail the webhook — Stripe needs a 200
+        // Log but don't fail the webhook - Stripe needs a 200
         console.error("[8qt webhook] certificate handler error:", err.message);
       }
     }

@@ -34,7 +34,7 @@ function adminOnly(req, res, next) {
 
 function writeOnly(req, res, next) {
   if (req.user?.role === "readonly_admin") {
-    return res.status(403).json({ error: "Read-only access — cannot modify" });
+    return res.status(403).json({ error: "Read-only access - cannot modify" });
   }
   next();
 }
@@ -104,13 +104,13 @@ router.get("/", async (req, res) => {
 // QUOTIENT CONFIG
 // ══════════════════════════════════════════════════════════════
 
-// GET /admin/8qt/config — list
+// GET /admin/8qt/config - list
 router.get("/config", async (req, res) => {
   const configs = await EightQTConfig.find().sort({ displayOrder: 1 }).lean();
   res.json({ configs });
 });
 
-// POST /admin/8qt/config/seed — seed defaults if none exist
+// POST /admin/8qt/config/seed - seed defaults if none exist
 router.post("/config/seed", writeOnly, async (req, res) => {
   const count = await EightQTConfig.countDocuments();
   if (count > 0) return res.json({ message: "Already seeded", count });
@@ -130,7 +130,7 @@ router.post("/config/seed", writeOnly, async (req, res) => {
   res.json({ ok: true, message: "Seeded 8 quotients", count: 8 });
 });
 
-// PATCH /admin/8qt/config/:code — update one quotient
+// PATCH /admin/8qt/config/:code - update one quotient
 router.patch("/config/:code", writeOnly, async (req, res) => {
   try {
     const allowed = [
@@ -179,7 +179,7 @@ router.get("/questions", async (req, res) => {
   }
 });
 
-// POST /admin/8qt/questions/import — CSV upload
+// POST /admin/8qt/questions/import - CSV upload
 // CSV columns: quotient, text, opt_a_text, opt_a_scores (JSON),
 //              opt_b_text, opt_b_scores, opt_c_text, opt_c_scores,
 //              opt_d_text, opt_d_scores, is_blended
@@ -257,7 +257,7 @@ router.post("/questions/import", writeOnly, upload.single("file"), async (req, r
   }
 });
 
-// POST /admin/8qt/questions — create single question
+// POST /admin/8qt/questions - create single question
 router.post("/questions", writeOnly, async (req, res) => {
   try {
     const q = await EightQTQuestion.create({
@@ -285,7 +285,7 @@ router.patch("/questions/:id", writeOnly, async (req, res) => {
   }
 });
 
-// DELETE /admin/8qt/questions/:id — soft delete (sets active: false)
+// DELETE /admin/8qt/questions/:id - soft delete (sets active: false)
 router.delete("/questions/:id", writeOnly, async (req, res) => {
   try {
     await EightQTQuestion.findByIdAndUpdate(req.params.id, { $set: { active: false } });

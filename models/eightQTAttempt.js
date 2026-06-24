@@ -1,5 +1,5 @@
 // models/eightQTAttempt.js
-// Stores each participant's 8QT session — registered OR anonymous
+// Stores each participant's 8QT session - registered OR anonymous
 import mongoose from "mongoose";
 
 const QuotientScoreSchema = new mongoose.Schema({

@@ -93,7 +93,7 @@ const hbs = engine({
   OR as a hero section banner:
 
   <div class="hero-cta-banner">
-    <div class="banner-label">New — Free Assessment</div>
+    <div class="banner-label">New - Free Assessment</div>
     <a href="/8qt" class="banner-btn">
       Discover Your 8 Quotients →
     </a>
@@ -148,7 +148,7 @@ ADMIN_EMAILS=admin@cripfcnt.com
 {
   "name": "The Responsible Builder",
   "tagline": "You see obligation where others see noise",
-  "description": "You consistently default to ownership rather than deflection. When a problem surfaces, your first instinct is to ask what role you can play, not who is to blame. This orientation makes you a stabilising force in most environments — people know that if you say something will be done, it will be.",
+  "description": "You consistently default to ownership rather than deflection. When a problem surfaces, your first instinct is to ask what role you can play, not who is to blame. This orientation makes you a stabilising force in most environments - people know that if you say something will be done, it will be.",
   "reflectionPrompts": [
     "Where in your life might your strong sense of responsibility be absorbing other people's accountability?",
     "What would it look like to delegate responsibility without losing ownership of outcomes?",
@@ -167,7 +167,7 @@ ADMIN_EMAILS=admin@cripfcnt.com
 {
   "name": "The Emerging Thinker",
   "tagline": "Every map begins somewhere",
-  "description": "Your 8 Quotients profile suggests you are at the beginning of a placement intelligence journey. This is not a weakness — it is the most honest starting point. CRIPFCnt was built for exactly this moment: the point where someone realises that intelligence alone does not explain outcomes, and begins to ask different questions.",
+  "description": "Your 8 Quotients profile suggests you are at the beginning of a placement intelligence journey. This is not a weakness - it is the most honest starting point. CRIPFCnt was built for exactly this moment: the point where someone realises that intelligence alone does not explain outcomes, and begins to ask different questions.",
   "reflectionPrompts": [
     "Which of the 8 quotients surprised you most when you saw your score?",
     "What situation in your life would look different if you applied a placement lens to it?",

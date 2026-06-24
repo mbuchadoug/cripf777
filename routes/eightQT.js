@@ -74,7 +74,7 @@ async function buildQuestionSet(configs) {
 }
 
 // ══════════════════════════════════════════════════════════════
-// STEP 1 — LANDING PAGE
+// STEP 1 - LANDING PAGE
 // GET /8qt
 // ══════════════════════════════════════════════════════════════
 router.get("/", async (req, res) => {
@@ -108,7 +108,7 @@ router.get("/", async (req, res) => {
 });
 
 // ══════════════════════════════════════════════════════════════
-// STEP 2 — IDENTITY: Anonymous start
+// STEP 2 - IDENTITY: Anonymous start
 // POST /8qt/start/anonymous
 // ══════════════════════════════════════════════════════════════
 router.post("/start/anonymous", async (req, res) => {
@@ -132,7 +132,7 @@ router.post("/start/anonymous", async (req, res) => {
   }
 });
 
-// STEP 2 — IDENTITY: Return with code
+// STEP 2 - IDENTITY: Return with code
 // POST /8qt/resume
 router.post("/resume", async (req, res) => {
   try {
@@ -154,8 +154,8 @@ router.post("/resume", async (req, res) => {
   }
 });
 
-// STEP 2 — IDENTITY: Google (existing auth infrastructure)
-// GET /8qt/google — sets session marker and redirects to /auth/google
+// STEP 2 - IDENTITY: Google (existing auth infrastructure)
+// GET /8qt/google - sets session marker and redirects to /auth/google
 router.get("/google", (req, res) => {
   req.session.signupSource = "8qt";
   req.session.returnTo = "/8qt/profile";
@@ -163,7 +163,7 @@ router.get("/google", (req, res) => {
 });
 
 // ══════════════════════════════════════════════════════════════
-// STEP 3 — PRE-TEST OPTIONAL PROFILE
+// STEP 3 - PRE-TEST OPTIONAL PROFILE
 // GET  /8qt/profile
 // POST /8qt/profile
 // ══════════════════════════════════════════════════════════════
@@ -176,7 +176,7 @@ router.post("/profile", async (req, res) => {
   try {
     const { firstName, country, sector, code } = req.body;
 
-    // Attempt creation happens here — after we have profile data
+    // Attempt creation happens here - after we have profile data
     const configs = await EightQTConfig.find({ active: true })
       .sort({ displayOrder: 1 }).lean();
 
@@ -249,7 +249,7 @@ router.post("/profile", async (req, res) => {
 });
 
 // ══════════════════════════════════════════════════════════════
-// STEP 4 — THE TEST
+// STEP 4 - THE TEST
 // GET /8qt/test/:attemptId
 // ══════════════════════════════════════════════════════════════
 router.get("/test/:attemptId", async (req, res) => {
@@ -277,7 +277,7 @@ router.get("/test/:attemptId", async (req, res) => {
     const currentIndex = questions.findIndex(q => !answeredIds.has(String(q._id)));
 
     if (currentIndex === -1) {
-      // All answered — push to submit
+      // All answered - push to submit
       return res.redirect(`/8qt/submit/${attempt._id}`);
     }
 
@@ -304,7 +304,7 @@ router.get("/test/:attemptId", async (req, res) => {
   }
 });
 
-// POST /8qt/test/:attemptId/answer — save one answer, redirect to next
+// POST /8qt/test/:attemptId/answer - save one answer, redirect to next
 router.post("/test/:attemptId/answer", async (req, res) => {
   try {
     const { questionId, selectedIndex } = req.body;
@@ -362,7 +362,7 @@ router.post("/test/:attemptId/answer", async (req, res) => {
 });
 
 // ══════════════════════════════════════════════════════════════
-// STEP 5 — SUBMIT & SCORE
+// STEP 5 - SUBMIT & SCORE
 // GET /8qt/submit/:attemptId (triggered after last answer)
 // ══════════════════════════════════════════════════════════════
 router.get("/submit/:attemptId", async (req, res) => {
@@ -400,7 +400,7 @@ router.get("/submit/:attemptId", async (req, res) => {
 });
 
 // ══════════════════════════════════════════════════════════════
-// STEP 6 — RESULTS PAGE
+// STEP 6 - RESULTS PAGE
 // GET /8qt/results/:attemptId
 // ══════════════════════════════════════════════════════════════
 router.get("/results/:attemptId", async (req, res) => {
@@ -448,7 +448,7 @@ router.get("/results/:attemptId", async (req, res) => {
 });
 
 // ══════════════════════════════════════════════════════════════
-// STEP 7 — CERTIFICATE REQUEST FORM
+// STEP 7 - CERTIFICATE REQUEST FORM
 // GET  /8qt/certificate/:attemptId
 // POST /8qt/certificate/:attemptId
 // ══════════════════════════════════════════════════════════════
@@ -539,7 +539,7 @@ router.post("/certificate/:attemptId", async (req, res) => {
 });
 
 // ══════════════════════════════════════════════════════════════
-// STEP 8 — STRIPE CHECKOUT
+// STEP 8 - STRIPE CHECKOUT
 // GET /8qt/checkout/:attemptId
 // ══════════════════════════════════════════════════════════════
 router.get("/checkout/:attemptId", async (req, res) => {
@@ -594,7 +594,7 @@ router.get("/checkout/:attemptId", async (req, res) => {
 });
 
 // Success landing (Stripe redirects here after payment)
-// Actual processing happens in webhook — this is just a waiting/confirmation page
+// Actual processing happens in webhook - this is just a waiting/confirmation page
 router.get("/cert-success/:attemptId", async (req, res) => {
   try {
     const attempt = await EightQTAttempt.findById(req.params.attemptId).lean();
@@ -610,7 +610,7 @@ router.get("/cert-success/:attemptId", async (req, res) => {
 });
 
 // ══════════════════════════════════════════════════════════════
-// STEP 9 — PUBLIC VERIFICATION
+// STEP 9 - PUBLIC VERIFICATION
 // GET /8qt/verify/:verifyCode
 // ══════════════════════════════════════════════════════════════
 router.get("/verify/:verifyCode", async (req, res) => {

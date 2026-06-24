@@ -1,17 +1,17 @@
 /**
- * certificateTemplate.js — CRIPFCNT Final
+ * certificateTemplate.js - CRIPFCNT Final
  *
  * SIZE: A4 landscape (297 × 210 mm)
  *
- * GAP FIX — uses CSS display:table layout instead of flexbox.
+ * GAP FIX - uses CSS display:table layout instead of flexbox.
  * Table cells stretch to fill row height by definition.
  * No flex quirks, no empty space possible.
  *
  * Layout:
- *   ROW 1 (48px)  : header band — sidebar | logo+wordmark | cert type+date
- *   ROW 2 (auto)  : body       — sidebar | content        | dark right panel
- *   ROW 3 (62px)  : footer     — sidebar | sig+badge      | (dark)
- *   ROW 4 (22px)  : cstrip     — sidebar | cert ID        | verify URL
+ *   ROW 1 (48px)  : header band - sidebar | logo+wordmark | cert type+date
+ *   ROW 2 (auto)  : body       - sidebar | content        | dark right panel
+ *   ROW 3 (62px)  : footer     - sidebar | sig+badge      | (dark)
+ *   ROW 4 (22px)  : cstrip     - sidebar | cert ID        | verify URL
  *
  * Puppeteer MUST use:
  *   format:"A4", landscape:true, printBackground:true,
@@ -107,7 +107,7 @@ export function buildCertificateHtml({
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
-<title>Certificate — ${recipientName}</title>
+<title>Certificate - ${recipientName}</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
@@ -121,7 +121,7 @@ html,body{
   -webkit-font-smoothing:antialiased;
 }
 
-/* ── TABLE SHELL — fills the entire page, zero gaps possible ── */
+/* ── TABLE SHELL - fills the entire page, zero gaps possible ── */
 .cert{
   width:297mm;
   height:210mm;
@@ -144,7 +144,7 @@ html,body{
 /* ── COLUMN WIDTHS ── */
 td{padding:0;vertical-align:top;}
 .c-sb  {width:44px;}
-.c-main{/* flex:1 equivalent — takes all remaining width */}
+.c-main{/* flex:1 equivalent - takes all remaining width */}
 .c-rp  {width:132px;}
 
 /* ── SIDEBAR col ── */
@@ -258,7 +258,7 @@ td{padding:0;vertical-align:top;}
       </div>
     </td>
 
-    <!-- left content — pure block stacking -->
+    <!-- left content - pure block stacking -->
     <td class="c-main">
       ${wm}
       <p class="certify-lbl">This is to certify that</p>

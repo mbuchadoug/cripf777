@@ -10218,7 +10218,7 @@ router.post("/suppliers/:id/users/:uid/edit-role", requireSupplierAdmin, async (
     await UserRole.findByIdAndUpdate(req.params.uid, {
       $set: { role, branchId: branchId || null, ...(staffName ? { name: staffName } : {}) }
     });
-    res.redirect(`/zq-admin/suppliers/${req.params.id}/staff?success=${encodeURIComponent("User updated" + (staffName ? " — " + staffName : ""))}`);
+    res.redirect(`/zq-admin/suppliers/${req.params.id}/staff?success=${encodeURIComponent("User updated" + (staffName ? " - " + staffName : ""))}`);
   } catch (err) {
     res.redirect(`/zq-admin/suppliers/${req.params.id}/staff?error=${encodeURIComponent(err.message)}`);
   }
@@ -10323,8 +10323,8 @@ router.get("/suppliers/:id/staff-cards", requireSupplierAdmin, async (req, res) 
           <span>👥 Active: <strong>${cards.filter(c=>c.active).length}/${cards.length}</strong></span>
         </div>
       </div>` : "";
-    // ── Inline QR builder — matches buildStaffQrImageUrl() exactly ───────────────
-    // Payload: ZQ:STAFF:<id>:SRC:qr  (NOT ZQ:S: — that routes to supplier resolver)
+    // ── Inline QR builder - matches buildStaffQrImageUrl() exactly ───────────────
+    // Payload: ZQ:STAFF:<id>:SRC:qr  (NOT ZQ:S: - that routes to supplier resolver)
     // Service: chart.googleapis.com  (same as buildStaffQrImageUrl in staffSmartLink.js)
     const _STAFF_BOT = (process.env.WHATSAPP_BOT_NUMBER || "263771143904").replace(/\D/g, "");
     function _staffQrUrl(cardId, size) {
@@ -10511,7 +10511,7 @@ router.get("/suppliers/:id/staff-cards/:cid/smart-link", requireSupplierAdmin, a
     const allLinks   = buildAllStaffLinks(cardId);
     const directLink = buildStaffDeepLink(cardId, null);
     // ── Build QR URLs matching buildStaffQrImageUrl() exactly ────────────────────
-    // Payload: ZQ:STAFF:<id>:SRC:qr  (NOT ZQ:S: — that routes to supplier resolver)
+    // Payload: ZQ:STAFF:<id>:SRC:qr  (NOT ZQ:S: - that routes to supplier resolver)
     // Service: chart.googleapis.com
     const _DETAIL_BOT = (process.env.WHATSAPP_BOT_NUMBER || "263771143904").replace(/\D/g, "");
     function _detailQr(size) {
@@ -10617,7 +10617,7 @@ router.get("/suppliers/:id/staff-cards/:cid/business-card", requireSupplierAdmin
     const card     = await StaffCard.findById(req.params.cid).lean();
     if (!supplier||!card) return res.status(404).send("Not found");
     // ── Build QR URL matching buildStaffQrImageUrl() exactly ─────────────────────
-    // Payload: ZQ:STAFF:<id>:SRC:qr  (chart.googleapis.com — same as the service function)
+    // Payload: ZQ:STAFF:<id>:SRC:qr  (chart.googleapis.com - same as the service function)
     const _BC_BOT    = (process.env.WHATSAPP_BOT_NUMBER || "263771143904").replace(/\D/g, "");
     const _bcRawPayload = "ZQ:STAFF:" + String(card._id) + ":SRC:qr";
     const _bcRawWaLink  = "https://wa.me/" + _BC_BOT + "?text=" + _bcRawPayload;

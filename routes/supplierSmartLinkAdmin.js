@@ -67,7 +67,7 @@ router.get("/", requireSupplierAdmin, async (req, res) => {
     const BOT_NUM    = (process.env.WHATSAPP_BOT_NUMBER || "263771143904").replace(/\D/g, "");
     const slugLink   = slug ? `https://wa.me/${BOT_NUM}?text=${encodeURIComponent("ZQ:S:" + slug)}` : null;
 
-    // ── Build QR URLs directly — avoids fragile .replace() on the encoded data param ──
+    // ── Build QR URLs directly - avoids fragile .replace() on the encoded data param ──
     // Use slug payload if available (shorter, human-readable), else fall back to ID-based.
     function _buildQr(payload, size) {
       return "https://api.qrserver.com/v1/create-qr-code/?size=" + size + "x" + size

@@ -104,7 +104,7 @@ export async function handle8QTCertificate(session) {
 
   } catch (err) {
     console.error("[8qt webhook] PDF/email error:", err.message);
-    // Don't re-throw — webhook must return 200 to Stripe
+    // Don't re-throw - webhook must return 200 to Stripe
     // The attempt is already marked "paid" so admin can manually re-trigger
   }
 }
@@ -184,7 +184,7 @@ async function sendCertificateEmail({ to, participantName, archetypeName, verify
   await transporter.sendMail({
     from: `"CRIPFCnt" <${process.env.SMTP_USER}>`,
     to,
-    subject: `Your CRIPFCnt 8 Quotients Certificate — ${archetypeName}`,
+    subject: `Your CRIPFCnt 8 Quotients Certificate - ${archetypeName}`,
     html
   });
 }

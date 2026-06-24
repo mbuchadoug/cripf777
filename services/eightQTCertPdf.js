@@ -130,7 +130,7 @@ export async function generateEightQTCertPdf({ attempt, template, archetype }) {
   <div class="cert-of">This certifies that</div>
   <div class="name">${participantName}</div>
   <div class="gold-bar"></div>
-  <div class="archetype">${archetypeName}${archetypeTagline ? ' — ' + archetypeTagline : ''}</div>
+  <div class="archetype">${archetypeName}${archetypeTagline ? ' - ' + archetypeTagline : ''}</div>
   <p class="body-text">
     has completed the CRIPFCnt 8 Quotients Assessment and has been mapped across the eight
     dimensions of Placement Intelligence as developed by Donald Mataranyika.
@@ -144,7 +144,7 @@ export async function generateEightQTCertPdf({ attempt, template, archetype }) {
     <tbody>${scoreRows}</tbody>
   </table>` : `
   <p class="body-text" style="font-size:15px;color:#C9A961;font-weight:600">
-    Dominant Quotient: ${dominant?.name || ""} (${dominant?.score || 0}/100 — ${dominant?.band || ""})
+    Dominant Quotient: ${dominant?.name || ""} (${dominant?.score || 0}/100 - ${dominant?.band || ""})
   </p>
   `}
 

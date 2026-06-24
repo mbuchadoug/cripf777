@@ -1,5 +1,5 @@
 // models/eightQTCertPurchase.js
-// Tracks Stripe certificate purchase — idempotency guard and audit trail
+// Tracks Stripe certificate purchase - idempotency guard and audit trail
 import mongoose from "mongoose";
 
 const EightQTCertPurchaseSchema = new mongoose.Schema({
