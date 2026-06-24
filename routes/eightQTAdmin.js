@@ -16,9 +16,7 @@ import EightQTConfig from "../models/eightQTConfig.js";
 import EightQTQuestion from "../models/eightQTQuestion.js";
 import EightQTArchetype from "../models/eightQTArchetype.js";
 import EightQTCertTemplate from "../models/eightQTCertTemplate.js";
-import { generateEightQTCertPdf } from "../services/eightQTCertPdf.js";
 import EightQTAttempt from "../models/eightQTAttempt.js";
-import EightQTArchetype from "../models/eightQTArchetype.js";
 
 const router = Router();
 const upload = multer({ dest: "uploads/", limits: { fileSize: 5 * 1024 * 1024 } });
@@ -502,11 +500,43 @@ router.post("/attempts/:id/regenerate-cert", writeOnly, async (req, res) => {
       archetype = await EightQTArchetype.findById(attempt.archetypeId).lean();
     }
 
-    const { url, verifyCode } = await generateEightQTCertPdf({
-      attempt: attempt.toObject(),
-      template,
-      archetype
+    // Inline cert generation using existing green CRIPFCnt template
+    const { buildCertificateHtml } = await import("../utils/certificateTemplate.js");
+    const puppeteer = (await import("puppeteer")).default;
+    const pathMod = (await import("path")).default;
+    const fsMod = (await import("fs")).default;
+    const cryptoMod = (await import("crypto")).default;
+
+    const verifyCode = attempt.certificateVerifyCode ||
+      cryptoMod.randomBytes(6).toString("hex").toUpperCase();
+
+    const participantName = attempt.certificateName || attempt.participantName || "Participant";
+    const scores = attempt.quotientScores || [];
+    const dom = scores.find(s => s.code === attempt.dominantQuotient);
+    const domScore = dom ? dom.score : null;
+
+    const html = buildCertificateHtml({
+      name: participantName,
+      orgName: "CRIPFCnt",
+      moduleName: attempt.dominantQuotient ? `${attempt.dominantQuotient} — Dominant Quotient` : "Placement Intelligence",
+      quizTitle: attempt.archetypeName || "8 Quotients Assessment",
+      score: domScore,
+      percentage: domScore,
+      date: new Date()
     });
+
+    const outDir = pathMod.join(process.cwd(), "public", "certificates", "8qt");
+    if (!fsMod.existsSync(outDir)) fsMod.mkdirSync(outDir, { recursive: true });
+    const filename = `8qt-cert-${verifyCode}.pdf`;
+    const outputPath = pathMod.join(outDir, filename);
+
+    const browser = await puppeteer.launch({ headless: "new", args: ["--no-sandbox", "--disable-setuid-sandbox"] });
+    const page = await browser.newPage();
+    await page.setContent(html, { waitUntil: "networkidle0" });
+    await page.pdf({ path: outputPath, format: "A4", landscape: true, printBackground: true, margin: { top: "0", bottom: "0", left: "0", right: "0" } });
+    await browser.close();
+
+    const url = `/certificates/8qt/${filename}`;
 
     attempt.certificatePdfUrl = url;
     attempt.certificateVerifyCode = verifyCode;

@@ -20,12 +20,64 @@ import EightQTArchetype from "../models/eightQTArchetype.js";
 import EightQTCertTemplate from "../models/eightQTCertTemplate.js";
 import EightQTCertPurchase from "../models/eightQTCertPurchase.js";
 import User from "../models/user.js";
-import {
-  computeQuotientScores,
-  matchArchetype,
-  getDominantAndEdge,
-  getBand
-} from "../services/eightQTScoring.js";
+// ── Scoring functions (inlined — no external service file needed) ──
+
+function getBand(score) {
+  if (score >= 81) return "Recalibrative";
+  if (score >= 61) return "Structural";
+  if (score >= 41) return "Functional";
+  if (score >= 21) return "Developing";
+  return "Emerging";
+}
+
+function computeQuotientScores(answers, configs) {
+  const rawMap = {};
+  for (const cfg of configs) {
+    rawMap[cfg.code] = { earned: 0, name: cfg.name, questionCount: cfg.questionCount };
+  }
+  for (const answer of answers) {
+    const qScores = answer.scores || {};
+    for (const [code, pts] of Object.entries(qScores)) {
+      if (!rawMap[code]) rawMap[code] = { earned: 0, name: code, questionCount: 8 };
+      rawMap[code].earned += Number(pts) || 0;
+    }
+  }
+  return configs.map(cfg => {
+    const data = rawMap[cfg.code] || { earned: 0, name: cfg.name, questionCount: cfg.questionCount };
+    const maxPossible = (data.questionCount || cfg.questionCount || 8) * 3;
+    const pct = maxPossible > 0 ? Math.round((data.earned / maxPossible) * 100) : 0;
+    const clamped = Math.min(100, Math.max(0, pct));
+    return { code: cfg.code, name: cfg.name, raw: data.earned, max: maxPossible, score: clamped, band: getBand(clamped) };
+  });
+}
+
+async function matchArchetype(quotientScores) {
+  const archetypes = await EightQTArchetype.find({ active: true }).sort({ priority: -1 }).lean();
+  const scoreMap = {};
+  for (const s of quotientScores) scoreMap[s.code] = s.score;
+  for (const arch of archetypes) {
+    if (arch.isDefault) continue;
+    const allMatch = (arch.conditions || []).every(cond => {
+      const val = scoreMap[cond.quotient] ?? 0;
+      switch (cond.operator) {
+        case "gte": return val >= cond.value;
+        case "lte": return val <= cond.value;
+        case "gt":  return val >  cond.value;
+        case "lt":  return val <  cond.value;
+        case "between": return val >= cond.value && val <= (cond.value2 ?? 100);
+        default: return false;
+      }
+    });
+    if (allMatch) return arch;
+  }
+  return archetypes.find(a => a.isDefault) || null;
+}
+
+function getDominantAndEdge(quotientScores) {
+  if (!quotientScores.length) return { dominant: null, edge: null };
+  const sorted = [...quotientScores].sort((a, b) => b.score - a.score);
+  return { dominant: sorted[0].code, edge: sorted[sorted.length - 1].code };
+}
 
 const router = Router();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
