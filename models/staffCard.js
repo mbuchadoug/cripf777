@@ -64,6 +64,12 @@ const StaffCardSchema = new mongoose.Schema({
   // active=false → link gracefully falls back to parent supplier, still logs view
   active:     { type: Boolean, default: true },
 
+  // ── Contact visibility (admin-controlled) ──────────────────────────────────
+  // When true, the staff member can type "my contacts" in the chatbot to see
+  // phones that opened their personal staff card link.
+  // Only ZimQuote admin can enable — staff never self-enable.
+  canViewContacts: { type: Boolean, default: false },
+
   // ── Admin-only internal notes (never shown to buyers) ─────────────────────
   adminNotes: { type: String, default: "", maxlength: 300 }
 

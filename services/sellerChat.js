@@ -435,7 +435,7 @@ export async function showSellerMenu(from, supplierId, biz, saveBiz, { source = 
 
   // ── Track analytics (non-blocking) ───────────────────────────────────────
   import("./supplierSmartLink.js").then(({ trackLinkEvent }) =>
-    trackLinkEvent(supplierId, { source, isConversion: false }).catch(() => {})
+    trackLinkEvent(supplierId, { source, isConversion: false, visitorPhone: from }).catch(() => {})
   ).catch(() => {});
 
   const hasHistory = biz?.sessionData?.scLastOrder;

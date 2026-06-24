@@ -13195,6 +13195,127 @@ if (!isMetaAction && /^(my card|staff card|my link|my qr)$/i.test(text.trim())) 
   if (_handled) return;
 }
 
+// ── Staff card self-service: salesperson types "my card" / "staff card" ───────
+// Lets any registered salesperson check their own card stats + get share captions
+// without needing access to the admin panel.
+if (!isMetaAction && /^(my card|staff card|my link|my qr)$/i.test(text.trim())) {
+  const _handled = await handleStaffCardSelfMenu({ from });
+  if (_handled) return;
+}
+
+// ── "my contacts" chatbot command ────────────────────────────────────────────
+// Shows the list of phone numbers that have opened this seller's / school's /
+// staff card's smart link — but ONLY if the admin has enabled canViewContacts
+// on their profile. Default is off; only Typhon can switch it on.
+// Supports pagination: "my contacts 2" shows page 2.
+if (!isMetaAction && /^my contacts(\s+\d+)?$/i.test(text.trim())) {
+  const _mcPage = parseInt((text.trim().match(/\d+/) || ["1"])[0], 10) - 1; // 0-indexed
+  const _mcPageSize = 10;
+  try {
+    const SupplierLinkVisitor = (await import("../models/supplierLinkVisitor.js")).default;
+    const SchoolContact       = (await import("../models/schoolContact.js")).default;
+
+    // ── Check: is this a staff card member? ──────────────────────────────────
+    const _StaffCard = (await import("../models/staffCard.js")).default;
+    const _staffCard = await _StaffCard.findOne({ phone, active: true }).lean();
+    if (_staffCard && _staffCard.canViewContacts) {
+      const _total = await SupplierLinkVisitor.countDocuments({ staffCardId: _staffCard._id, linkType: "staff" });
+      const _visitors = await SupplierLinkVisitor.find({ staffCardId: _staffCard._id, linkType: "staff" })
+        .sort({ lastSeen: -1 }).skip(_mcPage * _mcPageSize).limit(_mcPageSize).lean();
+
+      if (!_total) {
+        return sendText(from,
+          `👥 *My Card Contacts*\n\nNo one has opened your staff card link yet.\n\n` +
+          `Share your link to start getting contacts:\n` +
+          `_ZQ:STAFF:${String(_staffCard._id)}_`
+        );
+      }
+
+      const _srcLabel = { fb:"Facebook", wa:"WhatsApp", tt:"TikTok", qr:"QR", sms:"SMS", ig:"Instagram", yt:"YouTube", direct:"Direct" };
+      const _lines = _visitors.map((v, i) => {
+        const _d  = new Date(v.lastSeen).toLocaleDateString("en-GB", { day:"numeric", month:"short" });
+        const _ph = v.phone.startsWith("263") ? "0" + v.phone.slice(3) : v.phone;
+        return `${_mcPage * _mcPageSize + i + 1}. ${_ph} · ${_srcLabel[v.source] || v.source} · ${_d}${v.converted ? " ✅" : ""}`;
+      }).join("\n");
+
+      const _totalPages = Math.ceil(_total / _mcPageSize);
+      const _header = `👥 *Card Contacts (${_total} total)*\n_Page ${_mcPage + 1} of ${_totalPages}_\n\n`;
+      const _footer = _totalPages > 1 ? `\n\nType *my contacts ${_mcPage + 2}* for next page.` : "";
+      return sendText(from, _header + _lines + _footer);
+    }
+
+    // ── Check: is this a school admin? ───────────────────────────────────────
+    const _schoolForContacts = await SchoolProfile.findOne({ phone }).lean();
+    if (_schoolForContacts) {
+      if (!_schoolForContacts.canViewContacts) {
+        return sendText(from,
+          `🔒 *Contact Database*\n\nThis feature is not enabled on your account.\n\n` +
+          `Contact ZimQuote to activate the contact viewer for your school.`
+        );
+      }
+      const _total = await SchoolContact.countDocuments({ schoolId: _schoolForContacts._id });
+      const _contacts = await SchoolContact.find({ schoolId: _schoolForContacts._id })
+        .sort({ lastSeen: -1 }).skip(_mcPage * _mcPageSize).limit(_mcPageSize).lean();
+
+      if (!_total) {
+        return sendText(from,
+          `👥 *My School Contacts*\n\nNo contacts recorded yet.\n\n` +
+          `Share your school smart link to start capturing contacts.`
+        );
+      }
+
+      const _srcLabel2 = { profile:"Profile link", apply:"Apply link", enquiry:"Enquiry", brochure:"Brochure" };
+      const _lines2 = _contacts.map((c, i) => {
+        const _d  = new Date(c.lastSeen).toLocaleDateString("en-GB", { day:"numeric", month:"short" });
+        const _ph = c.phone.startsWith("263") ? "0" + c.phone.slice(3) : c.phone;
+        const _name = c.parentName || c.name || "";
+        return `${_mcPage * _mcPageSize + i + 1}. ${_ph}${_name ? " · " + _name : ""} · ${_srcLabel2[c.source] || c.source} · ${_d}${c.converted ? " ✅" : ""}`;
+      }).join("\n");
+
+      const _totalPages2 = Math.ceil(_total / _mcPageSize);
+      const _header2 = `👥 *School Contacts (${_total} total)*\n_Page ${_mcPage + 1} of ${_totalPages2}_\n✅ = submitted application\n\n`;
+      const _footer2 = _totalPages2 > 1 ? `\n\nType *my contacts ${_mcPage + 2}* for next page.` : "";
+      return sendText(from, _header2 + _lines2 + _footer2);
+    }
+
+    // ── Check: is this a supplier? ───────────────────────────────────────────
+    const _supForContacts = await SupplierProfile.findOne({ phone }).lean();
+    if (!_supForContacts) {
+      // Not a supplier, school, or staff — silently ignore
+    } else if (!_supForContacts.canViewContacts) {
+      return sendText(from,
+        `🔒 *Contact Database*\n\nThis feature is not enabled on your account.\n\n` +
+        `Contact ZimQuote to activate the contact viewer for your listing.`
+      );
+    } else {
+      const _total = await SupplierLinkVisitor.countDocuments({ supplierId: _supForContacts._id, linkType: "supplier" });
+      const _visitors = await SupplierLinkVisitor.find({ supplierId: _supForContacts._id, linkType: "supplier" })
+        .sort({ lastSeen: -1 }).skip(_mcPage * _mcPageSize).limit(_mcPageSize).lean();
+
+      if (!_total) {
+        return sendText(from,
+          `👥 *My Link Contacts*\n\nNo contacts yet — share your ZimQuote link to start.\n\n` +
+          `Type *my link* or go to *My Smart Link* for your link and QR code.`
+        );
+      }
+
+      const _srcLabel3 = { fb:"Facebook", wa:"WhatsApp", tt:"TikTok", qr:"QR", sms:"SMS", ig:"Instagram", yt:"YouTube", direct:"Direct" };
+      const _lines3 = _visitors.map((v, i) => {
+        const _d  = new Date(v.lastSeen).toLocaleDateString("en-GB", { day:"numeric", month:"short" });
+        const _ph = v.phone.startsWith("263") ? "0" + v.phone.slice(3) : v.phone;
+        return `${_mcPage * _mcPageSize + i + 1}. ${_ph} · ${_srcLabel3[v.source] || v.source} · ${_d}${v.converted ? " ✅" : ""}`;
+      }).join("\n");
+
+      const _totalPages3 = Math.ceil(_total / _mcPageSize);
+      const _header3 = `👥 *Smart Link Contacts (${_total} total)*\n_Page ${_mcPage + 1} of ${_totalPages3}_\n✅ = sent quote/enquiry/order\n\n`;
+      const _footer3 = _totalPages3 > 1 ? `\n\nType *my contacts ${_mcPage + 2}* for next page.` : "";
+      return sendText(from, _header3 + _lines3 + _footer3);
+    }
+  } catch (_mcErr) {
+    console.error("[MY CONTACTS]", _mcErr.message);
+  }
+}
+
 // [REMOVED: old school_apply_ handler - now handled by school_apply_start_ above]
 
 // ── School FAQ chatbot (sfaq_ actions) ───────────────────────────────────────

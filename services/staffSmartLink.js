@@ -133,7 +133,7 @@ export function buildStaffQrImageUrl(cardId, sizePx = 400) {
 
 // ─── Analytics tracking ───────────────────────────────────────────────────────
 
-export async function trackStaffLinkEvent(cardId, { source = "direct", isConversion = false } = {}) {
+export async function trackStaffLinkEvent(cardId, { source = "direct", isConversion = false, visitorPhone = null } = {}) {
   try {
     const srcKey = Object.keys(STAFF_LINK_SOURCES).includes(source) ? source : "direct";
     const inc = {
@@ -145,8 +145,54 @@ export async function trackStaffLinkEvent(cardId, { source = "direct", isConvers
       inc[`zqSourceConversions.${srcKey}`] = 1;
     }
     await StaffCard.findByIdAndUpdate(cardId, { $inc: inc });
+
+    // ── Capture visitor phone in SupplierLinkVisitor (non-blocking) ──────────
+    // Powers the admin contacts page and chatbot "my contacts" for this staff card.
+    if (visitorPhone) {
+      _captureStaffVisitor({ cardId, phone: visitorPhone, source, isConversion }).catch(() => {});
+    }
   } catch (err) {
     console.error("[STAFF LINK TRACK]", err.message);
+  }
+}
+
+/**
+ * Upsert a SupplierLinkVisitor record for a staff card open.
+ * linkType="staff" so staff and supplier visitors are kept separate.
+ * supplierId is stored too so admin can query all visitors for a business in one go.
+ */
+async function _captureStaffVisitor({ cardId, phone, source = "direct", isConversion = false }) {
+  try {
+    const SupplierLinkVisitor = (await import("../models/supplierLinkVisitor.js")).default;
+    const normPhone = String(phone).replace(/\D+/g, "");
+    if (!normPhone || normPhone.length < 9) return;
+
+    // Load supplierId from the card so we can index by business too
+    const card = await StaffCard.findById(cardId).lean();
+    if (!card) return;
+
+    const update = {
+      $set:  { lastSeen: new Date(), source },
+      $inc:  { viewCount: 1 },
+      $setOnInsert: {
+        firstSeen:   new Date(),
+        phone:       normPhone,
+        supplierId:  card.supplierId,
+        staffCardId: card._id,
+        linkType:    "staff"
+      }
+    };
+    if (isConversion) {
+      update.$set.converted   = true;
+      update.$set.convertedAt = new Date();
+    }
+    await SupplierLinkVisitor.findOneAndUpdate(
+      { staffCardId: card._id, phone: normPhone, linkType: "staff" },
+      update,
+      { upsert: true }
+    );
+  } catch (err) {
+    console.warn("[STAFF VISITOR CAPTURE]", err.message);
   }
 }
 
@@ -208,7 +254,7 @@ export async function handleStaffDeepLink({ from, text, biz, saveBiz }) {
   const supplier = card ? await SupplierProfile.findById(card.supplierId).lean() : null;
 
   // Always track the view - even for inactive cards, so admin sees stale links still firing
-  trackStaffLinkEvent(cardId, { source, isConversion: false }).catch(() => {});
+  trackStaffLinkEvent(cardId, { source, isConversion: false, visitorPhone: from }).catch(() => {});
 
   // Notify salesperson on their own phone (outside 24hr via Meta template)
   if (card?.phone) {

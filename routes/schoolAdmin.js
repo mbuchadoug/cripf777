@@ -16,6 +16,7 @@ import SchoolSubscriptionPayment from "../models/schoolSubscriptionPayment.js";
 import { sendDocument, sendText } from "../services/metaSender.js";
 import { generatePDF } from "../routes/twilio_biz.js";
 import SchoolLead from "../models/schoolLead.js";
+import SchoolContact from "../models/schoolContact.js";
 import {
   SCHOOL_CITIES,
   SCHOOL_FACILITIES,
@@ -4249,5 +4250,239 @@ router.post("/schools/:id/apply-qr", requireSupplierAdmin, async (req, res) => {
   }
 });
 
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SCHOOL SMART LINK CONTACTS VIEWER
+// GET  /zq-admin/schools/:id/contacts        → all visitors (SchoolContact records)
+// GET  /zq-admin/schools/:id/contacts/export → CSV download
+// GET  /zq-admin/schools/:id/contact-settings → canViewContacts toggle
+// POST /zq-admin/schools/:id/contact-settings → save flag
+// ─────────────────────────────────────────────────────────────────────────────
+
+router.get("/schools/:id/contacts", requireSupplierAdmin, async (req, res) => {
+  try {
+    const school = await SchoolProfile.findById(req.params.id).lean();
+    if (!school) return res.redirect("/zq-admin/schools");
+
+    const page     = Math.max(0, parseInt(req.query.page || "0", 10));
+    const pageSize = 50;
+
+    const [total, contacts] = await Promise.all([
+      SchoolContact.countDocuments({ schoolId: school._id }),
+      SchoolContact.find({ schoolId: school._id })
+        .sort({ lastSeen: -1 })
+        .skip(page * pageSize)
+        .limit(pageSize)
+        .lean()
+    ]);
+
+    const totalPages = Math.ceil(total / pageSize);
+    const srcLabel = { profile:"Profile link", apply:"Apply link", enquiry:"Enquiry", brochure:"Brochure" };
+    const statusColor = { new:"gray", contacted:"blue", enrolled:"green", not_interested:"red" };
+
+    const successMsg = req.query.success
+      ? `<div style="background:#dcfce7;color:#16a34a;padding:12px 16px;border-radius:8px;margin-bottom:16px">✅ ${esc(req.query.success)}</div>`
+      : "";
+
+    res.send(layout(`School: ${esc(school.schoolName)} - Contacts`, `
+      <a href="/zq-admin/schools/${school._id}" class="back-link">← Back to School</a>
+      ${successMsg}
+
+      <div class="panel">
+        <div class="panel-head" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px">
+          <div>
+            <h3>👥 Smart Link Contacts — ${esc(school.schoolName)}</h3>
+            <p style="font-size:12px;color:var(--muted);margin:4px 0 0">
+              Every parent who opened this school's smart link, applied, or sent an enquiry.
+              ${school.canViewContacts ? badge("Chatbot Access ON", "green") : badge("Chatbot Access OFF", "gray")}
+            </p>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <a href="/zq-admin/schools/${school._id}/contacts/export" class="btn btn-gray" style="font-size:13px">⬇ Export CSV</a>
+            <a href="/zq-admin/schools/${school._id}/contact-settings" class="btn btn-purple" style="font-size:13px">⚙️ Contact Settings</a>
+          </div>
+        </div>
+
+        ${!total ? `
+        <div style="padding:40px;text-align:center;color:var(--muted)">
+          <div style="font-size:40px;margin-bottom:12px">📭</div>
+          <p>No contacts recorded yet.</p>
+          <p style="font-size:12px;margin-top:8px">Contacts are captured automatically when a parent opens the school's smart link.</p>
+        </div>` : `
+
+        <div style="display:flex;gap:16px;margin-bottom:16px;flex-wrap:wrap">
+          ${stat(total, "Total contacts", "blue")}
+          ${stat(contacts.filter(c => c.converted).length + (page > 0 ? "+" : ""), "Applications (this page)", "green")}
+          ${stat(contacts.filter(c => c.source === "apply").length + (page > 0 ? "+" : ""), "Apply link opens (this page)", "")}
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Phone</th>
+              <th>Name</th>
+              <th>Source</th>
+              <th>Grade interest</th>
+              <th>Views</th>
+              <th>First seen</th>
+              <th>Last seen</th>
+              <th>Applied</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${contacts.map((c, i) => {
+              const dispPhone = c.phone.startsWith("263") ? "0" + c.phone.slice(3) : c.phone;
+              const firstName = c.parentName || c.name || "-";
+              const firstD = new Date(c.firstSeen).toLocaleDateString("en-GB", { day:"numeric", month:"short", year:"2-digit" });
+              const lastD  = new Date(c.lastSeen).toLocaleDateString("en-GB", { day:"numeric", month:"short", year:"2-digit" });
+              return `
+              <tr>
+                <td style="color:var(--muted);font-size:12px">${page * pageSize + i + 1}</td>
+                <td><a href="/zq-admin/search-logs/contact/${esc(c.phone)}" class="btn-link" style="font-weight:600">${esc(dispPhone)}</a></td>
+                <td style="font-size:13px">${esc(firstName)}</td>
+                <td>${badge(srcLabel[c.source] || c.source, c.source === "apply" ? "green" : c.source === "enquiry" ? "blue" : "gray")}</td>
+                <td style="font-size:12px;color:var(--muted)">${esc(c.gradeInterest || "-")}</td>
+                <td>${c.viewCount}</td>
+                <td style="font-size:12px;color:var(--muted)">${firstD}</td>
+                <td style="font-size:12px;color:var(--muted)">${lastD}</td>
+                <td>${c.converted ? badge("✅ Yes", "green") : badge("No", "gray")}</td>
+                <td>${badge(c.status || "new", statusColor[c.status] || "gray")}</td>
+              </tr>`;
+            }).join("")}
+          </tbody>
+        </table>
+
+        ${totalPages > 1 ? `
+        <div style="display:flex;gap:8px;justify-content:center;padding:16px 0;flex-wrap:wrap">
+          ${page > 0 ? `<a href="?page=${page-1}" class="btn btn-gray">← Prev</a>` : ""}
+          <span style="padding:8px 12px;font-size:13px;color:var(--muted)">Page ${page+1} of ${totalPages}</span>
+          ${page < totalPages-1 ? `<a href="?page=${page+1}" class="btn btn-blue">Next →</a>` : ""}
+        </div>` : ""}
+        `}
+      </div>
+    `));
+  } catch (err) {
+    res.send(layout("Error", `<div class="alert red">${err.message}</div>`));
+  }
+});
+
+router.get("/schools/:id/contacts/export", requireSupplierAdmin, async (req, res) => {
+  try {
+    const school = await SchoolProfile.findById(req.params.id).lean();
+    if (!school) return res.status(404).send("Not found");
+
+    const contacts = await SchoolContact.find({ schoolId: school._id })
+      .sort({ lastSeen: -1 }).lean();
+
+    const rows = [
+      ["Phone", "Display Phone", "Parent Name", "Student Name", "Grade Interest", "Source", "Views", "First Seen", "Last Seen", "Applied", "Status"]
+    ];
+    for (const c of contacts) {
+      const disp = c.phone.startsWith("263") ? "0" + c.phone.slice(3) : c.phone;
+      rows.push([
+        c.phone, disp,
+        c.parentName || c.name || "",
+        c.studentName || "",
+        c.gradeInterest || "",
+        c.source || "",
+        c.viewCount,
+        c.firstSeen ? new Date(c.firstSeen).toISOString().slice(0,10) : "",
+        c.lastSeen  ? new Date(c.lastSeen).toISOString().slice(0,10)  : "",
+        c.converted ? "Yes" : "No",
+        c.status || "new"
+      ]);
+    }
+
+    const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n");
+    const filename = `${school.schoolName.replace(/\s+/g,"_")}_contacts_${new Date().toISOString().slice(0,10)}.csv`;
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.send(csv);
+  } catch (err) {
+    res.status(500).send(err.message);
+  }
+});
+
+// ── School contact settings (canViewContacts toggle) ─────────────────────────
+router.get("/schools/:id/contact-settings", requireSupplierAdmin, async (req, res) => {
+  try {
+    const school = await SchoolProfile.findById(req.params.id).lean();
+    if (!school) return res.redirect("/zq-admin/schools");
+
+    const successMsg = req.query.success
+      ? `<div style="background:#dcfce7;color:#16a34a;padding:12px 16px;border-radius:8px;margin-bottom:16px">✅ ${esc(req.query.success)}</div>`
+      : "";
+
+    res.send(layout(`School: ${esc(school.schoolName)} - Contact Settings`, `
+      <a href="/zq-admin/schools/${school._id}" class="back-link">← Back to School</a>
+      ${successMsg}
+
+      <div class="panel" style="max-width:600px">
+        <div class="panel-head">
+          <h3>⚙️ Contact Database Settings — ${esc(school.schoolName)}</h3>
+        </div>
+
+        <div style="background:#fef9c3;color:#a16207;border-radius:8px;padding:12px 16px;margin-bottom:18px;font-size:13px;line-height:1.6">
+          <strong>Admin-only setting.</strong> The school admin can only enable the chatbot
+          contact viewer if Typhon grants access here. Schools cannot self-enable this feature.
+        </div>
+
+        <form method="POST" action="/zq-admin/schools/${school._id}/contact-settings">
+          <table style="width:100%;border-collapse:collapse;margin-bottom:20px">
+            <thead>
+              <tr>
+                <th style="text-align:left;padding:10px 12px;background:#f8fafc;border-bottom:2px solid #e2e8f0;font-size:11px;color:#64748b;text-transform:uppercase">Feature</th>
+                <th style="text-align:left;padding:10px 12px;background:#f8fafc;border-bottom:2px solid #e2e8f0;font-size:11px;color:#64748b;text-transform:uppercase">What it does</th>
+                <th style="text-align:center;padding:10px 12px;background:#f8fafc;border-bottom:2px solid #e2e8f0;font-size:11px;color:#64748b;text-transform:uppercase">Enabled</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td style="padding:14px 12px;font-weight:600">👥 Chatbot contact viewer</td>
+                <td style="padding:14px 12px;color:#64748b;font-size:13px">
+                  School admin can type <strong>"my contacts"</strong> in the WhatsApp bot to see
+                  a paginated list of all parents who opened their smart link, applied, or sent an enquiry.
+                  Shows phone, name (if captured), source, and date.
+                </td>
+                <td style="padding:14px 12px;text-align:center">
+                  <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer">
+                    <input type="checkbox" name="canViewContacts" value="true"
+                           ${school.canViewContacts ? "checked" : ""}
+                           style="width:18px;height:18px;cursor:pointer" />
+                    <span style="font-size:13px">${school.canViewContacts ? badge("Enabled", "green") : badge("Disabled", "gray")}</span>
+                  </label>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div style="display:flex;gap:10px">
+            <button type="submit" class="btn btn-purple">💾 Save Settings</button>
+            <a href="/zq-admin/schools/${school._id}/contacts" class="btn btn-gray">👥 View Contacts</a>
+            <a href="/zq-admin/schools/${school._id}" class="btn btn-gray">Cancel</a>
+          </div>
+        </form>
+      </div>
+    `));
+  } catch (err) {
+    res.send(layout("Error", `<div class="alert red">${err.message}</div>`));
+  }
+});
+
+router.post("/schools/:id/contact-settings", requireSupplierAdmin, async (req, res) => {
+  try {
+    const canViewContacts = req.body.canViewContacts === "true";
+    await SchoolProfile.findByIdAndUpdate(req.params.id, { $set: { canViewContacts } });
+    const school = await SchoolProfile.findById(req.params.id).lean();
+    const msg = canViewContacts
+      ? `Chatbot contact viewer enabled for ${school?.schoolName || "this school"}`
+      : `Chatbot contact viewer disabled for ${school?.schoolName || "this school"}`;
+    res.redirect(`/zq-admin/schools/${req.params.id}/contact-settings?success=${encodeURIComponent(msg)}`);
+  } catch (err) {
+    res.redirect(`/zq-admin/schools/${req.params.id}/contact-settings?error=${encodeURIComponent(err.message)}`);
+  }
+});
 
 export default router;

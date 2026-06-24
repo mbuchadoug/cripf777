@@ -6,6 +6,7 @@ import SupplierProfile from "../models/supplierProfile.js";
 import SupplierOrder from "../models/supplierOrder.js";
 import SupplierSubscriptionPayment from "../models/supplierSubscriptionPayment.js";
 import PhoneContact from "../models/phoneContact.js";   // ← ADD THIS LINE
+import SupplierLinkVisitor from "../models/supplierLinkVisitor.js";
 import SearchCommandLog from "../models/searchCommandLog.js";
 import { sendBuyerSearchHelpTemplate } from "../services/buyerSearchFollowUp.js";
 import BuyerRequest from "../models/buyerRequest2.js";
@@ -1596,6 +1597,10 @@ const successMsg = req.query.success
 
   <a href="/zq-admin/suppliers/${supplier._id}/vip-settings" class="btn btn-purple">
     🔒 VIP Notifications
+  </a>
+
+  <a href="/zq-admin/suppliers/${supplier._id}/contacts" class="btn" style="background:#0d9488;color:white">
+    👥 View Contacts
   </a>
 
   <a href="/zq-admin/suppliers/${supplier._id}/staff" class="btn" style="background:#0f766e;color:white">
@@ -7069,6 +7074,22 @@ router.get("/suppliers/:id/vip-settings", requireSupplierAdmin, async (req, res)
                   </label>
                 </td>
               </tr>
+              <tr>
+                <td style="padding:14px 12px;font-weight:600">👥 Contact database (chatbot)</td>
+                <td style="padding:14px 12px;color:#64748b;font-size:13px">
+                  Seller can type <strong>"my contacts"</strong> in the WhatsApp bot to see a
+                  paginated list of every phone number that has opened their smart link or staff card.
+                  Only enable for trusted sellers who need lead follow-up capability.
+                </td>
+                <td style="padding:14px 12px;text-align:center">
+                  <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer">
+                    <input type="checkbox" name="canViewContacts" value="true"
+                           ${supplier.canViewContacts ? "checked" : ""}
+                           style="width:18px;height:18px;cursor:pointer" />
+                    <span style="font-size:13px">${supplier.canViewContacts ? badge("Enabled", "green") : badge("Disabled", "gray")}</span>
+                  </label>
+                </td>
+              </tr>
             </tbody>
           </table>
 
@@ -7093,15 +7114,17 @@ router.post("/suppliers/:id/vip-settings", requireSupplierAdmin, async (req, res
   try {
     const revealBuyerPhone   = req.body.revealBuyerPhone   === "true";
     const revealVisitorPhone = req.body.revealVisitorPhone === "true";
+    const canViewContacts    = req.body.canViewContacts    === "true";
 
     await SupplierProfile.findByIdAndUpdate(req.params.id, {
-      $set: { revealBuyerPhone, revealVisitorPhone }
+      $set: { revealBuyerPhone, revealVisitorPhone, canViewContacts }
     });
 
     const supplier = await SupplierProfile.findById(req.params.id).lean();
     const changes  = [];
     if (revealBuyerPhone)   changes.push("buyer phone on requests");
     if (revealVisitorPhone) changes.push("visitor phone on smart link opens");
+    if (canViewContacts)    changes.push("contact database (chatbot)");
     const msg = changes.length
       ? `VIP enabled: ${changes.join(" + ")} for ${supplier?.businessName || "this seller"}`
       : `VIP notifications disabled for ${supplier?.businessName || "this seller"}`;
@@ -7146,7 +7169,10 @@ router.get("/vip-sellers", requireSupplierAdmin, async (req, res) => {
               <td>${esc(s.location?.city || "-")}</td>
               <td>${s.revealBuyerPhone ? badge("Enabled", "green") : badge("Off", "gray")}</td>
               <td>${s.revealVisitorPhone ? badge("Enabled", "green") : badge("Off", "gray")}</td>
-              <td><a href="/zq-admin/suppliers/${s._id}/vip-settings" class="btn-link">Edit →</a></td>
+              <td>
+                <a href="/zq-admin/suppliers/${s._id}/vip-settings" class="btn-link">Edit →</a>
+                <a href="/zq-admin/suppliers/${s._id}/contacts" class="btn-link" style="margin-left:8px">👥 Contacts →</a>
+              </td>
             </tr>`).join("")}
           </tbody>
         </table>` : `
@@ -7162,6 +7188,181 @@ router.get("/vip-sellers", requireSupplierAdmin, async (req, res) => {
 });
 
 router.use("/suppliers/:id/smart-link", smartLinkRoutes);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SUPPLIER SMART LINK CONTACTS VIEWER
+// GET  /zq-admin/suppliers/:id/contacts           → all visitors for this supplier
+// GET  /zq-admin/suppliers/:id/contacts/staff/:cardId → visitors for a staff card
+// POST /zq-admin/suppliers/:id/contacts/export    → CSV download
+// ─────────────────────────────────────────────────────────────────────────────
+
+router.get("/suppliers/:id/contacts", requireSupplierAdmin, async (req, res) => {
+  try {
+    const supplier = await SupplierProfile.findById(req.params.id).lean();
+    if (!supplier) return res.redirect("/zq-admin/suppliers");
+
+    const page     = Math.max(0, parseInt(req.query.page || "0", 10));
+    const pageSize = 50;
+    const linkType = req.query.type === "staff" ? "staff" : "supplier";
+
+    const query = linkType === "staff"
+      ? { supplierId: supplier._id, linkType: "staff" }
+      : { supplierId: supplier._id, linkType: "supplier" };
+
+    const [total, visitors] = await Promise.all([
+      SupplierLinkVisitor.countDocuments(query),
+      SupplierLinkVisitor.find(query)
+        .sort({ lastSeen: -1 })
+        .skip(page * pageSize)
+        .limit(pageSize)
+        .lean()
+    ]);
+
+    // Load staff cards for the tab links
+    const { StaffCard: _StaffCardModel } = await _loadStaffModules() || {};
+    const staffCards = _StaffCardModel
+      ? await _StaffCardModel.find({ supplierId: supplier._id }).lean()
+      : [];
+
+    const totalPages = Math.ceil(total / pageSize);
+    const srcLabel = { fb:"Facebook", wa:"WhatsApp Status", tt:"TikTok", qr:"QR Scan", sms:"SMS/Flyer", ig:"Instagram", yt:"YouTube", direct:"Direct" };
+
+    const successMsg = req.query.success
+      ? `<div style="background:#dcfce7;color:#16a34a;padding:12px 16px;border-radius:8px;margin-bottom:16px">✅ ${esc(req.query.success)}</div>`
+      : "";
+
+    res.send(layout(`Contacts: ${esc(supplier.businessName)}`, `
+      <a href="/zq-admin/suppliers/${supplier._id}" class="back-link">← Back to Profile</a>
+      ${successMsg}
+
+      <div class="panel">
+        <div class="panel-head" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px">
+          <div>
+            <h3>👥 Smart Link Contacts — ${esc(supplier.businessName)}</h3>
+            <p style="font-size:12px;color:var(--muted);margin:4px 0 0">
+              Every WhatsApp number that opened this supplier's smart link or staff card.
+              ${supplier.canViewContacts ? badge("Chatbot Access ON", "green") : badge("Chatbot Access OFF", "gray")}
+            </p>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <a href="/zq-admin/suppliers/${supplier._id}/contacts/export?type=${linkType}" class="btn btn-gray" style="font-size:13px">⬇ Export CSV</a>
+            <a href="/zq-admin/suppliers/${supplier._id}/vip-settings" class="btn btn-purple" style="font-size:13px">🔒 VIP Settings</a>
+          </div>
+        </div>
+
+        <!-- Type tabs -->
+        <div style="display:flex;gap:4px;margin-bottom:16px;border-bottom:2px solid var(--border);padding-bottom:0">
+          <a href="?type=supplier" style="padding:8px 16px;font-size:13px;font-weight:600;border-radius:6px 6px 0 0;text-decoration:none;
+            ${linkType === "supplier" ? "background:var(--blue);color:white" : "color:var(--muted)"}">
+            🏪 Supplier Link (${linkType === "supplier" ? total : "?"})
+          </a>
+          <a href="?type=staff" style="padding:8px 16px;font-size:13px;font-weight:600;border-radius:6px 6px 0 0;text-decoration:none;
+            ${linkType === "staff" ? "background:var(--blue);color:white" : "color:var(--muted)"}">
+            👤 Staff Cards (${linkType === "staff" ? total : "?"})
+          </a>
+        </div>
+
+        ${!total ? `
+        <div style="padding:40px;text-align:center;color:var(--muted)">
+          <div style="font-size:40px;margin-bottom:12px">📭</div>
+          <p>No contacts recorded yet for this ${linkType === "staff" ? "staff card" : "supplier link"}.</p>
+          <p style="font-size:12px;margin-top:8px">Contacts are captured automatically when someone opens the smart link via WhatsApp.</p>
+        </div>` : `
+
+        <div style="display:flex;gap:16px;margin-bottom:16px;flex-wrap:wrap">
+          ${stat(total, "Total contacts", "blue")}
+          ${stat(visitors.filter(v => v.converted).length + (page > 0 ? "+" : ""), "Conversions (this page)", "green")}
+          ${stat(visitors.filter(v => v.source === "qr").length + (page > 0 ? "+" : ""), "QR scans (this page)", "")}
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Phone</th>
+              <th>Source</th>
+              ${linkType === "staff" ? "<th>Staff Card</th>" : ""}
+              <th>Views</th>
+              <th>First seen</th>
+              <th>Last seen</th>
+              <th>Converted</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${visitors.map((v, i) => {
+              const dispPhone = v.phone.startsWith("263") ? "0" + v.phone.slice(3) : v.phone;
+              const firstD = new Date(v.firstSeen).toLocaleDateString("en-GB", { day:"numeric", month:"short", year:"2-digit" });
+              const lastD  = new Date(v.lastSeen).toLocaleDateString("en-GB", { day:"numeric", month:"short", year:"2-digit" });
+              const staffName = linkType === "staff" && staffCards.length
+                ? (staffCards.find(c => String(c._id) === String(v.staffCardId))?.name || "-")
+                : "";
+              return `
+              <tr>
+                <td style="color:var(--muted);font-size:12px">${page * pageSize + i + 1}</td>
+                <td>
+                  <a href="/zq-admin/search-logs/contact/${esc(v.phone)}" class="btn-link" style="font-weight:600">${esc(dispPhone)}</a>
+                </td>
+                <td>${badge(srcLabel[v.source] || v.source, v.source === "qr" ? "blue" : v.source === "fb" ? "blue" : "gray")}</td>
+                ${linkType === "staff" ? `<td style="font-size:12px;color:var(--muted)">${esc(staffName)}</td>` : ""}
+                <td>${v.viewCount}</td>
+                <td style="font-size:12px;color:var(--muted)">${firstD}</td>
+                <td style="font-size:12px;color:var(--muted)">${lastD}</td>
+                <td>${v.converted ? badge("✅ Yes", "green") : badge("No", "gray")}</td>
+              </tr>`;
+            }).join("")}
+          </tbody>
+        </table>
+
+        ${totalPages > 1 ? `
+        <div style="display:flex;gap:8px;justify-content:center;padding:16px 0;flex-wrap:wrap">
+          ${page > 0 ? `<a href="?type=${linkType}&page=${page-1}" class="btn btn-gray">← Prev</a>` : ""}
+          <span style="padding:8px 12px;font-size:13px;color:var(--muted)">Page ${page+1} of ${totalPages}</span>
+          ${page < totalPages-1 ? `<a href="?type=${linkType}&page=${page+1}" class="btn btn-blue">Next →</a>` : ""}
+        </div>` : ""}
+        `}
+      </div>
+    `));
+  } catch (err) {
+    res.send(layout("Error", `<div class="alert red">${err.message}</div>`));
+  }
+});
+
+// ── CSV export ────────────────────────────────────────────────────────────────
+router.get("/suppliers/:id/contacts/export", requireSupplierAdmin, async (req, res) => {
+  try {
+    const supplier = await SupplierProfile.findById(req.params.id).lean();
+    if (!supplier) return res.status(404).send("Not found");
+
+    const linkType = req.query.type === "staff" ? "staff" : "supplier";
+    const visitors = await SupplierLinkVisitor.find({ supplierId: supplier._id, linkType })
+      .sort({ lastSeen: -1 }).lean();
+
+    const rows = [
+      ["Phone", "Display Phone", "Source", "Views", "First Seen", "Last Seen", "Converted", "Converted At"]
+    ];
+    for (const v of visitors) {
+      const disp = v.phone.startsWith("263") ? "0" + v.phone.slice(3) : v.phone;
+      rows.push([
+        v.phone,
+        disp,
+        v.source,
+        v.viewCount,
+        v.firstSeen ? new Date(v.firstSeen).toISOString().slice(0,10) : "",
+        v.lastSeen  ? new Date(v.lastSeen).toISOString().slice(0,10) : "",
+        v.converted ? "Yes" : "No",
+        v.convertedAt ? new Date(v.convertedAt).toISOString().slice(0,10) : ""
+      ]);
+    }
+
+    const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(",")).join("\n");
+    const filename = `${supplier.businessName.replace(/\s+/g,"_")}_${linkType}_contacts_${new Date().toISOString().slice(0,10)}.csv`;
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.send(csv);
+  } catch (err) {
+    res.status(500).send(err.message);
+  }
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SEARCH COMMAND LOGS - Buyer command flow tracking

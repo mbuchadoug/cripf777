@@ -148,8 +148,9 @@ export function buildQrImageUrl(supplierId, sizePx = 400) {
  * Record a link view/open. Call from chatbot ZQ:SUPPLIER intercept.
  * source: "fb" | "wa" | "tt" | "qr" | "sms" | "ig" | "yt" | "direct"
  * isConversion: true when buyer completes an action (quote request, order, booking)
+ * visitorPhone: the WhatsApp number of the person who opened the link (from chatbot `from`)
  */
-export async function trackLinkEvent(supplierId, { source = "direct", isConversion = false } = {}) {
+export async function trackLinkEvent(supplierId, { source = "direct", isConversion = false, visitorPhone = null } = {}) {
   try {
     const inc = {
       zqLinkViews: 1,
@@ -164,9 +165,45 @@ export async function trackLinkEvent(supplierId, { source = "direct", isConversi
     if (isConversion) inc[`zqSourceConversions.${srcKey}`] = 1;
 
     await SupplierProfile.findByIdAndUpdate(supplierId, { $inc: inc });
+
+    // ── Capture visitor phone in SupplierLinkVisitor (non-blocking) ──────────
+    // This powers the "my contacts" chatbot command and the admin contacts page.
+    if (visitorPhone) {
+      _captureSupplierVisitor({ supplierId, phone: visitorPhone, source, isConversion }).catch(() => {});
+    }
   } catch (err) {
     // Non-critical - never throw
     console.error("[SMART LINK TRACK]", err.message);
+  }
+}
+
+/**
+ * Upsert a SupplierLinkVisitor record for a supplier smart link open.
+ * One document per phone+supplierId (linkType="supplier").
+ * Non-blocking: called fire-and-forget from trackLinkEvent.
+ */
+async function _captureSupplierVisitor({ supplierId, phone, source = "direct", isConversion = false }) {
+  try {
+    const SupplierLinkVisitor = (await import("../models/supplierLinkVisitor.js")).default;
+    const normPhone = String(phone).replace(/\D+/g, "");
+    if (!normPhone || normPhone.length < 9) return;
+
+    const update = {
+      $set:  { lastSeen: new Date(), source },
+      $inc:  { viewCount: 1 },
+      $setOnInsert: { firstSeen: new Date(), phone: normPhone, supplierId, linkType: "supplier" }
+    };
+    if (isConversion) {
+      update.$set.converted   = true;
+      update.$set.convertedAt = new Date();
+    }
+    await SupplierLinkVisitor.findOneAndUpdate(
+      { supplierId, phone: normPhone, linkType: "supplier" },
+      update,
+      { upsert: true }
+    );
+  } catch (err) {
+    console.warn("[SUPPLIER VISITOR CAPTURE]", err.message);
   }
 }
 
