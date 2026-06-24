@@ -1845,6 +1845,41 @@ ${(supplier.categories||[]).includes("tutoring") ? `
          placeholder="e.g. O-Level, A-Level, Grade 6, Grade 7" />
 </div>` : ""}
 
+${supplier.profileType === "service" ? `
+<div style="grid-column:1/-1;margin-top:4px;padding:14px;background:#eff6ff;border-radius:8px;border-left:3px solid #3b82f6">
+  <strong style="font-size:12px;color:#1d4ed8;text-transform:uppercase;letter-spacing:.4px">🔧 Service Provider Fields</strong>
+</div>
+
+<div class="fg" style="grid-column:1/-1">
+  <label>🛠 Services &amp; Rates
+    <span style="font-weight:400;font-size:11px;color:var(--muted);text-transform:none;letter-spacing:0">
+      — one per line: <code>service name, rate</code> — rate is optional
+    </span>
+  </label>
+  <textarea name="rates" rows="14" style="font-size:13px;font-family:monospace">${(supplier.rates||[]).map(r =>
+    r.rate ? r.service + ", " + r.rate : r.service
+  ).join("\n")}</textarea>
+  <span style="font-size:11px;color:var(--muted)">
+    With rate: <code>plumbing, $20/hr</code> &nbsp;·&nbsp;
+    No rate: <code>funeral policy services</code> &nbsp;·&nbsp;
+    Rate shown on buyer smart card.
+  </span>
+</div>
+
+<div class="fg">
+  <label>🚗 Travels to Clients</label>
+  <select name="travelAvailable">
+    <option value="true" ${supplier.travelAvailable ? "selected" : ""}>Yes — travels to client sites</option>
+    <option value="false" ${!supplier.travelAvailable ? "selected" : ""}>No — clients come to us</option>
+  </select>
+</div>
+<div class="fg">
+  <label>📍 Service Area</label>
+  <input name="serviceArea" value="${esc(supplier.serviceArea || "")}"
+         placeholder="e.g. Harare, Chitungwiza, nationwide" />
+</div>
+` : ""}
+
 ${supplier.profileType === "hospitality" ? `
 
 <div style="grid-column:1/-1;margin-top:4px;padding:14px;background:#f0fdf4;border-radius:8px;border-left:3px solid #22c55e">
@@ -2175,6 +2210,37 @@ update.notificationContacts = [...new Set(_notifRaw)].filter(
         extraServices.push({ name, price: parseFloat(parts[1]) || 0, unit: parts[2] || "service" });
       }
       update.extraServices = extraServices;
+    }
+
+    // ── Service rates (profileType=service suppliers) ────────────────────────
+    // Textarea format: one per line — "service name" or "service name, rate"
+    if (req.body.rates !== undefined) {
+      const parsedRates = [];
+      const parsedProducts = [];
+      for (const line of (req.body.rates || "").split("\n")) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        const commaIdx = trimmed.indexOf(",");
+        const service  = commaIdx >= 0 ? trimmed.slice(0, commaIdx).trim().toLowerCase() : trimmed.toLowerCase();
+        const rate     = commaIdx >= 0 ? trimmed.slice(commaIdx + 1).trim() : "";
+        if (service) {
+          parsedRates.push({ service, rate });
+          if (!parsedProducts.includes(service)) parsedProducts.push(service);
+        }
+      }
+      update.rates    = parsedRates;
+      // Keep products[] in sync so chatbot search finds this supplier
+      if (parsedProducts.length > 0) {
+        update.products       = parsedProducts;
+        update.listedProducts = parsedProducts;
+      }
+    }
+    // Service-specific travel/area fields
+    if (req.body.travelAvailable !== undefined) {
+      update.travelAvailable = req.body.travelAvailable === "true";
+    }
+    if (req.body.serviceArea !== undefined) {
+      update.serviceArea = (req.body.serviceArea || "").trim();
     }
     // Legacy field - keep saving if present for backward compat
     if (req.body.tourismType !== undefined) {
@@ -3362,13 +3428,16 @@ router.get("/suppliers/:id/products", requireSupplierAdmin, async (req, res) => 
             </div>
             ${supplier.rates?.length ? `
             <table>
-              <thead><tr><th>Service</th><th>Rate</th><th></th></tr></thead>
+              <thead><tr><th>Service</th><th>Rate</th><th style="width:120px"></th></tr></thead>
               <tbody>
                 ${supplier.rates.map((r, i) => `
                 <tr>
                   <td>${esc(r.service)}</td>
-                  <td>${esc(r.rate)}</td>
+                  <td>${esc(r.rate) || '<span style="color:#94a3b8;font-size:12px">—</span>'}</td>
                   <td>
+                    <a href="/zq-admin/suppliers/${supplier._id}/products/edit-rate/${i}"
+                       class="btn-link" style="font-size:12px">Edit</a>
+                    &nbsp;
                     <a href="/zq-admin/suppliers/${supplier._id}/products/delete-rate/${i}"
                        class="btn-link" style="color:#ef4444;font-size:12px"
                        onclick="return confirm('Delete this rate?')">Del</a>
@@ -3690,8 +3759,8 @@ router.get("/suppliers/:id/products/add-rate", requireSupplierAdmin, async (req,
           <input name="service" placeholder="e.g. plumbing, car hire" required />
         </div>
         <div class="fg" style="margin-bottom:16px">
-          <label>Rate</label>
-          <input name="rate" placeholder="e.g. 20/job, 10/hr, 50/trip" required />
+          <label>Rate <span style="font-weight:400;font-size:11px;color:var(--muted)">(optional)</span></label>
+          <input name="rate" placeholder="e.g. $20/job, $10/hr, price on request" />
         </div>
         <div class="form-actions">
           <button type="submit" class="btn btn-blue">💾 Add Rate</button>
@@ -3711,12 +3780,79 @@ router.post("/suppliers/:id/products/add-rate", requireSupplierAdmin, async (req
     if (!supplier.rates) supplier.rates = [];
     supplier.rates.push({
       service: service.trim().toLowerCase(),
-      rate: rate.trim().toLowerCase()
+      rate: (rate || "").trim().toLowerCase()
     });
 
     // Also add to products list
     const svcName = service.trim().toLowerCase();
     if (!supplier.products.includes(svcName)) supplier.products.push(svcName);
+
+    await supplier.save();
+    res.redirect(`/zq-admin/suppliers/${supplier._id}/products`);
+  } catch (err) {
+    res.send(layout("Error", `<div class="alert red">${err.message}</div>`));
+  }
+});
+
+// ── Edit service rate ──────────────────────────────────────────────────────
+router.get("/suppliers/:id/products/edit-rate/:idx", requireSupplierAdmin, async (req, res) => {
+  try {
+    const supplier = await SupplierProfile.findById(req.params.id).lean();
+    if (!supplier) return res.redirect("/zq-admin/suppliers");
+    const idx = parseInt(req.params.idx, 10);
+    const rate = (supplier.rates || [])[idx];
+    if (!rate) return res.redirect(`/zq-admin/suppliers/${supplier._id}/products`);
+
+    res.send(layout("Edit Rate", `
+      <a href="/zq-admin/suppliers/${supplier._id}/products" class="back-link">← Back to Products</a>
+      <div class="panel" style="max-width:500px">
+        <h3>Edit Service Rate</h3>
+        <form method="POST" action="/zq-admin/suppliers/${supplier._id}/products/edit-rate/${idx}" class="edit-form">
+          <div class="fg" style="margin-bottom:12px">
+            <label>Service Name</label>
+            <input name="service" value="${esc(rate.service)}" placeholder="e.g. plumbing, car hire" required />
+          </div>
+          <div class="fg" style="margin-bottom:16px">
+            <label>Rate <span style="font-weight:400;font-size:11px;color:var(--muted)">(optional)</span></label>
+            <input name="rate" value="${esc(rate.rate || "")}" placeholder="e.g. $20/job, $10/hr, price on request" />
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn btn-blue">💾 Save Rate</button>
+            <a href="/zq-admin/suppliers/${supplier._id}/products" class="btn btn-gray">Cancel</a>
+          </div>
+        </form>
+      </div>
+    `));
+  } catch (err) {
+    res.send(layout("Error", `<div class="alert red">${err.message}</div>`));
+  }
+});
+
+router.post("/suppliers/:id/products/edit-rate/:idx", requireSupplierAdmin, async (req, res) => {
+  try {
+    const { service, rate } = req.body;
+    const idx = parseInt(req.params.idx, 10);
+    const supplier = await SupplierProfile.findById(req.params.id);
+    if (!supplier) return res.redirect("/zq-admin/suppliers");
+
+    if (!supplier.rates || !supplier.rates[idx]) {
+      return res.redirect(`/zq-admin/suppliers/${supplier._id}/products`);
+    }
+
+    const oldService = supplier.rates[idx].service;
+    supplier.rates[idx].service = service.trim().toLowerCase();
+    supplier.rates[idx].rate    = (rate || "").trim();
+    supplier.markModified("rates");
+
+    // Keep products[] in sync — replace old name with new name
+    const prodIdx = supplier.products.indexOf(oldService);
+    const newName = service.trim().toLowerCase();
+    if (prodIdx >= 0) {
+      supplier.products[prodIdx] = newName;
+      supplier.markModified("products");
+    } else if (!supplier.products.includes(newName)) {
+      supplier.products.push(newName);
+    }
 
     await supplier.save();
     res.redirect(`/zq-admin/suppliers/${supplier._id}/products`);
