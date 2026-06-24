@@ -6168,6 +6168,19 @@ await UserSession.findOneAndUpdate(
 
 
  if (buyerRequestState === "awaiting_items") {
+  // ── FIX: sc_ smart-link button taps must NEVER be treated as buyer request
+  // item text. When a buyer has a stale buyerRequestState="awaiting_items" in
+  // session and then taps a smart card button (e.g. "Get instant quote" or
+  // "View All Services"), the action id (sc_quote_<id> / sc_catalogue_<id>)
+  // was being fed through parseItemListWithQty, flagged as a vague product
+  // name, and returning the "Please use the full product name" error —
+  // blocking the sc_ handler at the bottom of the file from ever running.
+  // The fix: skip the entire buyerRequestState block for ANY isMetaAction sc_ tap.
+  // This mirrors the REG TYPE EARLY HANDLER pattern used elsewhere in this file.
+  if (isMetaAction && a.startsWith("sc_")) {
+    // fall through to the sc_ handler block below
+  } else {
+
   // ── GUARD: if the user's biz is actively in an invoice/quote/receipt flow,
   // skip the buyer request handler entirely so business tools state machine
   // (continueTwilioFlow) can process the typed input correctly.
@@ -6536,6 +6549,7 @@ if (al === "my requests" || al === "buyer_my_requests") {
     `📍 *Where do you need these items?*\n\nReply with city or suburb + city.\n\nExamples:\n_Harare_\n_Mbare, Harare_\n_Borrowdale, Harare_\n\nType *0* for main menu`
   );
   } // end _skipBuyerReqForBizFlow guard
+  } // end else (not sc_ smart-link action)
 }
 
     if (buyerRequestState === "awaiting_location" &&
