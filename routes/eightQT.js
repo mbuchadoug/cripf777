@@ -33,8 +33,8 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 // ── Helpers ─────────────────────────────────────────────────────────
 
 function generateParticipantCode() {
-  const adjectives = ["Amber", "Cobalt", "Ember", "Fern", "Jade", "Ivory",
-    "Lunar", "Nova", "Onyx", "Pearl", "Sage", "Solar", "Terra", "Zinc"];
+  const adjectives = ["AMBER", "COBALT", "EMBER", "FERN", "JADE", "IVORY",
+    "LUNAR", "NOVA", "ONYX", "PEARL", "SAGE", "SOLAR", "TERRA", "ZINC"];
   const adj = adjectives[Math.floor(Math.random() * adjectives.length)];
   const num = Math.floor(1000 + Math.random() * 9000);
   return `PIQ-${num}-${adj}`;
@@ -139,10 +139,12 @@ router.post("/resume", async (req, res) => {
     const { code } = req.body;
     if (!code) return res.status(400).json({ error: "Code required" });
 
-    const attempt = await EightQTAttempt.findOne({ participantCode: code.trim() }).lean();
+    // Normalise — codes stored uppercase, user may type any case
+    const normCode = code.trim().toUpperCase();
+    const attempt = await EightQTAttempt.findOne({ participantCode: { $regex: normCode, $options: "i" } }).lean();
     if (!attempt) return res.status(404).json({ error: "Code not found. Please check and try again." });
 
-    req.session.eightQTParticipantCode = code.trim();
+    req.session.eightQTParticipantCode = normCode;
     await req.session.save();
 
     if (attempt.status === "finished") {
