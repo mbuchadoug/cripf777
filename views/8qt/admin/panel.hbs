@@ -1,0 +1,562 @@
+{{!-- views/8qt/admin/panel.hbs - Admin Panel for 8 Quotients Test --}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>8QT Admin Panel - CRIPFCnt</title>
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root{--navy:#1E3A5F;--navy-dk:#0F1C2E;--gold:#C9A961;--white:#fff;--light:#F8F9FA;--border:#E9ECEF;--dark:#495057;--text:#212529;--green:#059669;--red:#dc2626;--blue:#2f6ef7}
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:'Inter',sans-serif;background:var(--light);color:var(--text);font-size:14px}
+
+    /* TOP BAR */
+    .topbar{background:var(--navy-dk);color:var(--white);padding:0 24px;height:52px;display:flex;align-items:center;gap:16px;position:sticky;top:0;z-index:200}
+    .topbar-brand{font-family:'Crimson Pro',serif;font-size:1.2rem;font-weight:700;color:var(--gold)}
+    .topbar-sep{width:1px;height:18px;background:rgba(255,255,255,.15)}
+    .topbar-title{font-size:.8rem;font-weight:500;color:rgba(255,255,255,.7)}
+    .topbar-sp{flex:1}
+    .topbar-link{color:rgba(255,255,255,.7);text-decoration:none;font-size:.8rem}
+    .topbar-link:hover{color:var(--white)}
+
+    /* TABS */
+    .tabs{background:var(--white);border-bottom:1px solid var(--border);padding:0 24px;display:flex;gap:0;overflow-x:auto}
+    .tab{padding:14px 18px;font-size:.82rem;font-weight:500;color:var(--dark);border-bottom:2px solid transparent;cursor:pointer;white-space:nowrap;background:none;border-top:none;border-left:none;border-right:none;font-family:'Inter',sans-serif}
+    .tab:hover{color:var(--navy)}
+    .tab.active{color:var(--navy);border-bottom-color:var(--gold);font-weight:700}
+
+    /* PAGE */
+    .page{max-width:1200px;margin:0 auto;padding:28px 24px}
+
+    /* STAT CARDS */
+    .stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:16px;margin-bottom:28px}
+    .stat-card{background:var(--white);border-radius:10px;padding:20px;border:1px solid var(--border);text-align:center}
+    .stat-val{font-size:2rem;font-weight:700;color:var(--navy);line-height:1}
+    .stat-label{font-size:.72rem;font-weight:600;color:var(--dark);text-transform:uppercase;letter-spacing:1px;margin-top:6px}
+    .stat-card.gold{border-color:var(--gold);background:#fdf8ef}
+    .stat-card.gold .stat-val{color:#b8943a}
+
+    /* SECTION */
+    .section{background:var(--white);border-radius:12px;border:1px solid var(--border);margin-bottom:20px;overflow:hidden}
+    .section-head{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+    .section-title{font-weight:700;color:var(--navy);font-size:.9rem}
+    .section-body{padding:20px}
+
+    /* QUOTIENT CONFIG TABLE */
+    table{width:100%;border-collapse:collapse}
+    th{text-align:left;padding:8px 12px;font-size:.72rem;text-transform:uppercase;letter-spacing:1px;color:var(--dark);font-weight:600;border-bottom:2px solid var(--border)}
+    td{padding:10px 12px;border-bottom:1px solid var(--border);font-size:.85rem;vertical-align:middle}
+    tr:last-child td{border-bottom:none}
+    tr:hover td{background:#fafafa}
+
+    .badge{display:inline-flex;align-items:center;padding:.2rem .6rem;border-radius:20px;font-size:.7rem;font-weight:600}
+    .badge-green{background:#ecfdf5;color:#065f46}
+    .badge-gray{background:var(--light);color:var(--dark)}
+    .badge-gold{background:#fdf8ef;color:#b8943a}
+    .badge-blue{background:#eff6ff;color:var(--blue)}
+
+    .color-dot{width:12px;height:12px;border-radius:50%;display:inline-block;margin-right:6px;vertical-align:middle}
+
+    /* BUTTONS */
+    .btn{padding:.5rem .9rem;border-radius:6px;font-size:.8rem;font-weight:600;cursor:pointer;border:none;text-decoration:none;display:inline-flex;align-items:center;gap:4px;transition:all .15s}
+    .btn-navy{background:var(--navy);color:var(--white)}
+    .btn-navy:hover{background:var(--navy-dk)}
+    .btn-gold{background:var(--gold);color:var(--navy-dk)}
+    .btn-outline{background:transparent;border:1.5px solid var(--border);color:var(--dark)}
+    .btn-outline:hover{border-color:var(--navy);color:var(--navy)}
+    .btn-danger{background:#fef2f2;color:var(--red);border:1px solid #fecaca}
+    .btn-sm{padding:.35rem .7rem;font-size:.75rem}
+
+    /* FORMS */
+    .form-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+    .form-group{margin-bottom:14px}
+    .form-label{display:block;font-size:.75rem;font-weight:600;color:var(--navy);margin-bottom:5px}
+    .form-input{width:100%;padding:.55rem .8rem;border:1.5px solid var(--border);border-radius:6px;font-family:'Inter',sans-serif;font-size:.85rem}
+    .form-input:focus{outline:none;border-color:var(--navy)}
+    select.form-input{background:var(--white)}
+    textarea.form-input{resize:vertical;min-height:80px}
+
+    /* QUOTIENT BAR */
+    .q-bar-wrap{display:flex;align-items:center;gap:8px}
+    .q-bar{height:6px;border-radius:99px;flex:1;background:var(--border);overflow:hidden}
+    .q-bar-fill{height:100%;border-radius:99px}
+    .q-avg{font-size:.75rem;font-weight:600;color:var(--navy);width:30px;text-align:right;flex-shrink:0}
+
+    /* MODAL */
+    .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:500;display:none;align-items:center;justify-content:center}
+    .modal-overlay.open{display:flex}
+    .modal{background:var(--white);border-radius:14px;padding:32px;max-width:560px;width:90%;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+    .modal-title{font-family:'Crimson Pro',serif;font-size:1.4rem;color:var(--navy);margin-bottom:20px}
+    .modal-close{position:absolute;top:12px;right:16px;background:none;border:none;font-size:1.2rem;cursor:pointer;color:var(--dark)}
+
+    /* FILE UPLOAD */
+    .upload-zone{border:2px dashed var(--border);border-radius:10px;padding:32px;text-align:center;cursor:pointer;transition:border-color .2s}
+    .upload-zone:hover,.upload-zone.drag{border-color:var(--navy)}
+    .upload-zone p{color:var(--dark);font-size:.85rem}
+    .upload-zone .hint{font-size:.75rem;color:var(--dark);opacity:.7;margin-top:6px}
+    #fileInput{display:none}
+
+    @media(max-width:640px){
+      .stat-grid{grid-template-columns:repeat(2,1fr)}
+      .form-row{grid-template-columns:1fr}
+    }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <span class="topbar-brand">CRIPFCnt</span>
+  <div class="topbar-sep"></div>
+  <span class="topbar-title">8 Quotients Test - Admin</span>
+  <div class="topbar-sp"></div>
+  <a href="/admin/8qt/analytics" class="topbar-link">Analytics</a>
+  <div class="topbar-sep"></div>
+  <a href="/" class="topbar-link">← Main Site</a>
+</div>
+
+<!-- TABS -->
+<div class="tabs">
+  <button class="tab active" onclick="showTab('overview', this)">Overview</button>
+  <button class="tab" onclick="showTab('quotients', this)">Quotient Config</button>
+  <button class="tab" onclick="showTab('questions', this)">Question Bank</button>
+  <button class="tab" onclick="showTab('archetypes', this)">Archetypes</button>
+  <button class="tab" onclick="showTab('template', this)">Certificate Template</button>
+  <button class="tab" onclick="showTab('attempts', this)">Attempts</button>
+</div>
+
+<div class="page">
+
+  <!-- ══════════ OVERVIEW ══════════ -->
+  <div id="tab-overview">
+    <div class="stat-grid">
+      <div class="stat-card"><div class="stat-val">{{stats.totalAttempts}}</div><div class="stat-label">Total Attempts</div></div>
+      <div class="stat-card"><div class="stat-val">{{stats.finished}}</div><div class="stat-label">Completed</div></div>
+      <div class="stat-card gold"><div class="stat-val">{{stats.certRequested}}</div><div class="stat-label">Cert Requests</div></div>
+      <div class="stat-card gold"><div class="stat-val">{{stats.certIssued}}</div><div class="stat-label">Certs Issued</div></div>
+      <div class="stat-card"><div class="stat-val">{{stats.conversionRate}}%</div><div class="stat-label">Cert Conversion</div></div>
+    </div>
+
+    <!-- Quotient averages -->
+    <div class="section">
+      <div class="section-head">
+        <span class="section-title">Average Scores by Quotient (All Completed Attempts)</span>
+      </div>
+      <div class="section-body">
+        {{#each quotientAverages}}
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+          <span style="width:35px;font-size:.7rem;font-weight:700;color:var(--navy)">{{_id}}</span>
+          <span style="width:100px;font-size:.8rem;color:var(--dark)">{{name}}</span>
+          <div class="q-bar"><div class="q-bar-fill" style="width:{{avgScore}}%;background:var(--navy)"></div></div>
+          <span class="q-avg">{{round avgScore}}</span>
+        </div>
+        {{/each}}
+        {{#unless quotientAverages.length}}<p style="color:var(--dark);font-size:.85rem">No completed attempts yet.</p>{{/unless}}
+      </div>
+    </div>
+
+    <!-- Top archetypes -->
+    <div class="section">
+      <div class="section-head"><span class="section-title">Top Archetypes</span></div>
+      <div class="section-body">
+        {{#each archetypeAgg}}
+        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:.85rem">
+          <span>{{_id}}</span>
+          <span class="badge badge-gold">{{count}}</span>
+        </div>
+        {{/each}}
+        {{#unless archetypeAgg.length}}<p style="color:var(--dark);font-size:.85rem">No data yet.</p>{{/unless}}
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ QUOTIENT CONFIG ══════════ -->
+  <div id="tab-quotients" style="display:none">
+    <div class="section">
+      <div class="section-head">
+        <span class="section-title">Quotient Configuration</span>
+        <button class="btn btn-navy btn-sm" onclick="seedConfigs()">Seed Defaults</button>
+      </div>
+      <div class="section-body" style="padding:0">
+        <table>
+          <thead><tr>
+            <th>Code</th><th>Name</th><th>Questions</th><th>Status</th><th>Description</th><th>Actions</th>
+          </tr></thead>
+          <tbody id="configTbody">
+            {{#each configs}}
+            <tr data-code="{{this.code}}">
+              <td><span class="color-dot" style="background:{{this.color}}"></span>{{this.code}}</td>
+              <td>{{this.name}}</td>
+              <td><input type="number" value="{{this.questionCount}}" min="1" max="20" style="width:60px;padding:3px 6px;border:1px solid var(--border);border-radius:4px" onchange="updateConfig('{{this.code}}',{questionCount:+this.value})"></td>
+              <td>
+                <label style="cursor:pointer;display:flex;align-items:center;gap:6px;font-size:.8rem">
+                  <input type="checkbox" {{#if this.active}}checked{{/if}} onchange="updateConfig('{{this.code}}',{active:this.checked})">
+                  Active
+                </label>
+              </td>
+              <td style="max-width:200px"><div style="font-size:.78rem;color:var(--dark);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{this.description}}</div></td>
+              <td><button class="btn btn-outline btn-sm" onclick="editConfig('{{this.code}}')">Edit</button></td>
+            </tr>
+            {{/each}}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ QUESTION BANK ══════════ -->
+  <div id="tab-questions" style="display:none">
+    <div class="section">
+      <div class="section-head">
+        <span class="section-title">Question Bank</span>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-outline btn-sm" onclick="showModal('importModal')">📥 Import CSV</button>
+          <button class="btn btn-navy btn-sm" onclick="showModal('addQModal')">+ Add Question</button>
+        </div>
+      </div>
+      <div class="section-body" style="padding-bottom:0">
+        <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+          <select id="qFilter" onchange="loadQuestions()" class="form-input" style="width:auto">
+            <option value="">All Quotients</option>
+            {{#each configs}}<option value="{{this.code}}">{{this.name}}</option>{{/each}}
+          </select>
+          <select id="qActiveFilter" onchange="loadQuestions()" class="form-input" style="width:auto">
+            <option value="">All Status</option>
+            <option value="true">Active</option>
+            <option value="false">Inactive</option>
+          </select>
+        </div>
+        <div id="questionsContainer">
+          <p style="color:var(--dark);font-size:.85rem">Loading questions…</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ ARCHETYPES ══════════ -->
+  <div id="tab-archetypes" style="display:none">
+    <div class="section">
+      <div class="section-head">
+        <span class="section-title">Archetype Templates</span>
+        <button class="btn btn-navy btn-sm" onclick="showModal('addArchModal')">+ New Archetype</button>
+      </div>
+      <div class="section-body" style="padding:0">
+        <div id="archetypesContainer">Loading…</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ CERTIFICATE TEMPLATE ══════════ -->
+  <div id="tab-template" style="display:none">
+    <div class="section">
+      <div class="section-head"><span class="section-title">Certificate Template & Pricing</span></div>
+      <div class="section-body">
+        {{#if template}}
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Signatory Name</label>
+            <input class="form-input" id="tSigName" value="{{template.signatoryName}}">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Signatory Title</label>
+            <input class="form-input" id="tSigTitle" value="{{template.signatoryTitle}}">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Standard Price (cents, e.g. 999 = $9.99)</label>
+            <input class="form-input" id="tStdPrice" type="number" value="{{template.standardPriceCents}}">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Premium Price (cents)</label>
+            <input class="form-input" id="tPremPrice" type="number" value="{{template.premiumPriceCents}}">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Retake allowed after (days)</label>
+            <input class="form-input" id="tRetakeDays" type="number" value="{{template.retakeDays}}">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Currency</label>
+            <select class="form-input" id="tCurrency">
+              <option {{#if (eq template.currency "usd")}}selected{{/if}}>usd</option>
+              <option {{#if (eq template.currency "gbp")}}selected{{/if}}>gbp</option>
+              <option {{#if (eq template.currency "eur")}}selected{{/if}}>eur</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">
+            <input type="checkbox" id="tShowAll" {{#if template.showAllScores}}checked{{/if}}>
+            Show all 8 scores on certificate (uncheck = dominant quotient only)
+          </label>
+        </div>
+        <button class="btn btn-navy" onclick="saveTemplate('{{template._id}}')">Save Template Settings</button>
+        {{else}}
+        <p style="color:var(--dark);font-size:.85rem;margin-bottom:16px">No certificate template yet.</p>
+        <button class="btn btn-gold" onclick="createTemplate()">Create Default Template</button>
+        {{/if}}
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ ATTEMPTS ══════════ -->
+  <div id="tab-attempts" style="display:none">
+    <div class="section">
+      <div class="section-head">
+        <span class="section-title">Recent Attempts</span>
+        <div style="display:flex;gap:8px">
+          <select id="attStatusFilter" onchange="loadAttempts()" class="form-input" style="width:auto">
+            <option value="">All Status</option>
+            <option value="finished">Finished</option>
+            <option value="in_progress">In Progress</option>
+          </select>
+          <select id="attCertFilter" onchange="loadAttempts()" class="form-input" style="width:auto">
+            <option value="">All Cert Status</option>
+            <option value="none">No Cert</option>
+            <option value="requested">Requested</option>
+            <option value="paid">Paid</option>
+            <option value="issued">Issued</option>
+          </select>
+        </div>
+      </div>
+      <div class="section-body" style="padding:0">
+        <div id="attemptsContainer">Loading…</div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /page -->
+
+<!-- IMPORT CSV MODAL -->
+<div class="modal-overlay" id="importModal">
+  <div class="modal" style="position:relative">
+    <button class="modal-close" onclick="closeModal('importModal')">×</button>
+    <div class="modal-title">Import Questions from CSV</div>
+    <p style="font-size:.82rem;color:var(--dark);margin-bottom:16px;line-height:1.6">
+      CSV columns: <code>quotient, text, opt_a_text, opt_a_scores, opt_b_text, opt_b_scores, opt_c_text, opt_c_scores, opt_d_text, opt_d_scores, is_blended</code><br>
+      Scores format: JSON object e.g. <code>{"RQ":3}</code> or blended <code>{"RQ":2,"CvQ":1}</code>
+    </p>
+    <div class="upload-zone" onclick="document.getElementById('fileInput').click()" id="uploadZone">
+      <p>Click to select CSV file</p>
+      <p class="hint">Maximum 5MB · .csv format</p>
+    </div>
+    <input type="file" id="fileInput" accept=".csv" onchange="handleFileSelect(this)">
+    <div id="importStatus" style="margin-top:16px;font-size:.83rem"></div>
+    <button class="btn btn-navy" style="margin-top:16px;width:100%" id="importBtn" onclick="doImport()" disabled>Import Questions</button>
+  </div>
+</div>
+
+<script>
+// ── Tab switching ──────────────────────────────────────────────
+function showTab(id, btn) {
+  document.querySelectorAll('[id^=tab-]').forEach(el => el.style.display='none');
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-'+id).style.display='';
+  btn.classList.add('active');
+  if (id === 'questions') loadQuestions();
+  if (id === 'archetypes') loadArchetypes();
+  if (id === 'attempts') loadAttempts();
+}
+
+// ── Modal helpers ──────────────────────────────────────────────
+function showModal(id) { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+// ── Seed defaults ──────────────────────────────────────────────
+async function seedConfigs() {
+  if (!confirm('Seed default 8 quotient configs?')) return;
+  const r = await fetch('/admin/8qt/config/seed', { method: 'POST' });
+  const d = await r.json();
+  alert(d.message);
+  location.reload();
+}
+
+// ── Update config ──────────────────────────────────────────────
+async function updateConfig(code, data) {
+  await fetch(`/admin/8qt/config/${code}`, {
+    method: 'PATCH',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(data)
+  });
+}
+
+function editConfig(code) {
+  // Simple inline - could be expanded to modal
+  alert(`To edit full details for ${code}, use the PATCH /admin/8qt/config/${code} endpoint or implement an edit modal.`);
+}
+
+// ── Load questions ─────────────────────────────────────────────
+async function loadQuestions(page = 1) {
+  const q = document.getElementById('qFilter')?.value || '';
+  const a = document.getElementById('qActiveFilter')?.value || '';
+  const params = new URLSearchParams({ page });
+  if (q) params.set('quotient', q);
+  if (a) params.set('active', a);
+
+  const r = await fetch(`/admin/8qt/questions?${params}`);
+  const d = await r.json();
+
+  const container = document.getElementById('questionsContainer');
+  if (!d.questions?.length) {
+    container.innerHTML = '<p style="padding:20px;color:var(--dark)">No questions found.</p>';
+    return;
+  }
+
+  container.innerHTML = `
+    <table>
+      <thead><tr><th>Quotient</th><th>Question</th><th>Options</th><th>Status</th><th>Actions</th></tr></thead>
+      <tbody>
+        ${d.questions.map(q => `
+          <tr>
+            <td><span class="badge badge-blue">${q.quotient}</span>${q.isBlended ? ' <span class="badge badge-gold">blend</span>':''}</td>
+            <td style="max-width:280px;font-size:.82rem">${q.text}</td>
+            <td style="font-size:.75rem;color:var(--dark)">${q.options.length} options</td>
+            <td><span class="badge ${q.active ? 'badge-green':'badge-gray'}">${q.active ? 'Active':'Inactive'}</span></td>
+            <td>
+              <button class="btn btn-danger btn-sm" onclick="deactivateQ('${q._id}')">Disable</button>
+            </td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+    <div style="padding:12px 20px;font-size:.78rem;color:var(--dark)">
+      Showing ${d.questions.length} of ${d.total} · Page ${d.page}/${d.pages}
+      ${d.page < d.pages ? `<button class="btn btn-outline btn-sm" style="margin-left:10px" onclick="loadQuestions(${d.page+1})">Next →</button>`:``}
+    </div>
+  `;
+}
+
+async function deactivateQ(id) {
+  if (!confirm('Disable this question?')) return;
+  await fetch(`/admin/8qt/questions/${id}`, { method: 'DELETE' });
+  loadQuestions();
+}
+
+// ── CSV Import ─────────────────────────────────────────────────
+let selectedFile = null;
+
+function handleFileSelect(input) {
+  selectedFile = input.files[0];
+  if (selectedFile) {
+    document.getElementById('uploadZone').innerHTML = `<p>✓ ${selectedFile.name}</p><p class="hint">${(selectedFile.size/1024).toFixed(1)} KB</p>`;
+    document.getElementById('importBtn').disabled = false;
+  }
+}
+
+async function doImport() {
+  if (!selectedFile) return;
+  const btn = document.getElementById('importBtn');
+  btn.textContent = 'Importing…'; btn.disabled = true;
+
+  const fd = new FormData();
+  fd.append('file', selectedFile);
+
+  const r = await fetch('/admin/8qt/questions/import', { method: 'POST', body: fd });
+  const d = await r.json();
+
+  const status = document.getElementById('importStatus');
+  if (d.ok) {
+    status.innerHTML = `<span style="color:var(--green)">✓ Imported ${d.inserted} questions.</span>
+      ${d.errors.length ? `<span style="color:var(--red)"> ${d.errors.length} errors.</span>` : ''}`;
+  } else {
+    status.innerHTML = `<span style="color:var(--red)">Error: ${d.error}</span>`;
+  }
+  btn.textContent = 'Import Questions'; btn.disabled = false;
+  loadQuestions();
+}
+
+// ── Load archetypes ────────────────────────────────────────────
+async function loadArchetypes() {
+  const r = await fetch('/admin/8qt/archetypes');
+  const d = await r.json();
+  const c = document.getElementById('archetypesContainer');
+  if (!d.archetypes?.length) {
+    c.innerHTML = '<p style="padding:20px;color:var(--dark)">No archetypes configured yet.</p>';
+    return;
+  }
+  c.innerHTML = `<table>
+    <thead><tr><th>Priority</th><th>Name</th><th>Tagline</th><th>Conditions</th><th>Status</th><th>Actions</th></tr></thead>
+    <tbody>${d.archetypes.map(a => `
+      <tr>
+        <td>${a.priority}</td>
+        <td><strong>${a.name}</strong>${a.isDefault ? ' <span class="badge badge-gold">default</span>':''}</td>
+        <td style="font-size:.78rem;color:var(--dark);max-width:180px">${a.tagline || '-'}</td>
+        <td style="font-size:.72rem;color:var(--dark)">${(a.conditions||[]).map(c=>`${c.quotient} ${c.operator} ${c.value}`).join(', ')||'-'}</td>
+        <td><span class="badge ${a.active?'badge-green':'badge-gray'}">${a.active?'Active':'Off'}</span></td>
+        <td><button class="btn btn-danger btn-sm" onclick="toggleArchetype('${a._id}',${!a.active})">${a.active?'Disable':'Enable'}</button></td>
+      </tr>`).join('')}
+    </tbody>
+  </table>`;
+}
+
+async function toggleArchetype(id, active) {
+  await fetch(`/admin/8qt/archetypes/${id}`, {
+    method: 'PATCH', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ active })
+  });
+  loadArchetypes();
+}
+
+// ── Save template ──────────────────────────────────────────────
+async function saveTemplate(id) {
+  const data = {
+    signatoryName: document.getElementById('tSigName').value,
+    signatoryTitle: document.getElementById('tSigTitle').value,
+    standardPriceCents: +document.getElementById('tStdPrice').value,
+    premiumPriceCents: +document.getElementById('tPremPrice').value,
+    retakeDays: +document.getElementById('tRetakeDays').value,
+    currency: document.getElementById('tCurrency').value,
+    showAllScores: document.getElementById('tShowAll').checked
+  };
+  const r = await fetch(`/admin/8qt/template/${id}`, {
+    method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data)
+  });
+  const d = await r.json();
+  alert(d.ok ? 'Template saved.' : (d.error || 'Error'));
+}
+
+async function createTemplate() {
+  const r = await fetch('/admin/8qt/template', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({}) });
+  const d = await r.json();
+  if (d.ok) location.reload();
+}
+
+// ── Load attempts ──────────────────────────────────────────────
+async function loadAttempts(page = 1) {
+  const s = document.getElementById('attStatusFilter')?.value || '';
+  const c = document.getElementById('attCertFilter')?.value || '';
+  const params = new URLSearchParams({ page });
+  if (s) params.set('status', s);
+  if (c) params.set('certStatus', c);
+
+  const r = await fetch(`/admin/8qt/attempts?${params}`);
+  const d = await r.json();
+  const container = document.getElementById('attemptsContainer');
+
+  if (!d.attempts?.length) {
+    container.innerHTML = '<p style="padding:20px;color:var(--dark)">No attempts found.</p>';
+    return;
+  }
+
+  container.innerHTML = `<table>
+    <thead><tr><th>Participant</th><th>Archetype</th><th>Status</th><th>Cert</th><th>Date</th></tr></thead>
+    <tbody>${d.attempts.map(a=>`
+      <tr>
+        <td style="font-size:.8rem">${a.userId?.email||a.participantName||a.participantCode||'Anonymous'}</td>
+        <td style="font-size:.8rem">${a.archetypeName||'-'}</td>
+        <td><span class="badge ${a.status==='finished'?'badge-green':'badge-gray'}">${a.status}</span></td>
+        <td><span class="badge ${a.certificateStatus==='issued'?'badge-gold':a.certificateStatus==='paid'?'badge-blue':'badge-gray'}">${a.certificateStatus}</span></td>
+        <td style="font-size:.75rem;color:var(--dark)">${new Date(a.createdAt).toLocaleDateString()}</td>
+      </tr>`).join('')}
+    </tbody>
+  </table>
+  <div style="padding:12px 20px;font-size:.78rem;color:var(--dark)">
+    Showing ${d.attempts.length} of ${d.total} · Page ${d.page}/${d.pages}
+    ${d.page < d.pages ? `<button class="btn btn-outline btn-sm" style="margin-left:10px" onclick="loadAttempts(${d.page+1})">Next →</button>`:''}
+  </div>`;
+}
+</script>
+</body>
+</html>
