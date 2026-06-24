@@ -8,74 +8,8 @@ import EightQTCertTemplate from "../models/eightQTCertTemplate.js";
 import EightQTArchetype from "../models/eightQTArchetype.js";
 import User from "../models/user.js";
 import nodemailer from "nodemailer";
-import puppeteer from "puppeteer";
-import path from "path";
-import fs from "fs";
-import crypto from "crypto";
 // ── Use the existing CRIPFCnt green certificate template ──────
-import { buildCertificateHtml } from "../utils/certificateTemplate.js";
-
-const OUTPUT_DIR = path.join(process.cwd(), "public", "certificates", "8qt");
-
-/**
- * Generate an 8QT certificate PDF using the existing green CRIPFCnt template.
- */
-async function generate8QTCertPdf({ attempt, verifyCode }) {
-  if (!fs.existsSync(OUTPUT_DIR)) {
-    fs.mkdirSync(OUTPUT_DIR, { recursive: true });
-  }
-
-  const participantName = attempt.certificateName ||
-    attempt.profile?.firstName ||
-    attempt.participantName ||
-    "Participant";
-
-  // Find the dominant score to show as "score"
-  const scores = attempt.quotientScores || [];
-  const dominant = scores.find(s => s.code === attempt.dominantQuotient);
-  const dominantScore = dominant ? dominant.score : null;
-
-  // Build a quiz title from archetype name
-  const quizTitle = attempt.archetypeName || "8 Quotients Assessment";
-  const moduleName = attempt.dominantQuotient
-    ? `${attempt.dominantQuotient} — Dominant Quotient`
-    : "Placement Intelligence";
-
-  // Build the HTML using the existing CRIPFCnt template
-  const html = buildCertificateHtml({
-    name: participantName,
-    orgName: "CRIPFCnt",
-    moduleName,
-    quizTitle,
-    score: dominantScore,
-    percentage: dominantScore,
-    date: new Date()
-  });
-
-  const browser = await puppeteer.launch({
-    headless: "new",
-    args: ["--no-sandbox", "--disable-setuid-sandbox"]
-  });
-
-  const page = await browser.newPage();
-  await page.setViewport({ width: 1122, height: 794 });
-  await page.setContent(html, { waitUntil: "networkidle0" });
-
-  const filename = `8qt-cert-${verifyCode}.pdf`;
-  const outputPath = path.join(OUTPUT_DIR, filename);
-
-  await page.pdf({
-    path: outputPath,
-    format: "A4",
-    landscape: true,
-    printBackground: true,
-    margin: { top: "0", bottom: "0", left: "0", right: "0" }
-  });
-
-  await browser.close();
-
-  return `/certificates/8qt/${filename}`;
-}
+import { generateEightQTCertPdf } from "../services/eightQTCertPdf.js";
 
 /**
  * Main handler — called from stripe_webhook.js when meta.type === "8qt_certificate"
@@ -128,12 +62,16 @@ export async function handle8QTCertificate(session) {
 
   // ── Generate PDF using green CRIPFCnt template ─────────────
   try {
-    const verifyCode = attempt.certificateVerifyCode ||
-      crypto.randomBytes(6).toString("hex").toUpperCase();
+    const template = await EightQTCertTemplate.findOne({ active: true }).lean();
+    let archetype = null;
+    if (attempt.archetypeId) {
+      archetype = await EightQTArchetype.findById(attempt.archetypeId).lean();
+    }
 
-    const url = await generate8QTCertPdf({
+    const { url, verifyCode } = await generateEightQTCertPdf({
       attempt: attempt.toObject(),
-      verifyCode
+      template,
+      archetype
     });
 
     attempt.certificatePdfUrl = url;
