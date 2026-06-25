@@ -247,42 +247,37 @@ async function _sendNewRequestToPhone({
       }
       return;
     } catch (err) {
-      console.warn(`[BUY REQ TPL v2] failed for ${normalizedPhone}: ${err.message}. Falling back to sendButtons.`);
-      // ── v2 template failed: send interactive sendButtons immediately ────────
-      // DO NOT fall through to the plain-text v1 template (supplier_new_buyer_request)
-      // because it has NO buttons and succeeds silently, leaving the seller with
-      // plain text and no way to tap View & Quote. sendButtons is the correct
-      // fallback - it delivers within an active session and shows tappable actions.
-      try {
-        const itemDisplay = fullItemLines || itemSummary;
-        await sendButtons(normalizedPhone, {
-          text:
-            `🔔 *New Buyer Request* (${ref})\n\n` +
-            `📍 ${locationText}\n${deliveryLine}\n\n` +
-            `📦 *Items needed:*\n${itemDisplay}\n\n` +
-            `─────────────────\n` +
-            `Tap *View & Quote* to enter your prices.`,
-          buttons: [
-            { id: `req_offer_${requestId}`,   title: "⚡ View & Quote"  },
-            { id: `req_unavail_${requestId}`, title: "❌ Not Available" }
-          ]
-        });
-        console.log(`[BUY REQ TPL] sendButtons fallback OK → ${normalizedPhone} (${ref})`);
-      } catch (fallbackErr) {
-        console.warn(`[BUY REQ TPL] sendButtons fallback failed for ${normalizedPhone}: ${fallbackErr.message}. Trying v1 plain text as last resort.`);
-        // Last resort only: v1 plain text template (no buttons, but at least notifies)
-        try {
-          await _sendTemplate(normalizedPhone, "supplier_new_buyer_request", [
-            ref,
-            locationText,
-            `${_itemCount} item${_itemCount === 1 ? "" : "s"} requested`,
-            deliveryLine
-          ]);
-          console.log(`[BUY REQ TPL v1 last resort] supplier_new_buyer_request → ${normalizedPhone} (${ref})`);
-        } catch (v1Err) {
-          console.error(`[BUY REQ TPL] all fallbacks failed for ${normalizedPhone}: ${v1Err.message}`);
-        }
-      }
+      console.warn(`[BUY REQ TPL v2] failed for ${normalizedPhone}: ${err.message}. Falling back to v1.`);
+    }
+  }
+
+  // ── v1 fallback: plain text template ─────────────────────────────────────
+  try {
+    await _sendTemplate(normalizedPhone, "supplier_new_buyer_request", [
+      ref,
+      locationText,
+      `${_itemCount} item${_itemCount === 1 ? "" : "s"} requested`,
+      deliveryLine
+    ]);
+    console.log(`[BUY REQ TPL v1] supplier_new_buyer_request → ${normalizedPhone} (${ref})`);
+  } catch (err) {
+    console.warn(`[BUY REQ TPL v1] failed for ${normalizedPhone}: ${err.message}. Falling back to sendButtons.`);
+    try {
+      const itemDisplay = fullItemLines || itemSummary;
+      await sendButtons(normalizedPhone, {
+        text:
+          `🔥 *New Buyer Request* (${ref})\n\n` +
+          `📍 ${locationText}\n${deliveryLine}\n\n` +
+          `📦 *Items needed:*\n${itemDisplay}\n\n` +
+          `─────────────────\n` +
+          `Tap *View & Quote* to enter your prices.`,
+        buttons: [
+          { id: `req_offer_${requestId}`,   title: "💬 View & Quote"  },
+          { id: `req_unavail_${requestId}`, title: "❌ Not Available" }
+        ]
+      });
+    } catch (fallbackErr) {
+      console.error(`[BUY REQ TPL] all fallbacks failed for ${normalizedPhone}: ${fallbackErr.message}`);
     }
   }
 }
