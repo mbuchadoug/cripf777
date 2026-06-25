@@ -5,6 +5,11 @@
 //   - Archetype management
 //   - Certificate template config
 //   - Analytics dashboard
+//   - Attempt explorer: full quiz review, right/wrong per answer
+//   - Certificate preview (no payment required)
+//   - Manual certificate issuance
+//   - Cert pipeline (high-scorers without certs)
+//   - Search + CSV export
 
 import { Router } from "express";
 import multer from "multer";
@@ -17,6 +22,7 @@ import EightQTQuestion from "../models/eightQTQuestion.js";
 import EightQTArchetype from "../models/eightQTArchetype.js";
 import EightQTCertTemplate from "../models/eightQTCertTemplate.js";
 import EightQTAttempt from "../models/eightQTAttempt.js";
+import EightQTCertPurchase from "../models/eightQTCertPurchase.js";
 
 const router = Router();
 const upload = multer({ dest: "uploads/", limits: { fileSize: 5 * 1024 * 1024 } });
@@ -53,8 +59,8 @@ router.get("/", async (req, res) => {
     const finished = await EightQTAttempt.countDocuments({ status: "finished" });
     const certIssued = await EightQTAttempt.countDocuments({ certificateStatus: "issued" });
     const certPaid = await EightQTAttempt.countDocuments({ certificateStatus: "paid" });
+    const anonymous = await EightQTAttempt.countDocuments({ userId: null });
 
-    // Average per quotient
     const avgPipeline = [
       { $match: { status: "finished" } },
       { $unwind: "$quotientScores" },
@@ -68,7 +74,6 @@ router.get("/", async (req, res) => {
     ];
     const quotientAverages = await EightQTAttempt.aggregate(avgPipeline);
 
-    // Top archetypes
     const archetypeAgg = await EightQTAttempt.aggregate([
       { $match: { status: "finished", archetypeName: { $ne: null } } },
       { $group: { _id: "$archetypeName", count: { $sum: 1 } } },
@@ -76,7 +81,6 @@ router.get("/", async (req, res) => {
       { $limit: 5 }
     ]);
 
-    // Cert conversion
     const certRequested = await EightQTAttempt.countDocuments({ certificateStatus: { $ne: "none" } });
 
     res.render("8qt/admin/panel", {
@@ -88,6 +92,7 @@ router.get("/", async (req, res) => {
         certIssued,
         certPaid,
         certRequested,
+        anonymous,
         conversionRate: finished > 0
           ? Math.round((certRequested / finished) * 100) : 0
       },
@@ -104,13 +109,11 @@ router.get("/", async (req, res) => {
 // QUOTIENT CONFIG
 // ══════════════════════════════════════════════════════════════
 
-// GET /admin/8qt/config - list
 router.get("/config", async (req, res) => {
   const configs = await EightQTConfig.find().sort({ displayOrder: 1 }).lean();
   res.json({ configs });
 });
 
-// POST /admin/8qt/config/seed - seed defaults if none exist
 router.post("/config/seed", writeOnly, async (req, res) => {
   const count = await EightQTConfig.countDocuments();
   if (count > 0) return res.json({ message: "Already seeded", count });
@@ -130,7 +133,6 @@ router.post("/config/seed", writeOnly, async (req, res) => {
   res.json({ ok: true, message: "Seeded 8 quotients", count: 8 });
 });
 
-// PATCH /admin/8qt/config/:code - update one quotient
 router.patch("/config/:code", writeOnly, async (req, res) => {
   try {
     const allowed = [
@@ -157,7 +159,6 @@ router.patch("/config/:code", writeOnly, async (req, res) => {
 // QUESTION BANK
 // ══════════════════════════════════════════════════════════════
 
-// GET /admin/8qt/questions?quotient=RQ&page=1
 router.get("/questions", async (req, res) => {
   try {
     const filter = {};
@@ -241,7 +242,6 @@ router.post("/questions/import", writeOnly, upload.single("file"), async (req, r
       inserted = docs.length;
     }
 
-    // Cleanup temp file
     fs.unlink(req.file.path, () => {});
 
     res.json({
@@ -257,7 +257,6 @@ router.post("/questions/import", writeOnly, upload.single("file"), async (req, r
   }
 });
 
-// POST /admin/8qt/questions - create single question
 router.post("/questions", writeOnly, async (req, res) => {
   try {
     const q = await EightQTQuestion.create({
@@ -270,7 +269,6 @@ router.post("/questions", writeOnly, async (req, res) => {
   }
 });
 
-// PATCH /admin/8qt/questions/:id
 router.patch("/questions/:id", writeOnly, async (req, res) => {
   try {
     const q = await EightQTQuestion.findByIdAndUpdate(
@@ -285,7 +283,6 @@ router.patch("/questions/:id", writeOnly, async (req, res) => {
   }
 });
 
-// DELETE /admin/8qt/questions/:id - soft delete (sets active: false)
 router.delete("/questions/:id", writeOnly, async (req, res) => {
   try {
     await EightQTQuestion.findByIdAndUpdate(req.params.id, { $set: { active: false } });
@@ -346,7 +343,6 @@ router.get("/template", async (req, res) => {
 
 router.post("/template", writeOnly, async (req, res) => {
   try {
-    // Deactivate existing active templates
     await EightQTCertTemplate.updateMany({}, { $set: { active: false } });
     const t = await EightQTCertTemplate.create({ ...req.body, active: true });
     res.json({ ok: true, template: t });
@@ -388,7 +384,6 @@ router.get("/analytics", async (req, res) => {
       EightQTAttempt.countDocuments({ certificateStatus: "issued" })
     ]);
 
-    // Avg per quotient
     const quotientAverages = await EightQTAttempt.aggregate([
       { $match: { status: "finished" } },
       { $unwind: "$quotientScores" },
@@ -402,21 +397,18 @@ router.get("/analytics", async (req, res) => {
       { $sort: { avg: 1 } }
     ]);
 
-    // Archetype distribution
     const archetypeDist = await EightQTAttempt.aggregate([
       { $match: { status: "finished" } },
       { $group: { _id: "$archetypeName", count: { $sum: 1 } } },
       { $sort: { count: -1 } }
     ]);
 
-    // Sector distribution
     const sectorDist = await EightQTAttempt.aggregate([
       { $match: { "profile.sector": { $ne: "" } } },
       { $group: { _id: "$profile.sector", count: { $sum: 1 } } },
       { $sort: { count: -1 } }
     ]);
 
-    // Country distribution
     const countryDist = await EightQTAttempt.aggregate([
       { $match: { "profile.country": { $ne: "" } } },
       { $group: { _id: "$profile.country", count: { $sum: 1 } } },
@@ -424,7 +416,6 @@ router.get("/analytics", async (req, res) => {
       { $limit: 10 }
     ]);
 
-    // Daily attempts last 30 days
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     const dailyAttempts = await EightQTAttempt.aggregate([
@@ -458,7 +449,7 @@ router.get("/analytics", async (req, res) => {
 });
 
 // ══════════════════════════════════════════════════════════════
-// ATTEMPT MANAGEMENT
+// ATTEMPT LIST
 // GET /admin/8qt/attempts
 // ══════════════════════════════════════════════════════════════
 router.get("/attempts", async (req, res) => {
@@ -475,7 +466,7 @@ router.get("/attempts", async (req, res) => {
       .skip((page - 1) * limit)
       .limit(limit)
       .populate("userId", "email displayName")
-      .select("userId participantName participantCode archetypeName status certificateStatus certificatePdfUrl certificateVerifyCode certificateName certificateEmail dominantQuotient quotientScores createdAt finishedAt")
+      .select("userId participantName participantCode archetypeName status certificateStatus certificatePdfUrl certificateVerifyCode certificateName certificateEmail dominantQuotient quotientScores profile createdAt finishedAt adminIssuedBy adminIssueNote")
       .lean();
 
     res.json({ attempts, total, page, pages: Math.ceil(total / limit) });
@@ -484,8 +475,336 @@ router.get("/attempts", async (req, res) => {
   }
 });
 
-// ── Admin: manually regenerate a certificate (for "paid" but not yet "issued")
+// ══════════════════════════════════════════════════════════════
+// ATTEMPT SEARCH
+// GET /admin/8qt/attempts/search?q=...&status=...&certStatus=...
+// ══════════════════════════════════════════════════════════════
+router.get("/attempts/search", async (req, res) => {
+  try {
+    const q = req.query.q?.trim() || "";
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const limit = 25;
+    const filter = {};
+
+    if (req.query.status)     filter.status = req.query.status;
+    if (req.query.certStatus) filter.certificateStatus = req.query.certStatus;
+    if (req.query.archetype)  filter.archetypeName = new RegExp(req.query.archetype, "i");
+
+    if (q) {
+      filter.$or = [
+        { participantName:   new RegExp(q, "i") },
+        { participantCode:   new RegExp(q, "i") },
+        { certificateName:   new RegExp(q, "i") },
+        { certificateEmail:  new RegExp(q, "i") },
+        { archetypeName:     new RegExp(q, "i") },
+        { "profile.country": new RegExp(q, "i") },
+        { "profile.sector":  new RegExp(q, "i") }
+      ];
+    }
+
+    const total = await EightQTAttempt.countDocuments(filter);
+    const attempts = await EightQTAttempt.find(filter)
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .populate("userId", "email displayName")
+      .select("userId participantName participantCode archetypeName status certificateStatus certificatePdfUrl certificateVerifyCode certificateName certificateEmail dominantQuotient quotientScores profile createdAt finishedAt")
+      .lean();
+
+    res.json({ attempts, total, page, pages: Math.ceil(total / limit) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════
+// ATTEMPT DETAIL — full quiz review with right/wrong per answer
+// GET /admin/8qt/attempts/:id
+// ══════════════════════════════════════════════════════════════
+router.get("/attempts/:id", async (req, res) => {
+  try {
+    const attempt = await EightQTAttempt.findById(req.params.id)
+      .populate("userId", "email displayName firstName lastName")
+      .populate("archetypeId", "name tagline description reflectionPrompts")
+      .lean();
+
+    if (!attempt) return res.status(404).json({ error: "Attempt not found" });
+
+    // Hydrate questions for all answered question IDs
+    const questionIds = attempt.answers.map(a => a.questionId);
+    const questions = await EightQTQuestion.find({ _id: { $in: questionIds } }).lean();
+    const questionMap = {};
+    for (const q of questions) questionMap[String(q._id)] = q;
+
+    // Map answers by question ID for O(1) lookup
+    const answerMap = {};
+    for (const a of attempt.answers) {
+      answerMap[String(a.questionId)] = a;
+    }
+
+    const reviewRows = [];
+
+    for (let i = 0; i < attempt.questionIds.length; i++) {
+      const qid    = String(attempt.questionIds[i]);
+      const q      = questionMap[qid];
+      if (!q) continue;
+
+      const answer   = answerMap[qid] || null;
+      const optOrder = attempt.optionsOrder?.[i] || q.options.map((_, idx) => idx);
+
+      // Best option = highest points for this question's primary quotient
+      const primaryQ = q.quotient;
+      let bestOrigIdx = 0;
+      let bestPts     = -1;
+      for (let oi = 0; oi < q.options.length; oi++) {
+        const pts = Number(q.options[oi].scores?.[primaryQ] || 0);
+        if (pts > bestPts) { bestPts = pts; bestOrigIdx = oi; }
+      }
+
+      // Build display options in the order participant saw them
+      const displayOptions = optOrder.map((origIdx, displayPos) => {
+        const opt      = q.options[origIdx];
+        const totalPts = Object.values(opt.scores || {}).reduce((s, v) => s + Number(v), 0);
+        return {
+          displayPos,
+          origIdx,
+          text:      opt.text,
+          scores:    opt.scores,
+          totalPoints: totalPts,
+          isBest:    origIdx === bestOrigIdx,
+          wasChosen: answer ? answer.selectedIndex === origIdx : false
+        };
+      });
+
+      const earnedPts = answer
+        ? Object.values(answer.scores || {}).reduce((s, v) => s + Number(v), 0)
+        : 0;
+
+      // Correct = chose the highest-scoring option for the primary quotient
+      const isCorrect = answer ? answer.selectedIndex === bestOrigIdx : null;
+
+      reviewRows.push({
+        questionNumber: i + 1,
+        questionId:  qid,
+        quotient:    q.quotient,
+        text:        q.text,
+        isBlended:   q.isBlended,
+        options:     displayOptions,
+        skipped:     !answer,
+        isCorrect,
+        earnedPts,
+        bestPts,
+        chosenIndex: answer?.selectedIndex ?? null,
+        chosenText:  answer != null ? (q.options[answer.selectedIndex]?.text ?? "—") : "Not answered"
+      });
+    }
+
+    const answered  = reviewRows.filter(r => !r.skipped).length;
+    const correct   = reviewRows.filter(r => r.isCorrect === true).length;
+    const incorrect = reviewRows.filter(r => r.isCorrect === false).length;
+    const accuracy  = answered > 0 ? Math.round((correct / answered) * 100) : 0;
+
+    // Per-quotient accuracy breakdown
+    const quotientBreakdown = {};
+    for (const row of reviewRows) {
+      if (!quotientBreakdown[row.quotient]) {
+        quotientBreakdown[row.quotient] = { total: 0, correct: 0, skipped: 0 };
+      }
+      const qb = quotientBreakdown[row.quotient];
+      qb.total++;
+      if (row.skipped)        qb.skipped++;
+      else if (row.isCorrect) qb.correct++;
+    }
+
+    res.json({
+      attempt,
+      reviewRows,
+      summary:   { answered, correct, incorrect, accuracy },
+      quotientBreakdown
+    });
+  } catch (err) {
+    console.error("[admin attempt detail]", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════
+// ADMIN CERTIFICATE PREVIEW
+// Generates a PDF for any finished attempt without changing
+// the participant's certificateStatus or payment flow.
+// PDF goes to /certificates/8qt/preview/ subdirectory.
+//
+// GET /admin/8qt/attempts/:id/preview-cert
+// ══════════════════════════════════════════════════════════════
+router.get("/attempts/:id/preview-cert", async (req, res) => {
+  try {
+    const attempt = await EightQTAttempt.findById(req.params.id);
+    if (!attempt) return res.status(404).json({ error: "Attempt not found" });
+    if (attempt.status !== "finished") {
+      return res.status(400).json({ error: "Attempt not yet finished" });
+    }
+
+    // If already officially issued, just return that PDF
+    if (attempt.certificatePdfUrl && attempt.certificateStatus === "issued") {
+      return res.json({
+        ok: true,
+        url: attempt.certificatePdfUrl,
+        verifyCode: attempt.certificateVerifyCode,
+        note: "returning existing issued certificate"
+      });
+    }
+
+    const { buildCertificateHtml } = await import("../utils/certificateTemplate.js");
+    const puppeteer = (await import("puppeteer")).default;
+    const pathMod   = (await import("path")).default;
+    const fsMod     = (await import("fs")).default;
+
+    const name = attempt.certificateName?.trim() ||
+                 attempt.profile?.firstName?.trim() ||
+                 attempt.participantName ||
+                 "Participant";
+
+    const scores = attempt.quotientScores || [];
+    const dom    = scores.find(s => s.code === attempt.dominantQuotient);
+
+    const html = buildCertificateHtml({
+      name,
+      orgName:    attempt.certificateOrg || "CRIPFCnt",
+      moduleName: attempt.dominantQuotient
+        ? `${attempt.dominantQuotient} — Dominant Quotient`
+        : "Placement Intelligence",
+      quizTitle:  attempt.archetypeName || "8 Quotients Assessment",
+      score:      dom?.score ?? null,
+      percentage: dom?.score ?? null,
+      date:       new Date()
+    });
+
+    const outDir  = pathMod.join(process.cwd(), "public", "certificates", "8qt", "preview");
+    if (!fsMod.existsSync(outDir)) fsMod.mkdirSync(outDir, { recursive: true });
+
+    // Stable filename per attempt — repeated hits reuse same file
+    const filename   = `preview-${attempt._id}.pdf`;
+    const outputPath = pathMod.join(outDir, filename);
+
+    const browser = await puppeteer.launch({
+      headless: "new",
+      args: ["--no-sandbox", "--disable-setuid-sandbox"]
+    });
+    const page = await browser.newPage();
+    await page.emulateMediaType("print");
+    await page.setContent(html, { waitUntil: "networkidle0" });
+    await page.pdf({
+      path: outputPath,
+      format: "A4",
+      landscape: true,
+      printBackground: true,
+      margin: { top: "0", bottom: "0", left: "0", right: "0" }
+    });
+    await browser.close();
+
+    const url = `/certificates/8qt/preview/${filename}`;
+    console.log(`[admin] 👁 Preview cert generated for attempt ${attempt._id}: ${url}`);
+    res.json({ ok: true, url, note: "admin preview — participant payment status unchanged" });
+  } catch (err) {
+    console.error("[admin preview-cert]", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════
+// MANUAL CERTIFICATE ISSUANCE
+// Issues a certificate for any finished attempt without payment.
+// Use for: complimentary certs, researchers, VIPs, corrections.
+// Writes adminIssuedBy + adminIssueNote for audit trail.
+//
+// POST /admin/8qt/attempts/:id/issue-cert
+// Body: { fullName, email, orgName?, notes? }
+// ══════════════════════════════════════════════════════════════
+router.post("/attempts/:id/issue-cert", writeOnly, async (req, res) => {
+  try {
+    const { fullName, email, orgName, notes } = req.body;
+    if (!fullName || !email) {
+      return res.status(400).json({ error: "fullName and email are required" });
+    }
+
+    const attempt = await EightQTAttempt.findById(req.params.id);
+    if (!attempt) return res.status(404).json({ error: "Attempt not found" });
+    if (attempt.status !== "finished") {
+      return res.status(400).json({ error: "Cannot issue certificate for unfinished attempt" });
+    }
+
+    attempt.certificateName  = fullName.trim();
+    attempt.certificateEmail = email.trim().toLowerCase();
+    attempt.certificateOrg   = orgName?.trim() || "";
+
+    const { buildCertificateHtml } = await import("../utils/certificateTemplate.js");
+    const puppeteer  = (await import("puppeteer")).default;
+    const pathMod    = (await import("path")).default;
+    const fsMod      = (await import("fs")).default;
+    const cryptoMod  = (await import("crypto")).default;
+
+    const verifyCode = attempt.certificateVerifyCode ||
+      cryptoMod.randomBytes(6).toString("hex").toUpperCase();
+
+    const scores = attempt.quotientScores || [];
+    const dom    = scores.find(s => s.code === attempt.dominantQuotient);
+
+    const html = buildCertificateHtml({
+      name:       fullName.trim(),
+      orgName:    orgName?.trim() || "CRIPFCnt",
+      moduleName: attempt.dominantQuotient
+        ? `${attempt.dominantQuotient} — Dominant Quotient`
+        : "Placement Intelligence",
+      quizTitle:  attempt.archetypeName || "8 Quotients Assessment",
+      score:      dom?.score ?? null,
+      percentage: dom?.score ?? null,
+      date:       new Date()
+    });
+
+    const outDir     = pathMod.join(process.cwd(), "public", "certificates", "8qt");
+    if (!fsMod.existsSync(outDir)) fsMod.mkdirSync(outDir, { recursive: true });
+    const filename   = `8qt-cert-${verifyCode}.pdf`;
+    const outputPath = pathMod.join(outDir, filename);
+
+    const browser = await puppeteer.launch({
+      headless: "new",
+      args: ["--no-sandbox", "--disable-setuid-sandbox"]
+    });
+    const page = await browser.newPage();
+    await page.emulateMediaType("print");
+    await page.setContent(html, { waitUntil: "networkidle0" });
+    await page.pdf({
+      path: outputPath,
+      format: "A4",
+      landscape: true,
+      printBackground: true,
+      margin: { top: "0", bottom: "0", left: "0", right: "0" }
+    });
+    await browser.close();
+
+    const url = `/certificates/8qt/${filename}`;
+
+    attempt.certificatePdfUrl     = url;
+    attempt.certificateVerifyCode = verifyCode;
+    attempt.certificateStatus     = "issued";
+    attempt.certificateIssuedAt   = new Date();
+    attempt.adminIssuedBy         = req.user._id;
+    attempt.adminIssueNote        = notes?.trim() || "Manually issued by admin";
+
+    await attempt.save();
+
+    console.log(`[admin] ✅ Manual cert issued for attempt ${attempt._id} → ${url} by ${req.user.email}`);
+    res.json({ ok: true, url, verifyCode, attemptId: attempt._id });
+  } catch (err) {
+    console.error("[admin issue-cert]", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════
+// ADMIN RE-GENERATE CERT (for paid/requested/issued attempts)
 // POST /admin/8qt/attempts/:id/regenerate-cert
+// ══════════════════════════════════════════════════════════════
 router.post("/attempts/:id/regenerate-cert", writeOnly, async (req, res) => {
   try {
     const attempt = await EightQTAttempt.findById(req.params.id);
@@ -494,60 +813,177 @@ router.post("/attempts/:id/regenerate-cert", writeOnly, async (req, res) => {
       return res.status(400).json({ error: "Attempt has not been paid for" });
     }
 
-    const template = await EightQTCertTemplate.findOne({ active: true }).lean();
-    let archetype = null;
-    if (attempt.archetypeId) {
-      archetype = await EightQTArchetype.findById(attempt.archetypeId).lean();
-    }
-
-    // Inline cert generation using existing green CRIPFCnt template
     const { buildCertificateHtml } = await import("../utils/certificateTemplate.js");
-    const puppeteer = (await import("puppeteer")).default;
-    const pathMod = (await import("path")).default;
-    const fsMod = (await import("fs")).default;
-    const cryptoMod = (await import("crypto")).default;
+    const puppeteer  = (await import("puppeteer")).default;
+    const pathMod    = (await import("path")).default;
+    const fsMod      = (await import("fs")).default;
+    const cryptoMod  = (await import("crypto")).default;
 
-    const verifyCode = attempt.certificateVerifyCode ||
+    const verifyCode      = attempt.certificateVerifyCode ||
       cryptoMod.randomBytes(6).toString("hex").toUpperCase();
-
     const participantName = attempt.certificateName || attempt.participantName || "Participant";
-    const scores = attempt.quotientScores || [];
-    const dom = scores.find(s => s.code === attempt.dominantQuotient);
-    const domScore = dom ? dom.score : null;
+    const scores          = attempt.quotientScores || [];
+    const dom             = scores.find(s => s.code === attempt.dominantQuotient);
+    const domScore        = dom ? dom.score : null;
 
     const html = buildCertificateHtml({
-      name: participantName,
-      orgName: "CRIPFCnt",
-      moduleName: attempt.dominantQuotient ? `${attempt.dominantQuotient} — Dominant Quotient` : "Placement Intelligence",
-      quizTitle: attempt.archetypeName || "8 Quotients Assessment",
-      score: domScore,
+      name:       participantName,
+      orgName:    "CRIPFCnt",
+      moduleName: attempt.dominantQuotient
+        ? `${attempt.dominantQuotient} — Dominant Quotient`
+        : "Placement Intelligence",
+      quizTitle:  attempt.archetypeName || "8 Quotients Assessment",
+      score:      domScore,
       percentage: domScore,
-      date: new Date()
+      date:       new Date()
     });
 
-    const outDir = pathMod.join(process.cwd(), "public", "certificates", "8qt");
+    const outDir     = pathMod.join(process.cwd(), "public", "certificates", "8qt");
     if (!fsMod.existsSync(outDir)) fsMod.mkdirSync(outDir, { recursive: true });
-    const filename = `8qt-cert-${verifyCode}.pdf`;
+    const filename   = `8qt-cert-${verifyCode}.pdf`;
     const outputPath = pathMod.join(outDir, filename);
 
-    const browser = await puppeteer.launch({ headless: "new", args: ["--no-sandbox", "--disable-setuid-sandbox"] });
+    const browser = await puppeteer.launch({
+      headless: "new",
+      args: ["--no-sandbox", "--disable-setuid-sandbox"]
+    });
     const page = await browser.newPage();
+    await page.emulateMediaType("print");
     await page.setContent(html, { waitUntil: "networkidle0" });
-    await page.pdf({ path: outputPath, format: "A4", landscape: true, printBackground: true, margin: { top: "0", bottom: "0", left: "0", right: "0" } });
+    await page.pdf({
+      path: outputPath,
+      format: "A4",
+      landscape: true,
+      printBackground: true,
+      margin: { top: "0", bottom: "0", left: "0", right: "0" }
+    });
     await browser.close();
 
     const url = `/certificates/8qt/${filename}`;
 
-    attempt.certificatePdfUrl = url;
+    attempt.certificatePdfUrl     = url;
     attempt.certificateVerifyCode = verifyCode;
-    attempt.certificateStatus = "issued";
-    attempt.certificateIssuedAt = new Date();
+    attempt.certificateStatus     = "issued";
+    attempt.certificateIssuedAt   = new Date();
     await attempt.save();
 
     console.log(`[admin] ✅ Certificate re-generated for attempt ${attempt._id}: ${url}`);
     res.json({ ok: true, url, verifyCode });
   } catch (err) {
     console.error("[admin] regenerate-cert error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════
+// CERT PIPELINE
+// Finished participants without certificates, sorted by avg score.
+// Use for targeted nudges or complimentary issuances.
+//
+// GET /admin/8qt/cert-pipeline?minScore=60&limit=50&certStatus=none
+// ══════════════════════════════════════════════════════════════
+router.get("/cert-pipeline", async (req, res) => {
+  try {
+    const minScore  = Number(req.query.minScore || 0);
+    const limit     = Math.min(Number(req.query.limit || 50), 200);
+    const certState = req.query.certStatus || "none";
+
+    const matchStage = { status: "finished" };
+    if (certState !== "all") matchStage.certificateStatus = certState;
+
+    const pipeline = [
+      { $match: matchStage },
+      { $addFields: {
+          overallScore: {
+            $cond: {
+              if:   { $gt: [{ $size: "$quotientScores" }, 0] },
+              then: { $avg: "$quotientScores.score" },
+              else: 0
+            }
+          }
+        }
+      },
+      ...(minScore > 0 ? [{ $match: { overallScore: { $gte: minScore } } }] : []),
+      { $sort: { overallScore: -1 } },
+      { $limit: limit },
+      { $project: {
+          participantName:   1,
+          participantCode:   1,
+          certificateName:   1,
+          certificateEmail:  1,
+          archetypeName:     1,
+          dominantQuotient:  1,
+          overallScore:      1,
+          quotientScores:    1,
+          certificateStatus: 1,
+          finishedAt:        1,
+          "profile.sector":  1,
+          "profile.country": 1
+        }
+      }
+    ];
+
+    const results = await EightQTAttempt.aggregate(pipeline);
+    res.json({ ok: true, count: results.length, results });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════
+// CSV EXPORT — all finished attempts
+// GET /admin/8qt/export/csv
+// ══════════════════════════════════════════════════════════════
+router.get("/export/csv", async (req, res) => {
+  try {
+    const filter = { status: "finished" };
+    if (req.query.certStatus) filter.certificateStatus = req.query.certStatus;
+
+    const attempts = await EightQTAttempt.find(filter)
+      .select("participantName participantCode certificateName certificateEmail certificateOrg archetypeName dominantQuotient developmentEdge quotientScores certificateStatus certificateIssuedAt finishedAt profile adminIssueNote")
+      .lean();
+
+    const quotientCodes = ["CsQ", "RQ", "IQ", "PQ", "FQ", "CvQ", "NQ", "TQ"];
+    const headers = [
+      "Participant Name", "Code", "Certificate Name", "Email", "Organisation",
+      "Archetype", "Dominant Q", "Development Edge", "Cert Status",
+      "Country", "Sector", "Finished At", "Cert Issued At", "Admin Note",
+      ...quotientCodes.flatMap(c => [`${c} Score`, `${c} Band`])
+    ];
+
+    const rows = attempts.map(a => {
+      const scoreMap = {};
+      for (const s of (a.quotientScores || [])) scoreMap[s.code] = s;
+      return [
+        a.participantName || "",
+        a.participantCode || "",
+        a.certificateName || "",
+        a.certificateEmail || "",
+        a.certificateOrg || "",
+        a.archetypeName || "",
+        a.dominantQuotient || "",
+        a.developmentEdge || "",
+        a.certificateStatus || "",
+        a.profile?.country || "",
+        a.profile?.sector || "",
+        a.finishedAt   ? new Date(a.finishedAt).toISOString().split("T")[0]        : "",
+        a.certificateIssuedAt ? new Date(a.certificateIssuedAt).toISOString().split("T")[0] : "",
+        a.adminIssueNote || "",
+        ...quotientCodes.flatMap(c => [
+          scoreMap[c]?.score ?? "",
+          scoreMap[c]?.band  ?? ""
+        ])
+      ];
+    });
+
+    const csv = [headers, ...rows]
+      .map(row => row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(","))
+      .join("\r\n");
+
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Disposition", `attachment; filename="8qt-attempts-${Date.now()}.csv"`);
+    res.send(csv);
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });

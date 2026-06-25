@@ -7,7 +7,7 @@
   <title>8QT Admin Panel - CRIPFCnt</title>
   <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    :root{--navy:#1E3A5F;--navy-dk:#0F1C2E;--gold:#C9A961;--white:#fff;--light:#F8F9FA;--border:#E9ECEF;--dark:#495057;--text:#212529;--green:#059669;--red:#dc2626;--blue:#2f6ef7}
+    :root{--navy:#1E3A5F;--navy-dk:#0F1C2E;--gold:#C9A961;--white:#fff;--light:#F8F9FA;--border:#E9ECEF;--dark:#495057;--text:#212529;--green:#059669;--red:#dc2626;--blue:#2f6ef7;--amber:#d97706}
     *{margin:0;padding:0;box-sizing:border-box}
     body{font-family:'Inter',sans-serif;background:var(--light);color:var(--text);font-size:14px}
 
@@ -30,76 +30,157 @@
     .page{max-width:1200px;margin:0 auto;padding:28px 24px}
 
     /* STAT CARDS */
-    .stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:16px;margin-bottom:28px}
-    .stat-card{background:var(--white);border-radius:10px;padding:20px;border:1px solid var(--border);text-align:center}
+    .stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin-bottom:28px}
+    .stat-card{background:var(--white);border-radius:10px;padding:18px 16px;border:1px solid var(--border);text-align:center}
     .stat-val{font-size:2rem;font-weight:700;color:var(--navy);line-height:1}
-    .stat-label{font-size:.72rem;font-weight:600;color:var(--dark);text-transform:uppercase;letter-spacing:1px;margin-top:6px}
+    .stat-label{font-size:.7rem;font-weight:600;color:var(--dark);text-transform:uppercase;letter-spacing:1px;margin-top:6px}
     .stat-card.gold{border-color:var(--gold);background:#fdf8ef}
     .stat-card.gold .stat-val{color:#b8943a}
+    .stat-card.green .stat-val{color:var(--green)}
+    .stat-card.blue .stat-val{color:var(--blue)}
 
     /* SECTION */
     .section{background:var(--white);border-radius:12px;border:1px solid var(--border);margin-bottom:20px;overflow:hidden}
-    .section-head{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
-    .section-title{font-weight:700;color:var(--navy);font-size:.9rem}
+    .section-head{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+    .section-title{font-weight:700;color:var(--navy);font-size:.88rem}
     .section-body{padding:20px}
 
-    /* QUOTIENT CONFIG TABLE */
+    /* TABLES */
     table{width:100%;border-collapse:collapse}
-    th{text-align:left;padding:8px 12px;font-size:.72rem;text-transform:uppercase;letter-spacing:1px;color:var(--dark);font-weight:600;border-bottom:2px solid var(--border)}
-    td{padding:10px 12px;border-bottom:1px solid var(--border);font-size:.85rem;vertical-align:middle}
+    th{text-align:left;padding:8px 12px;font-size:.7rem;text-transform:uppercase;letter-spacing:1px;color:var(--dark);font-weight:600;border-bottom:2px solid var(--border)}
+    td{padding:10px 12px;border-bottom:1px solid var(--border);font-size:.83rem;vertical-align:middle}
     tr:last-child td{border-bottom:none}
     tr:hover td{background:#fafafa}
 
-    .badge{display:inline-flex;align-items:center;padding:.2rem .6rem;border-radius:20px;font-size:.7rem;font-weight:600}
+    /* BADGES */
+    .badge{display:inline-flex;align-items:center;padding:.2rem .55rem;border-radius:20px;font-size:.68rem;font-weight:600;line-height:1.3}
     .badge-green{background:#ecfdf5;color:#065f46}
     .badge-gray{background:var(--light);color:var(--dark)}
     .badge-gold{background:#fdf8ef;color:#b8943a}
     .badge-blue{background:#eff6ff;color:var(--blue)}
+    .badge-red{background:#fef2f2;color:var(--red)}
+    .badge-amber{background:#fffbeb;color:#92400e}
 
     .color-dot{width:12px;height:12px;border-radius:50%;display:inline-block;margin-right:6px;vertical-align:middle}
 
     /* BUTTONS */
-    .btn{padding:.5rem .9rem;border-radius:6px;font-size:.8rem;font-weight:600;cursor:pointer;border:none;text-decoration:none;display:inline-flex;align-items:center;gap:4px;transition:all .15s}
+    .btn{padding:.5rem .9rem;border-radius:6px;font-size:.8rem;font-weight:600;cursor:pointer;border:none;text-decoration:none;display:inline-flex;align-items:center;gap:5px;transition:all .15s;font-family:'Inter',sans-serif}
     .btn-navy{background:var(--navy);color:var(--white)}
     .btn-navy:hover{background:var(--navy-dk)}
     .btn-gold{background:var(--gold);color:var(--navy-dk)}
+    .btn-gold:hover{background:#b8943a}
+    .btn-green{background:var(--green);color:var(--white)}
+    .btn-green:hover{background:#047857}
     .btn-outline{background:transparent;border:1.5px solid var(--border);color:var(--dark)}
     .btn-outline:hover{border-color:var(--navy);color:var(--navy)}
     .btn-danger{background:#fef2f2;color:var(--red);border:1px solid #fecaca}
-    .btn-sm{padding:.35rem .7rem;font-size:.75rem}
+    .btn-danger:hover{background:#fee2e2}
+    .btn-sm{padding:.32rem .65rem;font-size:.73rem}
 
     /* FORMS */
     .form-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
     .form-group{margin-bottom:14px}
     .form-label{display:block;font-size:.75rem;font-weight:600;color:var(--navy);margin-bottom:5px}
-    .form-input{width:100%;padding:.55rem .8rem;border:1.5px solid var(--border);border-radius:6px;font-family:'Inter',sans-serif;font-size:.85rem}
+    .form-input{width:100%;padding:.52rem .8rem;border:1.5px solid var(--border);border-radius:6px;font-family:'Inter',sans-serif;font-size:.85rem;color:var(--text)}
     .form-input:focus{outline:none;border-color:var(--navy)}
     select.form-input{background:var(--white)}
-    textarea.form-input{resize:vertical;min-height:80px}
+    textarea.form-input{resize:vertical;min-height:72px}
+
+    /* SEARCH BAR */
+    .filter-bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;align-items:center}
+    .filter-bar .form-input{flex:1;min-width:160px;height:34px;padding:.35rem .7rem}
+    .filter-bar select{width:auto;min-width:130px}
 
     /* QUOTIENT BAR */
-    .q-bar-wrap{display:flex;align-items:center;gap:8px}
+    .q-bar-wrap{display:flex;align-items:center;gap:10px}
     .q-bar{height:6px;border-radius:99px;flex:1;background:var(--border);overflow:hidden}
     .q-bar-fill{height:100%;border-radius:99px}
     .q-avg{font-size:.75rem;font-weight:600;color:var(--navy);width:30px;text-align:right;flex-shrink:0}
 
-    /* MODAL */
-    .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:500;display:none;align-items:center;justify-content:center}
+    /* MODALS */
+    .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:500;display:none;align-items:flex-start;justify-content:center;padding-top:60px;overflow-y:auto}
     .modal-overlay.open{display:flex}
-    .modal{background:var(--white);border-radius:14px;padding:32px;max-width:560px;width:90%;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.2)}
-    .modal-title{font-family:'Crimson Pro',serif;font-size:1.4rem;color:var(--navy);margin-bottom:20px}
-    .modal-close{position:absolute;top:12px;right:16px;background:none;border:none;font-size:1.2rem;cursor:pointer;color:var(--dark)}
+    .modal{background:var(--white);border-radius:14px;padding:30px;max-width:580px;width:94%;box-shadow:0 20px 60px rgba(0,0,0,.2);position:relative;margin-bottom:40px}
+    .modal-title{font-family:'Crimson Pro',serif;font-size:1.35rem;color:var(--navy);margin-bottom:18px}
+    .modal-close{position:absolute;top:14px;right:18px;background:none;border:none;font-size:1.3rem;cursor:pointer;color:var(--dark);line-height:1}
+
+    /* DRAWER (slide-in panel for quiz review) */
+    .drawer-overlay{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:400;display:none}
+    .drawer-overlay.open{display:block}
+    .drawer{position:fixed;top:0;right:0;width:520px;max-width:95vw;height:100vh;background:var(--white);border-left:1px solid var(--border);z-index:401;overflow-y:auto;display:none;flex-direction:column}
+    .drawer.open{display:flex}
+    .drawer-header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;background:var(--white);z-index:10}
+    .drawer-title{font-weight:700;color:var(--navy);font-size:.95rem}
+    .drawer-body{padding:20px;flex:1}
+
+    /* QUIZ REVIEW */
+    .review-meta{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px}
+    .review-stat{background:var(--light);border-radius:8px;padding:10px 14px;text-align:center}
+    .review-stat-val{font-size:1.5rem;font-weight:700;color:var(--navy)}
+    .review-stat-label{font-size:.68rem;text-transform:uppercase;letter-spacing:.8px;color:var(--dark);margin-top:2px}
+    .qb-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:16px}
+    .qb-cell{background:var(--light);border-radius:7px;padding:8px 6px;text-align:center}
+    .qb-code{font-size:.65rem;color:var(--dark);font-weight:600}
+    .qb-val{font-size:1.1rem;font-weight:700;color:var(--navy)}
+    .qb-band{font-size:.6rem;color:var(--dark);margin-top:1px}
+    .score-bar-wrap{display:flex;align-items:center;gap:8px;margin:4px 0}
+    .score-bar-bg{flex:1;height:5px;border-radius:3px;background:var(--border);overflow:hidden}
+    .score-bar-fill{height:100%;border-radius:3px;background:var(--navy)}
+
+    /* QUESTION REVIEW ROWS */
+    .q-review-row{padding:12px 0;border-bottom:1px solid var(--border)}
+    .q-review-row:last-child{border-bottom:none}
+    .q-review-head{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+    .q-num{font-size:.68rem;color:var(--dark);font-weight:600;background:var(--light);padding:2px 7px;border-radius:4px}
+    .q-qcode{font-size:.68rem;font-weight:700;padding:2px 7px;border-radius:4px}
+    .q-text{font-size:.82rem;font-weight:600;color:var(--text);margin-bottom:8px;line-height:1.45}
+    .opt-row{display:flex;align-items:flex-start;gap:8px;padding:5px 8px;border-radius:6px;margin-bottom:3px;font-size:.78rem;line-height:1.35;border:1px solid transparent}
+    .opt-chosen{border-color:#bfdbfe;background:#eff6ff}
+    .opt-best{border-color:#a7f3d0;background:#ecfdf5}
+    .opt-chosen-wrong{border-color:#fecaca;background:#fef2f2}
+    .opt-icon{font-size:.85rem;flex-shrink:0;margin-top:1px}
+    .opt-pts{font-size:.68rem;color:var(--dark);margin-left:auto;flex-shrink:0;padding-left:8px}
+    .q-result-correct{font-size:.72rem;font-weight:600;color:var(--green);margin-top:4px}
+    .q-result-wrong{font-size:.72rem;font-weight:600;color:var(--red);margin-top:4px}
+    .q-result-skip{font-size:.72rem;color:var(--dark);margin-top:4px}
+
+    /* CERT PIPELINE */
+    .pipeline-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)}
+    .pipeline-row:last-child{border-bottom:none}
+    .pipeline-score{font-size:1.4rem;font-weight:700;color:var(--navy);min-width:42px;text-align:center}
+    .pipeline-info{flex:1;min-width:0}
+    .pipeline-name{font-weight:600;font-size:.84rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .pipeline-meta{font-size:.72rem;color:var(--dark);margin-top:2px}
+    .pipeline-actions{display:flex;flex-direction:column;gap:4px;flex-shrink:0}
+
+    /* MANUAL CERT FORM */
+    .cert-issue-block{background:var(--light);border-radius:10px;padding:18px;margin-top:12px}
+    .cert-issue-title{font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--navy);margin-bottom:12px}
+    .success-toast{background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46;border-radius:8px;padding:10px 14px;font-size:.82rem;margin-top:12px;display:none}
+    .error-toast{background:#fef2f2;border:1px solid #fecaca;color:var(--red);border-radius:8px;padding:10px 14px;font-size:.82rem;margin-top:12px;display:none}
 
     /* FILE UPLOAD */
-    .upload-zone{border:2px dashed var(--border);border-radius:10px;padding:32px;text-align:center;cursor:pointer;transition:border-color .2s}
+    .upload-zone{border:2px dashed var(--border);border-radius:10px;padding:28px;text-align:center;cursor:pointer;transition:border-color .2s}
     .upload-zone:hover,.upload-zone.drag{border-color:var(--navy)}
     .upload-zone p{color:var(--dark);font-size:.85rem}
-    .upload-zone .hint{font-size:.75rem;color:var(--dark);opacity:.7;margin-top:6px}
+    .upload-zone .hint{font-size:.73rem;color:var(--dark);opacity:.7;margin-top:5px}
     #fileInput{display:none}
+
+    /* ATTEMPT TABLE */
+    .att-name{font-size:.8rem;font-weight:600;color:var(--navy)}
+    .att-sub{font-size:.7rem;color:var(--dark);margin-top:1px}
+    .att-code{font-size:.68rem;color:#aaa;font-family:monospace}
+    .score-pills{display:flex;flex-wrap:wrap;gap:2px}
+    .score-pill{font-size:.63rem;font-weight:700;padding:1px 5px;border-radius:3px;background:#eef2ff;color:var(--navy)}
+
+    /* PAGINATION */
+    .pager{padding:12px 20px;font-size:.77rem;color:var(--dark);border-top:1px solid var(--border);display:flex;align-items:center;gap:8px}
 
     @media(max-width:640px){
       .stat-grid{grid-template-columns:repeat(2,1fr)}
       .form-row{grid-template-columns:1fr}
+      .drawer{width:100vw}
+      .review-meta{grid-template-columns:repeat(3,1fr)}
     }
   </style>
 </head>
@@ -108,21 +189,23 @@
 <div class="topbar">
   <span class="topbar-brand">CRIPFCnt</span>
   <div class="topbar-sep"></div>
-  <span class="topbar-title">8 Quotients Test - Admin</span>
+  <span class="topbar-title">8 Quotients Test — Admin</span>
   <div class="topbar-sp"></div>
-  <a href="/admin/8qt/analytics" class="topbar-link">Analytics</a>
+  <a href="/admin/8qt/analytics" class="topbar-link">Analytics API</a>
   <div class="topbar-sep"></div>
   <a href="/" class="topbar-link">← Main Site</a>
 </div>
 
 <!-- TABS -->
 <div class="tabs">
-  <button class="tab active" onclick="showTab('overview', this)">Overview</button>
-  <button class="tab" onclick="showTab('quotients', this)">Quotient Config</button>
-  <button class="tab" onclick="showTab('questions', this)">Question Bank</button>
-  <button class="tab" onclick="showTab('archetypes', this)">Archetypes</button>
-  <button class="tab" onclick="showTab('template', this)">Certificate Template</button>
-  <button class="tab" onclick="showTab('attempts', this)">Attempts</button>
+  <button class="tab active"  onclick="showTab('overview',   this)">Overview</button>
+  <button class="tab"         onclick="showTab('quotients',  this)">Quotient Config</button>
+  <button class="tab"         onclick="showTab('questions',  this)">Question Bank</button>
+  <button class="tab"         onclick="showTab('archetypes', this)">Archetypes</button>
+  <button class="tab"         onclick="showTab('template',   this)">Cert Template</button>
+  <button class="tab"         onclick="showTab('attempts',   this)">Attempts</button>
+  <button class="tab"         onclick="showTab('pipeline',   this)">Cert Pipeline</button>
+  <button class="tab"         onclick="showTab('issue',      this)">Issue Cert</button>
 </div>
 
 <div class="page">
@@ -130,42 +213,68 @@
   <!-- ══════════ OVERVIEW ══════════ -->
   <div id="tab-overview">
     <div class="stat-grid">
-      <div class="stat-card"><div class="stat-val">{{stats.totalAttempts}}</div><div class="stat-label">Total Attempts</div></div>
-      <div class="stat-card"><div class="stat-val">{{stats.finished}}</div><div class="stat-label">Completed</div></div>
-      <div class="stat-card gold"><div class="stat-val">{{stats.certRequested}}</div><div class="stat-label">Cert Requests</div></div>
-      <div class="stat-card gold"><div class="stat-val">{{stats.certIssued}}</div><div class="stat-label">Certs Issued</div></div>
-      <div class="stat-card"><div class="stat-val">{{stats.conversionRate}}%</div><div class="stat-label">Cert Conversion</div></div>
+      <div class="stat-card">
+        <div class="stat-val">{{stats.totalAttempts}}</div>
+        <div class="stat-label">Total Attempts</div>
+      </div>
+      <div class="stat-card blue">
+        <div class="stat-val">{{stats.finished}}</div>
+        <div class="stat-label">Completed</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-val">{{stats.anonymous}}</div>
+        <div class="stat-label">Anonymous</div>
+      </div>
+      <div class="stat-card gold">
+        <div class="stat-val">{{stats.certRequested}}</div>
+        <div class="stat-label">Cert Requests</div>
+      </div>
+      <div class="stat-card gold">
+        <div class="stat-val">{{stats.certPaid}}</div>
+        <div class="stat-label">Certs Paid</div>
+      </div>
+      <div class="stat-card green">
+        <div class="stat-val">{{stats.certIssued}}</div>
+        <div class="stat-label">Certs Issued</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-val">{{stats.conversionRate}}%</div>
+        <div class="stat-label">Cert Conversion</div>
+      </div>
     </div>
 
-    <!-- Quotient averages -->
-    <div class="section">
-      <div class="section-head">
-        <span class="section-title">Average Scores by Quotient (All Completed Attempts)</span>
-      </div>
-      <div class="section-body">
-        {{#each quotientAverages}}
-        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
-          <span style="width:35px;font-size:.7rem;font-weight:700;color:var(--navy)">{{_id}}</span>
-          <span style="width:100px;font-size:.8rem;color:var(--dark)">{{name}}</span>
-          <div class="q-bar"><div class="q-bar-fill" style="width:{{avgScore}}%;background:var(--navy)"></div></div>
-          <span class="q-avg">{{round avgScore}}</span>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
+      <!-- Quotient averages -->
+      <div class="section">
+        <div class="section-head">
+          <span class="section-title">Avg Score by Quotient</span>
         </div>
-        {{/each}}
-        {{#unless quotientAverages.length}}<p style="color:var(--dark);font-size:.85rem">No completed attempts yet.</p>{{/unless}}
+        <div class="section-body">
+          {{#each quotientAverages}}
+          <div style="margin-bottom:12px">
+            <div style="display:flex;justify-content:space-between;font-size:.75rem;margin-bottom:3px">
+              <span style="font-weight:600;color:var(--navy)">{{_id}} <span style="font-weight:400;color:var(--dark)">{{name}}</span></span>
+              <span style="font-weight:600">{{round avgScore}}</span>
+            </div>
+            <div class="q-bar"><div class="q-bar-fill" style="width:{{avgScore}}%;background:var(--navy)"></div></div>
+          </div>
+          {{/each}}
+          {{#unless quotientAverages.length}}<p style="color:var(--dark);font-size:.85rem">No completed attempts yet.</p>{{/unless}}
+        </div>
       </div>
-    </div>
 
-    <!-- Top archetypes -->
-    <div class="section">
-      <div class="section-head"><span class="section-title">Top Archetypes</span></div>
-      <div class="section-body">
-        {{#each archetypeAgg}}
-        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:.85rem">
-          <span>{{_id}}</span>
-          <span class="badge badge-gold">{{count}}</span>
+      <!-- Top archetypes -->
+      <div class="section">
+        <div class="section-head"><span class="section-title">Top Archetypes</span></div>
+        <div class="section-body">
+          {{#each archetypeAgg}}
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);font-size:.84rem">
+            <span>{{_id}}</span>
+            <span class="badge badge-gold">{{count}}</span>
+          </div>
+          {{/each}}
+          {{#unless archetypeAgg.length}}<p style="color:var(--dark);font-size:.85rem">No data yet.</p>{{/unless}}
         </div>
-        {{/each}}
-        {{#unless archetypeAgg.length}}<p style="color:var(--dark);font-size:.85rem">No data yet.</p>{{/unless}}
       </div>
     </div>
   </div>
@@ -180,21 +289,30 @@
       <div class="section-body" style="padding:0">
         <table>
           <thead><tr>
-            <th>Code</th><th>Name</th><th>Questions</th><th>Status</th><th>Description</th><th>Actions</th>
+            <th>Code</th><th>Name</th><th>Questions</th><th>Active</th><th>Description</th><th>Actions</th>
           </tr></thead>
           <tbody id="configTbody">
             {{#each configs}}
             <tr data-code="{{this.code}}">
-              <td><span class="color-dot" style="background:{{this.color}}"></span>{{this.code}}</td>
+              <td><span class="color-dot" style="background:{{this.color}}"></span><strong>{{this.code}}</strong></td>
               <td>{{this.name}}</td>
-              <td><input type="number" value="{{this.questionCount}}" min="1" max="20" style="width:60px;padding:3px 6px;border:1px solid var(--border);border-radius:4px" onchange="updateConfig('{{this.code}}',{questionCount:+this.value})"></td>
+              <td>
+                <input type="number" value="{{this.questionCount}}" min="1" max="20"
+                  style="width:58px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;font-size:.82rem"
+                  onchange="updateConfig('{{this.code}}',{questionCount:+this.value})">
+              </td>
               <td>
                 <label style="cursor:pointer;display:flex;align-items:center;gap:6px;font-size:.8rem">
-                  <input type="checkbox" {{#if this.active}}checked{{/if}} onchange="updateConfig('{{this.code}}',{active:this.checked})">
+                  <input type="checkbox" {{#if this.active}}checked{{/if}}
+                    onchange="updateConfig('{{this.code}}',{active:this.checked})">
                   Active
                 </label>
               </td>
-              <td style="max-width:200px"><div style="font-size:.78rem;color:var(--dark);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{this.description}}</div></td>
+              <td style="max-width:200px">
+                <div style="font-size:.76rem;color:var(--dark);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                  {{this.description}}
+                </div>
+              </td>
               <td><button class="btn btn-outline btn-sm" onclick="editConfig('{{this.code}}')">Edit</button></td>
             </tr>
             {{/each}}
@@ -210,24 +328,24 @@
       <div class="section-head">
         <span class="section-title">Question Bank</span>
         <div style="display:flex;gap:8px">
-          <button class="btn btn-outline btn-sm" onclick="showModal('importModal')">📥 Import CSV</button>
+          <button class="btn btn-outline btn-sm" onclick="showModal('importModal')">&#8627; Import CSV</button>
           <button class="btn btn-navy btn-sm" onclick="showModal('addQModal')">+ Add Question</button>
         </div>
       </div>
       <div class="section-body" style="padding-bottom:0">
-        <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">
-          <select id="qFilter" onchange="loadQuestions()" class="form-input" style="width:auto">
+        <div class="filter-bar">
+          <select id="qFilter" onchange="loadQuestions()" class="form-input">
             <option value="">All Quotients</option>
-            {{#each configs}}<option value="{{this.code}}">{{this.name}}</option>{{/each}}
+            {{#each configs}}<option value="{{this.code}}">{{this.code}} — {{this.name}}</option>{{/each}}
           </select>
-          <select id="qActiveFilter" onchange="loadQuestions()" class="form-input" style="width:auto">
+          <select id="qActiveFilter" onchange="loadQuestions()" class="form-input">
             <option value="">All Status</option>
             <option value="true">Active</option>
             <option value="false">Inactive</option>
           </select>
         </div>
         <div id="questionsContainer">
-          <p style="color:var(--dark);font-size:.85rem">Loading questions…</p>
+          <p style="color:var(--dark);font-size:.85rem;padding:8px 0">Loading questions…</p>
         </div>
       </div>
     </div>
@@ -241,7 +359,7 @@
         <button class="btn btn-navy btn-sm" onclick="showModal('addArchModal')">+ New Archetype</button>
       </div>
       <div class="section-body" style="padding:0">
-        <div id="archetypesContainer">Loading…</div>
+        <div id="archetypesContainer"><p style="padding:20px;color:var(--dark)">Loading…</p></div>
       </div>
     </div>
   </div>
@@ -249,7 +367,7 @@
   <!-- ══════════ CERTIFICATE TEMPLATE ══════════ -->
   <div id="tab-template" style="display:none">
     <div class="section">
-      <div class="section-head"><span class="section-title">Certificate Template & Pricing</span></div>
+      <div class="section-head"><span class="section-title">Certificate Template &amp; Pricing</span></div>
       <div class="section-body">
         {{#if template}}
         <div class="form-row">
@@ -287,14 +405,14 @@
           </div>
         </div>
         <div class="form-group">
-          <label class="form-label">
+          <label class="form-label" style="display:flex;align-items:center;gap:8px;font-weight:400">
             <input type="checkbox" id="tShowAll" {{#if template.showAllScores}}checked{{/if}}>
-            Show all 8 scores on certificate (uncheck = dominant quotient only)
+            Show all 8 quotient scores on certificate (uncheck = dominant quotient only)
           </label>
         </div>
         <button class="btn btn-navy" onclick="saveTemplate('{{template._id}}')">Save Template Settings</button>
         {{else}}
-        <p style="color:var(--dark);font-size:.85rem;margin-bottom:16px">No certificate template yet.</p>
+        <p style="color:var(--dark);font-size:.85rem;margin-bottom:16px">No certificate template configured yet.</p>
         <button class="btn btn-gold" onclick="createTemplate()">Create Default Template</button>
         {{/if}}
       </div>
@@ -305,14 +423,20 @@
   <div id="tab-attempts" style="display:none">
     <div class="section">
       <div class="section-head">
-        <span class="section-title">Recent Attempts</span>
+        <span class="section-title">All Attempts</span>
         <div style="display:flex;gap:8px">
-          <select id="attStatusFilter" onchange="loadAttempts()" class="form-input" style="width:auto">
+          <a href="/admin/8qt/export/csv" class="btn btn-outline btn-sm">&#8595; Export CSV</a>
+        </div>
+      </div>
+      <div class="section-body" style="padding-bottom:0">
+        <div class="filter-bar">
+          <input type="text" id="attSearch" class="form-input" placeholder="Search name, code, email, country…" oninput="debounceLoadAttempts()">
+          <select id="attStatusFilter" onchange="loadAttempts()" class="form-input">
             <option value="">All Status</option>
             <option value="finished">Finished</option>
             <option value="in_progress">In Progress</option>
           </select>
-          <select id="attCertFilter" onchange="loadAttempts()" class="form-input" style="width:auto">
+          <select id="attCertFilter" onchange="loadAttempts()" class="form-input">
             <option value="">All Cert Status</option>
             <option value="none">No Cert</option>
             <option value="requested">Requested</option>
@@ -320,51 +444,176 @@
             <option value="issued">Issued</option>
           </select>
         </div>
+        <div id="attemptsContainer">
+          <p style="padding:20px;color:var(--dark)">Loading…</p>
+        </div>
       </div>
-      <div class="section-body" style="padding:0">
-        <div id="attemptsContainer">Loading…</div>
+    </div>
+  </div>
+
+  <!-- ══════════ CERT PIPELINE ══════════ -->
+  <div id="tab-pipeline" style="display:none">
+    <div class="section">
+      <div class="section-head">
+        <span class="section-title">Certificate Pipeline</span>
+        <span style="font-size:.76rem;color:var(--dark)">Finished participants without paid certificates, sorted by avg score</span>
+      </div>
+      <div class="section-body">
+        <div class="filter-bar" style="margin-bottom:16px">
+          <select id="pipelineMin" onchange="loadPipeline()" class="form-input">
+            <option value="0">All scores</option>
+            <option value="50">Avg ≥ 50</option>
+            <option value="60" selected>Avg ≥ 60</option>
+            <option value="70">Avg ≥ 70</option>
+            <option value="80">Avg ≥ 80</option>
+          </select>
+          <select id="pipelineCertStatus" onchange="loadPipeline()" class="form-input">
+            <option value="none">No certificate</option>
+            <option value="requested">Requested (not paid)</option>
+            <option value="all">All unissued</option>
+          </select>
+          <span id="pipelineCount" style="font-size:.8rem;color:var(--dark);flex-shrink:0"></span>
+        </div>
+        <div id="pipelineContainer">
+          <p style="color:var(--dark);font-size:.85rem">Loading…</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ ISSUE CERT (MANUAL) ══════════ -->
+  <div id="tab-issue" style="display:none">
+    <div class="section">
+      <div class="section-head">
+        <span class="section-title">Issue Certificate Manually</span>
+        <span style="font-size:.76rem;color:var(--dark)">For any finished attempt — no payment required</span>
+      </div>
+      <div class="section-body">
+        <p style="font-size:.83rem;color:var(--dark);margin-bottom:16px;line-height:1.55">
+          Use this for complimentary certificates, sponsored participants, researchers, VIPs, or to correct a name/email on an existing cert.
+          The issuance is logged with your admin ID and any notes you provide.
+        </p>
+
+        <div class="filter-bar" style="margin-bottom:12px">
+          <input type="text" id="issueSearch" class="form-input" placeholder="Search by name, code or email…" oninput="debounceIssueSearch()">
+          <select id="issueStatusFilter" onchange="loadIssueList()" class="form-input">
+            <option value="finished">Finished only</option>
+          </select>
+        </div>
+
+        <div id="issueListContainer" style="margin-bottom:20px">
+          <p style="color:var(--dark);font-size:.83rem">Loading…</p>
+        </div>
+
+        <!-- Issue form — shown when an attempt is selected -->
+        <div id="issueFormWrap" style="display:none">
+          <div class="cert-issue-block">
+            <div class="cert-issue-title">Selected participant</div>
+            <div id="issueSelectedInfo" style="font-size:.83rem;margin-bottom:16px;line-height:1.55"></div>
+
+            <div class="cert-issue-title" style="margin-top:4px">Certificate details</div>
+            <div class="form-row" style="margin-top:8px">
+              <div class="form-group">
+                <label class="form-label">Full name on certificate *</label>
+                <input class="form-input" id="issueName" placeholder="e.g. Tendai Moyo">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Email address *</label>
+                <input class="form-input" id="issueEmail" placeholder="e.g. tendai@example.com" type="email">
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Organisation (optional)</label>
+              <input class="form-input" id="issueOrg" placeholder="e.g. Ministry of Finance">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Admin notes (internal only — not printed on certificate)</label>
+              <textarea class="form-input" id="issueNotes" rows="2" placeholder="e.g. Complimentary — invited keynote speaker at CRIPFCnt Summit 2025"></textarea>
+            </div>
+            <div style="display:flex;gap:10px;margin-top:4px">
+              <button class="btn btn-green" id="issueCertBtn" onclick="submitIssueCert()">&#x2713; Generate &amp; Issue Certificate</button>
+              <button class="btn btn-outline" onclick="cancelIssueForm()">Cancel</button>
+            </div>
+            <div class="success-toast" id="issueSuccessToast"></div>
+            <div class="error-toast" id="issueErrorToast"></div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 
 </div><!-- /page -->
 
-<!-- IMPORT CSV MODAL -->
+<!-- ══════════ MODALS ══════════ -->
+
+<!-- CSV Import -->
 <div class="modal-overlay" id="importModal">
-  <div class="modal" style="position:relative">
-    <button class="modal-close" onclick="closeModal('importModal')">×</button>
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal('importModal')">&#x2715;</button>
     <div class="modal-title">Import Questions from CSV</div>
-    <p style="font-size:.82rem;color:var(--dark);margin-bottom:16px;line-height:1.6">
-      CSV columns: <code>quotient, text, opt_a_text, opt_a_scores, opt_b_text, opt_b_scores, opt_c_text, opt_c_scores, opt_d_text, opt_d_scores, is_blended</code><br>
-      Scores format: JSON object e.g. <code>{"RQ":3}</code> or blended <code>{"RQ":2,"CvQ":1}</code>
+    <p style="font-size:.8rem;color:var(--dark);margin-bottom:14px;line-height:1.6">
+      Columns: <code>quotient, text, opt_a_text, opt_a_scores, opt_b_text, opt_b_scores, opt_c_text, opt_c_scores, opt_d_text, opt_d_scores, is_blended</code><br>
+      Scores format: JSON e.g. <code>{"RQ":3}</code> or blended <code>{"RQ":2,"CvQ":1}</code>
     </p>
     <div class="upload-zone" onclick="document.getElementById('fileInput').click()" id="uploadZone">
       <p>Click to select CSV file</p>
-      <p class="hint">Maximum 5MB · .csv format</p>
+      <p class="hint">Maximum 5 MB · .csv format only</p>
     </div>
     <input type="file" id="fileInput" accept=".csv" onchange="handleFileSelect(this)">
-    <div id="importStatus" style="margin-top:16px;font-size:.83rem"></div>
-    <button class="btn btn-navy" style="margin-top:16px;width:100%" id="importBtn" onclick="doImport()" disabled>Import Questions</button>
+    <div id="importStatus" style="margin-top:14px;font-size:.82rem"></div>
+    <button class="btn btn-navy" style="margin-top:14px;width:100%" id="importBtn" onclick="doImport()" disabled>Import Questions</button>
+  </div>
+</div>
+
+<!-- QUIZ REVIEW DRAWER -->
+<div class="drawer-overlay" id="drawerOverlay" onclick="closeDrawer()"></div>
+<div class="drawer" id="reviewDrawer">
+  <div class="drawer-header">
+    <span class="drawer-title" id="drawerTitle">Quiz Review</span>
+    <button class="btn btn-outline btn-sm" onclick="closeDrawer()">&#x2715; Close</button>
+  </div>
+  <div class="drawer-body" id="drawerBody">
+    <p style="color:var(--dark)">Loading…</p>
   </div>
 </div>
 
 <script>
-// ── Tab switching ──────────────────────────────────────────────
+// ════════════════════════════════════════════════════
+// TAB SWITCHING
+// ════════════════════════════════════════════════════
 function showTab(id, btn) {
-  document.querySelectorAll('[id^=tab-]').forEach(el => el.style.display='none');
+  document.querySelectorAll('[id^=tab-]').forEach(el => el.style.display = 'none');
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  document.getElementById('tab-'+id).style.display='';
+  document.getElementById('tab-' + id).style.display = '';
   btn.classList.add('active');
   if (id === 'questions') loadQuestions();
   if (id === 'archetypes') loadArchetypes();
   if (id === 'attempts') loadAttempts();
+  if (id === 'pipeline') loadPipeline();
+  if (id === 'issue') loadIssueList();
 }
 
-// ── Modal helpers ──────────────────────────────────────────────
+// ════════════════════════════════════════════════════
+// MODAL + DRAWER HELPERS
+// ════════════════════════════════════════════════════
 function showModal(id) { document.getElementById(id).classList.add('open'); }
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
 
-// ── Seed defaults ──────────────────────────────────────────────
+function openDrawer(title, html) {
+  document.getElementById('drawerTitle').textContent = title;
+  document.getElementById('drawerBody').innerHTML = html;
+  document.getElementById('reviewDrawer').classList.add('open');
+  document.getElementById('drawerOverlay').classList.add('open');
+}
+
+function closeDrawer() {
+  document.getElementById('reviewDrawer').classList.remove('open');
+  document.getElementById('drawerOverlay').classList.remove('open');
+}
+
+// ════════════════════════════════════════════════════
+// QUOTIENT CONFIG
+// ════════════════════════════════════════════════════
 async function seedConfigs() {
   if (!confirm('Seed default 8 quotient configs?')) return;
   const r = await fetch('/admin/8qt/config/seed', { method: 'POST' });
@@ -373,21 +622,21 @@ async function seedConfigs() {
   location.reload();
 }
 
-// ── Update config ──────────────────────────────────────────────
 async function updateConfig(code, data) {
   await fetch(`/admin/8qt/config/${code}`, {
     method: 'PATCH',
-    headers: {'Content-Type':'application/json'},
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data)
   });
 }
 
 function editConfig(code) {
-  // Simple inline - could be expanded to modal
-  alert(`To edit full details for ${code}, use the PATCH /admin/8qt/config/${code} endpoint or implement an edit modal.`);
+  alert(`Edit full details for ${code} via PATCH /admin/8qt/config/${code} — implement an edit modal as needed.`);
 }
 
-// ── Load questions ─────────────────────────────────────────────
+// ════════════════════════════════════════════════════
+// QUESTION BANK
+// ════════════════════════════════════════════════════
 async function loadQuestions(page = 1) {
   const q = document.getElementById('qFilter')?.value || '';
   const a = document.getElementById('qActiveFilter')?.value || '';
@@ -397,23 +646,30 @@ async function loadQuestions(page = 1) {
 
   const r = await fetch(`/admin/8qt/questions?${params}`);
   const d = await r.json();
-
   const container = document.getElementById('questionsContainer');
+
   if (!d.questions?.length) {
-    container.innerHTML = '<p style="padding:20px;color:var(--dark)">No questions found.</p>';
+    container.innerHTML = '<p style="padding:16px;color:var(--dark)">No questions found.</p>';
     return;
   }
 
   container.innerHTML = `
     <table>
-      <thead><tr><th>Quotient</th><th>Question</th><th>Options</th><th>Status</th><th>Actions</th></tr></thead>
+      <thead><tr>
+        <th>Quotient</th><th>Question</th><th>Options</th><th>Status</th><th>Actions</th>
+      </tr></thead>
       <tbody>
         ${d.questions.map(q => `
           <tr>
-            <td><span class="badge badge-blue">${q.quotient}</span>${q.isBlended ? ' <span class="badge badge-gold">blend</span>':''}</td>
-            <td style="max-width:280px;font-size:.82rem">${q.text}</td>
-            <td style="font-size:.75rem;color:var(--dark)">${q.options.length} options</td>
-            <td><span class="badge ${q.active ? 'badge-green':'badge-gray'}">${q.active ? 'Active':'Inactive'}</span></td>
+            <td>
+              <span class="badge badge-blue">${q.quotient}</span>
+              ${q.isBlended ? ' <span class="badge badge-gold">blend</span>' : ''}
+            </td>
+            <td style="max-width:300px;font-size:.82rem;line-height:1.4">${q.text}</td>
+            <td style="font-size:.76rem;color:var(--dark)">${q.options.length} options</td>
+            <td>
+              <span class="badge ${q.active ? 'badge-green' : 'badge-gray'}">${q.active ? 'Active' : 'Inactive'}</span>
+            </td>
             <td>
               <button class="btn btn-danger btn-sm" onclick="deactivateQ('${q._id}')">Disable</button>
             </td>
@@ -421,9 +677,9 @@ async function loadQuestions(page = 1) {
         `).join('')}
       </tbody>
     </table>
-    <div style="padding:12px 20px;font-size:.78rem;color:var(--dark)">
+    <div class="pager">
       Showing ${d.questions.length} of ${d.total} · Page ${d.page}/${d.pages}
-      ${d.page < d.pages ? `<button class="btn btn-outline btn-sm" style="margin-left:10px" onclick="loadQuestions(${d.page+1})">Next →</button>`:``}
+      ${d.page < d.pages ? `<button class="btn btn-outline btn-sm" onclick="loadQuestions(${d.page + 1})">Next →</button>` : ''}
     </div>
   `;
 }
@@ -434,13 +690,14 @@ async function deactivateQ(id) {
   loadQuestions();
 }
 
-// ── CSV Import ─────────────────────────────────────────────────
+// ── CSV Import ──────────────────────────────────────
 let selectedFile = null;
 
 function handleFileSelect(input) {
   selectedFile = input.files[0];
   if (selectedFile) {
-    document.getElementById('uploadZone').innerHTML = `<p>✓ ${selectedFile.name}</p><p class="hint">${(selectedFile.size/1024).toFixed(1)} KB</p>`;
+    document.getElementById('uploadZone').innerHTML =
+      `<p>&#10003; ${selectedFile.name}</p><p class="hint">${(selectedFile.size / 1024).toFixed(1)} KB</p>`;
     document.getElementById('importBtn').disabled = false;
   }
 }
@@ -448,7 +705,8 @@ function handleFileSelect(input) {
 async function doImport() {
   if (!selectedFile) return;
   const btn = document.getElementById('importBtn');
-  btn.textContent = 'Importing…'; btn.disabled = true;
+  btn.textContent = 'Importing…';
+  btn.disabled = true;
 
   const fd = new FormData();
   fd.append('file', selectedFile);
@@ -458,80 +716,119 @@ async function doImport() {
 
   const status = document.getElementById('importStatus');
   if (d.ok) {
-    status.innerHTML = `<span style="color:var(--green)">✓ Imported ${d.inserted} questions.</span>
-      ${d.errors.length ? `<span style="color:var(--red)"> ${d.errors.length} errors.</span>` : ''}`;
+    status.innerHTML = `<span style="color:var(--green)">&#10003; Imported ${d.inserted} questions.</span>
+      ${d.errors.length ? `<span style="color:var(--red)"> ${d.errors.length} row errors.</span>` : ''}`;
   } else {
     status.innerHTML = `<span style="color:var(--red)">Error: ${d.error}</span>`;
   }
-  btn.textContent = 'Import Questions'; btn.disabled = false;
+  btn.textContent = 'Import Questions';
+  btn.disabled = false;
   loadQuestions();
 }
 
-// ── Load archetypes ────────────────────────────────────────────
+// ════════════════════════════════════════════════════
+// ARCHETYPES
+// ════════════════════════════════════════════════════
 async function loadArchetypes() {
   const r = await fetch('/admin/8qt/archetypes');
   const d = await r.json();
   const c = document.getElementById('archetypesContainer');
+
   if (!d.archetypes?.length) {
     c.innerHTML = '<p style="padding:20px;color:var(--dark)">No archetypes configured yet.</p>';
     return;
   }
+
   c.innerHTML = `<table>
-    <thead><tr><th>Priority</th><th>Name</th><th>Tagline</th><th>Conditions</th><th>Status</th><th>Actions</th></tr></thead>
-    <tbody>${d.archetypes.map(a => `
-      <tr>
-        <td>${a.priority}</td>
-        <td><strong>${a.name}</strong>${a.isDefault ? ' <span class="badge badge-gold">default</span>':''}</td>
-        <td style="font-size:.78rem;color:var(--dark);max-width:180px">${a.tagline || '-'}</td>
-        <td style="font-size:.72rem;color:var(--dark)">${(a.conditions||[]).map(c=>`${c.quotient} ${c.operator} ${c.value}`).join(', ')||'-'}</td>
-        <td><span class="badge ${a.active?'badge-green':'badge-gray'}">${a.active?'Active':'Off'}</span></td>
-        <td><button class="btn btn-danger btn-sm" onclick="toggleArchetype('${a._id}',${!a.active})">${a.active?'Disable':'Enable'}</button></td>
-      </tr>`).join('')}
+    <thead><tr>
+      <th>Priority</th><th>Name</th><th>Tagline</th><th>Conditions</th><th>Status</th><th>Actions</th>
+    </tr></thead>
+    <tbody>
+      ${d.archetypes.map(a => `
+        <tr>
+          <td>${a.priority}</td>
+          <td>
+            <strong>${a.name}</strong>
+            ${a.isDefault ? ' <span class="badge badge-gold">default</span>' : ''}
+          </td>
+          <td style="font-size:.76rem;color:var(--dark);max-width:180px">${a.tagline || '—'}</td>
+          <td style="font-size:.72rem;color:var(--dark)">
+            ${(a.conditions || []).map(c => `${c.quotient} ${c.operator} ${c.value}`).join(', ') || '—'}
+          </td>
+          <td>
+            <span class="badge ${a.active ? 'badge-green' : 'badge-gray'}">${a.active ? 'Active' : 'Off'}</span>
+          </td>
+          <td>
+            <button class="btn btn-danger btn-sm" onclick="toggleArchetype('${a._id}',${!a.active})">
+              ${a.active ? 'Disable' : 'Enable'}
+            </button>
+          </td>
+        </tr>
+      `).join('')}
     </tbody>
   </table>`;
 }
 
 async function toggleArchetype(id, active) {
   await fetch(`/admin/8qt/archetypes/${id}`, {
-    method: 'PATCH', headers:{'Content-Type':'application/json'},
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ active })
   });
   loadArchetypes();
 }
 
-// ── Save template ──────────────────────────────────────────────
+// ════════════════════════════════════════════════════
+// CERTIFICATE TEMPLATE
+// ════════════════════════════════════════════════════
 async function saveTemplate(id) {
   const data = {
-    signatoryName: document.getElementById('tSigName').value,
-    signatoryTitle: document.getElementById('tSigTitle').value,
+    signatoryName:     document.getElementById('tSigName').value,
+    signatoryTitle:    document.getElementById('tSigTitle').value,
     standardPriceCents: +document.getElementById('tStdPrice').value,
-    premiumPriceCents: +document.getElementById('tPremPrice').value,
-    retakeDays: +document.getElementById('tRetakeDays').value,
-    currency: document.getElementById('tCurrency').value,
-    showAllScores: document.getElementById('tShowAll').checked
+    premiumPriceCents:  +document.getElementById('tPremPrice').value,
+    retakeDays:         +document.getElementById('tRetakeDays').value,
+    currency:           document.getElementById('tCurrency').value,
+    showAllScores:      document.getElementById('tShowAll').checked
   };
   const r = await fetch(`/admin/8qt/template/${id}`, {
-    method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data)
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
   });
   const d = await r.json();
   alert(d.ok ? 'Template saved.' : (d.error || 'Error'));
 }
 
 async function createTemplate() {
-  const r = await fetch('/admin/8qt/template', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({}) });
+  const r = await fetch('/admin/8qt/template', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({})
+  });
   const d = await r.json();
   if (d.ok) location.reload();
 }
 
-// ── Load attempts ──────────────────────────────────────────────
-async function loadAttempts(page = 1) {
-  const s = document.getElementById('attStatusFilter')?.value || '';
-  const c = document.getElementById('attCertFilter')?.value || '';
-  const params = new URLSearchParams({ page });
-  if (s) params.set('status', s);
-  if (c) params.set('certStatus', c);
+// ════════════════════════════════════════════════════
+// ATTEMPTS TABLE
+// ════════════════════════════════════════════════════
+let attDebounce;
+function debounceLoadAttempts() {
+  clearTimeout(attDebounce);
+  attDebounce = setTimeout(() => loadAttempts(1), 340);
+}
 
-  const r = await fetch(`/admin/8qt/attempts?${params}`);
+async function loadAttempts(page = 1) {
+  const q  = document.getElementById('attSearch')?.value?.trim() || '';
+  const st = document.getElementById('attStatusFilter')?.value  || '';
+  const ct = document.getElementById('attCertFilter')?.value    || '';
+
+  const endpoint = q
+    ? `/admin/8qt/attempts/search?${new URLSearchParams({ q, status: st, certStatus: ct, page })}`
+    : `/admin/8qt/attempts?${new URLSearchParams({ status: st, certStatus: ct, page })}`;
+
+  const r = await fetch(endpoint);
   const d = await r.json();
   const container = document.getElementById('attemptsContainer');
 
@@ -541,75 +838,85 @@ async function loadAttempts(page = 1) {
   }
 
   function certBadge(a) {
-    const map = { issued:'badge-gold', paid:'badge-blue', requested:'badge-gold', none:'badge-gray' };
-    return `<span class="badge ${map[a.certificateStatus]||'badge-gray'}">${a.certificateStatus}</span>`;
+    const map = { issued: 'badge-green', paid: 'badge-blue', requested: 'badge-gold', none: 'badge-gray' };
+    return `<span class="badge ${map[a.certificateStatus] || 'badge-gray'}">${a.certificateStatus}</span>`;
   }
 
-  function scoresSummary(a) {
-    if (!a.quotientScores || !a.quotientScores.length) return '<span style="color:#aaa;font-size:.75rem">—</span>';
-    return a.quotientScores.map(s =>
-      `<span title="${s.name}: ${s.score}/100 (${s.band})" style="display:inline-block;font-size:.65rem;font-weight:700;padding:1px 5px;border-radius:3px;margin:1px;background:#eef2ff;color:#1E3A5F">${s.code} ${s.score}</span>`
-    ).join('');
+  function scoresPills(a) {
+    if (!a.quotientScores?.length) return '<span style="color:#bbb;font-size:.72rem">—</span>';
+    return `<div class="score-pills">${a.quotientScores.map(s =>
+      `<span class="score-pill" title="${s.name}: ${s.score}/100 (${s.band})">${s.code} ${s.score}</span>`
+    ).join('')}</div>`;
   }
 
   function certActions(a) {
     let html = '';
     if (a.certificateStatus === 'issued' && a.certificatePdfUrl) {
-      html += `<a href="${a.certificatePdfUrl}" target="_blank" class="btn btn-gold btn-sm" style="margin-right:4px">⬇ PDF</a>`;
+      html += `<a href="${a.certificatePdfUrl}" target="_blank" class="btn btn-gold btn-sm">&#8595; PDF</a> `;
     }
-    if (['paid','requested','issued'].includes(a.certificateStatus)) {
-      html += `<button class="btn btn-outline btn-sm" onclick="regenCert('${a._id}', this)">↺ Re-gen</button>`;
+    if (['paid', 'requested', 'issued'].includes(a.certificateStatus)) {
+      html += `<button class="btn btn-outline btn-sm" onclick="regenCert('${a._id}',this)">&#8635; Re-gen</button> `;
     }
     if (a.certificateVerifyCode) {
-      html += `<a href="/8qt/verify/${a.certificateVerifyCode}" target="_blank" class="btn btn-outline btn-sm" style="margin-left:4px">Verify</a>`;
+      html += `<a href="/8qt/verify/${a.certificateVerifyCode}" target="_blank" class="btn btn-outline btn-sm">Verify</a> `;
+    }
+    // Admin preview cert — available for ALL finished attempts regardless of payment
+    html += `<button class="btn btn-outline btn-sm" onclick="previewCert('${a._id}',this)" title="Generate admin preview PDF without changing payment status">&#128065; Preview</button> `;
+    // Go to manual issue tab
+    if (a.status === 'finished') {
+      html += `<button class="btn btn-outline btn-sm" onclick="goIssue('${a._id}')">Issue</button>`;
     }
     return html || '—';
   }
 
   container.innerHTML = `
-  <style>
-    .att-name{font-size:.78rem;font-weight:600;color:var(--navy)}
-    .att-email{font-size:.72rem;color:var(--dark)}
-    .att-code{font-size:.68rem;color:#aaa;font-family:monospace}
-    .att-arch{font-size:.78rem;color:var(--text)}
-    .att-dom{font-size:.68rem;color:var(--dark)}
-  </style>
-  <table>
-    <thead><tr>
-      <th>Participant</th>
-      <th>Archetype / Dominant</th>
-      <th>Status</th>
-      <th>Scores</th>
-      <th>Certificate</th>
-      <th>Date</th>
-    </tr></thead>
-    <tbody>${d.attempts.map(a => `
-      <tr>
-        <td>
-          <div class="att-name">${a.certificateName || a.userId?.displayName || a.participantName || 'Anonymous'}</div>
-          <div class="att-email">${a.userId?.email || a.certificateEmail || ''}</div>
-          ${a.participantCode ? `<div class="att-code">${a.participantCode}</div>` : ''}
-        </td>
-        <td>
-          <div class="att-arch">${a.archetypeName || '—'}</div>
-          ${a.dominantQuotient ? `<div class="att-dom">Dominant: ${a.dominantQuotient}</div>` : ''}
-        </td>
-        <td>
-          <span class="badge ${a.status==='finished'?'badge-green':'badge-gray'}">${a.status}</span>
-          ${certBadge(a)}
-        </td>
-        <td>${scoresSummary(a)}</td>
-        <td>${certActions(a)}</td>
-        <td style="font-size:.72rem;color:var(--dark);white-space:nowrap">${new Date(a.createdAt).toLocaleDateString()}</td>
-      </tr>`).join('')}
-    </tbody>
-  </table>
-  <div style="padding:12px 20px;font-size:.78rem;color:var(--dark)">
-    Showing ${d.attempts.length} of ${d.total} · Page ${d.page}/${d.pages}
-    ${d.page < d.pages ? `<button class="btn btn-outline btn-sm" style="margin-left:10px" onclick="loadAttempts(${d.page+1})">Next →</button>`:''}
-  </div>`;
+    <table>
+      <thead><tr>
+        <th>Participant</th>
+        <th>Archetype / Dominant</th>
+        <th>Status</th>
+        <th>Scores</th>
+        <th>Certificate</th>
+        <th>Date</th>
+        <th>Actions</th>
+      </tr></thead>
+      <tbody>
+        ${d.attempts.map(a => `
+          <tr>
+            <td>
+              <div class="att-name">${a.certificateName || a.userId?.displayName || a.participantName || 'Anonymous'}</div>
+              <div class="att-sub">${a.userId?.email || a.certificateEmail || ''}</div>
+              ${a.participantCode ? `<div class="att-code">${a.participantCode}</div>` : ''}
+              ${(a.profile?.country || a.profile?.sector) ? `<div class="att-sub">${[a.profile?.country, a.profile?.sector].filter(Boolean).join(' · ')}</div>` : ''}
+              ${a.adminIssueNote ? `<div class="att-sub" style="color:var(--amber)">&#9888; ${a.adminIssueNote}</div>` : ''}
+            </td>
+            <td>
+              <div style="font-size:.8rem">${a.archetypeName || '—'}</div>
+              ${a.dominantQuotient ? `<div class="att-sub">Dominant: <strong>${a.dominantQuotient}</strong></div>` : ''}
+            </td>
+            <td>
+              <span class="badge ${a.status === 'finished' ? 'badge-green' : 'badge-gray'}">${a.status}</span>
+              ${certBadge(a)}
+            </td>
+            <td>${scoresPills(a)}</td>
+            <td>${certBadge(a)}</td>
+            <td style="font-size:.72rem;color:var(--dark);white-space:nowrap">${new Date(a.createdAt).toLocaleDateString()}</td>
+            <td style="white-space:nowrap">
+              ${a.status === 'finished' ? `<button class="btn btn-outline btn-sm" style="margin-bottom:3px" onclick="openReviewDrawer('${a._id}')">&#128270; Review</button><br>` : ''}
+              ${certActions(a)}
+            </td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+    <div class="pager">
+      Showing ${d.attempts.length} of ${d.total} &middot; Page ${d.page}/${d.pages}
+      ${d.page < d.pages ? `<button class="btn btn-outline btn-sm" onclick="loadAttempts(${d.page + 1})">Next &rarr;</button>` : ''}
+    </div>
+  `;
 }
 
+// ── Cert re-generation (for paid/requested/issued) ──
 async function regenCert(attemptId, btn) {
   if (!confirm('Re-generate certificate for this attempt?')) return;
   btn.textContent = '…';
@@ -618,18 +925,364 @@ async function regenCert(attemptId, btn) {
     const r = await fetch(`/admin/8qt/attempts/${attemptId}/regenerate-cert`, { method: 'POST' });
     const d = await r.json();
     if (d.ok) {
-      alert('✅ Certificate generated: ' + d.url);
+      alert('✅ Certificate regenerated: ' + d.url);
       loadAttempts();
     } else {
       alert('Error: ' + (d.error || 'Unknown'));
-      btn.textContent = '↺ Re-gen';
-      btn.disabled = false;
     }
-  } catch(e) {
+  } catch (e) {
     alert('Network error');
+  } finally {
     btn.textContent = '↺ Re-gen';
     btn.disabled = false;
   }
+}
+
+// ── Admin preview cert (no payment required, does not change status) ──
+async function previewCert(attemptId, btn) {
+  btn.textContent = '…';
+  btn.disabled = true;
+  try {
+    const r = await fetch(`/admin/8qt/attempts/${attemptId}/preview-cert`);
+    const d = await r.json();
+    if (d.ok) {
+      window.open(d.url, '_blank');
+    } else {
+      alert('Error: ' + (d.error || 'Could not generate preview'));
+    }
+  } catch (e) {
+    alert('Network error generating preview');
+  } finally {
+    btn.textContent = '👁 Preview';
+    btn.disabled = false;
+  }
+}
+
+// ── Navigate to Issue tab pre-loaded for this attempt ──
+function goIssue(attemptId) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  const issueTab = [...document.querySelectorAll('.tab')].find(t => t.textContent.trim().startsWith('Issue'));
+  if (issueTab) issueTab.classList.add('active');
+  document.querySelectorAll('[id^=tab-]').forEach(el => el.style.display = 'none');
+  document.getElementById('tab-issue').style.display = '';
+  loadIssueList(1, '', attemptId);
+}
+
+// ════════════════════════════════════════════════════
+// QUIZ REVIEW DRAWER
+// ════════════════════════════════════════════════════
+async function openReviewDrawer(attemptId) {
+  openDrawer('Loading review…', '<p style="color:var(--dark)">Fetching quiz data…</p>');
+  try {
+    const r = await fetch(`/admin/8qt/attempts/${attemptId}`);
+    const d = await r.json();
+    if (!d.attempt) { document.getElementById('drawerBody').innerHTML = '<p style="color:var(--red)">Error loading attempt.</p>'; return; }
+
+    const a   = d.attempt;
+    const sum = d.summary;
+    const qb  = d.quotientBreakdown || {};
+    const rows = d.reviewRows || [];
+
+    const name = a.certificateName || a.participantName || 'Anonymous';
+    document.getElementById('drawerTitle').textContent = `Quiz Review — ${name}`;
+
+    // Score bars
+    const scoreBars = (a.quotientScores || []).map(s => `
+      <div class="score-bar-wrap">
+        <span style="width:32px;font-size:.68rem;font-weight:700;color:var(--navy)">${s.code}</span>
+        <div class="score-bar-bg"><div class="score-bar-fill" style="width:${s.score}%;background:var(--navy)"></div></div>
+        <span style="width:28px;font-size:.75rem;font-weight:600;text-align:right">${s.score}</span>
+        <span class="badge badge-gray" style="font-size:.62rem">${s.band}</span>
+      </div>
+    `).join('');
+
+    // Per-quotient accuracy grid
+    const qbCells = Object.entries(qb).map(([code, data]) => `
+      <div class="qb-cell">
+        <div class="qb-code">${code}</div>
+        <div class="qb-val">${data.correct}/${data.total - data.skipped}</div>
+        <div class="qb-band">${data.skipped > 0 ? data.skipped + ' skipped' : 'all answered'}</div>
+      </div>
+    `).join('');
+
+    // Question review rows
+    function optClass(opt) {
+      if (opt.wasChosen && opt.isBest) return 'opt-best';
+      if (opt.wasChosen && !opt.isBest) return 'opt-chosen-wrong';
+      if (opt.isBest) return 'opt-best';
+      return '';
+    }
+    function optIcon(opt) {
+      if (opt.wasChosen && opt.isBest)   return '&#10003;'; // correct
+      if (opt.wasChosen && !opt.isBest)  return '&#10007;'; // wrong
+      if (opt.isBest)                     return '&#9675;';  // best but not chosen
+      return '&#9675;';
+    }
+
+    const questionRows = rows.map(row => `
+      <div class="q-review-row">
+        <div class="q-review-head">
+          <span class="q-num">Q${row.questionNumber}</span>
+          <span class="badge badge-blue q-qcode">${row.quotient}</span>
+          ${row.isBlended ? '<span class="badge badge-gold" style="font-size:.62rem">blend</span>' : ''}
+          ${row.skipped ? '<span class="badge badge-gray" style="font-size:.62rem">skipped</span>' : ''}
+        </div>
+        <div class="q-text">${row.text}</div>
+        ${row.options.map(opt => `
+          <div class="opt-row ${optClass(opt)}">
+            <span class="opt-icon">${optIcon(opt)}</span>
+            <span>${opt.text}</span>
+            <span class="opt-pts">${opt.totalPoints > 0 ? opt.totalPoints + 'pt' : ''}</span>
+          </div>
+        `).join('')}
+        ${row.skipped
+          ? `<div class="q-result-skip">Not answered</div>`
+          : row.isCorrect
+            ? `<div class="q-result-correct">&#10003; Best option chosen (+${row.earnedPts}pts)</div>`
+            : `<div class="q-result-wrong">&#10007; Best option: "${(row.options.find(o => o.isBest) || {}).text || ''}"</div>`
+        }
+      </div>
+    `).join('');
+
+    document.getElementById('drawerBody').innerHTML = `
+      <div style="margin-bottom:14px">
+        <div style="font-size:.76rem;color:var(--dark)">${a.participantCode || (a.userId?.email || '')}</div>
+        <div style="font-size:.8rem;margin-top:2px">${[a.profile?.country, a.profile?.sector].filter(Boolean).join(' · ')}</div>
+        <div style="font-size:.8rem;margin-top:2px">Archetype: <strong>${a.archetypeName || '—'}</strong> &nbsp;·&nbsp; Dominant: <strong>${a.dominantQuotient || '—'}</strong></div>
+        <div style="font-size:.8rem;margin-top:2px">Cert status: <span class="badge badge-${a.certificateStatus === 'issued' ? 'green' : a.certificateStatus === 'paid' ? 'blue' : 'gray'}">${a.certificateStatus}</span>
+          ${a.certificatePdfUrl ? `&nbsp;<a href="${a.certificatePdfUrl}" target="_blank" class="btn btn-gold btn-sm" style="vertical-align:middle">&#8595; PDF</a>` : ''}
+        </div>
+      </div>
+
+      <div class="review-meta">
+        <div class="review-stat">
+          <div class="review-stat-val">${sum.accuracy}%</div>
+          <div class="review-stat-label">Accuracy</div>
+        </div>
+        <div class="review-stat">
+          <div class="review-stat-val" style="color:var(--green)">${sum.correct}</div>
+          <div class="review-stat-label">Correct</div>
+        </div>
+        <div class="review-stat">
+          <div class="review-stat-val" style="color:var(--red)">${sum.incorrect}</div>
+          <div class="review-stat-label">Wrong</div>
+        </div>
+      </div>
+
+      <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--dark);margin-bottom:8px">Quotient scores</div>
+      ${scoreBars}
+
+      <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--dark);margin:14px 0 8px">Per-quotient accuracy</div>
+      <div class="qb-grid">${qbCells}</div>
+
+      <div style="display:flex;gap:8px;margin:14px 0;flex-wrap:wrap">
+        <button class="btn btn-outline btn-sm" onclick="previewCertFromDrawer('${a._id}')">&#128065; Preview Cert</button>
+        ${a.status === 'finished' ? `<button class="btn btn-green btn-sm" onclick="goIssueFromDrawer('${a._id}')">Issue Certificate</button>` : ''}
+      </div>
+
+      <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--dark);margin-bottom:8px">Answer-by-answer review</div>
+      <div style="font-size:.72rem;color:var(--dark);margin-bottom:10px">
+        <span style="color:var(--green)">&#10003;</span> = best option chosen &nbsp;
+        <span style="color:var(--red)">&#10007;</span> = suboptimal choice &nbsp;
+        &#9675; = unchosen option
+      </div>
+      ${questionRows || '<p style="color:var(--dark);font-size:.83rem">No answers recorded yet.</p>'}
+    `;
+  } catch (e) {
+    document.getElementById('drawerBody').innerHTML = `<p style="color:var(--red)">Error: ${e.message}</p>`;
+  }
+}
+
+async function previewCertFromDrawer(attemptId) {
+  try {
+    const r = await fetch(`/admin/8qt/attempts/${attemptId}/preview-cert`);
+    const d = await r.json();
+    if (d.ok) window.open(d.url, '_blank');
+    else alert('Preview error: ' + d.error);
+  } catch(e) { alert('Network error'); }
+}
+
+function goIssueFromDrawer(attemptId) {
+  closeDrawer();
+  goIssue(attemptId);
+}
+
+// ════════════════════════════════════════════════════
+// CERT PIPELINE
+// ════════════════════════════════════════════════════
+async function loadPipeline() {
+  const min    = document.getElementById('pipelineMin')?.value || '60';
+  const status = document.getElementById('pipelineCertStatus')?.value || 'none';
+  const params = new URLSearchParams({ minScore: min, certStatus: status, limit: 100 });
+
+  const r = await fetch(`/admin/8qt/cert-pipeline?${params}`);
+  const d = await r.json();
+  const container = document.getElementById('pipelineContainer');
+  const countEl   = document.getElementById('pipelineCount');
+
+  if (countEl) countEl.textContent = d.count !== undefined ? `${d.count} participant${d.count !== 1 ? 's' : ''}` : '';
+
+  if (!d.results?.length) {
+    container.innerHTML = '<p style="color:var(--dark);font-size:.84rem">No participants match this filter.</p>';
+    return;
+  }
+
+  container.innerHTML = d.results.map(a => {
+    const avg = Math.round(a.overallScore || 0);
+    const name = a.certificateName || a.participantName || 'Anonymous';
+    return `
+      <div class="pipeline-row">
+        <div class="pipeline-score">${avg}</div>
+        <div class="pipeline-info">
+          <div class="pipeline-name">${name}</div>
+          <div class="pipeline-meta">
+            ${a.participantCode || ''} &nbsp;
+            ${[a.profile?.country, a.profile?.sector].filter(Boolean).join(' · ')}
+          </div>
+          <div class="pipeline-meta">
+            ${a.archetypeName || ''} &nbsp;&middot;&nbsp; Dominant: <strong>${a.dominantQuotient || '—'}</strong>
+          </div>
+          ${a.certificateEmail ? `<div class="pipeline-meta" style="color:var(--navy)">${a.certificateEmail}</div>` : ''}
+        </div>
+        <div class="pipeline-actions">
+          <button class="btn btn-outline btn-sm" onclick="openReviewDrawer('${a._id}')">Review</button>
+          <button class="btn btn-green btn-sm" onclick="goIssue('${a._id}')">Issue Cert</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+// ════════════════════════════════════════════════════
+// MANUAL CERT ISSUANCE
+// ════════════════════════════════════════════════════
+let currentIssueAttemptId = null;
+let issueDebounce;
+
+function debounceIssueSearch() {
+  clearTimeout(issueDebounce);
+  issueDebounce = setTimeout(() => loadIssueList(1), 340);
+}
+
+async function loadIssueList(page = 1, overrideSearch = '', selectId = '') {
+  const q = overrideSearch || document.getElementById('issueSearch')?.value?.trim() || '';
+  const params = new URLSearchParams({ status: 'finished', page });
+  if (q) params.set('q', q);
+
+  const r = await fetch(`/admin/8qt/attempts/search?${params}`);
+  const d = await r.json();
+  const container = document.getElementById('issueListContainer');
+
+  if (!d.attempts?.length) {
+    container.innerHTML = '<p style="color:var(--dark);font-size:.83rem">No finished attempts found.</p>';
+    return;
+  }
+
+  container.innerHTML = d.attempts.slice(0, 12).map(a => {
+    const name = a.certificateName || a.participantName || 'Anonymous';
+    const avg  = a.quotientScores?.length
+      ? Math.round(a.quotientScores.reduce((s, x) => s + x.score, 0) / a.quotientScores.length)
+      : '—';
+    return `
+      <div class="pipeline-row" style="cursor:pointer" onclick="selectForIssue('${a._id}','${(a.certificateName || '').replace(/'/g,"\\'")}','${(a.certificateEmail || '').replace(/'/g,"\\'")}','${(a.certificateOrg || '').replace(/'/g,"\\'")}','${name.replace(/'/g,"\\'")}','${(a.archetypeName || '').replace(/'/g,"\\'")}','${avg}')">
+        <div class="pipeline-score" style="font-size:1rem">${avg}</div>
+        <div class="pipeline-info">
+          <div class="pipeline-name">${name}</div>
+          <div class="pipeline-meta">${a.participantCode || ''} · ${a.archetypeName || '—'}</div>
+          <div class="pipeline-meta">
+            Cert: <span class="badge badge-${a.certificateStatus === 'issued' ? 'green' : 'gray'}">${a.certificateStatus}</span>
+            ${a.adminIssueNote ? `&nbsp;<span style="color:var(--amber);font-size:.68rem">Admin issued</span>` : ''}
+          </div>
+        </div>
+        <button class="btn btn-navy btn-sm">Select</button>
+      </div>
+    `;
+  }).join('');
+
+  // If navigated here with a specific attemptId, auto-select it
+  if (selectId) {
+    const target = d.attempts.find(a => a._id === selectId);
+    if (target) {
+      const avg = target.quotientScores?.length
+        ? Math.round(target.quotientScores.reduce((s, x) => s + x.score, 0) / target.quotientScores.length)
+        : '—';
+      const name = target.certificateName || target.participantName || 'Anonymous';
+      selectForIssue(target._id, target.certificateName || '', target.certificateEmail || '', target.certificateOrg || '', name, target.archetypeName || '', avg);
+    }
+  }
+}
+
+function selectForIssue(id, certName, certEmail, certOrg, displayName, archetype, avg) {
+  currentIssueAttemptId = id;
+  document.getElementById('issueName').value  = certName || '';
+  document.getElementById('issueEmail').value = certEmail || '';
+  document.getElementById('issueOrg').value   = certOrg || '';
+  document.getElementById('issueNotes').value = '';
+  document.getElementById('issueSuccessToast').style.display = 'none';
+  document.getElementById('issueErrorToast').style.display   = 'none';
+
+  document.getElementById('issueSelectedInfo').innerHTML = `
+    <strong>${displayName}</strong> &nbsp;
+    <span style="color:var(--dark);font-size:.78rem">Avg score: ${avg} &nbsp;·&nbsp; ${archetype}</span><br>
+    <span style="font-size:.76rem;color:var(--dark)">Attempt ID: ${id}</span>
+  `;
+  document.getElementById('issueFormWrap').style.display = 'block';
+  document.getElementById('issueFormWrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function cancelIssueForm() {
+  document.getElementById('issueFormWrap').style.display = 'none';
+  currentIssueAttemptId = null;
+}
+
+async function submitIssueCert() {
+  if (!currentIssueAttemptId) return;
+
+  const fullName = document.getElementById('issueName').value.trim();
+  const email    = document.getElementById('issueEmail').value.trim();
+  const orgName  = document.getElementById('issueOrg').value.trim();
+  const notes    = document.getElementById('issueNotes').value.trim();
+
+  if (!fullName || !email) {
+    showIssueError('Full name and email are required.');
+    return;
+  }
+
+  const btn = document.getElementById('issueCertBtn');
+  btn.textContent = 'Generating…';
+  btn.disabled = true;
+
+  try {
+    const r = await fetch(`/admin/8qt/attempts/${currentIssueAttemptId}/issue-cert`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fullName, email, orgName, notes })
+    });
+    const d = await r.json();
+
+    if (d.ok) {
+      document.getElementById('issueSuccessToast').style.display = 'block';
+      document.getElementById('issueSuccessToast').innerHTML =
+        `&#10003; Certificate issued for <strong>${fullName}</strong>. &nbsp;
+         <a href="${d.url}" target="_blank" style="color:var(--navy);font-weight:600">Download PDF</a>
+         &nbsp;&middot;&nbsp; Verify code: <code>${d.verifyCode}</code>`;
+      document.getElementById('issueErrorToast').style.display = 'none';
+      loadAttempts();
+    } else {
+      showIssueError(d.error || 'Unknown error');
+    }
+  } catch (e) {
+    showIssueError('Network error: ' + e.message);
+  } finally {
+    btn.textContent = '✓ Generate & Issue Certificate';
+    btn.disabled = false;
+  }
+}
+
+function showIssueError(msg) {
+  const el = document.getElementById('issueErrorToast');
+  el.style.display = 'block';
+  el.textContent   = '⚠ ' + msg;
 }
 </script>
 </body>
