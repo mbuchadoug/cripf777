@@ -544,7 +544,7 @@ export async function buildLedger({ biz, data, branchId, start, end, openingBala
  *  - Drawings they processed
  *  - Balance reconciliation
  */
-export async function buildClerkStatement({ biz, clerkPhone, branchId, start, end }) {
+export async function buildClerkStatement({ biz, clerkPhone, branchId, start, end, openingCustody: openingCustodyOverride = null }) {
   const cur = biz.currency || "USD";
 
   // Normalise clerk phone
@@ -571,10 +571,13 @@ export async function buildClerkStatement({ biz, clerkPhone, branchId, start, en
     }
   }
 
-  // ── Opening custody: from handover received, or opening balance if owner ────
-  let openingCustody = 0;
-  let openingSource  = "Opening Balance";
-  if (handoversIn.length > 0) {
+  // ── Opening custody ────────────────────────────────────────────────────────
+  // Use the cumulative carry-forward if provided (computed from all history
+  // before `start`). This is always accurate — never relies on manual entry.
+  // Fall back to handover-in amount only if no override given.
+  let openingCustody = openingCustodyOverride !== null ? openingCustodyOverride : 0;
+  let openingSource  = openingCustodyOverride !== null ? "Carried forward from previous period" : "Opening Balance";
+  if (openingCustodyOverride === null && handoversIn.length > 0) {
     openingCustody = handoversIn[0].amountCounted || 0;
     openingSource  = `Received from ${handoversIn[0].outgoingName || "Unknown"} at ${new Date(handoversIn[0].handoverAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`;
   }
