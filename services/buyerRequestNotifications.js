@@ -223,67 +223,78 @@ async function _sendNewRequestToPhone({
     ? `1 item: ${_singleItem}`
     : `${_itemCount} items: ${_singleItem}${_itemCount > 1 ? " + more" : ""}`;
 
+  // ── STEP 1: Send a template to open the Meta session ─────────────────────
+  // Templates always deliver regardless of the 24-hour session window.
+  // Strategy:
+  //   a) Try v2 template first (has built-in quick reply buttons - best UX)
+  //   b) If v2 fails (404 / quality pending), fall back to v1 plain text
+  //   c) v1 plain text opens the session so step 2 sendButtons lands
+  //
+  // STEP 2: After ANY successful template, send sendButtons as a second message
+  // with View & Quote / Not Available. The template opened the session so this
+  // always delivers. Even if both templates fail, try sendButtons in case a
+  // session already exists (e.g. seller messaged the bot recently).
+
+  let _templateSent = false;
+
+  // ── Step 1a: Try v2 template (has quick reply buttons built in) ───────────
   if (USE_V2_TEMPLATE) {
     try {
       if (isVip && buyerPhone) {
-        // ── VIP path: 5-variable template with buyer phone ──────────────────
-      await _sendTemplateV2(normalizedPhone, "supplier_new_request_v2_with_phone", [
-  _itemSummary,
-  locationText,
-  deliveryLine,
-  ref,
-  _formatPhoneDisplay(buyerPhone)
-], requestId);
+        await _sendTemplateV2(normalizedPhone, "supplier_new_request_v2_with_phone", [
+          _itemSummary, locationText, deliveryLine, ref, _formatPhoneDisplay(buyerPhone)
+        ], requestId);
         console.log(`[BUY REQ TPL VIP] supplier_new_request_v2_with_phone → ${normalizedPhone} (${ref})`);
       } else {
-        // ── Standard path ───────────────────────────────────────────────────
-    await _sendTemplateV2(normalizedPhone, "supplier_new_request_v2", [
-  _itemSummary,
-  locationText,
-  deliveryLine,
-  ref
-], requestId);
+        await _sendTemplateV2(normalizedPhone, "supplier_new_request_v2", [
+          _itemSummary, locationText, deliveryLine, ref
+        ], requestId);
         console.log(`[BUY REQ TPL v2] supplier_new_request_v2 → ${normalizedPhone} (${ref})`);
       }
+      _templateSent = true;
+      // v2 has buttons built in — return now, no need for step 2
       return;
     } catch (err) {
-      console.warn(`[BUY REQ TPL v2] failed for ${normalizedPhone}: ${err.message}. Falling back to sendButtons.`);
-      // ── v2 template failed: send interactive sendButtons immediately ────────
-      // DO NOT fall through to the plain-text v1 template (supplier_new_buyer_request)
-      // because it has NO buttons and succeeds silently, leaving the seller with
-      // plain text and no way to tap View & Quote. sendButtons is the correct
-      // fallback - it delivers within an active session and shows tappable actions.
-      try {
-        const itemDisplay = fullItemLines || itemSummary;
-        await sendButtons(normalizedPhone, {
-          text:
-            `🔔 *New Buyer Request* (${ref})\n\n` +
-            `📍 ${locationText}\n${deliveryLine}\n\n` +
-            `📦 *Items needed:*\n${itemDisplay}\n\n` +
-            `─────────────────\n` +
-            `Tap *View & Quote* to enter your prices.`,
-          buttons: [
-            { id: `req_offer_${requestId}`,   title: "⚡ View & Quote"  },
-            { id: `req_unavail_${requestId}`, title: "❌ Not Available" }
-          ]
-        });
-        console.log(`[BUY REQ TPL] sendButtons fallback OK → ${normalizedPhone} (${ref})`);
-      } catch (fallbackErr) {
-        console.warn(`[BUY REQ TPL] sendButtons fallback failed for ${normalizedPhone}: ${fallbackErr.message}. Trying v1 plain text as last resort.`);
-        // Last resort only: v1 plain text template (no buttons, but at least notifies)
-        try {
-          await _sendTemplate(normalizedPhone, "supplier_new_buyer_request", [
-            ref,
-            locationText,
-            `${_itemCount} item${_itemCount === 1 ? "" : "s"} requested`,
-            deliveryLine
-          ]);
-          console.log(`[BUY REQ TPL v1 last resort] supplier_new_buyer_request → ${normalizedPhone} (${ref})`);
-        } catch (v1Err) {
-          console.error(`[BUY REQ TPL] all fallbacks failed for ${normalizedPhone}: ${v1Err.message}`);
-        }
-      }
+      console.warn(`[BUY REQ TPL v2] failed for ${normalizedPhone}: ${err.message}. Trying v1 to open session.`);
     }
+  }
+
+  // ── Step 1b: v1 plain-text template — no buttons but opens the session ────
+  if (!_templateSent) {
+    try {
+      await _sendTemplate(normalizedPhone, "supplier_new_buyer_request", [
+        ref,
+        locationText,
+        `${_itemCount} item${_itemCount === 1 ? "" : "s"} requested`,
+        deliveryLine
+      ]);
+      console.log(`[BUY REQ TPL v1] supplier_new_buyer_request → ${normalizedPhone} (${ref})`);
+      _templateSent = true;
+    } catch (err) {
+      console.warn(`[BUY REQ TPL v1] failed for ${normalizedPhone}: ${err.message}`);
+    }
+  }
+
+  // ── Step 2: Send interactive buttons after template ───────────────────────
+  // The template above opened the session so sendButtons now always delivers.
+  // If both templates failed, still try — seller may have an existing session.
+  const itemDisplay = fullItemLines || itemSummary;
+  try {
+    await sendButtons(normalizedPhone, {
+      text:
+        `🔔 *New Buyer Request* (${ref})\n\n` +
+        `📍 ${locationText}\n${deliveryLine}\n\n` +
+        `📦 *Items needed:*\n${itemDisplay}\n\n` +
+        `─────────────────\n` +
+        `Tap *View & Quote* to enter your prices.`,
+      buttons: [
+        { id: `req_offer_${requestId}`,   title: "⚡ View & Quote"  },
+        { id: `req_unavail_${requestId}`, title: "❌ Not Available" }
+      ]
+    });
+    console.log(`[BUY REQ TPL] Interactive buttons sent → ${normalizedPhone} (${ref})`);
+  } catch (btnErr) {
+    console.warn(`[BUY REQ TPL] sendButtons failed for ${normalizedPhone}: ${btnErr.message}`);
   }
 }
 
