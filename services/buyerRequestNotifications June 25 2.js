@@ -275,9 +275,27 @@ async function _sendNewRequestToPhone({
     }
   }
 
-  // NOTE: sendButtons with View & Quote / Not Available is sent by chatbotEngine.js
-  // AFTER _setSellerRequestSession() so the session is guaranteed to be set before
-  // the seller can tap the button. Do NOT send sendButtons here.
+  // ── Step 2: Send interactive buttons after template ───────────────────────
+  // The template above opened the session so sendButtons now always delivers.
+  // If both templates failed, still try — seller may have an existing session.
+  const itemDisplay = fullItemLines || itemSummary;
+  try {
+    await sendButtons(normalizedPhone, {
+      text:
+        `🔔 *New Buyer Request* (${ref})\n\n` +
+        `📍 ${locationText}\n${deliveryLine}\n\n` +
+        `📦 *Items needed:*\n${itemDisplay}\n\n` +
+        `─────────────────\n` +
+        `Tap *View & Quote* to enter your prices.`,
+      buttons: [
+        { id: `req_offer_${requestId}`,   title: "⚡ View & Quote"  },
+        { id: `req_unavail_${requestId}`, title: "❌ Not Available" }
+      ]
+    });
+    console.log(`[BUY REQ TPL] Interactive buttons sent → ${normalizedPhone} (${ref})`);
+  } catch (btnErr) {
+    console.warn(`[BUY REQ TPL] sendButtons failed for ${normalizedPhone}: ${btnErr.message}`);
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
