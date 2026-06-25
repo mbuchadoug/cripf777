@@ -102,43 +102,36 @@ export async function resolveCallerAndBranch(biz, from) {
 }
 
 
-// ─── Opening balance — cumulative carry-forward ───────────────────────────────
-// Instead of looking only at the exact day record (which is often missing),
-// walk backwards through CashBalance history to find the most recent closing
-// balance before `date`. That closing becomes the opening. If none exists,
-// return 0 (first-ever transaction scenario).
+// ─── True opening balance: computed from ALL history before `date` ────────────
+// Never relies on CashBalance records or manual entry. Sums every payment,
+// receipt, expense, payout and handover recorded before midnight of `date`
+// for this business/branch. Result is always accurate regardless of whether
+// anyone remembered to set an opening balance that morning.
 async function fetchOpeningBalance(biz, branchId, date) {
   try {
-    const CashBalance = (await import("../models/cashBalance.js")).default;
-    const day = new Date(date); day.setHours(0, 0, 0, 0);
+    const Invoice        = (await import("../models/invoice.js")).default;
+    const InvoicePayment = (await import("../models/invoicePayment.js")).default;
+    const Expense        = (await import("../models/expense.js")).default;
+    const CashPayout     = (await import("../models/cashPayout.js")).default;
+    const CashHandover   = (await import("../models/cashHandover.js")).default;
 
-    // First: check if there's an explicit opening balance for this exact day
-    const exact = await CashBalance.findOne({
-      businessId: biz._id, branchId: branchId || null, date: day
-    }).lean();
-    if (exact?.openingBalance != null && exact.openingBalance !== 0) {
-      return exact.openingBalance;
-    }
-
-    // Otherwise: find the most recent day before `date` that has a closing balance
-    const prev = await CashBalance.findOne({
+    const before = new Date(date); before.setHours(0, 0, 0, 0);
+    const bQ = {
       businessId: biz._id,
-      branchId:   branchId || null,
-      date:       { $lt: day },
-      closingBalance: { $exists: true, $ne: null }
-    }).sort({ date: -1 }).lean();
+      createdAt:  { $lt: before },
+      ...(branchId ? { branchId } : {})
+    };
 
-    if (prev?.closingBalance != null) {
-      // Auto-carry: write this as today's opening so future lookups are instant
-      await CashBalance.findOneAndUpdate(
-        { businessId: biz._id, branchId: branchId || null, date: day },
-        { $setOnInsert: { openingBalance: prev.closingBalance, closingBalance: prev.closingBalance } },
-        { upsert: true }
-      ).catch(() => {});  // non-fatal
-      return prev.closingBalance;
-    }
+    const [pmts, rcpts, exps, payouts] = await Promise.all([
+      InvoicePayment.aggregate([{ $match: bQ }, { $group: { _id: null, t: { $sum: "$amount" } } }]),
+      Invoice.aggregate([{ $match: { ...bQ, type: "receipt" } }, { $group: { _id: null, t: { $sum: "$total" } } }]),
+      Expense.aggregate([{ $match: bQ }, { $group: { _id: null, t: { $sum: "$amount" } } }]),
+      CashPayout.aggregate([{ $match: bQ }, { $group: { _id: null, t: { $sum: "$amount" } } }]).catch(() => [])
+    ]);
 
-    return exact?.openingBalance ?? 0;
+    const totalIn  = (pmts[0]?.t || 0) + (rcpts[0]?.t || 0);
+    const totalOut = (exps[0]?.t  || 0) + (payouts[0]?.t || 0);
+    return totalIn - totalOut;
   } catch (_) { return 0; }
 }
 
@@ -362,59 +355,75 @@ export async function runMonthlyReportMetaEnhanced({ biz, from }) {
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // DETAILED LEDGER  →  states "report_detailed*"
+//
+// DESIGN: The ledger is always a continuous running statement, never day-isolated.
+// "Daily" / "Weekly" / "Monthly" are just date-range presets — a window into the
+// same continuous ledger. Opening balance is computed from ALL history before the
+// start date so it is always accurate regardless of manual opening balance entries.
+// Each row shows a running balance column exactly like a bank statement.
 // ═══════════════════════════════════════════════════════════════════════════════
-export async function runDetailedLedgerReport({ biz, from, period = "day", customStart = null, customEnd = null, clerkSelfServe = false }) {
+export async function runDetailedLedgerReport({ biz, from, period = "day", customStart = null, customEnd = null }) {
   const { branchId, branchName } = await resolveCallerAndBranch(biz, from);
 
   let start, end, periodLabel;
 
   if (period === "custom" && customStart && customEnd) {
     start = customStart; end = customEnd;
-    periodLabel = `${shortDate(start)} - ${shortDate(end)}`;
+    periodLabel = `${shortDate(start)} – ${shortDate(end)}`;
   } else if (period === "week") {
-    const now = new Date(); const dow = now.getDay(); const diff = dow === 0 ? -6 : 1 - dow;
-    start = new Date(now); start.setDate(now.getDate() + diff); start.setHours(0, 0, 0, 0);
-    end   = new Date(start); end.setDate(start.getDate() + 6); end.setHours(23, 59, 59, 999);
-    periodLabel = `${shortDate(start)} - ${shortDate(end)}`;
+    // Last 7 days rolling (more useful than Mon-Sun calendar week)
+    end   = new Date(); end.setHours(23, 59, 59, 999);
+    start = new Date(end); start.setDate(start.getDate() - 6); start.setHours(0, 0, 0, 0);
+    periodLabel = `${shortDate(start)} – ${shortDate(end)}`;
   } else if (period === "month") {
     const now = new Date();
     start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
     end   = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
     periodLabel = start.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+  } else if (period === "year") {
+    const now = new Date();
+    start = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
+    end   = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
+    periodLabel = `Year ${now.getFullYear()}`;
   } else {
+    // "day" = today only, but opening balance still comes from all prior history
     start = new Date(); start.setHours(0,  0,  0,   0);
     end   = new Date(); end.setHours(23, 59, 59, 999);
-    periodLabel = dateLabel(start);
+    periodLabel = `Today · ${dateLabel(start)}`;
   }
 
-  const data           = await fetchReportData({ biz, start, end, branchId });
+  // Opening balance = computed from ALL transactions before `start`, no manual entry needed
   const openingBalance = await fetchOpeningBalance(biz, branchId, start);
-  const ledger         = await buildLedger({ biz, data, branchId, start, end, openingBalance });
+  const data           = await fetchReportData({ biz, start, end, branchId });
+
+  // Build running-balance ledger rows
+  const ledger = await _buildRunningLedger({ biz, data, branchId, start, end, openingBalance });
 
   biz.sessionState = "ready"; biz.sessionData = {}; await biz.save();
 
   const cur = biz.currency || "USD";
   const net = ledger.closingBalance - openingBalance;
+  const txCount = ledger.rows.filter(r => r.type !== "opening" && r.type !== "closing").length;
 
-  // Short WhatsApp message - full detail is in the PDF
   await sendText(from,
-`📋 *DETAILED LEDGER*
+`📋 *LEDGER STATEMENT*
 ${biz.name}${branchName ? ` · ${branchName}` : ""}
 ${periodLabel}
 ━━━━━━━━━━━━━━━━━━━━
 Opening Balance: ${fmtMoney(openingBalance, cur)}
-Total In  (+):   ${fmtMoney(ledger.totalCredits, cur)}
-Total Out (−):   ${fmtMoney(ledger.totalDebits, cur)}
+  + Money In:   ${fmtMoney(ledger.totalCredits, cur)}
+  − Money Out:  ${fmtMoney(ledger.totalDebits, cur)}
+━━━━━━━━━━━━━━━━━━━━
 Closing Balance: ${fmtMoney(ledger.closingBalance, cur)}
-Net Change: ${net >= 0 ? "▲ +" : "▼ "}${fmtMoney(Math.abs(net), cur)}
-${ledger.rows.filter(r => !r.isHandover).length} transactions · ${ledger.rows.filter(r => r.isHandover).length} handovers
+Net Movement: ${net >= 0 ? "▲ +" : "▼ "}${fmtMoney(Math.abs(net), cur)}
+${txCount} transactions recorded
 
-📄 Full ledger PDF with all transactions and running balances is attached below ↓`
+📄 Full ledger with running balances per transaction is attached ↓`
   );
 
   try {
     const { filename, url } = await generateReportPDF({
-      biz, reportType: "Detailed Ledger", periodLabel, branchName,
+      biz, reportType: "Ledger Statement", periodLabel, branchName,
       ledgerRows: ledger.rows, openingBalance, closingBalance: ledger.closingBalance
     });
     await sendDocument(from, { link: url, filename });
@@ -422,6 +431,68 @@ ${ledger.rows.filter(r => !r.isHandover).length} transactions · ${ledger.rows.f
 
   await sendMainMenu(from);
   return true;
+}
+
+
+// ─── Build running-balance ledger rows ────────────────────────────────────────
+// Returns rows suitable for PDF rendering, each with a `balance` field showing
+// the running total after that transaction — exactly like a bank statement.
+async function _buildRunningLedger({ biz, data, branchId, start, end, openingBalance }) {
+  const CashPayout   = (await import("../models/cashPayout.js")).default;
+  const CashHandover = (await import("../models/cashHandover.js")).default;
+
+  const bQ = { businessId: biz._id, createdAt: { $gte: start, $lte: end }, ...(branchId ? { branchId } : {}) };
+  const [payouts, handovers] = await Promise.all([
+    CashPayout.find(bQ).lean().catch(() => []),
+    CashHandover.find({ ...bQ, $or: [{ fromBranchId: branchId }, { toBranchId: branchId }] }).lean().catch(() => [])
+  ]);
+
+  // Flatten all transactions into a single array with type/sign/metadata
+  const rows = [];
+
+  for (const p of data.payments) {
+    rows.push({ date: p.createdAt, type: "payment", credit: p.amount || 0, debit: 0,
+      description: `Invoice payment · ${p.invoiceRef || p.invoiceId || ""}`,
+      ref: p._id, recordedBy: p.recordedBy || null });
+  }
+  for (const r of data.receipts) {
+    rows.push({ date: r.createdAt, type: "receipt", credit: r.total || 0, debit: 0,
+      description: `Cash sale · ${r.clientName || r.invoiceRef || "Receipt"}`,
+      ref: r._id, recordedBy: r.recordedBy || null });
+  }
+  for (const e of data.expenses) {
+    rows.push({ date: e.createdAt, type: "expense", credit: 0, debit: e.amount || 0,
+      description: `Expense · ${e.category || ""} · ${e.description || ""}`,
+      ref: e._id, recordedBy: e.recordedBy || null });
+  }
+  for (const po of payouts) {
+    rows.push({ date: po.createdAt, type: "payout", credit: 0, debit: po.amount || 0,
+      description: `Payout · ${po.reason || ""}`,
+      ref: po._id, recordedBy: po.recordedBy || null });
+  }
+  for (const h of handovers) {
+    const isOut = String(h.fromBranchId) === String(branchId);
+    rows.push({ date: h.handoverAt || h.createdAt, type: "handover",
+      credit: isOut ? 0 : (h.amountCounted || 0),
+      debit:  isOut ? (h.amountCounted || 0) : 0,
+      description: `Handover · ${h.outgoingName || ""} → ${h.incomingName || ""}`,
+      ref: h._id, recordedBy: h.outgoingPhone || null });
+  }
+
+  // Sort chronologically
+  rows.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+  // Add running balance to each row
+  let balance = openingBalance;
+  let totalCredits = 0, totalDebits = 0;
+  const runningRows = rows.map(r => {
+    balance   += r.credit - r.debit;
+    totalCredits += r.credit;
+    totalDebits  += r.debit;
+    return { ...r, balance };
+  });
+
+  return { rows: runningRows, totalCredits, totalDebits, closingBalance: balance };
 }
 
 
@@ -434,30 +505,35 @@ export async function runClerkStatementReport({ biz, from, clerkPhone, period = 
   let start, end, periodLabel;
   if (period === "custom" && customStart && customEnd) {
     start = customStart; end = customEnd;
-    periodLabel = `${shortDate(start)} - ${shortDate(end)}`;
+    periodLabel = `${shortDate(start)} – ${shortDate(end)}`;
   } else if (period === "week") {
-    const now = new Date(); const dow = now.getDay(); const diff = dow === 0 ? -6 : 1 - dow;
-    start = new Date(now); start.setDate(now.getDate() + diff); start.setHours(0, 0, 0, 0);
-    end   = new Date(start); end.setDate(start.getDate() + 6); end.setHours(23, 59, 59, 999);
-    periodLabel = `${shortDate(start)} - ${shortDate(end)}`;
+    // Last 7 days rolling
+    end   = new Date(); end.setHours(23, 59, 59, 999);
+    start = new Date(end); start.setDate(start.getDate() - 6); start.setHours(0, 0, 0, 0);
+    periodLabel = `${shortDate(start)} – ${shortDate(end)}`;
   } else if (period === "month") {
     const now = new Date();
     start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
     end   = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
     periodLabel = start.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+  } else if (period === "year") {
+    const now = new Date();
+    start = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
+    end   = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
+    periodLabel = `Year ${now.getFullYear()}`;
   } else {
+    // "day" = today, but opening still comes from all prior history
     start = new Date(); start.setHours(0,  0,  0,   0);
     end   = new Date(); end.setHours(23, 59, 59, 999);
-    periodLabel = dateLabel(start);
+    periodLabel = `Today · ${dateLabel(start)}`;
   }
 
   biz.sessionState = "ready"; biz.sessionData = {}; await biz.save();
 
-  // ── Cumulative opening custody ────────────────────────────────────────────
-  // Find this clerk's cumulative opening custody: sum of all amounts they
-  // received (handovers received TO them, opening balance assigned to them)
-  // minus all amounts they handed over, prior to `start`.
-  // This gives the true carry-forward so the statement is a running ledger.
+  // ── Cumulative opening custody (computed, not stored) ─────────────────────
+  // Sum ALL of this clerk's credits and debits before `start`.
+  // This is their true carry-forward balance — works even if they never set
+  // an opening balance and even across days/weeks/months seamlessly.
   const _clerkCumulativeOpening = await fetchClerkCumulativeBalance({ biz, clerkPhone, branchId, before: start });
 
   const stmt = await buildClerkStatement({ biz, clerkPhone, branchId, start, end, openingCustody: _clerkCumulativeOpening });

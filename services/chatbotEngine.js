@@ -10474,50 +10474,53 @@ Type *done* to save`,
 
   if (a === ACTIONS.DETAILED_REPORT) {
     if (!biz) return sendMainMenu(from);
-    // Show period picker
+    // Date-range picker — ledger is always continuous, these are window presets
     biz.sessionData = { ...(biz.sessionData||{}) };
     await saveBizSafe(biz);
-    return sendList(from, "📋 Detailed Ledger - Choose Period:", [
-      { id: "rpt_det_day",    title: "📅 Today"          },
-      { id: "rpt_det_week",   title: "📊 This Week"       },
-      { id: "rpt_det_month",  title: "📆 This Month"      },
-      { id: "rpt_det_custom", title: "🗓 Custom Dates..."  },
-      { id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu"      }
+    return sendList(from, "📋 Ledger Statement - Choose Date Range:", [
+      { id: "rpt_det_day",    title: "📅 Today"           },
+      { id: "rpt_det_week",   title: "📊 Last 7 Days"      },
+      { id: "rpt_det_month",  title: "📆 This Month"       },
+      { id: "rpt_det_year",   title: "🗂 This Year"        },
+      { id: "rpt_det_custom", title: "🗓 Custom Range..."  },
+      { id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu"       }
     ]);
   }
 
   if (a === "rpt_det_day")    { if (!biz) return sendMainMenu(from); biz.sessionState = "report_detailed";       biz.sessionData = {}; await saveBizSafe(biz); return continueTwilioFlow({ from, text: "auto" }); }
   if (a === "rpt_det_week")   { if (!biz) return sendMainMenu(from); biz.sessionState = "report_detailed_week";  biz.sessionData = {}; await saveBizSafe(biz); return continueTwilioFlow({ from, text: "auto" }); }
   if (a === "rpt_det_month")  { if (!biz) return sendMainMenu(from); biz.sessionState = "report_detailed_month"; biz.sessionData = {}; await saveBizSafe(biz); return continueTwilioFlow({ from, text: "auto" }); }
+  if (a === "rpt_det_year")   { if (!biz) return sendMainMenu(from); biz.sessionState = "report_detailed_year";  biz.sessionData = {}; await saveBizSafe(biz); return continueTwilioFlow({ from, text: "auto" }); }
   if (a === "rpt_det_custom") {
     if (!biz) return sendMainMenu(from);
     biz.sessionState = "report_date_filter";
     biz.sessionData  = { filterFor: "detailed" };
     await saveBizSafe(biz);
     return sendButtons(from, {
-      text: "🗓 *Custom Date Range*\n\nEnter a date range, for example:\n*01 Jun - 22 Jun*\nor\n*01/06 - 22/06*",
+      text: "🗓 *Custom Date Range*\n\nType the range e.g.:\n*01 Jun - 22 Jun*\n*01/06 - 22/06*\n*2026-06-01 - 2026-06-22*",
       buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
     });
   }
 
   if (a === ACTIONS.CLERK_STATEMENT) {
     if (!biz) return sendMainMenu(from);
-    // Period picker first, then clerk picker
+    // Date range picker
     await saveBizSafe(biz);
-    return sendList(from, "👤 Clerk Statement - Choose Period:", [
-      { id: "rpt_clk_day",    title: "📅 Today"         },
-      { id: "rpt_clk_week",   title: "📊 This Week"      },
-      { id: "rpt_clk_month",  title: "📆 This Month"     },
-      { id: "rpt_clk_custom", title: "🗓 Custom Dates..." },
-      { id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu"     }
+    return sendList(from, "👤 Clerk Statement - Choose Date Range:", [
+      { id: "rpt_clk_day",    title: "📅 Today"            },
+      { id: "rpt_clk_week",   title: "📊 Last 7 Days"       },
+      { id: "rpt_clk_month",  title: "📆 This Month"        },
+      { id: "rpt_clk_year",   title: "📅 This Year"         },
+      { id: "rpt_clk_custom", title: "🗓 Custom Range..."   },
+      { id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu"        }
     ]);
   }
 
   // Clerk period selection → then pick clerk or self
-  if (["rpt_clk_day","rpt_clk_week","rpt_clk_month","rpt_clk_custom"].includes(a)) {
+  if (["rpt_clk_day","rpt_clk_week","rpt_clk_month","rpt_clk_year","rpt_clk_custom"].includes(a)) {
     if (!biz) return sendMainMenu(from);
-    const periodMap = { rpt_clk_day: "day", rpt_clk_week: "week", rpt_clk_month: "month", rpt_clk_custom: "custom" };
-    const clkPeriod = periodMap[a] || "day";
+    const periodMap = { rpt_clk_day: "day", rpt_clk_week: "week", rpt_clk_month: "month", rpt_clk_year: "year", rpt_clk_custom: "custom" };
+    const clkPeriod = periodMap[a] || "month";
     if (a === "rpt_clk_custom") {
       biz.sessionState = "report_date_filter";
       biz.sessionData  = { filterFor: "clerk", clerkPhone: caller?.phone || null };

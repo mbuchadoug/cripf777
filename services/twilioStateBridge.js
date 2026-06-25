@@ -316,6 +316,7 @@ const restrictedStateMap = {
     report_detailed:         "reports",
     report_detailed_week:    "reports",
     report_detailed_month:   "reports",
+    report_detailed_year:    "reports",
     report_clerk_statement:  "reports",
     report_clerk_pick:       "reports",
     payment_amount: "payments",
@@ -662,6 +663,7 @@ if (state === "payment_invoice_search") {
   if (state === "report_detailed")       return runDetailedLedgerReport({ biz, from, period: "day"   });
   if (state === "report_detailed_week")  return runDetailedLedgerReport({ biz, from, period: "week"  });
   if (state === "report_detailed_month") return runDetailedLedgerReport({ biz, from, period: "month" });
+  if (state === "report_detailed_year")  return runDetailedLedgerReport({ biz, from, period: "year"  });
   if (state === "report_detailed_custom") {
     const { customStart, customEnd } = biz.sessionData || {};
     if (!customStart || !customEnd) { biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz); return sendMainMenu(from); }
