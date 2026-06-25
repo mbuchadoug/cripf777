@@ -102,85 +102,14 @@ export async function resolveCallerAndBranch(biz, from) {
 }
 
 
-// ─── Opening balance — cumulative carry-forward ───────────────────────────────
-// Instead of looking only at the exact day record (which is often missing),
-// walk backwards through CashBalance history to find the most recent closing
-// balance before `date`. That closing becomes the opening. If none exists,
-// return 0 (first-ever transaction scenario).
+// ─── Opening balance ─────────────────────────────────────────────────────────
 async function fetchOpeningBalance(biz, branchId, date) {
   try {
     const CashBalance = (await import("../models/cashBalance.js")).default;
     const day = new Date(date); day.setHours(0, 0, 0, 0);
-
-    // First: check if there's an explicit opening balance for this exact day
-    const exact = await CashBalance.findOne({
-      businessId: biz._id, branchId: branchId || null, date: day
-    }).lean();
-    if (exact?.openingBalance != null && exact.openingBalance !== 0) {
-      return exact.openingBalance;
-    }
-
-    // Otherwise: find the most recent day before `date` that has a closing balance
-    const prev = await CashBalance.findOne({
-      businessId: biz._id,
-      branchId:   branchId || null,
-      date:       { $lt: day },
-      closingBalance: { $exists: true, $ne: null }
-    }).sort({ date: -1 }).lean();
-
-    if (prev?.closingBalance != null) {
-      // Auto-carry: write this as today's opening so future lookups are instant
-      await CashBalance.findOneAndUpdate(
-        { businessId: biz._id, branchId: branchId || null, date: day },
-        { $setOnInsert: { openingBalance: prev.closingBalance, closingBalance: prev.closingBalance } },
-        { upsert: true }
-      ).catch(() => {});  // non-fatal
-      return prev.closingBalance;
-    }
-
-    return exact?.openingBalance ?? 0;
+    const rec = await CashBalance.findOne({ businessId: biz._id, branchId: branchId || null, date: day }).lean();
+    return rec?.openingBalance ?? 0;
   } catch (_) { return 0; }
-}
-
-// ─── Compute and persist closing balance for a given day ─────────────────────
-// Called at end of day or whenever a report is generated. Ensures tomorrow's
-// opening balance is always available without manual entry.
-export async function saveClosingBalance(biz, branchId, date) {
-  try {
-    const CashBalance    = (await import("../models/cashBalance.js")).default;
-    const InvoicePayment = (await import("../models/invoicePayment.js")).default;
-    const Invoice        = (await import("../models/invoice.js")).default;
-    const Expense        = (await import("../models/expense.js")).default;
-    const CashPayout     = (await import("../models/cashPayout.js")).default;
-    const CashHandover   = (await import("../models/cashHandover.js")).default;
-
-    const day   = new Date(date); day.setHours(0, 0, 0, 0);
-    const dayEnd = new Date(day);  dayEnd.setHours(23, 59, 59, 999);
-
-    const bQ = { businessId: biz._id, createdAt: { $gte: day, $lte: dayEnd }, ...(branchId ? { branchId } : {}) };
-
-    const [payments, receipts, expenses, payouts] = await Promise.all([
-      InvoicePayment.aggregate([{ $match: bQ }, { $group: { _id: null, t: { $sum: "$amount" } } }]),
-      Invoice.aggregate([{ $match: { ...bQ, type: "receipt" } }, { $group: { _id: null, t: { $sum: "$total" } } }]),
-      Expense.aggregate([{ $match: bQ }, { $group: { _id: null, t: { $sum: "$amount" } } }]),
-      CashPayout.aggregate([{ $match: bQ }, { $group: { _id: null, t: { $sum: "$amount" } } }]).catch(() => [])
-    ]);
-
-    const opening   = await fetchOpeningBalance(biz, branchId, day);
-    const totalIn   = (payments[0]?.t || 0) + (receipts[0]?.t || 0);
-    const totalOut  = (expenses[0]?.t  || 0) + (payouts[0]?.t  || 0);
-    const closing   = opening + totalIn - totalOut;
-
-    await CashBalance.findOneAndUpdate(
-      { businessId: biz._id, branchId: branchId || null, date: day },
-      { $set: { closingBalance: closing, openingBalance: opening, updatedAt: new Date() } },
-      { upsert: true }
-    );
-    return closing;
-  } catch (e) {
-    console.error("[SAVE CLOSING]", e.message);
-    return 0;
-  }
 }
 
 
@@ -307,8 +236,6 @@ export async function runDailyReportMetaEnhanced({ biz, from }) {
   const data  = await fetchReportData({ biz, start, end, branchId });
   const totals = calcTotals(data);
   const openingBalance = await fetchOpeningBalance(biz, branchId, start);
-  // Persist closing balance so it becomes tomorrow's opening automatically
-  await saveClosingBalance(biz, branchId, start);
   biz.sessionState = "ready"; biz.sessionData = {}; await biz.save();
   await sendReport({ biz, from, label: "Daily Report", periodLabel: dateLabel(start), branchName, branchId, data, totals, prevTotals: null, weeks: null, start, end, openingBalance });
   await sendMainMenu(from);
@@ -363,7 +290,7 @@ export async function runMonthlyReportMetaEnhanced({ biz, from }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // DETAILED LEDGER  →  states "report_detailed*"
 // ═══════════════════════════════════════════════════════════════════════════════
-export async function runDetailedLedgerReport({ biz, from, period = "day", customStart = null, customEnd = null, clerkSelfServe = false }) {
+export async function runDetailedLedgerReport({ biz, from, period = "day", customStart = null, customEnd = null }) {
   const { branchId, branchName } = await resolveCallerAndBranch(biz, from);
 
   let start, end, periodLabel;
@@ -453,14 +380,7 @@ export async function runClerkStatementReport({ biz, from, clerkPhone, period = 
 
   biz.sessionState = "ready"; biz.sessionData = {}; await biz.save();
 
-  // ── Cumulative opening custody ────────────────────────────────────────────
-  // Find this clerk's cumulative opening custody: sum of all amounts they
-  // received (handovers received TO them, opening balance assigned to them)
-  // minus all amounts they handed over, prior to `start`.
-  // This gives the true carry-forward so the statement is a running ledger.
-  const _clerkCumulativeOpening = await fetchClerkCumulativeBalance({ biz, clerkPhone, branchId, before: start });
-
-  const stmt = await buildClerkStatement({ biz, clerkPhone, branchId, start, end, openingCustody: _clerkCumulativeOpening });
+  const stmt = await buildClerkStatement({ biz, clerkPhone, branchId, start, end });
   const cur  = biz.currency || "USD";
   const { clerkName, clerkRole, openingCustody, totalIn, totalOut, expectedClosing, handedOver, discrepancy } = stmt;
 
@@ -470,112 +390,34 @@ export async function runClerkStatementReport({ biz, from, clerkPhone, period = 
         : discrepancy > 0
           ? `⚠️ Surplus +${fmtMoney(discrepancy, cur)}`
           : `❌ Short ${fmtMoney(Math.abs(discrepancy), cur)}`)
-    : `⏳ Shift open - Cash at hand: ${fmtMoney(expectedClosing, cur)}`;
-
-  // Determine if caller IS the clerk (self-serve) or manager viewing clerk
-  const UserRole = (await import("../models/userRole.js")).default;
-  const { normalizePhone } = await import("./phone.js");
-  let callerPhone = normalizePhone(from);
-  if (callerPhone.startsWith("0")) callerPhone = "263" + callerPhone.slice(1);
-  const isSelfServe = callerPhone === clerkPhone;
-
-  const header = isSelfServe
-    ? `💼 *MY STATEMENT*
-${clerkName}
-${biz.name}${branchName ? ` · ${branchName}` : ""}`
-    : `👤 *CLERK STATEMENT*
-${clerkName} (${clerkRole})
-${biz.name}${branchName ? ` · ${branchName}` : ""}`;
+    : `⏳ Shift open - Balance: ${fmtMoney(expectedClosing, cur)}`;
 
   await sendText(from,
-`${header}
+`👤 *CLERK STATEMENT*
+${clerkName} (${clerkRole})
+${biz.name}${branchName ? ` · ${branchName}` : ""}
 ${periodLabel}
 ━━━━━━━━━━━━━━━━━━━━
-Opening Balance: ${fmtMoney(openingCustody, cur)}
+Opening Custody: ${fmtMoney(openingCustody, cur)}
 Total In  (+):   ${fmtMoney(totalIn, cur)}
 Total Out (−):   ${fmtMoney(totalOut, cur)}
-━━━━━━━━━━━━━━━━━━━━
-CASH AT HAND:    ${fmtMoney(expectedClosing, cur)}
+Closing Balance: ${fmtMoney(expectedClosing, cur)}
 ${stmt.txRows.length} transactions recorded
 ━━━━━━━━━━━━━━━━━━━━
-${recLine}
+RECONCILIATION: ${recLine}
 
-📄 Full statement PDF attached below ↓`
+📄 Full clerk statement PDF attached below ↓`
   );
 
   try {
     const { filename, url } = await generateReportPDF({
-      biz, reportType: isSelfServe ? "My Statement" : "Clerk Statement",
+      biz, reportType: "Clerk Statement",
       periodLabel: `${clerkName} · ${periodLabel}`,
-      branchName, clerkData: { ...stmt, openingCustody: _clerkCumulativeOpening }
+      branchName, clerkData: stmt
     });
     await sendDocument(from, { link: url, filename });
   } catch (e) { console.error("[CLERK STMT PDF]", e.message); await sendText(from, "⚠️ PDF generation failed."); }
 
   await sendMainMenu(from);
   return true;
-}
-
-
-// ─── Clerk cumulative balance: sum everything before `before` date ────────────
-// Walks ALL historical invoicePayments, receipts, expenses, payouts, and
-// handovers attributed to this clerk to compute their true running balance.
-// This is the carry-forward opening for any clerk statement period.
-async function fetchClerkCumulativeBalance({ biz, clerkPhone, branchId, before }) {
-  try {
-    const Invoice        = (await import("../models/invoice.js")).default;
-    const InvoicePayment = (await import("../models/invoicePayment.js")).default;
-    const Expense        = (await import("../models/expense.js")).default;
-    const CashPayout     = (await import("../models/cashPayout.js")).default;
-    const CashHandover   = (await import("../models/cashHandover.js")).default;
-
-    const beforeDate = new Date(before); beforeDate.setHours(0, 0, 0, 0);
-    const bQ = {
-      businessId: biz._id,
-      createdAt:  { $lt: beforeDate },
-      ...(branchId ? { branchId } : {})
-    };
-    const clerkQ = { ...bQ, recordedBy: clerkPhone };
-
-    const [pmts, rcpts, exps, payouts, handoversOut, handoversIn] = await Promise.all([
-      // Money the clerk collected from clients (invoice payments recorded by them)
-      InvoicePayment.aggregate([{ $match: clerkQ }, { $group: { _id: null, t: { $sum: "$amount" } } }]),
-      // Cash sales (receipts) the clerk raised
-      Invoice.aggregate([{ $match: { ...clerkQ, type: "receipt" } }, { $group: { _id: null, t: { $sum: "$total" } } }]),
-      // Expenses the clerk recorded (debit from their custody)
-      Expense.aggregate([{ $match: clerkQ }, { $group: { _id: null, t: { $sum: "$amount" } } }]),
-      // Payouts the clerk made
-      CashPayout.aggregate([{ $match: clerkQ }, { $group: { _id: null, t: { $sum: "$amount" } } }]).catch(() => []),
-      // Handovers the clerk gave (debit)
-      CashHandover.aggregate([{ $match: { ...bQ, fromPhone: clerkPhone } }, { $group: { _id: null, t: { $sum: "$amount" } } }]).catch(() => []),
-      // Handovers the clerk received (credit)
-      CashHandover.aggregate([{ $match: { ...bQ, toPhone: clerkPhone } },   { $group: { _id: null, t: { $sum: "$amount" } } }]).catch(() => [])
-    ]);
-
-    const totalIn  = (pmts[0]?.t || 0) + (rcpts[0]?.t || 0) + (handoversIn[0]?.t  || 0);
-    const totalOut = (exps[0]?.t  || 0) + (payouts[0]?.t || 0) + (handoversOut[0]?.t || 0);
-    return totalIn - totalOut;  // positive = clerk holds this much cash
-  } catch (e) {
-    console.error("[CLERK CUMULATIVE]", e.message);
-    return 0;
-  }
-}
-
-
-// ─── Clerk self-serve: clerk views their own ledger and balance ───────────────
-export async function runClerkSelfServeStatement({ biz, from, period = "month", customStart = null, customEnd = null }) {
-  const { normalizePhone } = await import("./phone.js");
-  let clerkPhone = normalizePhone(from);
-  if (clerkPhone.startsWith("0")) clerkPhone = "263" + clerkPhone.slice(1);
-
-  // Resolve their branch from their UserRole
-  const UserRole = (await import("../models/userRole.js")).default;
-  const caller = await UserRole.findOne({ phone: clerkPhone, pending: false });
-  if (!caller || !["clerk", "manager"].includes(caller.role)) {
-    await sendText(from, "❌ Your account doesn't have clerk or manager access.");
-    await sendMainMenu(from);
-    return true;
-  }
-
-  return runClerkStatementReport({ biz, from, clerkPhone, period, customStart, customEnd });
 }

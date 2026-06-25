@@ -13,7 +13,7 @@ import { ACTIONS } from "./actions.js";
 import { sendList } from "./metaSender.js";
 import InvoicePayment from "../models/invoicePayment.js";
 
-import { runDailyReportMetaEnhanced, runWeeklyReportMetaEnhanced, runMonthlyReportMetaEnhanced, runDetailedLedgerReport, runClerkStatementReport, runClerkSelfServeStatement, saveClosingBalance, parseCustomDateRange } from "./dailyReportEnhanced.js";
+import { runDailyReportMetaEnhanced, runWeeklyReportMetaEnhanced, runMonthlyReportMetaEnhanced, runDetailedLedgerReport, runClerkStatementReport, parseCustomDateRange } from "./dailyReportEnhanced.js";
 import {
   parseCommaNames,
   parsePickEntries,
@@ -699,14 +699,6 @@ if (state === "payment_invoice_search") {
   }
 
   // ── Self clerk statement (clerk views own statement) ──────────────────────
-  // ── Clerk self-serve: clerk views their own statement ──────────────────────
-  if (state === "report_clerk_self") {
-    const period = biz.sessionData?.clerkPeriod || "month";
-    const customStart = biz.sessionData?.customStart || null;
-    const customEnd   = biz.sessionData?.customEnd   || null;
-    return runClerkSelfServeStatement({ biz, from, period, customStart, customEnd });
-  }
-
   if (state === "report_clerk_statement") {
     let phone2 = from.replace(/\D+/g, "");
     if (phone2.startsWith("0")) phone2 = "263" + phone2.slice(1);
@@ -3177,9 +3169,6 @@ _Cash balance updated._`
       await sendText(from, "❌ Error saving handover. Please try again.");
       return true;
     }
-
-    // Update closing balance so incoming clerk's opening is accurate
-    try { await saveClosingBalance(biz, targetBranchId, new Date()); } catch (_) {}
 
     biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
 
