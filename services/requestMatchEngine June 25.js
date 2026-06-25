@@ -13,7 +13,6 @@
 //  - PRODUCT/SERVICE intents NEVER match hospitality suppliers.
 
 import SupplierProfile from "../models/supplierProfile.js";
-import UserSession     from "../models/userSession.js";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -1043,87 +1042,6 @@ export async function notifyNewSellerOfUnmatchedRequests(supplier) {
           itemSummary:   itemLines,
           deliveryLine
         });
-
-        // ── Set session so seller can open the quote flow ─────────────────────
-        // Without this, the seller receives the notification template but when
-        // they open the chatbot the engine has no session context and cannot
-        // show them the request or the quote form.
-        // Mirrors exactly what notifySuppliersOfBuyerRequest() does in chatbotEngine.js.
-        try {
-          const _rmeReqId  = String(req._id);
-          const _rmePhone  = String(supplier.phone).replace(/\D+/g, "");
-          const _rmeNorm   = _rmePhone.startsWith("0") && _rmePhone.length === 10
-            ? "263" + _rmePhone.slice(1) : _rmePhone;
-
-          // Load existing pending map and prune stale entries (>48h)
-          const _rmeExisting = await UserSession.findOne({ phone: _rmeNorm }).lean();
-          let _rmeMap = {};
-          try {
-            const _rmeRaw = _rmeExisting?.tempData?.sellerPendingRequests;
-            _rmeMap = _rmeRaw && typeof _rmeRaw === "object" && !Array.isArray(_rmeRaw)
-              ? _rmeRaw : {};
-          } catch (_) { _rmeMap = {}; }
-          const _cutoff = Date.now() - 48 * 60 * 60 * 1000;
-          for (const k of Object.keys(_rmeMap)) {
-            if ((_rmeMap[k]?.storedAt || 0) < _cutoff) delete _rmeMap[k];
-          }
-          _rmeMap[_rmeReqId] = {
-            state: "awaiting_offer_intro",
-            storedAt: Date.now(),
-            requestId: _rmeReqId,
-            role: "primary"
-          };
-
-          await UserSession.findOneAndUpdate(
-            { phone: _rmeNorm },
-            {
-              $set: {
-                "tempData.sellerPendingRequests":   _rmeMap,
-                "tempData.sellerRequestReplyState": "awaiting_offer_intro",
-                "tempData.sellerRequestId":          _rmeReqId
-              }
-            },
-            { upsert: true }
-          );
-
-          // Also set session for notification contacts (watchers) with role=notification_only
-          const _rmeNotifContacts = supplier.notificationContacts || [];
-          for (const nc of _rmeNotifContacts) {
-            try {
-              const _ncPhone = String(nc).replace(/\D+/g, "");
-              const _ncNorm  = _ncPhone.startsWith("0") && _ncPhone.length === 10
-                ? "263" + _ncPhone.slice(1) : _ncPhone;
-              const _ncExisting = await UserSession.findOne({ phone: _ncNorm }).lean();
-              let _ncMap = {};
-              try {
-                const _ncRaw = _ncExisting?.tempData?.sellerPendingRequests;
-                _ncMap = _ncRaw && typeof _ncRaw === "object" && !Array.isArray(_ncRaw) ? _ncRaw : {};
-              } catch (_) { _ncMap = {}; }
-              for (const k of Object.keys(_ncMap)) {
-                if ((_ncMap[k]?.storedAt || 0) < _cutoff) delete _ncMap[k];
-              }
-              _ncMap[_rmeReqId] = {
-                state: "awaiting_offer_intro",
-                storedAt: Date.now(),
-                requestId: _rmeReqId,
-                role: "notification_only"
-              };
-              await UserSession.findOneAndUpdate(
-                { phone: _ncNorm },
-                {
-                  $set: {
-                    "tempData.sellerPendingRequests":   _ncMap,
-                    "tempData.sellerRequestReplyState": "awaiting_offer_intro",
-                    "tempData.sellerRequestId":          _rmeReqId
-                  }
-                },
-                { upsert: true }
-              );
-            } catch (_ncErr) { /* non-fatal */ }
-          }
-        } catch (_sessErr) {
-          console.warn("[RE-NOTIFY SESSION SET]", _sessErr.message);
-        }
 
         await BuyerRequest.findByIdAndUpdate(req._id, {
           $addToSet: { notifiedSuppliers: supplier._id }
