@@ -189,7 +189,7 @@
 <div class="topbar">
   <span class="topbar-brand">CRIPFCnt</span>
   <div class="topbar-sep"></div>
-  <span class="topbar-title">8 Quotients Test — Admin</span>
+  <span class="topbar-title">8 Quotients Test - Admin</span>
   <div class="topbar-sp"></div>
   <a href="/admin/8qt/analytics" class="topbar-link">Analytics API</a>
   <div class="topbar-sep"></div>
@@ -336,7 +336,7 @@
         <div class="filter-bar">
           <select id="qFilter" onchange="loadQuestions()" class="form-input">
             <option value="">All Quotients</option>
-            {{#each configs}}<option value="{{this.code}}">{{this.code}} — {{this.name}}</option>{{/each}}
+            {{#each configs}}<option value="{{this.code}}">{{this.code}} - {{this.name}}</option>{{/each}}
           </select>
           <select id="qActiveFilter" onchange="loadQuestions()" class="form-input">
             <option value="">All Status</option>
@@ -486,7 +486,7 @@
     <div class="section">
       <div class="section-head">
         <span class="section-title">Issue Certificate Manually</span>
-        <span style="font-size:.76rem;color:var(--dark)">For any finished attempt — no payment required</span>
+        <span style="font-size:.76rem;color:var(--dark)">For any finished attempt - no payment required</span>
       </div>
       <div class="section-body">
         <p style="font-size:.83rem;color:var(--dark);margin-bottom:16px;line-height:1.55">
@@ -505,7 +505,7 @@
           <p style="color:var(--dark);font-size:.83rem">Loading…</p>
         </div>
 
-        <!-- Issue form — shown when an attempt is selected -->
+        <!-- Issue form - shown when an attempt is selected -->
         <div id="issueFormWrap" style="display:none">
           <div class="cert-issue-block">
             <div class="cert-issue-title">Selected participant</div>
@@ -527,8 +527,8 @@
               <input class="form-input" id="issueOrg" placeholder="e.g. Ministry of Finance">
             </div>
             <div class="form-group">
-              <label class="form-label">Admin notes (internal only — not printed on certificate)</label>
-              <textarea class="form-input" id="issueNotes" rows="2" placeholder="e.g. Complimentary — invited keynote speaker at CRIPFCnt Summit 2025"></textarea>
+              <label class="form-label">Admin notes (internal only - not printed on certificate)</label>
+              <textarea class="form-input" id="issueNotes" rows="2" placeholder="e.g. Complimentary - invited keynote speaker at CRIPFCnt Summit 2025"></textarea>
             </div>
             <div style="display:flex;gap:10px;margin-top:4px">
               <button class="btn btn-green" id="issueCertBtn" onclick="submitIssueCert()">&#x2713; Generate &amp; Issue Certificate</button>
@@ -631,7 +631,7 @@ async function updateConfig(code, data) {
 }
 
 function editConfig(code) {
-  alert(`Edit full details for ${code} via PATCH /admin/8qt/config/${code} — implement an edit modal as needed.`);
+  alert(`Edit full details for ${code} via PATCH /admin/8qt/config/${code} - implement an edit modal as needed.`);
 }
 
 // ════════════════════════════════════════════════════
@@ -751,9 +751,9 @@ async function loadArchetypes() {
             <strong>${a.name}</strong>
             ${a.isDefault ? ' <span class="badge badge-gold">default</span>' : ''}
           </td>
-          <td style="font-size:.76rem;color:var(--dark);max-width:180px">${a.tagline || '—'}</td>
+          <td style="font-size:.76rem;color:var(--dark);max-width:180px">${a.tagline || '-'}</td>
           <td style="font-size:.72rem;color:var(--dark)">
-            ${(a.conditions || []).map(c => `${c.quotient} ${c.operator} ${c.value}`).join(', ') || '—'}
+            ${(a.conditions || []).map(c => `${c.quotient} ${c.operator} ${c.value}`).join(', ') || '-'}
           </td>
           <td>
             <span class="badge ${a.active ? 'badge-green' : 'badge-gray'}">${a.active ? 'Active' : 'Off'}</span>
@@ -843,7 +843,7 @@ async function loadAttempts(page = 1) {
   }
 
   function scoresPills(a) {
-    if (!a.quotientScores?.length) return '<span style="color:#bbb;font-size:.72rem">—</span>';
+    if (!a.quotientScores?.length) return '<span style="color:#bbb;font-size:.72rem">-</span>';
     return `<div class="score-pills">${a.quotientScores.map(s =>
       `<span class="score-pill" title="${s.name}: ${s.score}/100 (${s.band})">${s.code} ${s.score}</span>`
     ).join('')}</div>`;
@@ -860,13 +860,13 @@ async function loadAttempts(page = 1) {
     if (a.certificateVerifyCode) {
       html += `<a href="/8qt/verify/${a.certificateVerifyCode}" target="_blank" class="btn btn-outline btn-sm">Verify</a> `;
     }
-    // Admin preview cert — available for ALL finished attempts regardless of payment
+    // Admin preview cert - available for ALL finished attempts regardless of payment
     html += `<button class="btn btn-outline btn-sm" onclick="previewCert('${a._id}',this)" title="Generate admin preview PDF without changing payment status">&#128065; Preview</button> `;
     // Go to manual issue tab
     if (a.status === 'finished') {
       html += `<button class="btn btn-outline btn-sm" onclick="goIssue('${a._id}')">Issue</button>`;
     }
-    return html || '—';
+    return html || '-';
   }
 
   container.innerHTML = `
@@ -891,7 +891,7 @@ async function loadAttempts(page = 1) {
               ${a.adminIssueNote ? `<div class="att-sub" style="color:var(--amber)">&#9888; ${a.adminIssueNote}</div>` : ''}
             </td>
             <td>
-              <div style="font-size:.8rem">${a.archetypeName || '—'}</div>
+              <div style="font-size:.8rem">${a.archetypeName || '-'}</div>
               ${a.dominantQuotient ? `<div class="att-sub">Dominant: <strong>${a.dominantQuotient}</strong></div>` : ''}
             </td>
             <td>
@@ -984,7 +984,7 @@ async function openReviewDrawer(attemptId) {
     const rows = d.reviewRows || [];
 
     const name = a.certificateName || a.participantName || 'Anonymous';
-    document.getElementById('drawerTitle').textContent = `Quiz Review — ${name}`;
+    document.getElementById('drawerTitle').textContent = `Quiz Review - ${name}`;
 
     // Score bars
     const scoreBars = (a.quotientScores || []).map(s => `
@@ -1048,7 +1048,7 @@ async function openReviewDrawer(attemptId) {
       <div style="margin-bottom:14px">
         <div style="font-size:.76rem;color:var(--dark)">${a.participantCode || (a.userId?.email || '')}</div>
         <div style="font-size:.8rem;margin-top:2px">${[a.profile?.country, a.profile?.sector].filter(Boolean).join(' · ')}</div>
-        <div style="font-size:.8rem;margin-top:2px">Archetype: <strong>${a.archetypeName || '—'}</strong> &nbsp;·&nbsp; Dominant: <strong>${a.dominantQuotient || '—'}</strong></div>
+        <div style="font-size:.8rem;margin-top:2px">Archetype: <strong>${a.archetypeName || '-'}</strong> &nbsp;·&nbsp; Dominant: <strong>${a.dominantQuotient || '-'}</strong></div>
         <div style="font-size:.8rem;margin-top:2px">Cert status: <span class="badge badge-${a.certificateStatus === 'issued' ? 'green' : a.certificateStatus === 'paid' ? 'blue' : 'gray'}">${a.certificateStatus}</span>
           ${a.certificatePdfUrl ? `&nbsp;<a href="${a.certificatePdfUrl}" target="_blank" class="btn btn-gold btn-sm" style="vertical-align:middle">&#8595; PDF</a>` : ''}
         </div>
@@ -1140,7 +1140,7 @@ async function loadPipeline() {
             ${[a.profile?.country, a.profile?.sector].filter(Boolean).join(' · ')}
           </div>
           <div class="pipeline-meta">
-            ${a.archetypeName || ''} &nbsp;&middot;&nbsp; Dominant: <strong>${a.dominantQuotient || '—'}</strong>
+            ${a.archetypeName || ''} &nbsp;&middot;&nbsp; Dominant: <strong>${a.dominantQuotient || '-'}</strong>
           </div>
           ${a.certificateEmail ? `<div class="pipeline-meta" style="color:var(--navy)">${a.certificateEmail}</div>` : ''}
         </div>
@@ -1182,13 +1182,13 @@ async function loadIssueList(page = 1, overrideSearch = '', selectId = '') {
     const name = a.certificateName || a.participantName || 'Anonymous';
     const avg  = a.quotientScores?.length
       ? Math.round(a.quotientScores.reduce((s, x) => s + x.score, 0) / a.quotientScores.length)
-      : '—';
+      : '-';
     return `
       <div class="pipeline-row" style="cursor:pointer" onclick="selectForIssue('${a._id}','${(a.certificateName || '').replace(/'/g,"\\'")}','${(a.certificateEmail || '').replace(/'/g,"\\'")}','${(a.certificateOrg || '').replace(/'/g,"\\'")}','${name.replace(/'/g,"\\'")}','${(a.archetypeName || '').replace(/'/g,"\\'")}','${avg}')">
         <div class="pipeline-score" style="font-size:1rem">${avg}</div>
         <div class="pipeline-info">
           <div class="pipeline-name">${name}</div>
-          <div class="pipeline-meta">${a.participantCode || ''} · ${a.archetypeName || '—'}</div>
+          <div class="pipeline-meta">${a.participantCode || ''} · ${a.archetypeName || '-'}</div>
           <div class="pipeline-meta">
             Cert: <span class="badge badge-${a.certificateStatus === 'issued' ? 'green' : 'gray'}">${a.certificateStatus}</span>
             ${a.adminIssueNote ? `&nbsp;<span style="color:var(--amber);font-size:.68rem">Admin issued</span>` : ''}
@@ -1205,7 +1205,7 @@ async function loadIssueList(page = 1, overrideSearch = '', selectId = '') {
     if (target) {
       const avg = target.quotientScores?.length
         ? Math.round(target.quotientScores.reduce((s, x) => s + x.score, 0) / target.quotientScores.length)
-        : '—';
+        : '-';
       const name = target.certificateName || target.participantName || 'Anonymous';
       selectForIssue(target._id, target.certificateName || '', target.certificateEmail || '', target.certificateOrg || '', name, target.archetypeName || '', avg);
     }

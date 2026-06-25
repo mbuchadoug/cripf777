@@ -1853,7 +1853,7 @@ ${supplier.profileType === "service" ? `
 <div class="fg" style="grid-column:1/-1">
   <label>🛠 Services &amp; Rates
     <span style="font-weight:400;font-size:11px;color:var(--muted);text-transform:none;letter-spacing:0">
-      — one per line: <code>service name, rate</code> — rate is optional
+      - one per line: <code>service name, rate</code> - rate is optional
     </span>
   </label>
   <textarea name="rates" rows="14" style="font-size:13px;font-family:monospace">${(supplier.rates||[]).map(r =>
@@ -1869,8 +1869,8 @@ ${supplier.profileType === "service" ? `
 <div class="fg">
   <label>🚗 Travels to Clients</label>
   <select name="travelAvailable">
-    <option value="true" ${supplier.travelAvailable ? "selected" : ""}>Yes — travels to client sites</option>
-    <option value="false" ${!supplier.travelAvailable ? "selected" : ""}>No — clients come to us</option>
+    <option value="true" ${supplier.travelAvailable ? "selected" : ""}>Yes - travels to client sites</option>
+    <option value="false" ${!supplier.travelAvailable ? "selected" : ""}>No - clients come to us</option>
   </select>
 </div>
 <div class="fg">
@@ -2213,7 +2213,7 @@ update.notificationContacts = [...new Set(_notifRaw)].filter(
     }
 
     // ── Service rates (profileType=service suppliers) ────────────────────────
-    // Textarea format: one per line — "service name" or "service name, rate"
+    // Textarea format: one per line - "service name" or "service name, rate"
     if (req.body.rates !== undefined) {
       const parsedRates = [];
       const parsedProducts = [];
@@ -3433,7 +3433,7 @@ router.get("/suppliers/:id/products", requireSupplierAdmin, async (req, res) => 
                 ${supplier.rates.map((r, i) => `
                 <tr>
                   <td>${esc(r.service)}</td>
-                  <td>${esc(r.rate) || '<span style="color:#94a3b8;font-size:12px">—</span>'}</td>
+                  <td>${esc(r.rate) || '<span style="color:#94a3b8;font-size:12px">-</span>'}</td>
                   <td>
                     <a href="/zq-admin/suppliers/${supplier._id}/products/edit-rate/${i}"
                        class="btn-link" style="font-size:12px">Edit</a>
@@ -3844,7 +3844,7 @@ router.post("/suppliers/:id/products/edit-rate/:idx", requireSupplierAdmin, asyn
     supplier.rates[idx].rate    = (rate || "").trim();
     supplier.markModified("rates");
 
-    // Keep products[] in sync — replace old name with new name
+    // Keep products[] in sync - replace old name with new name
     const prodIdx = supplier.products.indexOf(oldService);
     const newName = service.trim().toLowerCase();
     if (prodIdx >= 0) {
@@ -7374,7 +7374,7 @@ router.get("/suppliers/:id/contacts", requireSupplierAdmin, async (req, res) => 
       <div class="panel">
         <div class="panel-head" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px">
           <div>
-            <h3>👥 Smart Link Contacts — ${esc(supplier.businessName)}</h3>
+            <h3>👥 Smart Link Contacts - ${esc(supplier.businessName)}</h3>
             <p style="font-size:12px;color:var(--muted);margin:4px 0 0">
               Every WhatsApp number that opened this supplier's smart link or staff card.
               ${supplier.canViewContacts ? badge("Chatbot Access ON", "green") : badge("Chatbot Access OFF", "gray")}

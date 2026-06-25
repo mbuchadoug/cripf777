@@ -6173,7 +6173,7 @@ await UserSession.findOneAndUpdate(
   // session and then taps a smart card button (e.g. "Get instant quote" or
   // "View All Services"), the action id (sc_quote_<id> / sc_catalogue_<id>)
   // was being fed through parseItemListWithQty, flagged as a vague product
-  // name, and returning the "Please use the full product name" error —
+  // name, and returning the "Please use the full product name" error -
   // blocking the sc_ handler at the bottom of the file from ever running.
   // The fix: skip the entire buyerRequestState block for ANY isMetaAction sc_ tap.
   // This mirrors the REG TYPE EARLY HANDLER pattern used elsewhere in this file.
@@ -13205,7 +13205,7 @@ if (!isMetaAction && /^(my card|staff card|my link|my qr)$/i.test(text.trim())) 
 
 // ── "my contacts" chatbot command ────────────────────────────────────────────
 // Shows the list of phone numbers that have opened this seller's / school's /
-// staff card's smart link — but ONLY if the admin has enabled canViewContacts
+// staff card's smart link - but ONLY if the admin has enabled canViewContacts
 // on their profile. Default is off; only Typhon can switch it on.
 // Supports pagination: "my contacts 2" shows page 2.
 if (!isMetaAction && /^my contacts(\s+\d+)?$/i.test(text.trim())) {
@@ -13281,7 +13281,7 @@ if (!isMetaAction && /^my contacts(\s+\d+)?$/i.test(text.trim())) {
     // ── Check: is this a supplier? ───────────────────────────────────────────
     const _supForContacts = await SupplierProfile.findOne({ phone }).lean();
     if (!_supForContacts) {
-      // Not a supplier, school, or staff — silently ignore
+      // Not a supplier, school, or staff - silently ignore
     } else if (!_supForContacts.canViewContacts) {
       return sendText(from,
         `🔒 *Contact Database*\n\nThis feature is not enabled on your account.\n\n` +
@@ -13294,7 +13294,7 @@ if (!isMetaAction && /^my contacts(\s+\d+)?$/i.test(text.trim())) {
 
       if (!_total) {
         return sendText(from,
-          `👥 *My Link Contacts*\n\nNo contacts yet — share your ZimQuote link to start.\n\n` +
+          `👥 *My Link Contacts*\n\nNo contacts yet - share your ZimQuote link to start.\n\n` +
           `Type *my link* or go to *My Smart Link* for your link and QR code.`
         );
       }

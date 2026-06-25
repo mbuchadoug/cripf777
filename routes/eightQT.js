@@ -20,7 +20,7 @@ import EightQTArchetype from "../models/eightQTArchetype.js";
 import EightQTCertTemplate from "../models/eightQTCertTemplate.js";
 import EightQTCertPurchase from "../models/eightQTCertPurchase.js";
 import User from "../models/user.js";
-// ── Scoring functions (inlined — no external service file needed) ──
+// ── Scoring functions (inlined - no external service file needed) ──
 
 function getBand(score) {
   if (score >= 81) return "Recalibrative";
@@ -191,7 +191,7 @@ router.post("/resume", async (req, res) => {
     const { code } = req.body;
     if (!code) return res.status(400).json({ error: "Code required" });
 
-    // Normalise — codes stored uppercase, user may type any case
+    // Normalise - codes stored uppercase, user may type any case
     const normCode = code.trim().toUpperCase();
     const attempt = await EightQTAttempt.findOne({ participantCode: new RegExp("^" + normCode + "$", "i") }).lean();
     if (!attempt) return res.status(404).json({ error: "Code not found. Please check and try again." });
@@ -266,7 +266,7 @@ router.post("/profile", async (req, res) => {
 
     const displayName = participantCode ? generateDisplayName(participantCode) : null;
 
-    // Build attempt doc — omit participantCode entirely for Google users
+    // Build attempt doc - omit participantCode entirely for Google users
     // (sparse index ignores absent fields, but fails on explicit null duplicates)
     const attemptDoc = {
       userId,
@@ -735,6 +735,131 @@ router.get("/api/attempt/:attemptId/status", async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+
+// ══════════════════════════════════════════════════════════════
+// STRIPE WEBHOOK - POST /8qt/webhook
+// Handles checkout.session.completed for type=8qt_certificate.
+// This is the ONLY place that generates and issues the cert PDF
+// after a successful Stripe payment. The cert-success page is
+// just a holding page that polls for the PDF URL.
+//
+// IMPORTANT: this route needs raw body parsing.
+// In your Express app, BEFORE bodyParser.json(), add:
+//   app.use("/8qt/webhook", express.raw({ type: "application/json" }));
+// OR register this route before any json() middleware.
+// ══════════════════════════════════════════════════════════════
+router.post("/webhook", async (req, res) => {
+  const sig     = req.headers["stripe-signature"];
+  const secret  = process.env.STRIPE_WEBHOOK_SECRET_8QT || process.env.STRIPE_WEBHOOK_SECRET;
+
+  let event;
+  try {
+    // req.body must be the raw buffer - ensure raw body middleware is registered
+    // for this path before Express json() parser
+    event = stripe.webhooks.constructEvent(req.body, sig, secret);
+  } catch (err) {
+    console.error("[8qt webhook] signature verification failed:", err.message);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  if (event.type !== "checkout.session.completed") {
+    return res.json({ received: true });
+  }
+
+  const session = event.data.object;
+
+  // Only handle 8qt certificate purchases
+  if (session.metadata?.type !== "8qt_certificate") {
+    return res.json({ received: true });
+  }
+
+  const attemptId = session.metadata?.attemptId;
+  if (!attemptId) {
+    console.error("[8qt webhook] No attemptId in metadata");
+    return res.json({ received: true });
+  }
+
+  // Idempotency: if cert already issued, skip
+  try {
+    const existing = await EightQTAttempt.findById(attemptId).lean();
+    if (!existing) {
+      console.error("[8qt webhook] Attempt not found:", attemptId);
+      return res.json({ received: true });
+    }
+    if (existing.certificateStatus === "issued") {
+      console.log("[8qt webhook] Already issued, skipping:", attemptId);
+      return res.json({ received: true });
+    }
+
+    // Record the purchase
+    await EightQTCertPurchase.findOneAndUpdate(
+      { stripeSessionId: session.id },
+      {
+        $set: {
+          attemptId:   existing._id,
+          userId:      existing.userId || null,
+          participantCode: existing.participantCode || null,
+          stripeSessionId: session.id,
+          amountPaid:  session.amount_total || 0,
+          currency:    session.currency || "usd",
+          tier:        session.metadata?.tier || "standard",
+          status:      "complete",
+          paidAt:      new Date()
+        }
+      },
+      { upsert: true, new: true }
+    );
+
+    // Mark attempt as paid before generating PDF
+    await EightQTAttempt.findByIdAndUpdate(attemptId, {
+      $set: { certificateStatus: "paid" }
+    });
+
+    // Load template + archetype
+    const template  = await EightQTCertTemplate.findOne({ active: true }).lean();
+    let archetype   = null;
+    if (existing.archetypeId) {
+      archetype = await EightQTArchetype.findById(existing.archetypeId).lean();
+    }
+
+    // Merge cert details from Stripe metadata into attempt object for the builder
+    const attemptForPdf = {
+      ...existing,
+      certificateName:  session.metadata?.participantName || existing.certificateName || existing.participantName || "Participant",
+      certificateEmail: session.customer_email || existing.certificateEmail || "",
+      certificateOrg:   existing.certificateOrg || ""
+    };
+
+    // Generate PDF using the correct 8QT cert builder
+    const { generateEightQTCertPdf } = await import("../services/eightQTCertPdf.js");
+    const { url, verifyCode } = await generateEightQTCertPdf({
+      attempt:   attemptForPdf,
+      template,
+      archetype
+    });
+
+    // Save final state
+    await EightQTAttempt.findByIdAndUpdate(attemptId, {
+      $set: {
+        certificatePdfUrl:     url,
+        certificateVerifyCode: verifyCode,
+        certificateStatus:     "issued",
+        certificateIssuedAt:   new Date(),
+        certificateName:       attemptForPdf.certificateName,
+        certificateEmail:      attemptForPdf.certificateEmail
+      }
+    });
+
+    console.log(`[8qt webhook] Certificate issued for attempt ${attemptId}: ${url}`);
+  } catch (err) {
+    console.error("[8qt webhook] cert generation failed:", err.message, err.stack);
+    // Return 200 to Stripe so it doesn't retry - cert generation errors are logged
+    // and can be retried manually via admin panel
+  }
+
+  res.json({ received: true });
 });
 
 export default router;

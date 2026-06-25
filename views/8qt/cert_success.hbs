@@ -1,5 +1,5 @@
 {{!-- views/8qt/cert_success.hbs --}}
-{{!-- Rendered inside main.hbs — no DOCTYPE/html/head/body tags --}}
+{{!-- Rendered inside main.hbs - no DOCTYPE/html/head/body tags --}}
 
 <style>
   .cs-wrap{min-height:70vh;display:flex;align-items:center;justify-content:center;padding:40px 20px}
@@ -41,7 +41,7 @@
     <a href="/8qt/results/{{attempt._id}}" class="cs-btn cs-btn-outline">View My Results</a>
 
     {{else}}
-    {{!-- Webhook not yet complete — show spinner and poll --}}
+    {{!-- Webhook not yet complete - show spinner and poll --}}
     <div class="cs-icon cs-icon-wait" id="csIcon">⏳</div>
     <h1 id="csHeadline">Payment Confirmed</h1>
     <p>{{message}}</p>
@@ -82,7 +82,7 @@ async function pollCertStatus() {
     const d = await r.json();
 
     if (d.certificateStatus === 'issued' && d.pdfUrl) {
-      // Certificate ready — show download button
+      // Certificate ready - show download button
       document.getElementById('csIcon').textContent = '✅';
       document.getElementById('csIcon').className = 'cs-icon cs-icon-ok';
       document.getElementById('csHeadline').textContent = 'Certificate Ready';
@@ -110,7 +110,7 @@ async function pollCertStatus() {
       setTimeout(pollCertStatus, 3000);
     } else {
       document.getElementById('csPollStatus').innerHTML =
-        '<p style="font-size:.8rem;color:#6c757d">Certificate is still being processed. Check your email — it will arrive shortly. You can also <a href="/8qt/results/' + ATTEMPT_ID + '" style="color:#1E3A5F">return to your results</a> to download it later.</p>';
+        '<p style="font-size:.8rem;color:#6c757d">Certificate is still being processed. Check your email - it will arrive shortly. You can also <a href="/8qt/results/' + ATTEMPT_ID + '" style="color:#1E3A5F">return to your results</a> to download it later.</p>';
     }
   } catch(e) {
     pollCount++;

@@ -12,7 +12,7 @@ import nodemailer from "nodemailer";
 import { generateEightQTCertPdf } from "../services/eightQTCertPdf.js";
 
 /**
- * Main handler — called from stripe_webhook.js when meta.type === "8qt_certificate"
+ * Main handler - called from stripe_webhook.js when meta.type === "8qt_certificate"
  */
 export async function handle8QTCertificate(session) {
   const meta = session.metadata || {};
@@ -100,7 +100,7 @@ export async function handle8QTCertificate(session) {
 
   } catch (err) {
     console.error("[8qt webhook] PDF/email error:", err.message);
-    // Don't re-throw — webhook must return 200 to Stripe
+    // Don't re-throw - webhook must return 200 to Stripe
     // attempt remains "paid" so admin can regenerate via panel
   }
 }
@@ -159,7 +159,7 @@ async function sendCertificateEmail({ to, participantName, archetypeName, verify
   await transporter.sendMail({
     from: `"CRIPFCnt" <${process.env.SMTP_USER}>`,
     to,
-    subject: `Your CRIPFCnt 8 Quotients Certificate — ${archetypeName}`,
+    subject: `Your CRIPFCnt 8 Quotients Certificate - ${archetypeName}`,
     html
   });
 }

@@ -142,7 +142,7 @@ const SupplierProfileSchema = new mongoose.Schema({
   // ── Contact visibility (admin-controlled) ──────────────────────────────────
   // When true, the supplier/owner can type "my contacts" in the chatbot and see
   // a list of phone numbers that have opened their smart link or staff card.
-  // Only Typhon (ZimQuote admin) can toggle this on — sellers never self-enable.
+  // Only Typhon (ZimQuote admin) can toggle this on - sellers never self-enable.
   canViewContacts: { type: Boolean, default: false },
 
   // ── Tutor / teacher fields ─────────────────────────────────────────────────

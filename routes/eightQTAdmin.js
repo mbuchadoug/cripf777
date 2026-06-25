@@ -23,6 +23,7 @@ import EightQTArchetype from "../models/eightQTArchetype.js";
 import EightQTCertTemplate from "../models/eightQTCertTemplate.js";
 import EightQTAttempt from "../models/eightQTAttempt.js";
 import EightQTCertPurchase from "../models/eightQTCertPurchase.js";
+import { generateEightQTCertPdf } from "../services/eightQTCertPdf.js";
 
 const router = Router();
 const upload = multer({ dest: "uploads/", limits: { fileSize: 5 * 1024 * 1024 } });
@@ -518,7 +519,7 @@ router.get("/attempts/search", async (req, res) => {
 });
 
 // ══════════════════════════════════════════════════════════════
-// ATTEMPT DETAIL — full quiz review with right/wrong per answer
+// ATTEMPT DETAIL - full quiz review with right/wrong per answer
 // GET /admin/8qt/attempts/:id
 // ══════════════════════════════════════════════════════════════
 router.get("/attempts/:id", async (req, res) => {
@@ -595,7 +596,7 @@ router.get("/attempts/:id", async (req, res) => {
         earnedPts,
         bestPts,
         chosenIndex: answer?.selectedIndex ?? null,
-        chosenText:  answer != null ? (q.options[answer.selectedIndex]?.text ?? "—") : "Not answered"
+        chosenText:  answer != null ? (q.options[answer.selectedIndex]?.text ?? "-") : "Not answered"
       });
     }
 
@@ -633,6 +634,11 @@ router.get("/attempts/:id", async (req, res) => {
 // Generates a PDF for any finished attempt without changing
 // the participant's certificateStatus or payment flow.
 // PDF goes to /certificates/8qt/preview/ subdirectory.
+
+// ══════════════════════════════════════════════════════════════
+// ADMIN CERTIFICATE PREVIEW
+// Generates a PDF for any finished attempt without changing
+// the participant's certificateStatus or payment flow.
 //
 // GET /admin/8qt/attempts/:id/preview-cert
 // ══════════════════════════════════════════════════════════════
@@ -644,7 +650,7 @@ router.get("/attempts/:id/preview-cert", async (req, res) => {
       return res.status(400).json({ error: "Attempt not yet finished" });
     }
 
-    // If already officially issued, just return that PDF
+    // If already officially issued, return that PDF directly
     if (attempt.certificatePdfUrl && attempt.certificateStatus === "issued") {
       return res.json({
         ok: true,
@@ -654,57 +660,21 @@ router.get("/attempts/:id/preview-cert", async (req, res) => {
       });
     }
 
-    const { buildCertificateHtml } = await import("../utils/certificateTemplate.js");
-    const puppeteer = (await import("puppeteer")).default;
-    const pathMod   = (await import("path")).default;
-    const fsMod     = (await import("fs")).default;
+    const template  = await EightQTCertTemplate.findOne({ active: true }).lean();
+    let archetype   = null;
+    if (attempt.archetypeId) {
+      archetype = await EightQTArchetype.findById(attempt.archetypeId).lean();
+    }
 
-    const name = attempt.certificateName?.trim() ||
-                 attempt.profile?.firstName?.trim() ||
-                 attempt.participantName ||
-                 "Participant";
-
-    const scores = attempt.quotientScores || [];
-    const dom    = scores.find(s => s.code === attempt.dominantQuotient);
-
-    const html = buildCertificateHtml({
-      name,
-      orgName:    attempt.certificateOrg || "CRIPFCnt",
-      moduleName: attempt.dominantQuotient
-        ? `${attempt.dominantQuotient} — Dominant Quotient`
-        : "Placement Intelligence",
-      quizTitle:  attempt.archetypeName || "8 Quotients Assessment",
-      score:      dom?.score ?? null,
-      percentage: dom?.score ?? null,
-      date:       new Date()
+    // Use the proper 8QT cert builder - NOT buildCertificateHtml from certificateTemplate.js
+    const { url, verifyCode } = await generateEightQTCertPdf({
+      attempt: attempt.toObject(),
+      template,
+      archetype
     });
 
-    const outDir  = pathMod.join(process.cwd(), "public", "certificates", "8qt", "preview");
-    if (!fsMod.existsSync(outDir)) fsMod.mkdirSync(outDir, { recursive: true });
-
-    // Stable filename per attempt — repeated hits reuse same file
-    const filename   = `preview-${attempt._id}.pdf`;
-    const outputPath = pathMod.join(outDir, filename);
-
-    const browser = await puppeteer.launch({
-      headless: "new",
-      args: ["--no-sandbox", "--disable-setuid-sandbox"]
-    });
-    const page = await browser.newPage();
-    await page.emulateMediaType("print");
-    await page.setContent(html, { waitUntil: "networkidle0" });
-    await page.pdf({
-      path: outputPath,
-      format: "A4",
-      landscape: true,
-      printBackground: true,
-      margin: { top: "0", bottom: "0", left: "0", right: "0" }
-    });
-    await browser.close();
-
-    const url = `/certificates/8qt/preview/${filename}`;
-    console.log(`[admin] 👁 Preview cert generated for attempt ${attempt._id}: ${url}`);
-    res.json({ ok: true, url, note: "admin preview — participant payment status unchanged" });
+    console.log(`[admin] Preview cert for attempt ${attempt._id}: ${url}`);
+    res.json({ ok: true, url, verifyCode, note: "admin preview - participant payment status unchanged" });
   } catch (err) {
     console.error("[admin preview-cert]", err);
     res.status(500).json({ error: err.message });
@@ -733,56 +703,22 @@ router.post("/attempts/:id/issue-cert", writeOnly, async (req, res) => {
       return res.status(400).json({ error: "Cannot issue certificate for unfinished attempt" });
     }
 
+    // Write cert details to attempt before generating - the builder reads these
     attempt.certificateName  = fullName.trim();
     attempt.certificateEmail = email.trim().toLowerCase();
     attempt.certificateOrg   = orgName?.trim() || "";
 
-    const { buildCertificateHtml } = await import("../utils/certificateTemplate.js");
-    const puppeteer  = (await import("puppeteer")).default;
-    const pathMod    = (await import("path")).default;
-    const fsMod      = (await import("fs")).default;
-    const cryptoMod  = (await import("crypto")).default;
+    const template  = await EightQTCertTemplate.findOne({ active: true }).lean();
+    let archetype   = null;
+    if (attempt.archetypeId) {
+      archetype = await EightQTArchetype.findById(attempt.archetypeId).lean();
+    }
 
-    const verifyCode = attempt.certificateVerifyCode ||
-      cryptoMod.randomBytes(6).toString("hex").toUpperCase();
-
-    const scores = attempt.quotientScores || [];
-    const dom    = scores.find(s => s.code === attempt.dominantQuotient);
-
-    const html = buildCertificateHtml({
-      name:       fullName.trim(),
-      orgName:    orgName?.trim() || "CRIPFCnt",
-      moduleName: attempt.dominantQuotient
-        ? `${attempt.dominantQuotient} — Dominant Quotient`
-        : "Placement Intelligence",
-      quizTitle:  attempt.archetypeName || "8 Quotients Assessment",
-      score:      dom?.score ?? null,
-      percentage: dom?.score ?? null,
-      date:       new Date()
+    const { url, verifyCode } = await generateEightQTCertPdf({
+      attempt: attempt.toObject(),
+      template,
+      archetype
     });
-
-    const outDir     = pathMod.join(process.cwd(), "public", "certificates", "8qt");
-    if (!fsMod.existsSync(outDir)) fsMod.mkdirSync(outDir, { recursive: true });
-    const filename   = `8qt-cert-${verifyCode}.pdf`;
-    const outputPath = pathMod.join(outDir, filename);
-
-    const browser = await puppeteer.launch({
-      headless: "new",
-      args: ["--no-sandbox", "--disable-setuid-sandbox"]
-    });
-    const page = await browser.newPage();
-    await page.emulateMediaType("print");
-    await page.setContent(html, { waitUntil: "networkidle0" });
-    await page.pdf({
-      path: outputPath,
-      format: "A4",
-      landscape: true,
-      printBackground: true,
-      margin: { top: "0", bottom: "0", left: "0", right: "0" }
-    });
-    await browser.close();
-
-    const url = `/certificates/8qt/${filename}`;
 
     attempt.certificatePdfUrl     = url;
     attempt.certificateVerifyCode = verifyCode;
@@ -793,7 +729,7 @@ router.post("/attempts/:id/issue-cert", writeOnly, async (req, res) => {
 
     await attempt.save();
 
-    console.log(`[admin] ✅ Manual cert issued for attempt ${attempt._id} → ${url} by ${req.user.email}`);
+    console.log(`[admin] Manual cert issued for attempt ${attempt._id} → ${url} by ${req.user.email}`);
     res.json({ ok: true, url, verifyCode, attemptId: attempt._id });
   } catch (err) {
     console.error("[admin issue-cert]", err);
@@ -813,53 +749,17 @@ router.post("/attempts/:id/regenerate-cert", writeOnly, async (req, res) => {
       return res.status(400).json({ error: "Attempt has not been paid for" });
     }
 
-    const { buildCertificateHtml } = await import("../utils/certificateTemplate.js");
-    const puppeteer  = (await import("puppeteer")).default;
-    const pathMod    = (await import("path")).default;
-    const fsMod      = (await import("fs")).default;
-    const cryptoMod  = (await import("crypto")).default;
+    const template  = await EightQTCertTemplate.findOne({ active: true }).lean();
+    let archetype   = null;
+    if (attempt.archetypeId) {
+      archetype = await EightQTArchetype.findById(attempt.archetypeId).lean();
+    }
 
-    const verifyCode      = attempt.certificateVerifyCode ||
-      cryptoMod.randomBytes(6).toString("hex").toUpperCase();
-    const participantName = attempt.certificateName || attempt.participantName || "Participant";
-    const scores          = attempt.quotientScores || [];
-    const dom             = scores.find(s => s.code === attempt.dominantQuotient);
-    const domScore        = dom ? dom.score : null;
-
-    const html = buildCertificateHtml({
-      name:       participantName,
-      orgName:    "CRIPFCnt",
-      moduleName: attempt.dominantQuotient
-        ? `${attempt.dominantQuotient} — Dominant Quotient`
-        : "Placement Intelligence",
-      quizTitle:  attempt.archetypeName || "8 Quotients Assessment",
-      score:      domScore,
-      percentage: domScore,
-      date:       new Date()
+    const { url, verifyCode } = await generateEightQTCertPdf({
+      attempt: attempt.toObject(),
+      template,
+      archetype
     });
-
-    const outDir     = pathMod.join(process.cwd(), "public", "certificates", "8qt");
-    if (!fsMod.existsSync(outDir)) fsMod.mkdirSync(outDir, { recursive: true });
-    const filename   = `8qt-cert-${verifyCode}.pdf`;
-    const outputPath = pathMod.join(outDir, filename);
-
-    const browser = await puppeteer.launch({
-      headless: "new",
-      args: ["--no-sandbox", "--disable-setuid-sandbox"]
-    });
-    const page = await browser.newPage();
-    await page.emulateMediaType("print");
-    await page.setContent(html, { waitUntil: "networkidle0" });
-    await page.pdf({
-      path: outputPath,
-      format: "A4",
-      landscape: true,
-      printBackground: true,
-      margin: { top: "0", bottom: "0", left: "0", right: "0" }
-    });
-    await browser.close();
-
-    const url = `/certificates/8qt/${filename}`;
 
     attempt.certificatePdfUrl     = url;
     attempt.certificateVerifyCode = verifyCode;
@@ -867,7 +767,7 @@ router.post("/attempts/:id/regenerate-cert", writeOnly, async (req, res) => {
     attempt.certificateIssuedAt   = new Date();
     await attempt.save();
 
-    console.log(`[admin] ✅ Certificate re-generated for attempt ${attempt._id}: ${url}`);
+    console.log(`[admin] Certificate re-generated for attempt ${attempt._id}: ${url}`);
     res.json({ ok: true, url, verifyCode });
   } catch (err) {
     console.error("[admin] regenerate-cert error:", err.message);
@@ -875,7 +775,6 @@ router.post("/attempts/:id/regenerate-cert", writeOnly, async (req, res) => {
   }
 });
 
-// ══════════════════════════════════════════════════════════════
 // CERT PIPELINE
 // Finished participants without certificates, sorted by avg score.
 // Use for targeted nudges or complimentary issuances.
@@ -931,7 +830,7 @@ router.get("/cert-pipeline", async (req, res) => {
 });
 
 // ══════════════════════════════════════════════════════════════
-// CSV EXPORT — all finished attempts
+// CSV EXPORT - all finished attempts
 // GET /admin/8qt/export/csv
 // ══════════════════════════════════════════════════════════════
 router.get("/export/csv", async (req, res) => {

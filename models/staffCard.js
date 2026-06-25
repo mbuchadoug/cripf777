@@ -67,7 +67,7 @@ const StaffCardSchema = new mongoose.Schema({
   // ── Contact visibility (admin-controlled) ──────────────────────────────────
   // When true, the staff member can type "my contacts" in the chatbot to see
   // phones that opened their personal staff card link.
-  // Only ZimQuote admin can enable — staff never self-enable.
+  // Only ZimQuote admin can enable - staff never self-enable.
   canViewContacts: { type: Boolean, default: false },
 
   // ── Admin-only internal notes (never shown to buyers) ─────────────────────

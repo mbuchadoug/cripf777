@@ -546,7 +546,7 @@ async function loadAttempts(page = 1) {
   }
 
   function scoresSummary(a) {
-    if (!a.quotientScores || !a.quotientScores.length) return '<span style="color:#aaa;font-size:.75rem">—</span>';
+    if (!a.quotientScores || !a.quotientScores.length) return '<span style="color:#aaa;font-size:.75rem">-</span>';
     return a.quotientScores.map(s =>
       `<span title="${s.name}: ${s.score}/100 (${s.band})" style="display:inline-block;font-size:.65rem;font-weight:700;padding:1px 5px;border-radius:3px;margin:1px;background:#eef2ff;color:#1E3A5F">${s.code} ${s.score}</span>`
     ).join('');
@@ -563,7 +563,7 @@ async function loadAttempts(page = 1) {
     if (a.certificateVerifyCode) {
       html += `<a href="/8qt/verify/${a.certificateVerifyCode}" target="_blank" class="btn btn-outline btn-sm" style="margin-left:4px">Verify</a>`;
     }
-    return html || '—';
+    return html || '-';
   }
 
   container.innerHTML = `
@@ -591,7 +591,7 @@ async function loadAttempts(page = 1) {
           ${a.participantCode ? `<div class="att-code">${a.participantCode}</div>` : ''}
         </td>
         <td>
-          <div class="att-arch">${a.archetypeName || '—'}</div>
+          <div class="att-arch">${a.archetypeName || '-'}</div>
           ${a.dominantQuotient ? `<div class="att-dom">Dominant: ${a.dominantQuotient}</div>` : ''}
         </td>
         <td>

@@ -518,7 +518,7 @@ router.post("/attempts/:id/regenerate-cert", writeOnly, async (req, res) => {
     const html = buildCertificateHtml({
       name: participantName,
       orgName: "CRIPFCnt",
-      moduleName: attempt.dominantQuotient ? `${attempt.dominantQuotient} — Dominant Quotient` : "Placement Intelligence",
+      moduleName: attempt.dominantQuotient ? `${attempt.dominantQuotient} - Dominant Quotient` : "Placement Intelligence",
       quizTitle: attempt.archetypeName || "8 Quotients Assessment",
       score: domScore,
       percentage: domScore,

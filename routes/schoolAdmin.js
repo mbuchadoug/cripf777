@@ -4291,7 +4291,7 @@ router.get("/schools/:id/contacts", requireSupplierAdmin, async (req, res) => {
       <div class="panel">
         <div class="panel-head" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px">
           <div>
-            <h3>👥 Smart Link Contacts — ${esc(school.schoolName)}</h3>
+            <h3>👥 Smart Link Contacts - ${esc(school.schoolName)}</h3>
             <p style="font-size:12px;color:var(--muted);margin:4px 0 0">
               Every parent who opened this school's smart link, applied, or sent an enquiry.
               ${school.canViewContacts ? badge("Chatbot Access ON", "green") : badge("Chatbot Access OFF", "gray")}
@@ -4421,7 +4421,7 @@ router.get("/schools/:id/contact-settings", requireSupplierAdmin, async (req, re
 
       <div class="panel" style="max-width:600px">
         <div class="panel-head">
-          <h3>⚙️ Contact Database Settings — ${esc(school.schoolName)}</h3>
+          <h3>⚙️ Contact Database Settings - ${esc(school.schoolName)}</h3>
         </div>
 
         <div style="background:#fef9c3;color:#a16207;border-radius:8px;padding:12px 16px;margin-bottom:18px;font-size:13px;line-height:1.6">

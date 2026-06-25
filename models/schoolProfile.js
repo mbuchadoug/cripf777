@@ -233,7 +233,7 @@ const schoolProfileSchema = new mongoose.Schema({
   // ── Contact visibility (admin-controlled) ──────────────────────────────────
   // When true, the school admin can type "my contacts" in the chatbot and see
   // a list of phone numbers that opened their school smart link.
-  // Only ZimQuote admin (Typhon) can enable this — schools never self-enable.
+  // Only ZimQuote admin (Typhon) can enable this - schools never self-enable.
   canViewContacts: { type: Boolean, default: false },
 
   // ── Subscription ──────────────────────────────────────────────────────────
