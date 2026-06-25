@@ -2756,15 +2756,18 @@ if (!requestKey) {
         buyerPhone:    request.buyerPhone || null       // shown only to VIP sellers
       });
 
-      // Step 2: Immediately send interactive buttons after the template ping.
-      // The template opens the Meta session, so this sendButtons is deliverable
-      // right after. Sellers see the item list + action buttons without needing
-      // to type anything first.
+      // Step 2: Immediately send interactive pricing form - template opens the session
+      // so this sendButtons is always deliverable right after the template ping.
       const _supplierPhone = String(supplier.phone).replace(/\D+/g, "");
       const _normalizedSupplierPhone = _supplierPhone.startsWith("0") && _supplierPhone.length === 10
         ? "263" + _supplierPhone.slice(1) : _supplierPhone;
 
       // ── Step 2: Set state to "awaiting_offer_intro" ─────────────────────────────
+      // We do NOT send a follow-up message here - Meta only opens a real session
+      // when the supplier sends a message back to us, not when we send to them.
+      // Instead, the FIRST message the supplier sends (even "hi") will show
+      // them the full item list + View & Quote button. See awaiting_offer_intro handler.
+      //
       // FIX: store requestIds in a map (sellerPendingRequests) so a notification
       // contact on multiple sellers' lists never has one request overwrite another.
       const _reqId = requestKey;
@@ -2801,47 +2804,6 @@ if (!requestKey) {
 
       await _setSellerRequestSession(_normalizedSupplierPhone);
       console.log(`[BUYER REQ] Session set to awaiting_offer_intro for ${_normalizedSupplierPhone} (req ${_reqId})`);
-
-      // ── Step 2b: Send interactive buttons immediately after template ────────────
-      // Template opens the Meta session; this follow-up is always deliverable.
-      // Seller gets tappable View & Quote / Not Available buttons without needing
-      // to type anything first (previous behaviour required a "hi" to trigger them).
-      try {
-        const _step2IsService = request.isServiceRequest || _buyerRequestIsService(request.items || []);
-        const _step2ItemLines = (request.items || []).map((item, i) => {
-          const qty  = Number(item.quantity || 1);
-          const unit = item.unitLabel && item.unitLabel !== "units" ? ` ${item.unitLabel}` : "";
-          return `${i + 1}. *${item.product}* (${qty}${unit})`;
-        }).join("\n");
-
-        const _step2Delivery = _step2IsService
-          ? (request.serviceAddress ? `📍 Service at: ${request.serviceAddress}` : "📍 Client will share address")
-          : request.deliveryRequired ? "🚚 Delivery needed" : "🏠 Collection / flexible";
-
-        const _step2Location = request.area
-          ? `📍 ${request.area}${request.city ? `, ${request.city}` : ""}`
-          : request.city ? `📍 ${request.city}` : "📍 Zimbabwe";
-
-        await sendButtons(_normalizedSupplierPhone, {
-          text:
-            `🔔 *New ${_step2IsService ? "Service" : "Product"} Request - ${ref}*\n\n` +
-            `${_step2Location}\n` +
-            `${_step2Delivery}\n\n` +
-            `📦 *${(request.items || []).length} item${(request.items || []).length === 1 ? "" : "s"} needed:*\n` +
-            `${_step2ItemLines}\n\n` +
-            `─────────────────\n` +
-            `Tap *View & Quote* to enter your price${(request.items || []).length === 1 ? "" : "s"}.\n` +
-            `The buyer receives your quote instantly.`,
-          buttons: [
-            { id: `req_offer_${requestKey}`,   title: "⚡ View & Quote"  },
-            { id: `req_unavail_${requestKey}`,  title: "❌ Not Available" }
-          ]
-        });
-        console.log(`[BUYER REQ] Interactive buttons sent to ${_normalizedSupplierPhone} (req ${_reqId})`);
-      } catch (_step2Err) {
-        // Non-fatal - seller still has the template + session state; they can type "hi" to proceed
-        console.warn(`[BUYER REQ] Step 2 sendButtons failed for ${_normalizedSupplierPhone}:`, _step2Err.message);
-      }
 
       // ── Also set awaiting_offer_intro for all notification contacts ────────────
       // They receive the template too (fan-out in notifySupplierNewRequestTemplate)
