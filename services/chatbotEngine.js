@@ -10473,7 +10473,7 @@ Type *done* to save`,
     biz.sessionData  = { filterFor: "detailed" };
     await saveBizSafe(biz);
     return sendButtons(from, {
-      text: "🗓 *Detailed Ledger — Custom Date Range*\n\nType the range, e.g.:\n*01 Jun - 27 Jun*\n*01/06 - 27/06*\n*2026-06-01 - 2026-06-27*\n\nOr type *cancel* to go back.",
+      text: "🗓 *Detailed Ledger — Custom Range*\n\nType the date range:\n*01 Jun - 27 Jun*\n*01/06 - 27/06*\n*2026-06-01 - 2026-06-27*\n\nOr type *cancel* to go back.",
       buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
     });
   }
@@ -19012,7 +19012,12 @@ if (!isMetaAction && text && text.trim().length > 1) {
     "branch_add_name", "invite_user_phone",
     "subscription_payment_pending", "subscription_enter_ecocash",
     // Service rate update - text entry states must not be hijacked by Request Sellers
-    "service_update_rates", "service_update_rates_confirm_unit", "service_update_rates_confirm"
+    "service_update_rates", "service_update_rates_confirm_unit", "service_update_rates_confirm",
+    // Report text-input states — must not be hijacked by Request Sellers
+    "report_date_filter", "report_clerk_pick_custom",
+    "report_detailed", "report_detailed_week", "report_detailed_month", "report_detailed_year",
+    "report_clerk_statement", "report_clerk_pick", "report_clerk_self", "report_choose_branch",
+    "cash_handover_amount", "cash_handover_incoming", "cash_handover_note"
   ]);
 
   if (biz && _bizActiveStates.has(biz.sessionState)) {

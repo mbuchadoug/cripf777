@@ -432,11 +432,11 @@ export async function sendReportsMenu(to, isGold = false, isSilver = false) {
       { id: "rpt_ledger_today",  title: "📋 Ledger · Today"             },
       { id: "rpt_ledger_week",   title: "📋 Ledger · This Week"         },
       { id: "rpt_ledger_month",  title: "📋 Ledger · This Month"        },
-      { id: "rpt_ledger_custom", title: "📋 Ledger · Custom Dates"      },
-      { id: "rpt_self_today",    title: "👤 My Statement · Today"       },
-      { id: "rpt_self_week",     title: "👤 My Statement · This Week"   },
-      { id: "rpt_self_month",    title: "👤 My Statement · This Month"  },
-      { id: "rpt_self_custom",   title: "👤 My Statement · Custom"      },
+      { id: "rpt_ledger_custom", title: "📋 Ledger · Custom"      },
+      { id: "rpt_self_today",    title: "👤 My Stmt · Today"       },
+      { id: "rpt_self_week",     title: "👤 My Stmt · This Week"   },
+      { id: "rpt_self_month",    title: "👤 My Stmt · This Month"  },
+      { id: "rpt_self_custom",   title: "👤 My Stmt · Custom"      },
       { id: ACTIONS.BACK,        title: "⬅ Back"                        }
     ]);
   }
@@ -446,11 +446,11 @@ export async function sendReportsMenu(to, isGold = false, isSilver = false) {
     { id: "rpt_ledger_today",  title: "📋 Ledger · Today"             },
     { id: "rpt_ledger_week",   title: "📋 Ledger · This Week"         },
     { id: "rpt_ledger_month",  title: "📋 Ledger · This Month"        },
-    { id: "rpt_ledger_custom", title: "📋 Ledger · Custom Dates"      },
-    { id: "rpt_clerk_today",   title: "👤 Clerk Statement · Today"    },
-    { id: "rpt_clerk_week",    title: "👤 Clerk Statement · This Week" },
-    { id: "rpt_clerk_month",   title: "👤 Clerk Statement · This Month"},
-    { id: "rpt_clerk_custom",  title: "👤 Clerk Statement · Custom"   },
+    { id: "rpt_ledger_custom", title: "📋 Ledger · Custom"      },
+    { id: "rpt_clerk_today",   title: "👤 Clerk · Today"    },
+    { id: "rpt_clerk_week",    title: "👤 Clerk · This Week" },
+    { id: "rpt_clerk_month",   title: "👤 Clerk · This Month"},
+    { id: "rpt_clerk_custom",  title: "👤 Clerk · Custom"   },
     { id: ACTIONS.BACK,        title: "⬅ Back"                        }
   ]);
 }
@@ -466,11 +466,11 @@ export async function sendBranchReportsMenu(to, isGold = false, isSilver = false
     { id: "rpt_ledger_today",  title: "📋 Ledger · Today"             },
     { id: "rpt_ledger_week",   title: "📋 Ledger · This Week"         },
     { id: "rpt_ledger_month",  title: "📋 Ledger · This Month"        },
-    { id: "rpt_ledger_custom", title: "📋 Ledger · Custom Dates"      },
-    { id: "rpt_clerk_today",   title: "👤 Clerk Statement · Today"    },
-    { id: "rpt_clerk_week",    title: "👤 Clerk Statement · This Week" },
-    { id: "rpt_clerk_month",   title: "👤 Clerk Statement · This Month"},
-    { id: "rpt_clerk_custom",  title: "👤 Clerk Statement · Custom"   },
+    { id: "rpt_ledger_custom", title: "📋 Ledger · Custom"      },
+    { id: "rpt_clerk_today",   title: "👤 Clerk · Today"    },
+    { id: "rpt_clerk_week",    title: "👤 Clerk · This Week" },
+    { id: "rpt_clerk_month",   title: "👤 Clerk · This Month"},
+    { id: "rpt_clerk_custom",  title: "👤 Clerk · Custom"   },
     { id: ACTIONS.BACK,        title: "⬅ Back to Reports"             }
   ]);
 }
