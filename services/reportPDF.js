@@ -477,80 +477,116 @@ function buildSummaryHTML({ biz, reportType, periodLabel, branchName, data, tota
 }
 
 
-// ── 2. Detailed Ledger HTML — grouped by day, running balance per row ─────────
+
+// ── 2. Detailed Ledger HTML — day-grouped, running balance per row ────────────
+// Matches the preview exactly: dark day header, transactions with running balance,
+// day closing bar, next day opening = previous day closing.
 function buildLedgerHTML({ biz, periodLabel, branchName, ledgerRows, openingBalance, closingBalance, cur, logoSrc }) {
   const totalIn  = ledgerRows.reduce((s, r) => s + (r.credit || 0), 0);
   const totalOut = ledgerRows.reduce((s, r) => s + (r.debit  || 0), 0);
   const netChange = closingBalance - openingBalance;
 
   // ── Group rows by calendar day ──────────────────────────────────────────────
-  const dayMap = new Map(); // "25 Jun 2026" → [rows]
+  const dayMap = new Map();
   for (const row of ledgerRows) {
-    const dayKey = new Date(row.date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+    const d = new Date(row.date || row.at);
+    const dayKey = d.toLocaleDateString("en-GB", { weekday: "long", day: "2-digit", month: "short", year: "numeric" });
     if (!dayMap.has(dayKey)) dayMap.set(dayKey, []);
     dayMap.get(dayKey).push(row);
   }
 
-  // Build HTML for each day group
-  let dayGroupsHTML = "";
-  let runningOpen = openingBalance; // carry opening balance day-to-day
+  let dayHTML = "";
+  let dayOpeningBalance = openingBalance;
+
+  if (dayMap.size === 0) {
+    dayHTML = `<tr><td colspan="7" style="text-align:center;padding:32px;color:#9ca3af;font-style:italic">No transactions recorded in this period</td></tr>`;
+  }
 
   for (const [dayKey, rows] of dayMap) {
     const dayClose = rows[rows.length - 1].balance;
-    const dayIn  = rows.reduce((s, r) => s + (r.credit || 0), 0);
-    const dayOut = rows.reduce((s, r) => s + (r.debit  || 0), 0);
+    const dayIn    = rows.reduce((s, r) => s + (r.credit || 0), 0);
+    const dayOut   = rows.reduce((s, r) => s + (r.debit  || 0), 0);
 
-    const rowsHTML = rows.map((row, i) => {
-      const typeColor = (row.type === "expense" || row.type === "payout")
-        ? "color:#be123c" : (row.type === "payment" || row.type === "receipt") ? "color:#15803d" : "color:#374151";
+    // Day header row — dark blue
+    dayHTML += `
+    <tr>
+      <td colspan="4" style="background:#1e3a5f;color:#e0f2fe;font-weight:600;font-size:12px;padding:8px 10px;border-top:2px solid #0c2a4a">
+        &#x1F4C5; ${esc(dayKey)}
+      </td>
+      <td style="background:#1e3a5f;color:#86efac;text-align:right;padding:8px 10px;font-size:11px;border-top:2px solid #0c2a4a">
+        Opening: ${money(dayOpeningBalance, cur)}
+      </td>
+      <td style="background:#1e3a5f;color:#fca5a5;text-align:right;padding:8px 10px;font-size:11px;border-top:2px solid #0c2a4a">
+        Out: ${money(dayOut, cur)}
+      </td>
+      <td style="background:#1e3a5f;color:#fff;font-weight:700;text-align:right;padding:8px 10px;font-size:11px;border-top:2px solid #0c2a4a">
+        Closing: ${money(dayClose, cur)}
+      </td>
+    </tr>
+    <tr style="background:#f8fafc">
+      <td colspan="7" style="padding:4px 10px;font-size:10px;color:#6b7280">
+        ${rows.length} transaction${rows.length === 1 ? "" : "s"} &nbsp;&bull;&nbsp;
+        In: <span style="color:#15803d;font-weight:600">${money(dayIn, cur)}</span>
+        &nbsp;&bull;&nbsp;
+        Out: <span style="color:#be123c;font-weight:600">${money(dayOut, cur)}</span>
+      </td>
+    </tr>
+    <tr style="background:#f0fdf4">
+      <td colspan="6" style="padding:5px 10px;font-size:11px;color:#15803d;font-weight:600">
+        Opening balance carried forward
+      </td>
+      <td style="text-align:right;padding:5px 10px;font-size:11px;color:#15803d;font-weight:700">
+        ${money(dayOpeningBalance, cur)}
+      </td>
+    </tr>`;
+
+    // Transaction rows for this day
+    rows.forEach((row, i) => {
+      const isCredit = (row.credit || 0) > 0;
       const typeLabel = { payment: "Inv. Payment", receipt: "Cash Sale", expense: "Expense",
-        payout: "Payout", handover: "Handover" }[row.type] || row.type || "";
-      return `<tr class="${i % 2 === 1 ? "stripe" : ""}">
-        <td style="white-space:nowrap;font-size:11px">${dt(row.date)}</td>
-        <td style="${typeColor};font-size:11px;font-weight:600">${esc(typeLabel)}</td>
-        <td style="font-size:11px">${esc(row.description || "")}</td>
-        <td style="font-size:11px;color:#6b7280">${esc(row.recordedBy || "")}</td>
-        <td class="r" style="color:#15803d;font-weight:500">${row.credit > 0 ? money(row.credit, cur) : ""}</td>
-        <td class="r" style="color:#be123c;font-weight:500">${row.debit  > 0 ? money(row.debit,  cur) : ""}</td>
-        <td class="r" style="font-weight:700">${money(row.balance, cur)}</td>
+        payout: "Payout", handover: "Handover",
+        INVOICE_PMT: "Inv. Payment", CASH_SALE: "Cash Sale", EXPENSE: "Expense",
+        DRAWING: "Drawing", PAYOUT: "Payout", HANDOVER: "Handover"
+      }[row.type] || (row.typeLabel || row.type || "");
+      const typeColor = (row.type === "expense" || row.type === "EXPENSE" || row.type === "payout" || row.type === "PAYOUT" || row.type === "DRAWING")
+        ? "color:#be123c" : "color:#15803d";
+      const stripe = i % 2 === 1 ? "background:#f9fafb" : "";
+      const timeStr = new Date(row.date || row.at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+      const desc = esc(row.description || "");
+      const recBy = esc(row.recorder || row.recordedBy || "");
+
+      dayHTML += `
+      <tr style="${stripe};border-bottom:0.5px solid #f3f4f6">
+        <td style="padding:6px 10px;font-size:11px;color:#6b7280;white-space:nowrap">${timeStr}</td>
+        <td style="padding:6px 8px;font-size:11px;font-weight:600;${typeColor}">${esc(typeLabel)}</td>
+        <td style="padding:6px 8px;font-size:11px;color:#111827">${desc}</td>
+        <td style="padding:6px 8px;font-size:11px;color:#6b7280">${recBy}</td>
+        <td style="text-align:right;padding:6px 8px;font-size:11px;color:#15803d;font-weight:500">
+          ${(row.credit || 0) > 0 ? money(row.credit, cur) : ""}
+        </td>
+        <td style="text-align:right;padding:6px 8px;font-size:11px;color:#be123c;font-weight:500">
+          ${(row.debit || 0) > 0 ? money(row.debit, cur) : ""}
+        </td>
+        <td style="text-align:right;padding:6px 10px;font-size:12px;font-weight:700;color:#111827">
+          ${money(row.balance, cur)}
+        </td>
       </tr>`;
-    }).join("");
+    });
 
-    dayGroupsHTML += `
-      <!-- DAY: ${dayKey} -->
-      <tr style="background:#1f2937">
-        <td colspan="4" style="color:#fff;font-weight:700;font-size:12px;padding:7px 8px">
-          📅 ${dayKey}
-        </td>
-        <td class="r" style="color:#86efac;font-size:11px">Opening: ${money(runningOpen, cur)}</td>
-        <td class="r" style="color:#fca5a5;font-size:11px">Out: ${money(dayOut, cur)}</td>
-        <td class="r" style="color:#fff;font-weight:700">Closing: ${money(dayClose, cur)}</td>
-      </tr>
-      <tr style="background:#f8fafc">
-        <td colspan="4" style="font-size:10px;color:#6b7280;padding:4px 8px">
-          ${rows.length} transaction${rows.length === 1 ? "" : "s"} &nbsp;·&nbsp;
-          In: <span style="color:#15803d;font-weight:600">${money(dayIn, cur)}</span> &nbsp;·&nbsp;
-          Out: <span style="color:#be123c;font-weight:600">${money(dayOut, cur)}</span>
-        </td>
-        <td colspan="3"></td>
-      </tr>
-      ${rowsHTML}
-      <tr style="background:#f0f9ff;border-top:1px solid #bae6fd">
-        <td colspan="4" style="font-size:11px;font-weight:600;color:#0369a1">End of ${dayKey}</td>
-        <td class="r" style="color:#15803d;font-weight:600">${money(dayIn, cur)}</td>
-        <td class="r" style="color:#be123c;font-weight:600">${money(dayOut, cur)}</td>
-        <td class="r" style="font-weight:700;color:#0369a1">${money(dayClose, cur)}</td>
-      </tr>
-      <tr><td colspan="7" style="padding:4px;background:#fff;border:none"></td></tr>`;
+    // Day closing summary row
+    dayHTML += `
+    <tr style="background:#dbeafe;border-top:1px solid #93c5fd">
+      <td colspan="3" style="padding:6px 10px;font-size:11px;color:#1e40af;font-weight:600">
+        End of ${dayKey.split(",")[0].trim()} &mdash; ${rows.length} transaction${rows.length === 1 ? "" : "s"}
+      </td>
+      <td style="padding:6px 8px;font-size:11px;color:#1e40af"></td>
+      <td style="text-align:right;padding:6px 8px;font-size:11px;color:#15803d;font-weight:600">${money(dayIn, cur)}</td>
+      <td style="text-align:right;padding:6px 8px;font-size:11px;color:#be123c;font-weight:600">${money(dayOut, cur)}</td>
+      <td style="text-align:right;padding:6px 10px;font-size:12px;font-weight:700;color:#1e40af">${money(dayClose, cur)}</td>
+    </tr>
+    <tr><td colspan="7" style="padding:6px;background:#fff"></td></tr>`;
 
-    runningOpen = dayClose; // next day opens where this one closed
-  }
-
-  // If no rows at all
-  if (dayMap.size === 0) {
-    dayGroupsHTML = `<tr><td colspan="7" style="text-align:center;padding:24px;color:#9ca3af">
-      No transactions recorded in this period
-    </td></tr>`;
+    dayOpeningBalance = dayClose;
   }
 
   return `<!doctype html><html><head><meta charset="utf-8"/>
@@ -558,10 +594,9 @@ function buildLedgerHTML({ biz, periodLabel, branchName, ledgerRows, openingBala
   <style>
     ${baseCSS()}
     body { font-size: 11px; padding: 20px 24px; }
-    th, td { padding: 5px 7px; }
-    th { font-size: 9px; }
-    td { font-size: 11px; }
     @page { size: A4; margin: 15mm 12mm; }
+    th { font-size: 10px; padding: 7px 10px; }
+    td { font-size: 11px; }
   </style></head><body>
 
   ${reportHeader({
@@ -570,12 +605,12 @@ function buildLedgerHTML({ biz, periodLabel, branchName, ledgerRows, openingBala
     branch: branchName, generated: dt(new Date())
   })}
 
-  <!-- SUMMARY STRIP -->
-  <div class="kpi-grid" style="grid-template-columns:repeat(4,1fr)">
+  <!-- SUMMARY KPI STRIP -->
+  <div class="kpi-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px">
     <div class="kpi">
       <div class="kpi-label">Opening Balance</div>
       <div class="kpi-val">${money(openingBalance, cur)}</div>
-      <div class="kpi-sub">Start of period</div>
+      <div class="kpi-sub">Computed from all history before period</div>
     </div>
     <div class="kpi">
       <div class="kpi-label">Total In (+)</div>
@@ -592,28 +627,26 @@ function buildLedgerHTML({ biz, periodLabel, branchName, ledgerRows, openingBala
     </div>
   </div>
 
-  <!-- DAY-BY-DAY LEDGER TABLE -->
-  <div class="section-title">Transaction Ledger — ${esc(periodLabel)}</div>
+  <!-- PERIOD LEDGER TABLE — grouped by day -->
+  <div class="section-title">Transaction Ledger &mdash; ${esc(periodLabel)}</div>
+
   <table>
     <thead>
       <tr>
-        <th style="width:110px">Date / Time</th>
+        <th style="width:60px">Time</th>
         <th style="width:100px">Type</th>
         <th>Description</th>
-        <th style="width:90px">Recorded By</th>
-        <th class="r" style="width:80px">IN (+)</th>
-        <th class="r" style="width:80px">OUT (−)</th>
+        <th style="width:90px">Recorded by</th>
+        <th class="r" style="width:80px">In (+)</th>
+        <th class="r" style="width:80px">Out (−)</th>
         <th class="r" style="width:90px">Balance</th>
       </tr>
     </thead>
     <tbody>
-      <tr style="background:#f0fdf4">
-        <td colspan="6" style="color:#15803d;font-weight:700">OPENING BALANCE — ${esc(periodLabel)}</td>
-        <td class="r" style="font-weight:700;color:#15803d">${money(openingBalance, cur)}</td>
-      </tr>
-      ${dayGroupsHTML}
+      ${dayHTML}
+      <!-- PERIOD GRAND TOTAL -->
       <tr class="grand-total">
-        <td colspan="4">CLOSING BALANCE — End of Period</td>
+        <td colspan="4">CLOSING BALANCE &mdash; End of ${esc(periodLabel)}</td>
         <td class="r" style="color:#15803d">${money(totalIn, cur)}</td>
         <td class="r" style="color:#be123c">(${money(totalOut, cur)})</td>
         <td class="r">${money(closingBalance, cur)}</td>
@@ -622,7 +655,7 @@ function buildLedgerHTML({ biz, periodLabel, branchName, ledgerRows, openingBala
   </table>
 
   <div style="margin-top:12px;font-size:11px;color:#6b7280">
-    ${ledgerRows.length} total transactions across ${dayMap.size} day${dayMap.size === 1 ? "" : "s"}
+    ${ledgerRows.length} total transaction${ledgerRows.length === 1 ? "" : "s"} across ${dayMap.size} day${dayMap.size === 1 ? "" : "s"}
   </div>
 
   ${reportFooter(biz.name, "Ledger Statement")}
@@ -630,7 +663,8 @@ function buildLedgerHTML({ biz, periodLabel, branchName, ledgerRows, openingBala
 }
 
 
-// ── 3. Clerk Statement HTML ──────────────────────────────────────────────────
+
+// ── 3. Clerk Statement HTML — day-grouped, running balance, reconciliation ────
 function buildClerkStatementHTML({ biz, periodLabel, branchName, clerkData, logoSrc, cur }) {
   const {
     clerkName, clerkRole, openingCustody, openingSource,
@@ -638,18 +672,106 @@ function buildClerkStatementHTML({ biz, periodLabel, branchName, clerkData, logo
     expectedClosing, handedOver, discrepancy, totalIn, totalOut
   } = clerkData;
 
-  const txTableRows = txRows.length
-    ? txRows.map((row, i) => `
-      <tr class="${i % 2 === 1 ? "stripe" : ""}">
-        <td style="white-space:nowrap;font-size:11px">${dt(row.at)}</td>
-        <td style="font-size:11px;font-weight:500;${row.credit > 0 ? "color:#15803d" : "color:#be123c"}">${esc(row.typeLabel || "")}</td>
-        <td style="font-size:11px">${esc(row.description || "")}</td>
-        <td class="r" style="color:#15803d;font-weight:500">${row.credit > 0 ? money(row.credit, cur) : ""}</td>
-        <td class="r" style="color:#be123c;font-weight:500">${row.debit  > 0 ? money(row.debit,  cur) : ""}</td>
-        <td class="r" style="font-weight:700">${money(row.balance, cur)}</td>
-      </tr>`).join("")
-    : `<tr><td colspan="6" style="color:#9ca3af;text-align:center;padding:16px">No transactions recorded this period</td></tr>`;
+  // ── Group txRows by day ─────────────────────────────────────────────────────
+  const dayMap = new Map();
+  for (const row of txRows) {
+    const d = new Date(row.at || row.date);
+    const dayKey = d.toLocaleDateString("en-GB", { weekday: "long", day: "2-digit", month: "short", year: "numeric" });
+    if (!dayMap.has(dayKey)) dayMap.set(dayKey, []);
+    dayMap.get(dayKey).push(row);
+  }
 
+  let dayHTML = "";
+  let dayOpening = openingCustody;
+
+  if (dayMap.size === 0) {
+    dayHTML = `<tr><td colspan="6" style="text-align:center;padding:32px;color:#9ca3af;font-style:italic">No transactions recorded in this period</td></tr>`;
+  }
+
+  for (const [dayKey, rows] of dayMap) {
+    const dayClose = rows[rows.length - 1].balance;
+    const dayIn    = rows.reduce((s, r) => s + (r.credit || 0), 0);
+    const dayOut   = rows.reduce((s, r) => s + (r.debit  || 0), 0);
+
+    dayHTML += `
+    <tr>
+      <td colspan="3" style="background:#1e3a5f;color:#e0f2fe;font-weight:600;font-size:12px;padding:8px 10px;border-top:2px solid #0c2a4a">
+        &#x1F4C5; ${esc(dayKey)}
+      </td>
+      <td style="background:#1e3a5f;color:#86efac;text-align:right;padding:8px 10px;font-size:11px;border-top:2px solid #0c2a4a">
+        Opening: ${money(dayOpening, cur)}
+      </td>
+      <td style="background:#1e3a5f;color:#fca5a5;text-align:right;padding:8px 10px;font-size:11px;border-top:2px solid #0c2a4a">
+        Out: ${money(dayOut, cur)}
+      </td>
+      <td style="background:#1e3a5f;color:#fff;font-weight:700;text-align:right;padding:8px 10px;font-size:11px;border-top:2px solid #0c2a4a">
+        Closing: ${money(dayClose, cur)}
+      </td>
+    </tr>
+    <tr style="background:#f0fdf4">
+      <td colspan="5" style="padding:5px 10px;font-size:11px;color:#15803d;font-weight:600">
+        Opening custody balance
+      </td>
+      <td style="text-align:right;padding:5px 10px;font-size:11px;color:#15803d;font-weight:700">
+        ${money(dayOpening, cur)}
+      </td>
+    </tr>`;
+
+    rows.forEach((row, i) => {
+      const isDebit = (row.debit || 0) > 0;
+      const typeColor = isDebit ? "color:#be123c" : "color:#15803d";
+      const stripe = i % 2 === 1 ? "background:#f9fafb" : "";
+      const timeStr = new Date(row.at || row.date).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+
+      dayHTML += `
+      <tr style="${stripe};border-bottom:0.5px solid #f3f4f6">
+        <td style="padding:6px 10px;font-size:11px;color:#6b7280;white-space:nowrap">${timeStr}</td>
+        <td style="padding:6px 8px;font-size:11px;font-weight:600;${typeColor}">${esc(row.typeLabel || "")}</td>
+        <td style="padding:6px 8px;font-size:11px;color:#111827">${esc(row.description || "")}</td>
+        <td style="text-align:right;padding:6px 8px;font-size:11px;color:#15803d;font-weight:500">
+          ${(row.credit || 0) > 0 ? money(row.credit, cur) : ""}
+        </td>
+        <td style="text-align:right;padding:6px 8px;font-size:11px;color:#be123c;font-weight:500">
+          ${(row.debit || 0) > 0 ? money(row.debit, cur) : ""}
+        </td>
+        <td style="text-align:right;padding:6px 10px;font-size:12px;font-weight:700;color:#111827">
+          ${money(row.balance, cur)}
+        </td>
+      </tr>`;
+    });
+
+    dayHTML += `
+    <tr style="background:#dbeafe;border-top:1px solid #93c5fd">
+      <td colspan="2" style="padding:6px 10px;font-size:11px;color:#1e40af;font-weight:600">
+        End of ${dayKey.split(",")[0].trim()}
+      </td>
+      <td style="padding:6px 8px;font-size:11px;color:#1e40af"></td>
+      <td style="text-align:right;padding:6px 8px;font-size:11px;color:#15803d;font-weight:600">${money(dayIn, cur)}</td>
+      <td style="text-align:right;padding:6px 8px;font-size:11px;color:#be123c;font-weight:600">${money(dayOut, cur)}</td>
+      <td style="text-align:right;padding:6px 10px;font-size:12px;font-weight:700;color:#1e40af">${money(dayClose, cur)}</td>
+    </tr>
+    <tr><td colspan="6" style="padding:6px;background:#fff"></td></tr>`;
+
+    dayOpening = dayClose;
+  }
+
+  // ── Reconciliation verdict ──────────────────────────────────────────────────
+  let reconcileHTML;
+  if (handedOver !== null) {
+    if (Math.abs(discrepancy) < 0.01) {
+      reconcileHTML = `<div class="verdict profit">&#x2705; BALANCED &mdash; Expected ${money(expectedClosing, cur)}, Counted ${money(handedOver, cur)}</div>`;
+    } else if (discrepancy > 0) {
+      reconcileHTML = `<div class="verdict" style="background:#fffbeb;color:#b45309;border-left:4px solid #d97706">
+        &#x26A0;&#xFE0F; SURPLUS +${money(discrepancy, cur)} &mdash; Counted ${money(handedOver, cur)}, Expected ${money(expectedClosing, cur)}
+      </div>`;
+    } else {
+      reconcileHTML = `<div class="verdict loss">&#x274C; SHORT ${money(Math.abs(discrepancy), cur)} &mdash; Counted ${money(handedOver, cur)}, Expected ${money(expectedClosing, cur)}</div>`;
+    }
+  } else {
+    reconcileHTML = `<div class="verdict even">&#x23F3; Shift still open &mdash; Cash at hand should be ${money(expectedClosing, cur)}. No handover recorded yet.</div>`;
+  }
+
+  // ── Handovers in table ──────────────────────────────────────────────────────
   const handInRows = handoversIn.length
     ? handoversIn.map(h => `
       <tr>
@@ -659,14 +781,14 @@ function buildClerkStatementHTML({ biz, periodLabel, branchName, clerkData, logo
         <td class="r" style="color:#15803d;font-weight:600">${money(h.amountCounted, cur)}</td>
         <td>${esc(h.notes || "")}</td>
       </tr>`).join("")
-    : `<tr><td colspan="5" style="color:#9ca3af">Opening balance used (no handover-in recorded)</td></tr>`;
+    : `<tr><td colspan="5" style="color:#9ca3af;font-style:italic">Opening balance carried forward from previous period (${money(openingCustody, cur)})</td></tr>`;
 
   const handOutRows = handoversOut.length
     ? handoversOut.map(h => {
         const diff = h.amountCounted - expectedClosing;
         const ok   = Math.abs(diff) < 0.01;
         const cls  = ok ? "flag-ok" : diff > 0 ? "flag-surplus" : "flag-short";
-        const flag = ok ? "✅ Balanced" : diff > 0 ? `⚠️ Surplus +${money(diff, cur)}` : `❌ Short ${money(Math.abs(diff), cur)}`;
+        const flag = ok ? "&#x2705; Balanced" : diff > 0 ? `&#x26A0;&#xFE0F; Surplus +${money(diff, cur)}` : `&#x274C; Short ${money(Math.abs(diff), cur)}`;
         return `<tr>
           <td>${dt(h.handoverAt)}</td>
           <td>${esc(h.incomingName || "Unknown")}</td>
@@ -675,97 +797,82 @@ function buildClerkStatementHTML({ biz, periodLabel, branchName, clerkData, logo
           <td class="${cls}">${flag}</td>
         </tr>`;
       }).join("")
-    : `<tr><td colspan="5" style="color:#9ca3af">No handover-out recorded (shift may still be open)</td></tr>`;
-
-  const reconcile = handedOver !== null
-    ? (Math.abs(discrepancy) < 0.01
-        ? `<div class="verdict profit">✅ BALANCED - Expected ${money(expectedClosing, cur)}, Counted ${money(handedOver, cur)}</div>`
-        : discrepancy > 0
-          ? `<div class="verdict" style="background:#fffbeb;color:#b45309;border-left:4px solid #d97706">⚠️ SURPLUS - Counted ${money(handedOver, cur)}, Expected ${money(expectedClosing, cur)}. Difference: +${money(discrepancy, cur)}</div>`
-          : `<div class="verdict loss">❌ SHORT - Counted ${money(handedOver, cur)}, Expected ${money(expectedClosing, cur)}. Difference: ${money(discrepancy, cur)}</div>`)
-    : `<div class="verdict even">⏳ Shift still open - Current balance in custody: ${money(expectedClosing, cur)}</div>`;
+    : `<tr><td colspan="5" style="color:#9ca3af;font-style:italic">No handover-out recorded (shift may still be open)</td></tr>`;
 
   return `<!doctype html><html><head><meta charset="utf-8"/>
   <title>Clerk Statement - ${esc(clerkName)}</title>
   <style>
     ${baseCSS()}
     body { font-size: 12px; }
+    @page { size: A4; margin: 15mm 12mm; }
   </style></head><body>
 
   ${reportHeader({
     bizName: biz.name, logoSrc, address: biz.address,
     title: "Clerk Statement",
-    subtitle: `${esc(clerkName)} (${esc(clerkRole)}) · ${esc(periodLabel)}`,
+    subtitle: `${esc(clerkName)} (${esc(clerkRole)}) &bull; ${esc(periodLabel)}`,
     branch: branchName, generated: dt(new Date())
   })}
 
-  <!-- CLERK KPIs -->
-  <div class="kpi-grid" style="grid-template-columns:repeat(4,1fr)">
+  <!-- CLERK KPI STRIP -->
+  <div class="kpi-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px">
     <div class="kpi">
       <div class="kpi-label">Opening Custody</div>
       <div class="kpi-val">${money(openingCustody, cur)}</div>
-      <div class="kpi-sub">${esc(openingSource)}</div>
+      <div class="kpi-sub">${esc(openingSource || "Carried forward")}</div>
     </div>
     <div class="kpi">
-      <div class="kpi-label">Total Received</div>
+      <div class="kpi-label">Total Collected</div>
       <div class="kpi-val" style="color:#15803d">+${money(totalIn, cur)}</div>
     </div>
     <div class="kpi">
       <div class="kpi-label">Total Paid Out</div>
-      <div class="kpi-val" style="color:#be123c">−${money(totalOut, cur)}</div>
+      <div class="kpi-val" style="color:#be123c">&minus;${money(totalOut, cur)}</div>
     </div>
     <div class="kpi">
-      <div class="kpi-label">Expected Closing</div>
+      <div class="kpi-label">Cash at Hand</div>
       <div class="kpi-val">${money(expectedClosing, cur)}</div>
+      <div class="kpi-sub">${handedOver !== null ? "Shift closed" : "Shift open"}</div>
     </div>
   </div>
 
-  <!-- RECONCILIATION -->
-  ${reconcile}
+  ${reconcileHTML}
 
-  <!-- CASH RECEIVED (handovers in) -->
-  <div class="section-title">Cash Received at Start of Shift</div>
+  <!-- SHIFT HANDOVERS RECEIVED -->
+  <div class="section-title">Cash Received at Start (Handovers In)</div>
   <table>
-    <thead><tr>
-      <th>Date/Time</th><th>Received From</th><th>Their Role</th>
-      <th class="r">Amount</th><th>Notes</th>
-    </tr></thead>
+    <thead><tr><th>Date/Time</th><th>Received From</th><th>Their Role</th><th class="r">Amount</th><th>Notes</th></tr></thead>
     <tbody>${handInRows}</tbody>
   </table>
 
-  <!-- TRANSACTIONS -->
-  <div class="section-title">All Transactions Recorded by ${esc(clerkName)}</div>
+  <!-- ALL TRANSACTIONS — grouped by day with running balance -->
+  <div class="section-title">All Transactions by ${esc(clerkName)} &mdash; ${esc(periodLabel)}</div>
   <table>
-    <thead><tr>
-      <th style="width:110px">Date/Time</th>
-      <th style="width:120px">Type</th>
-      <th>Description</th>
-      <th class="r" style="width:90px">IN (+)</th>
-      <th class="r" style="width:90px">OUT (−)</th>
-      <th class="r" style="width:90px">Balance</th>
-    </tr></thead>
-    <tbody>
-      <tr style="background:#f0fdf4">
-        <td colspan="5" style="color:#15803d;font-weight:600">Opening Custody Balance</td>
-        <td class="r" style="font-weight:700;color:#15803d">${money(openingCustody, cur)}</td>
+    <thead>
+      <tr>
+        <th style="width:60px">Time</th>
+        <th style="width:120px">Type</th>
+        <th>Description</th>
+        <th class="r" style="width:85px">In (+)</th>
+        <th class="r" style="width:85px">Out (&minus;)</th>
+        <th class="r" style="width:90px">Balance</th>
       </tr>
-      ${txTableRows}
+    </thead>
+    <tbody>
+      ${dayHTML}
       <tr class="grand-total">
-        <td colspan="3">Totals / Closing Balance</td>
+        <td colspan="3">Closing Balance &mdash; End of Period</td>
         <td class="r" style="color:#15803d">+${money(totalIn, cur)}</td>
-        <td class="r" style="color:#be123c">−${money(totalOut, cur)}</td>
+        <td class="r" style="color:#be123c">&minus;${money(totalOut, cur)}</td>
         <td class="r">${money(expectedClosing, cur)}</td>
       </tr>
     </tbody>
   </table>
 
-  <!-- CASH HANDED OUT -->
-  <div class="section-title">Cash Handed Out at End of Shift</div>
+  <!-- HANDOVERS OUT -->
+  <div class="section-title">Cash Handed Over at End of Shift</div>
   <table>
-    <thead><tr>
-      <th>Date/Time</th><th>Handed To</th><th>Their Role</th>
-      <th class="r">Amount Counted</th><th>Status</th>
-    </tr></thead>
+    <thead><tr><th>Date/Time</th><th>Handed To</th><th>Their Role</th><th class="r">Amount Counted</th><th>Status</th></tr></thead>
     <tbody>${handOutRows}</tbody>
   </table>
 
