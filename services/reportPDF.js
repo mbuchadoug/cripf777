@@ -478,7 +478,7 @@ function buildSummaryHTML({ biz, reportType, periodLabel, branchName, data, tota
 
 
 
-// ── 2. Detailed Ledger HTML — day-grouped, running balance per row ────────────
+// ── 2. Detailed Ledger HTML - day-grouped, running balance per row ────────────
 // Matches the preview exactly: dark day header, transactions with running balance,
 // day closing bar, next day opening = previous day closing.
 function buildLedgerHTML({ biz, periodLabel, branchName, ledgerRows, openingBalance, closingBalance, cur, logoSrc }) {
@@ -507,7 +507,7 @@ function buildLedgerHTML({ biz, periodLabel, branchName, ledgerRows, openingBala
     const dayIn    = rows.reduce((s, r) => s + (r.credit || 0), 0);
     const dayOut   = rows.reduce((s, r) => s + (r.debit  || 0), 0);
 
-    // Day header row — dark blue
+    // Day header row - dark blue
     dayHTML += `
     <tr>
       <td colspan="4" style="background:#1e3a5f;color:#e0f2fe;font-weight:600;font-size:12px;padding:8px 10px;border-top:2px solid #0c2a4a">
@@ -627,7 +627,7 @@ function buildLedgerHTML({ biz, periodLabel, branchName, ledgerRows, openingBala
     </div>
   </div>
 
-  <!-- PERIOD LEDGER TABLE — grouped by day -->
+  <!-- PERIOD LEDGER TABLE - grouped by day -->
   <div class="section-title">Transaction Ledger &mdash; ${esc(periodLabel)}</div>
 
   <table>
@@ -664,7 +664,7 @@ function buildLedgerHTML({ biz, periodLabel, branchName, ledgerRows, openingBala
 
 
 
-// ── 3. Clerk Statement HTML — day-grouped, running balance, reconciliation ────
+// ── 3. Clerk Statement HTML - day-grouped, running balance, reconciliation ────
 function buildClerkStatementHTML({ biz, periodLabel, branchName, clerkData, logoSrc, cur }) {
   const {
     clerkName, clerkRole, openingCustody, openingSource,
@@ -845,7 +845,7 @@ function buildClerkStatementHTML({ biz, periodLabel, branchName, clerkData, logo
     <tbody>${handInRows}</tbody>
   </table>
 
-  <!-- ALL TRANSACTIONS — grouped by day with running balance -->
+  <!-- ALL TRANSACTIONS - grouped by day with running balance -->
   <div class="section-title">All Transactions by ${esc(clerkName)} &mdash; ${esc(periodLabel)}</div>
   <table>
     <thead>

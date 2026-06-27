@@ -10474,7 +10474,7 @@ Type *done* to save`,
 
   if (a === ACTIONS.DETAILED_REPORT) {
     if (!biz) return sendMainMenu(from);
-    // Date-range picker — ledger is always continuous, these are window presets
+    // Date-range picker - ledger is always continuous, these are window presets
     biz.sessionData = { ...(biz.sessionData||{}) };
     await saveBizSafe(biz);
     return sendList(from, "📋 Ledger Statement - Choose Date Range:", [

@@ -573,7 +573,7 @@ export async function buildClerkStatement({ biz, clerkPhone, branchId, start, en
 
   // ── Opening custody ────────────────────────────────────────────────────────
   // Use the cumulative carry-forward if provided (computed from all history
-  // before `start`). This is always accurate — never relies on manual entry.
+  // before `start`). This is always accurate - never relies on manual entry.
   // Fall back to handover-in amount only if no override given.
   let openingCustody = openingCustodyOverride !== null ? openingCustodyOverride : 0;
   let openingSource  = openingCustodyOverride !== null ? "Carried forward from previous period" : "Opening Balance";

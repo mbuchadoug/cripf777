@@ -10441,7 +10441,7 @@ Type *done* to save`,
   // ── Reports ────────────────────────────────────────────────────────────────
   //
   // Two reports only: Detailed Ledger + Clerk Statement (+ self-serve variant).
-  // Date filter is embedded in the menu — user picks report+period in one tap.
+  // Date filter is embedded in the menu - user picks report+period in one tap.
   // Custom date: user types range → report runs.
   // Clerk statement: admin picks clerk after period; clerk/manager sees self.
   //
@@ -10473,12 +10473,12 @@ Type *done* to save`,
     biz.sessionData  = { filterFor: "detailed" };
     await saveBizSafe(biz);
     return sendButtons(from, {
-      text: "🗓 *Detailed Ledger — Custom Range*\n\nType the date range:\n*01 Jun - 27 Jun*\n*01/06 - 27/06*\n*2026-06-01 - 2026-06-27*\n\nOr type *cancel* to go back.",
+      text: "🗓 *Detailed Ledger - Custom Range*\n\nType the date range:\n*01 Jun - 27 Jun*\n*01/06 - 27/06*\n*2026-06-01 - 2026-06-27*\n\nOr type *cancel* to go back.",
       buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
     });
   }
 
-  // ── Clerk Statement (admin/owner — picks a clerk) ─────────────────────────
+  // ── Clerk Statement (admin/owner - picks a clerk) ─────────────────────────
   if (a === "rpt_clerk_today" || a === "rpt_clerk_week" || a === "rpt_clerk_month" || a === "rpt_clerk_custom") {
     if (!biz) return sendMainMenu(from);
     const clkPeriodMap = { rpt_clerk_today: "day", rpt_clerk_week: "week", rpt_clerk_month: "month", rpt_clerk_custom: "custom" };
@@ -10488,7 +10488,7 @@ Type *done* to save`,
       biz.sessionData  = { filterFor: "clerk" };
       await saveBizSafe(biz);
       return sendButtons(from, {
-        text: "🗓 *Clerk Statement — Custom Date Range*\n\nType the range:\n*01 Jun - 27 Jun*\n\nOr type *cancel* to go back.",
+        text: "🗓 *Clerk Statement - Custom Date Range*\n\nType the range:\n*01 Jun - 27 Jun*\n\nOr type *cancel* to go back.",
         buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
       });
     }
@@ -10498,7 +10498,7 @@ Type *done* to save`,
     return continueTwilioFlow({ from, text: "auto" });
   }
 
-  // ── Self Statement (clerk/manager — views own statement) ──────────────────
+  // ── Self Statement (clerk/manager - views own statement) ──────────────────
   if (a === "rpt_self_today" || a === "rpt_self_week" || a === "rpt_self_month" || a === "rpt_self_custom") {
     if (!biz) return sendMainMenu(from);
     const selfPeriodMap = { rpt_self_today: "day", rpt_self_week: "week", rpt_self_month: "month", rpt_self_custom: "custom" };
@@ -10508,7 +10508,7 @@ Type *done* to save`,
       biz.sessionData  = { filterFor: "clerk_self" };
       await saveBizSafe(biz);
       return sendButtons(from, {
-        text: "🗓 *My Statement — Custom Date Range*\n\nType the range:\n*01 Jun - 27 Jun*\n\nOr type *cancel* to go back.",
+        text: "🗓 *My Statement - Custom Date Range*\n\nType the range:\n*01 Jun - 27 Jun*\n\nOr type *cancel* to go back.",
         buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
       });
     }
@@ -11372,7 +11372,22 @@ const shortcodeBlockedStates = [
   // Without these, typed rate strings hit the shortcode search and trigger "Which city?"
   "service_update_rates",
   "service_update_rates_confirm_unit",
-  "service_update_rates_confirm"
+  "service_update_rates_confirm",
+
+  // Report states - date text "01 Jun - 27 Jun" must never trigger shortcode search
+  "report_date_filter",
+  "report_clerk_pick_custom",
+  "report_detailed",
+  "report_detailed_week",
+  "report_detailed_month",
+  "report_detailed_year",
+  "report_clerk_statement",
+  "report_clerk_pick",
+  "report_clerk_self",
+  "report_choose_branch",
+  "cash_handover_amount",
+  "cash_handover_incoming",
+  "cash_handover_note"
 ];
 
 if (
@@ -19013,7 +19028,7 @@ if (!isMetaAction && text && text.trim().length > 1) {
     "subscription_payment_pending", "subscription_enter_ecocash",
     // Service rate update - text entry states must not be hijacked by Request Sellers
     "service_update_rates", "service_update_rates_confirm_unit", "service_update_rates_confirm",
-    // Report text-input states — must not be hijacked by Request Sellers
+    // Report text-input states - must not be hijacked by Request Sellers
     "report_date_filter", "report_clerk_pick_custom",
     "report_detailed", "report_detailed_week", "report_detailed_month", "report_detailed_year",
     "report_clerk_statement", "report_clerk_pick", "report_clerk_self", "report_choose_branch",

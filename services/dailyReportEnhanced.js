@@ -357,7 +357,7 @@ export async function runMonthlyReportMetaEnhanced({ biz, from }) {
 // DETAILED LEDGER  →  states "report_detailed*"
 //
 // DESIGN: The ledger is always a continuous running statement, never day-isolated.
-// "Daily" / "Weekly" / "Monthly" are just date-range presets — a window into the
+// "Daily" / "Weekly" / "Monthly" are just date-range presets - a window into the
 // same continuous ledger. Opening balance is computed from ALL history before the
 // start date so it is always accurate regardless of manual opening balance entries.
 // Each row shows a running balance column exactly like a bank statement.
@@ -436,7 +436,7 @@ ${txCount} transactions recorded
 
 // ─── Build running-balance ledger rows ────────────────────────────────────────
 // Returns rows suitable for PDF rendering, each with a `balance` field showing
-// the running total after that transaction — exactly like a bank statement.
+// the running total after that transaction - exactly like a bank statement.
 async function _buildRunningLedger({ biz, data, branchId, start, end, openingBalance }) {
   const CashPayout   = (await import("../models/cashPayout.js")).default;
   const CashHandover = (await import("../models/cashHandover.js")).default;
@@ -532,7 +532,7 @@ export async function runClerkStatementReport({ biz, from, clerkPhone, period = 
 
   // ── Cumulative opening custody (computed, not stored) ─────────────────────
   // Sum ALL of this clerk's credits and debits before `start`.
-  // This is their true carry-forward balance — works even if they never set
+  // This is their true carry-forward balance - works even if they never set
   // an opening balance and even across days/weeks/months seamlessly.
   const _clerkCumulativeOpening = await fetchClerkCumulativeBalance({ biz, clerkPhone, branchId, before: start });
 

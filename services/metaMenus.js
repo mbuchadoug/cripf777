@@ -415,7 +415,7 @@ export async function sendInvoiceConfirmMenu(to, summaryText) {
 
 /* =============================================================================
    REPORTS MENU  – 2 reports only: Detailed Ledger + Clerk Statement
-   Date filter is embedded in the menu list — one tap picks report + period.
+   Date filter is embedded in the menu list - one tap picks report + period.
    Admin: sees all clerks. Clerk/manager: sees only own statement.
 ============================================================================= */
 export async function sendReportsMenu(to, isGold = false, isSilver = false) {
@@ -428,7 +428,7 @@ export async function sendReportsMenu(to, isGold = false, isSilver = false) {
 
   // Clerk / manager: sees Detailed Ledger (branch-scoped) + My Statement only
   if (caller?.role === "clerk" || caller?.role === "manager") {
-    return sendList(to, "📈 Reports — pick report & period:", [
+    return sendList(to, "📈 Reports - pick report & period:", [
       { id: "rpt_ledger_today",  title: "📋 Ledger · Today"             },
       { id: "rpt_ledger_week",   title: "📋 Ledger · This Week"         },
       { id: "rpt_ledger_month",  title: "📋 Ledger · This Month"        },
@@ -442,7 +442,7 @@ export async function sendReportsMenu(to, isGold = false, isSilver = false) {
   }
 
   // Owner / admin: sees both reports + full clerk picker on clerk statement
-  return sendList(to, "📈 Reports — pick report & period:", [
+  return sendList(to, "📈 Reports - pick report & period:", [
     { id: "rpt_ledger_today",  title: "📋 Ledger · Today"             },
     { id: "rpt_ledger_week",   title: "📋 Ledger · This Week"         },
     { id: "rpt_ledger_month",  title: "📋 Ledger · This Month"        },
@@ -460,9 +460,9 @@ export async function sendOverallReportsMenu(to, isGold = false, isSilver = fals
   return sendReportsMenu(to, isGold, isSilver);
 }
 
-// Branch-scoped variant — identical list; branchId already in sessionData
+// Branch-scoped variant - identical list; branchId already in sessionData
 export async function sendBranchReportsMenu(to, isGold = false, isSilver = false) {
-  return sendList(to, "🏢 Branch Reports — pick report & period:", [
+  return sendList(to, "🏢 Branch Reports - pick report & period:", [
     { id: "rpt_ledger_today",  title: "📋 Ledger · Today"             },
     { id: "rpt_ledger_week",   title: "📋 Ledger · This Week"         },
     { id: "rpt_ledger_month",  title: "📋 Ledger · This Month"        },

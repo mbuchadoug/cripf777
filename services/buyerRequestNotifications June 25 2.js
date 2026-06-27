@@ -252,14 +252,14 @@ async function _sendNewRequestToPhone({
         console.log(`[BUY REQ TPL v2] supplier_new_request_v2 → ${normalizedPhone} (${ref})`);
       }
       _templateSent = true;
-      // v2 has buttons built in — return now, no need for step 2
+      // v2 has buttons built in - return now, no need for step 2
       return;
     } catch (err) {
       console.warn(`[BUY REQ TPL v2] failed for ${normalizedPhone}: ${err.message}. Trying v1 to open session.`);
     }
   }
 
-  // ── Step 1b: v1 plain-text template — no buttons but opens the session ────
+  // ── Step 1b: v1 plain-text template - no buttons but opens the session ────
   if (!_templateSent) {
     try {
       await _sendTemplate(normalizedPhone, "supplier_new_buyer_request", [
@@ -277,7 +277,7 @@ async function _sendNewRequestToPhone({
 
   // ── Step 2: Send interactive buttons after template ───────────────────────
   // The template above opened the session so sendButtons now always delivers.
-  // If both templates failed, still try — seller may have an existing session.
+  // If both templates failed, still try - seller may have an existing session.
   const itemDisplay = fullItemLines || itemSummary;
   try {
     await sendButtons(normalizedPhone, {
