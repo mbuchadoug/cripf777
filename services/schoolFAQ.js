@@ -133,7 +133,7 @@ function _buildFeeBlock(school) {
 
   text += "\n_All fees in USD._";
   const firstTuition = tuition[0]?.amount || school.fees?.term1 || 0;
-  if (firstTuition > 0) text += `\n💡 _Annual estimate (day, 3 terms): ~$${firstTuition * 3}_`;
+  // Annual estimate line removed - boarding schools have different day/boarding totals
   if (school.ecocashNumber) text += `\n📲 EcoCash: *${school.ecocashNumber}*`;
   if (school.bankDetails)   text += `\n🏦 ${school.bankDetails}`;
 
@@ -228,11 +228,11 @@ export async function showSchoolFAQMenu(from, schoolId, biz, saveBiz, { source =
     : "";
 
   const FAC = Object.fromEntries((SCHOOL_FACILITIES || []).map(f => [f.id, f.label]));
-  const facList = (school.facilities || []).slice(0, 5).map(id => FAC[id] || id).filter(Boolean);
-  const facLine = facList.length ? `🏊 ${facList.join(" · ")}` : "";
+  const facList = (school.facilities || []).map(id => FAC[id] || id).filter(Boolean);
+  const facLine = facList.length ? `🏫 ${facList.join(" · ")}` : "";
 
   const EXT = Object.fromEntries((SCHOOL_EXTRAMURALACTIVITIES || []).map(e => [e.id, e.label]));
-  const extList = (school.extramuralActivities || []).slice(0, 4).map(id => EXT[id] || id).filter(Boolean);
+  const extList = (school.extramuralActivities || []).map(id => EXT[id] || id).filter(Boolean);
   const extLine = extList.length ? `⚽ ${extList.join(", ")}` : "";
 
   const feeText = _feeText(school);
@@ -257,8 +257,9 @@ export async function showSchoolFAQMenu(from, schoolId, biz, saveBiz, { source =
   if (school.grades?.from && school.grades?.to) msg1 += `\n📚 Grades: ${school.grades.from} – ${school.grades.to}`;
   if (school.boarding === "boarding" || school.boarding === "both") msg1 += " · 🛏️ Boarding";
 
-  // Auto-generate highlights only when no pitch was set (pitch is now sent above as msg0)
-  if (!_pitch) {
+  // Always show facilities, extramural & results in msg1 as factual highlights
+  // The pitch/description (msg0) is marketing text - these are separate factual data
+  {
     const lines = [];
     if (resultLine) lines.push(resultLine);
     if (facLine)    lines.push(facLine);
@@ -305,7 +306,7 @@ export async function showSchoolFAQMenu(from, schoolId, biz, saveBiz, { source =
       try {
         if (sendImage) {
           try {
-            await sendImage(from, { link: flyer.url, caption: flyer.label || school.schoolName });
+            await sendImage(from, { imageUrl: flyer.url, caption: flyer.label || school.schoolName });
             continue;
           } catch (_) {}
         }
@@ -341,7 +342,7 @@ export async function showSchoolFAQMenu(from, schoolId, biz, saveBiz, { source =
             if (typeof meta.sendImage === "function") sendImage = meta.sendImage;
           } catch (_) {}
           if (sendImage) {
-            try { await sendImage(from, { link: doc.url, caption: doc.label }); continue; } catch (_) {}
+            try { await sendImage(from, { imageUrl: doc.url, caption: doc.label }); continue; } catch (_) {}
           }
         }
         await sendDocument(from, {
