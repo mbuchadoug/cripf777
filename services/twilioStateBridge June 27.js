@@ -319,8 +319,6 @@ const restrictedStateMap = {
     report_detailed_year:    "reports",
     report_clerk_statement:  "reports",
     report_clerk_pick:       "reports",
-    report_clerk_pick_custom: "reports",
-    report_date_filter:       "reports",
     payment_amount: "payments",
     payment_method: "payments",
     expense_amount: "payments",
@@ -673,38 +671,6 @@ if (state === "payment_invoice_search") {
   }
 
   // ── Clerk statement: pick a clerk then show their statement ──────────────
-
-  // ── Clerk picker for custom-date clerk statement ────────────────────────────
-  // Entered after user typed a custom date range and filterFor === "clerk"
-  // On first pass: shows staff list. On second pass (clerkPhone set): runs report.
-  if (state === "report_clerk_pick_custom") {
-    if (biz.sessionData?.clerkPhone) {
-      const clerkPhone  = biz.sessionData.clerkPhone;
-      const customStart = biz.sessionData.customStart ? new Date(biz.sessionData.customStart) : null;
-      const customEnd   = biz.sessionData.customEnd   ? new Date(biz.sessionData.customEnd)   : null;
-      biz.sessionState  = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
-      return runClerkStatementReport({ biz, from, clerkPhone, period: "custom", customStart, customEnd });
-    }
-    // First pass: show clerk list
-    const UserRoleModel = (await import("../models/userRole.js")).default;
-    const branchId = caller?.role !== "owner" ? caller?.branchId : null;
-    const q = { businessId: biz._id, pending: false };
-    if (branchId) q.branchId = branchId;
-    const staff = await UserRoleModel.find(q).lean();
-    if (!staff.length) {
-      await sendText(from, "❌ No staff found for this business.");
-      biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
-      return sendMainMenu(from);
-    }
-    const items = staff.map(u => ({
-      id:    `rpt_clk_custom_pick_${u.phone}`,
-      title: `👤 ${u.name || u.phone} (${u.role || "clerk"})`
-    }));
-    items.push({ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" });
-    await sendList(from, "👤 Select clerk for statement:", items);
-    return true;
-  }
-
   if (state === "report_clerk_pick") {
     // If clerkPhone already chosen (second pass), run the statement
     if (biz.sessionData?.clerkPhone) {
@@ -3086,75 +3052,6 @@ _Cash balance updated._`
       return true;
     }
 
-
-    // ── Handover balance enforcement ──────────────────────────────────────────
-    // A clerk cannot hand over more cash than their current running custody balance.
-    // We compute this in real time: all credits they received minus all debits they
-    // recorded and all previous handovers they gave out.
-    try {
-      const InvoicePaymentM = (await import("../models/invoicePayment.js")).default;
-      const InvoiceM        = (await import("../models/invoice.js")).default;
-      const ExpenseM        = (await import("../models/expense.js")).default;
-      const CashPayoutM     = (await import("../models/cashPayout.js")).default;
-      const CashHandoverM   = (await import("../models/cashHandover.js")).default;
-
-      const bQ = { businessId: biz._id };
-
-      const [pmtsIn, rcptsIn, expsOut, payoutsOut, hOut, hIn] = await Promise.all([
-        InvoicePaymentM.aggregate([
-          { $match: { ...bQ, $or: [{ createdBy: phone }, { recordedBy: phone }] } },
-          { $group: { _id: null, t: { $sum: "$amount" } } }
-        ]),
-        InvoiceM.aggregate([
-          { $match: { ...bQ, type: "receipt", $or: [{ createdBy: phone }, { recordedBy: phone }] } },
-          { $group: { _id: null, t: { $sum: "$total" } } }
-        ]),
-        ExpenseM.aggregate([
-          { $match: { ...bQ, $or: [{ createdBy: phone }, { recordedBy: phone }] } },
-          { $group: { _id: null, t: { $sum: "$amount" } } }
-        ]),
-        CashPayoutM.aggregate([
-          { $match: { ...bQ, $or: [{ createdBy: phone }, { recordedBy: phone }] } },
-          { $group: { _id: null, t: { $sum: "$amount" } } }
-        ]).catch(() => []),
-        CashHandoverM.aggregate([
-          { $match: { ...bQ, outgoingPhone: phone } },
-          { $group: { _id: null, t: { $sum: "$amountCounted" } } }
-        ]).catch(() => []),
-        CashHandoverM.aggregate([
-          { $match: { ...bQ, incomingPhone: phone } },
-          { $group: { _id: null, t: { $sum: "$amountCounted" } } }
-        ]).catch(() => [])
-      ]);
-
-      const custodyBalance =
-        (pmtsIn[0]?.t  || 0) +
-        (rcptsIn[0]?.t || 0) +
-        (hIn[0]?.t     || 0) -
-        (expsOut[0]?.t  || 0) -
-        (payoutsOut[0]?.t || 0) -
-        (hOut[0]?.t    || 0);
-
-      const cur = biz.currency || "USD";
-
-      if (amount > custodyBalance + 0.01) {
-        await sendText(from,
-          `❌ *Cannot hand over ${amount} ${cur}*\n\n` +
-          `Your current cash balance is *${custodyBalance.toFixed(2)} ${cur}*.\n\n` +
-          `You can only hand over cash you actually hold.\n\n` +
-          `Enter an amount up to *${custodyBalance.toFixed(2)} ${cur}*, or type *cancel* to abort.`
-        );
-        return true;  // Stay in cash_handover_amount so clerk can retry
-      }
-
-      // Store for confirmation message
-      biz.sessionData.custodyBalanceAtHandover = custodyBalance;
-    } catch (balErr) {
-      console.error("[HANDOVER BALANCE CHECK]", balErr.message);
-      // Non-blocking: if balance check fails, allow handover and log the error
-    }
-    // ── End balance enforcement ───────────────────────────────────────────────
-
     biz.sessionData.handoverAmount = amount;
 
     // Fetch branch colleagues for the incoming-staff picker
@@ -3346,10 +3243,10 @@ _This handover is logged and will appear in today's report._`
     if (!range) {
       await sendText(from,
         "❌ Couldn't understand that date range.\n\n" +
-        "Try:\n" +
-        "  *01 Jun - 27 Jun*\n" +
-        "  *01/06 - 27/06*\n" +
-        "  *2026-06-01 - 2026-06-27*\n\n" +
+        "Try one of these formats:\n" +
+        "  *01 Jun - 22 Jun*\n" +
+        "  *01/06 - 22/06*\n" +
+        "  *2026-06-01 - 2026-06-22*\n\n" +
         "Or type *cancel* to go back."
       );
       return true;
@@ -3358,22 +3255,13 @@ _This handover is logged and will appear in today's report._`
     biz.sessionData.customStart = range.start.toISOString();
     biz.sessionData.customEnd   = range.end.toISOString();
 
-    // Self-serve clerk (rpt_self_custom): skip clerk picker, run own statement
-    if (reportAction === "clerk_self") {
-      let clerkPhone = from.replace(/\D+/g, "");
-      if (clerkPhone.startsWith("0")) clerkPhone = "263" + clerkPhone.slice(1);
+    if (reportAction === "clerk") {
+      const clerkPhone = biz.sessionData?.clerkPhone;
+      if (!clerkPhone) { biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz); return sendMainMenu(from); }
       biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
       return runClerkStatementReport({ biz, from, clerkPhone, period: "custom", customStart: range.start, customEnd: range.end });
     }
 
-    // Admin clerk statement (rpt_clerk_custom): dates stored, now pick clerk
-    if (reportAction === "clerk") {
-      biz.sessionState = "report_clerk_pick_custom";
-      await saveBizSafe(biz);
-      return continueTwilioFlow({ from, text: "auto" });
-    }
-
-    // Detailed ledger
     biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
     return runDetailedLedgerReport({ biz, from, period: "custom", customStart: range.start, customEnd: range.end });
   }

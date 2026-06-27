@@ -414,9 +414,7 @@ export async function sendInvoiceConfirmMenu(to, summaryText) {
 }
 
 /* =============================================================================
-   REPORTS MENU  – 2 reports only: Detailed Ledger + Clerk Statement
-   Date filter is embedded in the menu list — one tap picks report + period.
-   Admin: sees all clerks. Clerk/manager: sees only own statement.
+   REPORTS MENU - Owner sees two-tier, managers/clerks see their branch only
 ============================================================================= */
 export async function sendReportsMenu(to, isGold = false, isSilver = false) {
   const biz = await (await import("./bizHelpers.js")).getBizForPhone(to);
@@ -424,56 +422,67 @@ export async function sendReportsMenu(to, isGold = false, isSilver = false) {
 
   const phone      = to.replace(/\D+/g, "");
   const normalized = phone.startsWith("0") ? "263" + phone.slice(1) : phone;
-  const caller     = await UserRole.findOne({ phone: normalized, pending: false });
 
-  // Clerk / manager: sees Detailed Ledger (branch-scoped) + My Statement only
-  if (caller?.role === "clerk" || caller?.role === "manager") {
-    return sendList(to, "📈 Reports — pick report & period:", [
-      { id: "rpt_ledger_today",  title: "📋 Ledger · Today"             },
-      { id: "rpt_ledger_week",   title: "📋 Ledger · This Week"         },
-      { id: "rpt_ledger_month",  title: "📋 Ledger · This Month"        },
-      { id: "rpt_ledger_custom", title: "📋 Ledger · Custom Dates"      },
-      { id: "rpt_self_today",    title: "👤 My Statement · Today"       },
-      { id: "rpt_self_week",     title: "👤 My Statement · This Week"   },
-      { id: "rpt_self_month",    title: "👤 My Statement · This Month"  },
-      { id: "rpt_self_custom",   title: "👤 My Statement · Custom"      },
-      { id: ACTIONS.BACK,        title: "⬅ Back"                        }
-    ]);
+  // Look up caller by phone across all roles (not just current biz)
+  // This handles the case where UserRole businessId might differ
+  const caller = await UserRole.findOne({ phone: normalized, pending: false });
+
+  const canSeeAdvanced = isGold || isSilver;
+
+  // Clerk or manager: branch-scoped daily report only
+  if (caller?.role === "manager" || caller?.role === "clerk") {
+    const items = [
+      { id: ACTIONS.DAILY_REPORT,    title: "📅 Daily Summary"         },
+      { id: ACTIONS.DETAILED_REPORT, title: "📋 Detailed Ledger"       },
+      { id: ACTIONS.CLERK_STATEMENT, title: "👤 My Statement"          },
+      ...(canSeeAdvanced ? [
+        { id: ACTIONS.WEEKLY_REPORT,   title: "📊 Weekly Summary"      },
+        { id: ACTIONS.MONTHLY_REPORT,  title: "📆 Monthly Summary"     }
+      ] : []),
+      { id: ACTIONS.BACK, title: "⬅ Back" }
+    ];
+    return sendList(to, "📈 Reports (Your Branch)", items);
   }
 
-  // Owner / admin: sees both reports + full clerk picker on clerk statement
-  return sendList(to, "📈 Reports — pick report & period:", [
-    { id: "rpt_ledger_today",  title: "📋 Ledger · Today"             },
-    { id: "rpt_ledger_week",   title: "📋 Ledger · This Week"         },
-    { id: "rpt_ledger_month",  title: "📋 Ledger · This Month"        },
-    { id: "rpt_ledger_custom", title: "📋 Ledger · Custom Dates"      },
-    { id: "rpt_clerk_today",   title: "👤 Clerk Statement · Today"    },
-    { id: "rpt_clerk_week",    title: "👤 Clerk Statement · This Week" },
-    { id: "rpt_clerk_month",   title: "👤 Clerk Statement · This Month"},
-    { id: "rpt_clerk_custom",  title: "👤 Clerk Statement · Custom"   },
-    { id: ACTIONS.BACK,        title: "⬅ Back"                        }
+  // Owner: overall + branch breakdown
+  return sendList(to, "📈 Reports", [
+    { id: "overall_reports", title: "📊 Overall Reports" },
+    { id: "branch_reports",  title: "🏢 Branch Reports"  },
+    { id: ACTIONS.BACK,      title: "⬅ Back"             }
   ]);
 }
 
-// Kept for backwards-compat (overall_reports action in switch still calls this)
 export async function sendOverallReportsMenu(to, isGold = false, isSilver = false) {
-  return sendReportsMenu(to, isGold, isSilver);
+  const canSeeAdvanced = isGold || isSilver;
+  const items = [
+    { id: ACTIONS.DAILY_REPORT,    title: "📅 Daily Summary"     },
+    { id: ACTIONS.DETAILED_REPORT, title: "📋 Detailed Ledger"   },
+    { id: ACTIONS.CLERK_STATEMENT, title: "👤 Clerk Statement"   },
+    ...(canSeeAdvanced ? [
+      { id: ACTIONS.WEEKLY_REPORT,  title: "📊 Weekly Summary"   },
+      { id: ACTIONS.MONTHLY_REPORT, title: "📆 Monthly Summary"  }
+    ] : []),
+    { id: ACTIONS.BACK, title: "⬅ Back to Reports" }
+  ];
+  return sendList(to, "📊 Overall Reports (All Branches)", items);
 }
 
-// Branch-scoped variant — identical list; branchId already in sessionData
 export async function sendBranchReportsMenu(to, isGold = false, isSilver = false) {
-  return sendList(to, "🏢 Branch Reports — pick report & period:", [
-    { id: "rpt_ledger_today",  title: "📋 Ledger · Today"             },
-    { id: "rpt_ledger_week",   title: "📋 Ledger · This Week"         },
-    { id: "rpt_ledger_month",  title: "📋 Ledger · This Month"        },
-    { id: "rpt_ledger_custom", title: "📋 Ledger · Custom Dates"      },
-    { id: "rpt_clerk_today",   title: "👤 Clerk Statement · Today"    },
-    { id: "rpt_clerk_week",    title: "👤 Clerk Statement · This Week" },
-    { id: "rpt_clerk_month",   title: "👤 Clerk Statement · This Month"},
-    { id: "rpt_clerk_custom",  title: "👤 Clerk Statement · Custom"   },
-    { id: ACTIONS.BACK,        title: "⬅ Back to Reports"             }
-  ]);
+  const canSeeAdvanced = isGold || isSilver;
+  const items = [
+    { id: "branch_daily",    title: "📅 Daily Summary"   },
+    { id: "branch_detailed", title: "📋 Detailed Ledger" },
+    { id: "branch_clerk",    title: "👤 Clerk Statement" },
+    ...(canSeeAdvanced ? [
+      { id: "branch_weekly",  title: "📊 Weekly Summary"  },
+      { id: "branch_monthly", title: "📆 Monthly Summary" }
+    ] : []),
+    { id: ACTIONS.BACK, title: "⬅ Back to Reports" }
+  ];
+  return sendList(to, "🏢 Branch Reports", items);
 }
+
+
 
 /* =============================================================================
    USERS MENU

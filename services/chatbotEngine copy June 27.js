@@ -10439,144 +10439,133 @@ Type *done* to save`,
   }
 
   // ── Reports ────────────────────────────────────────────────────────────────
-  //
-  // Two reports only: Detailed Ledger + Clerk Statement (+ self-serve variant).
-  // Date filter is embedded in the menu — user picks report+period in one tap.
-  // Custom date: user types range → report runs.
-  // Clerk statement: admin picks clerk after period; clerk/manager sees self.
-  //
-  // Action patterns:
-  //   rpt_ledger_{today|week|month|custom}
-  //   rpt_clerk_{today|week|month|custom}   ← admin, picks clerk next
-  //   rpt_self_{today|week|month|custom}    ← self-serve (clerk/manager)
-  //
 
-  // ── Detailed Ledger ───────────────────────────────────────────────────────
-  if (a === "rpt_ledger_today") {
+  if (a === ACTIONS.DAILY_REPORT) {
     if (!biz) return sendMainMenu(from);
-    biz.sessionState = "report_detailed"; biz.sessionData = {}; await saveBizSafe(biz);
+    biz.sessionState = "report_daily";
+    biz.sessionData = {};
+    await saveBizSafe(biz);
     return continueTwilioFlow({ from, text: "auto" });
   }
-  if (a === "rpt_ledger_week") {
+
+  if (a === ACTIONS.WEEKLY_REPORT) {
     if (!biz) return sendMainMenu(from);
-    biz.sessionState = "report_detailed_week"; biz.sessionData = {}; await saveBizSafe(biz);
+    biz.sessionState = "report_weekly";
+    biz.sessionData = {};
+    await saveBizSafe(biz);
     return continueTwilioFlow({ from, text: "auto" });
   }
-  if (a === "rpt_ledger_month") {
+
+  if (a === ACTIONS.MONTHLY_REPORT) {
     if (!biz) return sendMainMenu(from);
-    biz.sessionState = "report_detailed_month"; biz.sessionData = {}; await saveBizSafe(biz);
+    biz.sessionState = "report_monthly";
+    biz.sessionData = {};
+    await saveBizSafe(biz);
     return continueTwilioFlow({ from, text: "auto" });
   }
-  if (a === "rpt_ledger_custom") {
+
+  if (a === ACTIONS.BRANCH_REPORT) {
+    if (!biz) return sendMainMenu(from);
+    biz.sessionState = "report_choose_branch";
+    biz.sessionData = {};
+    await saveBizSafe(biz);
+    return continueTwilioFlow({ from, text: "auto" });
+  }
+
+  if (a === ACTIONS.DETAILED_REPORT) {
+    if (!biz) return sendMainMenu(from);
+    // Date-range picker — ledger is always continuous, these are window presets
+    biz.sessionData = { ...(biz.sessionData||{}) };
+    await saveBizSafe(biz);
+    return sendList(from, "📋 Ledger Statement - Choose Date Range:", [
+      { id: "rpt_det_day",    title: "📅 Today"           },
+      { id: "rpt_det_week",   title: "📊 Last 7 Days"      },
+      { id: "rpt_det_month",  title: "📆 This Month"       },
+      { id: "rpt_det_year",   title: "🗂 This Year"        },
+      { id: "rpt_det_custom", title: "🗓 Custom Range..."  },
+      { id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu"       }
+    ]);
+  }
+
+  if (a === "rpt_det_day")    { if (!biz) return sendMainMenu(from); biz.sessionState = "report_detailed";       biz.sessionData = {}; await saveBizSafe(biz); return continueTwilioFlow({ from, text: "auto" }); }
+  if (a === "rpt_det_week")   { if (!biz) return sendMainMenu(from); biz.sessionState = "report_detailed_week";  biz.sessionData = {}; await saveBizSafe(biz); return continueTwilioFlow({ from, text: "auto" }); }
+  if (a === "rpt_det_month")  { if (!biz) return sendMainMenu(from); biz.sessionState = "report_detailed_month"; biz.sessionData = {}; await saveBizSafe(biz); return continueTwilioFlow({ from, text: "auto" }); }
+  if (a === "rpt_det_year")   { if (!biz) return sendMainMenu(from); biz.sessionState = "report_detailed_year";  biz.sessionData = {}; await saveBizSafe(biz); return continueTwilioFlow({ from, text: "auto" }); }
+  if (a === "rpt_det_custom") {
     if (!biz) return sendMainMenu(from);
     biz.sessionState = "report_date_filter";
     biz.sessionData  = { filterFor: "detailed" };
     await saveBizSafe(biz);
     return sendButtons(from, {
-      text: "🗓 *Detailed Ledger — Custom Date Range*\n\nType the range, e.g.:\n*01 Jun - 27 Jun*\n*01/06 - 27/06*\n*2026-06-01 - 2026-06-27*\n\nOr type *cancel* to go back.",
+      text: "🗓 *Custom Date Range*\n\nType the range e.g.:\n*01 Jun - 22 Jun*\n*01/06 - 22/06*\n*2026-06-01 - 2026-06-22*",
       buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
     });
   }
 
-  // ── Clerk Statement (admin/owner — picks a clerk) ─────────────────────────
-  if (a === "rpt_clerk_today" || a === "rpt_clerk_week" || a === "rpt_clerk_month" || a === "rpt_clerk_custom") {
+  if (a === ACTIONS.CLERK_STATEMENT) {
     if (!biz) return sendMainMenu(from);
-    const clkPeriodMap = { rpt_clerk_today: "day", rpt_clerk_week: "week", rpt_clerk_month: "month", rpt_clerk_custom: "custom" };
-    const clkPeriod    = clkPeriodMap[a] || "day";
-    if (a === "rpt_clerk_custom") {
+    // Date range picker
+    await saveBizSafe(biz);
+    return sendList(from, "👤 Clerk Statement - Choose Date Range:", [
+      { id: "rpt_clk_day",    title: "📅 Today"            },
+      { id: "rpt_clk_week",   title: "📊 Last 7 Days"       },
+      { id: "rpt_clk_month",  title: "📆 This Month"        },
+      { id: "rpt_clk_year",   title: "📅 This Year"         },
+      { id: "rpt_clk_custom", title: "🗓 Custom Range..."   },
+      { id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu"        }
+    ]);
+  }
+
+  // Clerk period selection → then pick clerk or self
+  if (["rpt_clk_day","rpt_clk_week","rpt_clk_month","rpt_clk_year","rpt_clk_custom"].includes(a)) {
+    if (!biz) return sendMainMenu(from);
+    const periodMap = { rpt_clk_day: "day", rpt_clk_week: "week", rpt_clk_month: "month", rpt_clk_year: "year", rpt_clk_custom: "custom" };
+    const clkPeriod = periodMap[a] || "month";
+    if (a === "rpt_clk_custom") {
       biz.sessionState = "report_date_filter";
-      biz.sessionData  = { filterFor: "clerk" };
+      biz.sessionData  = { filterFor: "clerk", clerkPhone: caller?.phone || null };
       await saveBizSafe(biz);
       return sendButtons(from, {
-        text: "🗓 *Clerk Statement — Custom Date Range*\n\nType the range:\n*01 Jun - 27 Jun*\n\nOr type *cancel* to go back.",
+        text: "🗓 *Custom Date Range*\n\nEnter a date range:\n*01 Jun - 22 Jun*",
         buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
       });
     }
-    biz.sessionState = "report_clerk_pick";
-    biz.sessionData  = { clerkPeriod: clkPeriod };
+    if (caller?.role === "owner" || caller?.role === "manager") {
+      biz.sessionState = "report_clerk_pick";
+      biz.sessionData  = { clerkPeriod: clkPeriod };
+    } else {
+      biz.sessionState = "report_clerk_statement";
+      biz.sessionData  = { clerkPeriod: clkPeriod, clerkPhone: caller?.phone };
+    }
     await saveBizSafe(biz);
     return continueTwilioFlow({ from, text: "auto" });
   }
 
-  // ── Self Statement (clerk/manager — views own statement) ──────────────────
-  if (a === "rpt_self_today" || a === "rpt_self_week" || a === "rpt_self_month" || a === "rpt_self_custom") {
-    if (!biz) return sendMainMenu(from);
-    const selfPeriodMap = { rpt_self_today: "day", rpt_self_week: "week", rpt_self_month: "month", rpt_self_custom: "custom" };
-    const selfPeriod    = selfPeriodMap[a] || "day";
-    if (a === "rpt_self_custom") {
-      biz.sessionState = "report_date_filter";
-      biz.sessionData  = { filterFor: "clerk_self" };
-      await saveBizSafe(biz);
-      return sendButtons(from, {
-        text: "🗓 *My Statement — Custom Date Range*\n\nType the range:\n*01 Jun - 27 Jun*\n\nOr type *cancel* to go back.",
-        buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
-      });
-    }
-    biz.sessionState = "report_clerk_statement";
-    biz.sessionData  = { clerkPeriod: selfPeriod, clerkPhone: caller?.phone || null };
-    await saveBizSafe(biz);
-    return continueTwilioFlow({ from, text: "auto" });
-  }
-
-  // ── Custom date clerk pick: rpt_clk_custom_pick_{phone} ──────────────────
-  if (a?.startsWith("rpt_clk_custom_pick_")) {
-    if (!biz) return sendMainMenu(from);
-    const { runClerkStatementReport } = await import("./dailyReportEnhanced.js");
-    const clerkPhone  = a.replace("rpt_clk_custom_pick_", "");
-    const customStart = biz.sessionData?.customStart ? new Date(biz.sessionData.customStart) : null;
-    const customEnd   = biz.sessionData?.customEnd   ? new Date(biz.sessionData.customEnd)   : null;
-    biz.sessionState  = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
-    return runClerkStatementReport({ biz, from, clerkPhone, period: "custom", customStart, customEnd });
-  }
-
-  // ── Legacy/compat: old action IDs bounce to new reports menu ─────────────
-  if (
-    a === ACTIONS.DAILY_REPORT  ||
-    a === ACTIONS.WEEKLY_REPORT ||
-    a === ACTIONS.MONTHLY_REPORT ||
-    a === ACTIONS.DETAILED_REPORT ||
-    a === ACTIONS.CLERK_STATEMENT
-  ) {
-    if (!biz) return sendMainMenu(from);
-    const isGold   = ["gold", "enterprise"].includes(biz.package);
-    const isSilver = ["silver", "gold", "enterprise"].includes(biz.package);
-    return sendReportsMenu(from, isGold, isSilver);
-  }
-
-  if (a === ACTIONS.BRANCH_REPORT) {
-    if (!biz) return sendMainMenu(from);
-    biz.sessionState = "report_choose_branch"; biz.sessionData = {}; await saveBizSafe(biz);
-    return continueTwilioFlow({ from, text: "auto" });
-  }
-
-  // ── Clerk picker result: clerk_stmt_pick_{phone} ──────────────────────────
+  // Handle clerk picker result: clerk_stmt_pick_{phone}
   if (a?.startsWith("clerk_stmt_pick_")) {
     if (!biz) return sendMainMenu(from);
-    const { runClerkStatementReport } = await import("./dailyReportEnhanced.js");
     const clerkPhone = a.replace("clerk_stmt_pick_", "");
-    const period     = biz.sessionData?.clerkPeriod || "day";
-    biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
-    return runClerkStatementReport({ biz, from, clerkPhone, period });
+    biz.sessionData  = { clerkPhone, clerkPeriod: "day" };
+    biz.sessionState = "report_clerk_pick";
+    await saveBizSafe(biz);
+    return continueTwilioFlow({ from, text: "auto" });
   }
 
-  // ── Branch sub-report shortcuts (from branch_reports menu) ───────────────
+  // Handle branch_detailed and branch_clerk for branch reports menu
   if (a === "branch_detailed") {
     if (!biz) return sendMainMenu(from);
-    biz.sessionState = "report_detailed"; biz.sessionData = {}; await saveBizSafe(biz);
+    biz.sessionState = "report_detailed";
+    biz.sessionData  = {};
+    await saveBizSafe(biz);
     return continueTwilioFlow({ from, text: "auto" });
   }
+
   if (a === "branch_clerk") {
     if (!biz) return sendMainMenu(from);
-    biz.sessionState = "report_clerk_pick"; biz.sessionData = {}; await saveBizSafe(biz);
+    biz.sessionState = "report_clerk_pick";
+    biz.sessionData  = {};
+    await saveBizSafe(biz);
     return continueTwilioFlow({ from, text: "auto" });
-  }
-  // Legacy branch_daily / branch_weekly / branch_monthly → new reports menu (scoped to branch)
-  if (a === "branch_daily" || a === "branch_weekly" || a === "branch_monthly") {
-    if (!biz) return sendMainMenu(from);
-    const isGold   = ["gold", "enterprise"].includes(biz.package);
-    const isSilver = ["silver", "gold", "enterprise"].includes(biz.package);
-    const { sendBranchReportsMenu } = await import("./metaMenus.js");
-    return sendBranchReportsMenu(from, isGold, isSilver);
   }
 
   // ── Product text input states ──────────────────────────────────────────────
