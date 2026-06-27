@@ -112,10 +112,8 @@ const brochureUpload = multer({
   storage: multer.memoryStorage(),
   limits:  { fileSize: 10 * 1024 * 1024 }, // 10MB max
   fileFilter: (req, file, cb) => {
-    // Accept PDFs and images (PNG, JPG, WEBP) - images are sent as WhatsApp image messages
-    const ALLOWED = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
-    if (ALLOWED.includes(file.mimetype)) cb(null, true);
-    else cb(new Error("Only PDF, JPG, PNG, or WEBP files are allowed."));
+    if (file.mimetype === "application/pdf") cb(null, true);
+    else cb(new Error("Only PDF files are allowed."));
   }
 });
 
@@ -840,9 +838,7 @@ router.get("/schools/brochure/:filename", async (req, res) => {
     }
 
     const file = files[0];
-    // Serve with correct Content-Type for both PDFs and images
-    const contentType = file.metadata?.mimeType || file.contentType || "application/pdf";
-    res.setHeader("Content-Type",        contentType);
+    res.setHeader("Content-Type",        "application/pdf");
     res.setHeader("Content-Disposition", `inline; filename="${file.filename}"`);
     res.setHeader("Cache-Control",       "public, max-age=86400"); // cache 24h
 
@@ -1058,8 +1054,7 @@ router.get("/schools/:id", requireSupplierAdmin, async (req, res) => {
         <!-- ── Brochures panel ── -->
           <div class="panel">
             <div class="panel-head">
-              <h3>&#x1F4C4; Brochures &amp; Documents</h3>
-              <a href="/zq-admin/schools/${school._id}/brochures" class="btn btn-sm btn-blue">&#x270F; Manage All Files</a>
+              <h3>📄 Brochures & Documents</h3>
             </div>
 
             ${(school.brochures || []).length ? `
@@ -1080,17 +1075,16 @@ router.get("/schools/:id", requireSupplierAdmin, async (req, res) => {
               </tbody>
             </table>` : `<p class="muted" style="font-size:13px;margin-bottom:14px">No brochures uploaded yet.</p>`}
 
-           <a href="/zq-admin/schools/${school._id}/brochures" class="btn btn-blue btn-sm" style="display:inline-block;margin-bottom:12px">&#x270F; Manage All Files (Add / Rename / Remove)</a>
            <form method="POST" action="/zq-admin/schools/${school._id}/brochure/add" enctype="multipart/form-data" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
               <div class="fg" style="flex:1;min-width:160px">
                 <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Label</label>
                 <input name="label" placeholder="e.g. 2025 Prospectus" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px" required />
               </div>
               <div class="fg" style="flex:2;min-width:240px">
-                <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">PDF or Image (JPG/PNG/WEBP)</label>
-                <input name="brochureFile" type="file" accept=".pdf,application/pdf,image/jpeg,image/png,image/webp" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--surface2);color:var(--text)" required />
+                <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">PDF File</label>
+                <input name="brochureFile" type="file" accept=".pdf,application/pdf" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--surface2);color:var(--text)" required />
               </div>
-              <button type="submit" class="btn btn-blue btn-sm" style="white-space:nowrap">&#x2B06; Upload</button>
+              <button type="submit" class="btn btn-blue btn-sm" style="white-space:nowrap">⬆ Upload PDF</button>
             </form>
             <p style="font-size:11px;color:var(--muted);margin-top:8px">📁 PDF is stored on the server and sent directly to parents on WhatsApp - no Google Drive or data needed.</p>
             <p style="font-size:11px;color:var(--muted);margin-top:4px">⚠ Max file size: 10MB. Keep PDFs under 5MB for best WhatsApp delivery.</p>
@@ -2327,24 +2321,20 @@ router.post("/schools/:id/brochure/add",
       const school = await SchoolProfile.findById(req.params.id);
       if (!school) return res.redirect("/zq-admin/schools");
 
-      if (!req.file) throw new Error("Please select a PDF or image file (JPG, PNG, WEBP) to upload.");
+      if (!req.file) throw new Error("Please select a PDF file to upload.");
 
       const label    = (req.body.label?.trim()) || "School Brochure";
-      const mime     = req.file.mimetype;
-      const isImage  = ["image/jpeg","image/png","image/webp"].includes(mime);
-      const ext      = isImage ? (mime === "image/png" ? "png" : mime === "image/webp" ? "webp" : "jpg") : "pdf";
-      const filename = `${school._id}_${Date.now()}.${ext}`;
+      const filename = `${school._id}_${Date.now()}.pdf`;
       const bucket   = getBucket();
 
       // ── Stream the buffer into GridFS ─────────────────────────────────────
       await new Promise((resolve, reject) => {
         const uploadStream = bucket.openUploadStream(filename, {
-          contentType: mime,
+          contentType: "application/pdf",
           metadata: {
             schoolId:   school._id.toString(),
             schoolName: school.schoolName,
-            label,
-            isImage
+            label
           }
         });
         uploadStream.on("finish", resolve);
@@ -2358,16 +2348,15 @@ router.post("/schools/:id/brochure/add",
       const fileUrl  = `${baseUrl}/zq-admin/schools/brochure/${filename}`;
 
       school.brochures = school.brochures || [];
-      school.brochures.push({ label, url: fileUrl, addedAt: new Date(), isImage, mimeType: mime });
+      school.brochures.push({ label, url: fileUrl, addedAt: new Date() });
       await school.save();
 
       const sizeMB = (req.file.size / 1024 / 1024).toFixed(2);
-      const typeLabel = isImage ? "Image" : "PDF";
-      res.redirect(`/zq-admin/schools/${req.params.id}/brochures?success=` +
-        encodeURIComponent(`"${label}" ${typeLabel} uploaded (${sizeMB} MB). Parents will receive it when they open your link.`));
+      res.redirect(`/zq-admin/schools/${req.params.id}?success=` +
+        encodeURIComponent(`"${label}" uploaded (${sizeMB} MB). Parents can now download it on WhatsApp.`));
 
     } catch (err) {
-      res.redirect(`/zq-admin/schools/${req.params.id}/brochures?error=${encodeURIComponent(err.message)}`);
+      res.redirect(`/zq-admin/schools/${req.params.id}?error=${encodeURIComponent(err.message)}`);
     }
   }
 );
@@ -2411,152 +2400,6 @@ router.post("/schools/:id/brochure/:index/delete", requireSupplierAdmin, async (
     res.redirect(`/zq-admin/schools/${req.params.id}?error=${encodeURIComponent(err.message)}`);
   }
 });
-
-// -----------------------------------------------------------------------------
-// EDIT BROCHURE LABEL
-// POST /zq-admin/schools/:id/brochure/:index/edit
-// -----------------------------------------------------------------------------
-router.post("/schools/:id/brochure/:index/edit", requireSupplierAdmin, async (req, res) => {
-  try {
-    const school = await SchoolProfile.findById(req.params.id);
-    if (!school) return res.redirect("/zq-admin/schools");
-    const idx = parseInt(req.params.index);
-    if (!isNaN(idx) && school.brochures?.[idx]) {
-      const newLabel = (req.body.label || "").trim();
-      if (newLabel) school.brochures[idx].label = newLabel;
-      school.markModified("brochures");
-      await school.save();
-    }
-    res.redirect(`/zq-admin/schools/${req.params.id}/brochures?success=${encodeURIComponent("Label updated.")}`);
-  } catch (err) {
-    res.redirect(`/zq-admin/schools/${req.params.id}/brochures?error=${encodeURIComponent(err.message)}`);
-  }
-});
-
-// -----------------------------------------------------------------------------
-// BROCHURES MANAGEMENT PAGE
-// GET /zq-admin/schools/:id/brochures
-// Full list: add, rename, view/preview, delete. PDFs and images both supported.
-// Linked from the school profile panel and apply-qr page.
-// -----------------------------------------------------------------------------
-router.get("/schools/:id/brochures", requireSupplierAdmin, async (req, res) => {
-  try {
-    const school = await SchoolProfile.findById(req.params.id).lean();
-    if (!school) return res.redirect("/zq-admin/schools");
-
-    const ok  = req.query.success ? `<div style="background:#dcfce7;color:#16a34a;padding:14px;border-radius:8px;margin-bottom:16px">&#x2705; ${esc(req.query.success)}</div>` : "";
-    const err = req.query.error   ? `<div style="background:#fee2e2;color:#dc2626;padding:14px;border-radius:8px;margin-bottom:16px">&#x274c; ${esc(req.query.error)}</div>`   : "";
-
-    const brochures = school.brochures || [];
-
-    const rows = brochures.length ? brochures.map((b, i) => {
-      const isImg = b.isImage || /\.(jpg|jpeg|png|webp)$/i.test(b.url);
-      const typeTag = isImg
-        ? `<span style="background:#eff6ff;color:#1d4ed8;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600">IMAGE</span>`
-        : `<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600">PDF</span>`;
-      const preview = isImg
-        ? `<a href="${esc(b.url)}" target="_blank"><img src="${esc(b.url)}" style="height:56px;border-radius:6px;border:1px solid var(--border);object-fit:cover;display:block" onerror="this.style.display='none'" /></a>`
-        : `<a href="${esc(b.url)}" target="_blank" style="font-size:12px;color:#1d4ed8;white-space:nowrap">&#x1F4C4; View PDF</a>`;
-      const added = b.addedAt ? new Date(b.addedAt).toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"}) : "";
-      return `
-      <tr style="border-bottom:1px solid var(--border)">
-        <td style="padding:12px 10px">${typeTag}</td>
-        <td style="padding:12px 10px;font-weight:600">${esc(b.label)}</td>
-        <td style="padding:12px 10px">${preview}</td>
-        <td style="padding:12px 10px;color:var(--muted);font-size:12px">${added}</td>
-        <td style="padding:12px 10px">
-          <div style="display:flex;gap:6px;flex-wrap:wrap">
-            <a href="${esc(b.url)}" target="_blank" class="btn btn-sm btn-blue">View</a>
-            <button type="button" class="btn btn-sm"
-              onclick="var f=document.getElementById('edit-form-${i}');f.style.display=f.style.display==='none'?'block':'none'">
-              &#x270F; Rename
-            </button>
-            <form method="POST" action="/zq-admin/schools/${school._id}/brochure/${i}/delete"
-                  style="display:inline" onsubmit="return confirm('Remove this file?')">
-              <button class="btn btn-sm" style="background:#fef2f2;color:#dc2626;border:1px solid #fecaca">&#x1F5D1; Remove</button>
-            </form>
-          </div>
-          <form id="edit-form-${i}" method="POST" action="/zq-admin/schools/${school._id}/brochure/${i}/edit"
-                style="display:none;margin-top:8px">
-            <div style="display:flex;gap:6px;align-items:center">
-              <input name="label" value="${esc(b.label)}"
-                     style="flex:1;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px" required />
-              <button type="submit" class="btn btn-sm btn-green">Save</button>
-              <button type="button" class="btn btn-sm"
-                onclick="document.getElementById('edit-form-${i}').style.display='none'">Cancel</button>
-            </div>
-          </form>
-        </td>
-      </tr>`;
-    }).join("") : `<tr><td colspan="5" style="padding:24px;text-align:center;color:var(--muted)">No brochures, documents, or pictures uploaded yet.</td></tr>`;
-
-    res.send(layout(`Brochures &amp; Documents: ${esc(school.schoolName)}`, `
-      <a href="/zq-admin/schools/${school._id}" class="back-link">&#x2190; Back to ${esc(school.schoolName)}</a>
-      ${ok}${err}
-
-      <div class="panel">
-        <div class="panel-head">
-          <h3>&#x1F4C4; Brochures, Documents &amp; Pictures (${brochures.length})</h3>
-          <a href="/zq-admin/schools/${school._id}/apply-qr" class="btn btn-sm btn-blue">&#x1F4DD; Apply QR Settings</a>
-        </div>
-        <p style="font-size:13px;color:var(--muted);margin-bottom:20px;line-height:1.6">
-          All files uploaded here are sent directly to parents on WhatsApp when they open your school link.
-          <strong>PDFs</strong> are sent as downloadable documents parents can open and save.
-          <strong>Images</strong> (JPG/PNG/WEBP) are sent as WhatsApp photos displayed inline.
-          All files are stored on the ZimQuote server &mdash; no Google Drive or external hosting needed.
-        </p>
-
-        <div style="overflow-x:auto;margin-bottom:28px">
-          <table style="width:100%;border-collapse:collapse;font-size:13px">
-            <thead>
-              <tr style="background:var(--surface2)">
-                <th style="padding:10px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.5px">Type</th>
-                <th style="padding:10px;text-align:left">Label / Name</th>
-                <th style="padding:10px;text-align:left">Preview</th>
-                <th style="padding:10px;text-align:left;white-space:nowrap">Added</th>
-                <th style="padding:10px;text-align:left">Actions</th>
-              </tr>
-            </thead>
-            <tbody>${rows}</tbody>
-          </table>
-        </div>
-
-        <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:20px">
-          <h4 style="margin:0 0 16px;color:#16a34a">&#x2B06; Upload New File</h4>
-          <form method="POST" action="/zq-admin/schools/${school._id}/brochure/add"
-                enctype="multipart/form-data">
-            <div style="display:grid;grid-template-columns:1fr 2fr auto;gap:12px;align-items:flex-end">
-              <div>
-                <label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;color:#16a34a">Label / Name</label>
-                <input name="label" placeholder="e.g. 2027 Prospectus"
-                       style="width:100%;padding:9px 11px;border:1px solid #86efac;border-radius:7px;font-size:13px" required />
-              </div>
-              <div>
-                <label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;color:#16a34a">
-                  File &mdash; PDF, JPG, PNG or WEBP (max 10MB)
-                </label>
-                <input name="brochureFile" type="file"
-                       accept=".pdf,application/pdf,image/jpeg,image/png,image/webp"
-                       style="width:100%;padding:9px 11px;border:1px solid #86efac;border-radius:7px;font-size:13px;background:white;color:var(--text)" required />
-              </div>
-              <div>
-                <button type="submit" class="btn btn-green" style="white-space:nowrap">&#x2B06; Upload</button>
-              </div>
-            </div>
-            <p style="font-size:11px;color:#64748b;margin-top:10px;line-height:1.6">
-              &#x1F4C4; PDFs sent as downloadable documents &mdash; parents can open and save them.<br>
-              &#x1F5BC; Images (JPG/PNG/WEBP) sent as WhatsApp photos &mdash; shown inline, no download tap needed.<br>
-              &#x26A0; Keep PDFs under 5MB and images under 3MB for reliable WhatsApp delivery.
-            </p>
-          </form>
-        </div>
-      </div>
-    `));
-  } catch (err) {
-    res.send(layout("Error", `<div class="alert red">${esc(err.message)}</div>`));
-  }
-});
-
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TOGGLE ACTIVE
@@ -4365,41 +4208,10 @@ router.get("/schools/:id/apply-qr", requireSupplierAdmin, async (req, res) => {
           </div>
 
           <div class="form-actions">
-            <button type="submit" class="btn btn-green">&#x1F4BE; Save Settings</button>
+            <button type="submit" class="btn btn-green">💾 Save Settings</button>
             <a href="/zq-admin/schools/${school._id}" class="btn btn-gray">Cancel</a>
           </div>
         </form>
-      </div>
-
-      <!-- Brochures quick-view panel -->
-      <div class="panel">
-        <div class="panel-head">
-          <h3>&#x1F4C4; Brochures, Documents &amp; Pictures (${(school.brochures||[]).length})</h3>
-          <a href="/zq-admin/schools/${school._id}/brochures" class="btn btn-sm btn-blue">&#x270F; Manage All Files</a>
-        </div>
-        <p style="font-size:13px;color:var(--muted);margin-bottom:14px;line-height:1.6">
-          These files are sent automatically to every parent who opens your school WhatsApp link.
-          PDFs are sent as downloadable documents; images are sent as WhatsApp photos.
-        </p>
-        ${(school.brochures||[]).length ? `
-        <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:16px">
-          <thead><tr style="background:var(--surface2)">
-            <th style="padding:8px 10px;text-align:left">Type</th>
-            <th style="padding:8px 10px;text-align:left">Name</th>
-            <th style="padding:8px 10px;text-align:left">View</th>
-          </tr></thead>
-          <tbody>
-            ${(school.brochures||[]).map(b => {
-              const isImg = b.isImage || /\.(jpg|jpeg|png|webp)$/i.test(b.url);
-              return `<tr style="border-bottom:1px solid var(--border)">
-                <td style="padding:8px 10px">${isImg ? '<span style="background:#eff6ff;color:#1d4ed8;padding:2px 7px;border-radius:8px;font-size:11px;font-weight:600">IMAGE</span>' : '<span style="background:#fef3c7;color:#92400e;padding:2px 7px;border-radius:8px;font-size:11px;font-weight:600">PDF</span>'}</td>
-                <td style="padding:8px 10px;font-weight:500">${esc(b.label)}</td>
-                <td style="padding:8px 10px"><a href="${esc(b.url)}" target="_blank" style="font-size:12px;color:#1d4ed8">View &#x2192;</a></td>
-              </tr>`;
-            }).join("")}
-          </tbody>
-        </table>` : '<p style="font-size:13px;color:var(--muted)">No files uploaded yet. Use <strong>Manage All Files</strong> above to upload your first brochure or picture.</p>'}
-        <a href="/zq-admin/schools/${school._id}/brochures" class="btn btn-blue">&#x2B06; Upload New Brochure / Picture</a>
       </div>
     `));
   } catch (err) {

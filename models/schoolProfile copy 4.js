@@ -204,12 +204,9 @@ const schoolProfileSchema = new mongoose.Schema({
   profilePdfUrl:      { type: String, default: "" },
   applicationFormUrl: { type: String, default: "" },
   brochures: [{
-    label:    { type: String, default: "School Brochure" },
+    label:   { type: String, default: "School Brochure" },
     url:     { type: String, required: true },
-    addedAt:  { type: Date, default: Date.now },
-    // isImage: true if the file is a JPG/PNG/WEBP image (sent as WhatsApp photo, not document)
-    isImage:  { type: Boolean, default: false },
-    mimeType: { type: String, default: "application/pdf" }
+    addedAt: { type: Date, default: Date.now }
   }],
 
   // ── Smart Link Profile Card ────────────────────────────────────────────────

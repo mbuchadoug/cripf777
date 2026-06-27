@@ -237,19 +237,7 @@ export async function showSchoolFAQMenu(from, schoolId, biz, saveBiz, { source =
 
   const feeText = _feeText(school);
 
-  // ── MESSAGE 0: School description / pitch ──────────────────────────
-  // Sent FIRST, above everything else, so parents see the school pitch/announcement
-  // prominently before the identity card. Reads from:
-  //   1. school.smartLinkPitch  - set via the "Smart Link" panel in schoolAdmin.js
-  //   2. school.description     - set via "Edit School Profile" in supplierAdmin.js
-  //   3. Nothing - falls through to auto-highlights inline in msg1
-  const _pitch = (school.smartLinkPitch || school.description || "").trim();
-  if (_pitch) {
-    const _pitchMsg = (parentName ? `Hi ${parentName.split(" ")[0]}! 👋\n\n` : "") + _pitch;
-    await sendText(from, _pitchMsg);
-  }
-
-  // ── MESSAGE 1: Identity card ────────────────────────────────────────────
+  // ── MESSAGE 1: Identity + pitch ────────────────────────────────────────────
   let msg1 = `🏫 *${school.schoolName}*${school.verified ? " ✅" : ""}\n`;
   msg1 += `📍 ${school.suburb ? school.suburb + ", " : ""}${school.city}\n`;
   msg1 += `${adm}${feeText ? " · " + feeText : ""} · ${TYPE[school.type] || "School"} · ${cur}`;
@@ -257,8 +245,15 @@ export async function showSchoolFAQMenu(from, schoolId, biz, saveBiz, { source =
   if (school.grades?.from && school.grades?.to) msg1 += `\n📚 Grades: ${school.grades.from} – ${school.grades.to}`;
   if (school.boarding === "boarding" || school.boarding === "both") msg1 += " · 🛏️ Boarding";
 
-  // Auto-generate highlights only when no pitch was set (pitch is now sent above as msg0)
-  if (!_pitch) {
+  // Admin pitch - reads from three possible locations in priority order:
+  // 1. school.smartLinkPitch  - set via the green "📲 Smart Link" panel (new schoolAdmin.js)
+  // 2. school.description     - set via the inline "Edit School Profile" form in supplierAdmin.js
+  // 3. Auto-generated from facilities/results if neither is set
+  const _pitch = (school.smartLinkPitch || school.description || "").trim();
+  if (_pitch) {
+    msg1 += `\n\n${_pitch}`;
+  } else {
+    // Auto-generate highlights when no pitch is set
     const lines = [];
     if (resultLine) lines.push(resultLine);
     if (facLine)    lines.push(facLine);
@@ -267,22 +262,13 @@ export async function showSchoolFAQMenu(from, schoolId, biz, saveBiz, { source =
     if (lines.length) msg1 += "\n\n" + lines.join("\n");
   }
 
-  // ── Contact numbers: primary + all notificationContacts shown to parents ──
-  // notificationContacts[] is admin-managed via the Edit page in schoolAdmin.js
-  const _fmtPhone  = p => (p || "").startsWith("263") ? "0" + p.slice(3) : p;
-  const _allPhones = [phone, ...(school.notificationContacts || [])].filter(Boolean);
-  if (_allPhones.length === 1) {
-    msg1 += `\n\n📞 ${_fmtPhone(_allPhones[0])}`;
-  } else {
-    msg1 += `\n\n📞 ${_allPhones.map(_fmtPhone).join("  |  ")}`;
-  }
+  msg1 += `\n\n📞 ${phone}`;
   if (school.email)       msg1 += `  📧 ${school.email}`;
   if (school.website)     msg1 += `\n🌐 ${school.website}`;
   if (school.address)     msg1 += `\n📍 ${school.address}`;
   if (school.officeHours) msg1 += `\n⏰ ${school.officeHours}`;
 
-  // Prepend greeting here only if no pitch was sent (pitch carries its own greeting)
-  if (!_pitch && parentName) msg1 = `Hi ${parentName.split(" ")[0]}! 👋\n\n` + msg1;
+  if (parentName) msg1 = `Hi ${parentName.split(" ")[0]}! 👋\n\n` + msg1;
 
   await sendText(from, msg1);
 
