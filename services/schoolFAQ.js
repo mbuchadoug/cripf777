@@ -83,12 +83,22 @@ function _buildFeeBlock(school) {
 
   if (tuition.length > 0) {
     text += "*Tuition (per term):*\n";
-    tuition.forEach(f => {
-      const lv = LEVEL[f.appliesTo] || {};
-      text += `${lv.emoji || "•"} ${f.label || lv.label}: *$${f.amount}*`;
-      if (f.note) text += ` _(${f.note})_`;
-      text += "\n";
-    });
+    // If every tuition entry has the same amount, collapse to one line
+    // using the school's actual grade range (e.g. "Form 1 - Form 6")
+    const _amounts = [...new Set(tuition.map(f => f.amount))];
+    if (_amounts.length === 1) {
+      const _gFrom  = (school.grades?.from || "").trim();
+      const _gTo    = (school.grades?.to   || "").trim();
+      const _gLabel = (_gFrom && _gTo) ? `${_gFrom} – ${_gTo}` : "All Forms / Grades";
+      text += `🏫 ${_gLabel}: *$${_amounts[0]}*\n`;
+    } else {
+      tuition.forEach(f => {
+        const lv = LEVEL[f.appliesTo] || {};
+        text += `${lv.emoji || "•"} ${f.label || lv.label}: *$${f.amount}*`;
+        if (f.note) text += ` _(${f.note})_`;
+        text += "\n";
+      });
+    }
   }
   if (boarding.length > 0) {
     text += "\n*Boarding (per term):*\n";
@@ -268,16 +278,12 @@ export async function showSchoolFAQMenu(from, schoolId, biz, saveBiz, { source =
     if (lines.length) msg1 += "\n\n" + lines.join("\n");
   }
 
-  // ── Contact numbers: primary + all notificationContacts shown to parents ──
-  // notificationContacts[] is admin-managed via the Edit page in schoolAdmin.js
-  const _fmtPhone  = p => (p || "").startsWith("263") ? "0" + p.slice(3) : p;
-  const _allPhones = [phone, ...(school.notificationContacts || [])].filter(Boolean);
-  if (_allPhones.length === 1) {
-    msg1 += `\n\n📞 ${_fmtPhone(_allPhones[0])}`;
-  } else {
-    msg1 += `\n\n📞 ${_allPhones.map(_fmtPhone).join("  |  ")}`;
-  }
-  if (school.email)       msg1 += `  📧 ${school.email}`;
+  // ── Contact number: school public number only ───────────
+  // notificationContacts[] is for internal delivery alerts only -
+  // those numbers are system/admin numbers, NOT shown to parents.
+  const _fmtPhone = p => (p || "").startsWith("263") ? "0" + p.slice(3) : p;
+  msg1 += `\n\n📞 ${_fmtPhone(phone)}`;
+    if (school.email)       msg1 += `  📧 ${school.email}`;
   if (school.website)     msg1 += `\n🌐 ${school.website}`;
   if (school.address)     msg1 += `\n📍 ${school.address}`;
   if (school.officeHours) msg1 += `\n⏰ ${school.officeHours}`;
