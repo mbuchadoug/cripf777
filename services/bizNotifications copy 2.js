@@ -356,7 +356,8 @@ export async function getNotificationRecipients(businessId, clerkPhone = null) {
  * Get today's running cash balance for a branch (or whole business if no branchId).
  */
 export async function getDailyRunningBalance(businessId, branchId, currency = "USD") {
-  const [InvoicePayment, Invoice, Expense, CashPayout] = await Promise.all([
+  const [CashBalance, InvoicePayment, Invoice, Expense, CashPayout] = await Promise.all([
+    import("../models/cashBalance.js").then(m => m.default),
     import("../models/invoicePayment.js").then(m => m.default),
     import("../models/invoice.js").then(m => m.default),
     import("../models/expense.js").then(m => m.default),
@@ -366,30 +367,19 @@ export async function getDailyRunningBalance(businessId, branchId, currency = "U
   const today    = new Date(); today.setHours(0, 0, 0, 0);
   const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
 
-  const base   = { businessId, ...(branchId ? { branchId } : {}) };
-  const todayQ = { ...base, createdAt: { $gte: today, $lt: tomorrow } };
-  const beforeQ = { ...base, createdAt: { $lt: today } };
+  const base      = { businessId };
+  if (branchId) base.branchId = branchId;
+  const todayQ    = { ...base, createdAt: { $gte: today, $lt: tomorrow } };
 
-  // FIX: Compute true opening from ALL transactions before today's midnight.
-  // This replaces the old CashBalance.findOne() lookup which returned 0 whenever
-  // no one manually set an opening balance that morning — causing every notification
-  // to show wrong "Cash at hand" values with no carry-forward from yesterday.
-  const [pmtsBefore, rcptsBefore, expsBefore, payoutsBefore,
-         payments, receipts, expenses, payouts] = await Promise.all([
-    InvoicePayment.aggregate([{ $match: beforeQ }, { $group: { _id: null, t: { $sum: "$amount" } } }]).catch(() => []),
-    Invoice.aggregate([{ $match: { ...beforeQ, type: "receipt" } }, { $group: { _id: null, t: { $sum: "$total" } } }]).catch(() => []),
-    Expense.aggregate([{ $match: beforeQ }, { $group: { _id: null, t: { $sum: "$amount" } } }]).catch(() => []),
-    CashPayout ? CashPayout.aggregate([{ $match: beforeQ }, { $group: { _id: null, t: { $sum: "$amount" } } }]).catch(() => []) : [],
+  const [balance, payments, receipts, expenses, payouts] = await Promise.all([
+    CashBalance.findOne({ ...base, date: today }).lean().catch(() => null),
     InvoicePayment.find(todayQ).lean().catch(() => []),
     Invoice.find({ ...todayQ, type: "receipt" }).lean().catch(() => []),
     Expense.find(todayQ).lean().catch(() => []),
-    CashPayout ? CashPayout.find({ ...base, createdAt: { $gte: today, $lt: tomorrow } }).lean().catch(() => []) : []
+    CashPayout ? CashPayout.find({ ...base, date: today }).lean().catch(() => []) : []
   ]);
 
-  // True carry-forward opening = everything collected minus everything spent before today
-  const opening = (pmtsBefore[0]?.t || 0) + (rcptsBefore[0]?.t || 0)
-                - (expsBefore[0]?.t  || 0) - (payoutsBefore[0]?.t || 0);
-
+  const opening = balance?.openingBalance ?? 0;
   const cashIn  = payments.reduce((s, p) => s + (p.amount || 0), 0) +
                   receipts.reduce((s, r) => s + (r.total  || 0), 0);
   const cashOut = expenses.reduce((s, e) => s + (e.amount || 0), 0) +

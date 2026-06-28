@@ -597,8 +597,7 @@ ${recLine}
 // Walks ALL historical invoicePayments, receipts, expenses, payouts, and
 // handovers attributed to this clerk to compute their true running balance.
 // This is the carry-forward opening for any clerk statement period.
-// ─── Exported so bizNotifications.js can use same logic for notification balance lines ─
-export async function fetchClerkCumulativeBalance({ biz, clerkPhone, branchId, before }) {
+async function fetchClerkCumulativeBalance({ biz, clerkPhone, branchId, before }) {
   try {
     const Invoice        = (await import("../models/invoice.js")).default;
     const InvoicePayment = (await import("../models/invoicePayment.js")).default;
@@ -612,42 +611,21 @@ export async function fetchClerkCumulativeBalance({ biz, clerkPhone, branchId, b
       createdAt:  { $lt: beforeDate },
       ...(branchId ? { branchId } : {})
     };
-
-    // FIX: documents are saved with createdBy, not recordedBy.
-    // Use $or to match either field so we never miss a transaction.
-    const clerkFilter = { $or: [{ createdBy: clerkPhone }, { recordedBy: clerkPhone }] };
+    const clerkQ = { ...bQ, recordedBy: clerkPhone };
 
     const [pmts, rcpts, exps, payouts, handoversOut, handoversIn] = await Promise.all([
-      // Money the clerk collected (invoice payments created by them)
-      InvoicePayment.aggregate([
-        { $match: { ...bQ, ...clerkFilter } },
-        { $group: { _id: null, t: { $sum: "$amount" } } }
-      ]),
+      // Money the clerk collected from clients (invoice payments recorded by them)
+      InvoicePayment.aggregate([{ $match: clerkQ }, { $group: { _id: null, t: { $sum: "$amount" } } }]),
       // Cash sales (receipts) the clerk raised
-      Invoice.aggregate([
-        { $match: { ...bQ, type: "receipt", ...clerkFilter } },
-        { $group: { _id: null, t: { $sum: "$total" } } }
-      ]),
+      Invoice.aggregate([{ $match: { ...clerkQ, type: "receipt" } }, { $group: { _id: null, t: { $sum: "$total" } } }]),
       // Expenses the clerk recorded (debit from their custody)
-      Expense.aggregate([
-        { $match: { ...bQ, ...clerkFilter } },
-        { $group: { _id: null, t: { $sum: "$amount" } } }
-      ]),
+      Expense.aggregate([{ $match: clerkQ }, { $group: { _id: null, t: { $sum: "$amount" } } }]),
       // Payouts the clerk made
-      CashPayout.aggregate([
-        { $match: { ...bQ, ...clerkFilter } },
-        { $group: { _id: null, t: { $sum: "$amount" } } }
-      ]).catch(() => []),
-      // FIX: schema uses outgoingPhone (not fromPhone) and amountCounted (not amount)
-      CashHandover.aggregate([
-        { $match: { ...bQ, outgoingPhone: clerkPhone } },
-        { $group: { _id: null, t: { $sum: "$amountCounted" } } }
-      ]).catch(() => []),
-      // FIX: schema uses incomingPhone (not toPhone) and amountCounted (not amount)
-      CashHandover.aggregate([
-        { $match: { ...bQ, incomingPhone: clerkPhone } },
-        { $group: { _id: null, t: { $sum: "$amountCounted" } } }
-      ]).catch(() => [])
+      CashPayout.aggregate([{ $match: clerkQ }, { $group: { _id: null, t: { $sum: "$amount" } } }]).catch(() => []),
+      // Handovers the clerk gave (debit)
+      CashHandover.aggregate([{ $match: { ...bQ, fromPhone: clerkPhone } }, { $group: { _id: null, t: { $sum: "$amount" } } }]).catch(() => []),
+      // Handovers the clerk received (credit)
+      CashHandover.aggregate([{ $match: { ...bQ, toPhone: clerkPhone } },   { $group: { _id: null, t: { $sum: "$amount" } } }]).catch(() => [])
     ]);
 
     const totalIn  = (pmts[0]?.t || 0) + (rcpts[0]?.t || 0) + (handoversIn[0]?.t  || 0);
