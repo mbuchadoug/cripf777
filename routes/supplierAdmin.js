@@ -1611,6 +1611,10 @@ const successMsg = req.query.success
     🪪 Staff E-Business Cards
   </a>
 
+  <a href="/zq-admin/suppliers/${supplier._id}/recurring" class="btn" style="background:#0369a1;color:white">
+    🏠 Recurring Billing
+  </a>
+
   <form method="POST" action="/zq-admin/suppliers/${supplier._id}/delete" style="display:inline"
         onsubmit="return confirm('⚠️ PERMANENTLY DELETE ${esc(supplier.businessName)}?\n\nThis removes:\n• Supplier profile\n• Business account & branch\n• Products & prices\n• Subscription payments\n• Search logs\n\nThis cannot be undone.')">
     <button class="btn btn-red">🗑 Delete Supplier</button>
@@ -4091,7 +4095,8 @@ function layout(title, content) {
                      || t.startsWith("Receipt:") || t === "Add Price"
                      || t === "Edit Price" || t === "Add Rate"
                      || t === "Manage Live Items"
-                     || t.startsWith("Hospitality:") || t === "VIP Sellers";
+                     || t.startsWith("Hospitality:") || t === "VIP Sellers"
+                     || t.startsWith("Recurring:");
   const isSchools     = t === "Schools" || t === "Register School"
                      || t.startsWith("School:") || t.startsWith("Edit School:");
   const isOrders      = t === "Orders";
@@ -11261,17 +11266,165 @@ router.post("/apply/school/:id/submit", async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // PATCH: supplierAdmin.js — Recurring Billing admin routes
 //
-// WHERE TO INSERT: Add this entire block BEFORE "export default router;"
-// at the bottom of supplierAdmin.js
-//
-// ALSO ADD to layout() function nav array (inside the PLATFORM divider section):
-//   { href: `/zq-admin/suppliers/${id}/recurring`, label: "🏠 Recurring Billing", active: t.startsWith("Recurring:") }
-// (This is supplier-specific so it only shows on supplier detail pages)
-// ─────────────────────────────────────────────────────────────────────────────
+// WHERE TO INSERT: Add this entire block BEFORE "
+// ── GET /suppliers/:id/recurring/:acctId/edit — edit account ─────────────────
+router.get("/suppliers/:id/recurring/:acctId/edit", requireSupplierAdmin, async (req, res) => {
+  try {
+    const supplier = await SupplierProfile.findById(req.params.id).lean();
+    const Business         = (await import("../models/business.js")).default;
+    const RecurringAccount = (await import("../models/recurringAccount.js")).default;
+    const Branch           = (await import("../models/branch.js")).default;
+    const biz  = supplier?.businessId ? await Business.findById(supplier.businessId).lean() : null;
+    const acct = await RecurringAccount.findById(req.params.acctId).lean();
+    if (!acct || !biz) return res.redirect(`/zq-admin/suppliers/${req.params.id}/recurring`);
 
-// ═════════════════════════════════════════════════════════════════════════════
-// RECURRING BILLING ADMIN ROUTES
-// ═════════════════════════════════════════════════════════════════════════════
+    const branches = await Branch.find({ businessId: biz._id }).lean();
+    const errMsg     = req.query.error   ? `<div class="alert red">❌ ${esc(req.query.error)}</div>`   : "";
+    const successMsg = req.query.success ? `<div class="alert green">✅ ${esc(req.query.success)}</div>` : "";
+
+    const catOpts = ["unit","flat","room","student","policy","member","plot","other"]
+      .map(c => `<option value="${c}" ${acct.category === c ? "selected" : ""}>${c.charAt(0).toUpperCase()+c.slice(1)}</option>`)
+      .join("");
+    const cycleOpts = ["monthly","quarterly","termly","annual"]
+      .map(c => `<option value="${c}" ${acct.billingCycle === c ? "selected" : ""}>${c.charAt(0).toUpperCase()+c.slice(1)}</option>`)
+      .join("");
+    const branchOpts = `<option value="">— No branch —</option>` +
+      branches.map(b => `<option value="${b._id}" ${String(acct.branchId) === String(b._id) ? "selected" : ""}>${esc(b.name)}</option>`).join("");
+
+    const content = `
+      <div style="margin-bottom:16px">
+        <a href="/zq-admin/suppliers/${supplier._id}/recurring" style="color:var(--blue);text-decoration:none">← Back to Recurring Billing</a>
+      </div>
+      <h2 style="font-size:20px;font-weight:700;margin-bottom:20px">✏️ Edit Account — ${esc(acct.name)}</h2>
+      ${errMsg}${successMsg}
+      <div class="card" style="max-width:600px">
+        <form method="POST" action="/zq-admin/suppliers/${supplier._id}/recurring/${acct._id}/edit">
+          <div style="margin-bottom:14px">
+            <label style="font-weight:600;display:block;margin-bottom:6px">Account / Unit Name *</label>
+            <input name="name" required value="${esc(acct.name)}"
+              style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:7px;font-size:14px">
+          </div>
+          <div style="margin-bottom:14px">
+            <label style="font-weight:600;display:block;margin-bottom:6px">Short Reference Code</label>
+            <input name="ref" value="${esc(acct.ref || "")}"
+              style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:7px;font-size:14px">
+          </div>
+          <div style="margin-bottom:14px">
+            <label style="font-weight:600;display:block;margin-bottom:6px">Category</label>
+            <select name="category" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:7px;font-size:14px">${catOpts}</select>
+          </div>
+          <div style="margin-bottom:14px">
+            <label style="font-weight:600;display:block;margin-bottom:6px">Description</label>
+            <input name="description" value="${esc(acct.description || "")}"
+              style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:7px;font-size:14px">
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+            <div>
+              <label style="font-weight:600;display:block;margin-bottom:6px">Charge Amount *</label>
+              <input name="billingAmount" type="number" step="0.01" required value="${acct.billingAmount || 0}"
+                style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:7px;font-size:14px">
+            </div>
+            <div>
+              <label style="font-weight:600;display:block;margin-bottom:6px">Billing Cycle</label>
+              <select name="billingCycle" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:7px;font-size:14px">${cycleOpts}</select>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+            <div>
+              <label style="font-weight:600;display:block;margin-bottom:6px">Billing Day (1–28)</label>
+              <input name="billingDay" type="number" min="1" max="28" value="${acct.billingDay || 1}"
+                style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:7px;font-size:14px">
+            </div>
+            <div>
+              <label style="font-weight:600;display:block;margin-bottom:6px">Branch</label>
+              <select name="branchId" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:7px;font-size:14px">${branchOpts}</select>
+            </div>
+          </div>
+          <div style="margin-bottom:14px">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+              <input type="checkbox" name="isActive" value="1" ${acct.isActive !== false ? "checked" : ""}
+                style="width:16px;height:16px">
+              <span style="font-weight:600">Account is active</span>
+            </label>
+          </div>
+          <div style="display:flex;gap:10px;margin-top:20px">
+            <button type="submit" style="background:var(--blue);color:white;padding:10px 20px;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">
+              ✅ Save Changes
+            </button>
+            <a href="/zq-admin/suppliers/${supplier._id}/recurring"
+               style="background:#f1f5f9;color:var(--text);padding:10px 20px;border-radius:8px;font-size:14px;text-decoration:none">
+              Cancel
+            </a>
+          </div>
+        </form>
+      </div>`;
+
+    res.send(layout(`Recurring: ${acct.name}`, content));
+  } catch (e) {
+    res.redirect(`/zq-admin/suppliers/${req.params.id}/recurring?error=${encodeURIComponent(e.message)}`);
+  }
+});
+
+// ── POST /suppliers/:id/recurring/:acctId/edit — save account edits ──────────
+router.post("/suppliers/:id/recurring/:acctId/edit", requireSupplierAdmin, async (req, res) => {
+  try {
+    const RecurringAccount = (await import("../models/recurringAccount.js")).default;
+    const { name, ref, category, description, billingAmount, billingCycle, billingDay, branchId, isActive } = req.body;
+    await RecurringAccount.findByIdAndUpdate(req.params.acctId, {
+      name:          name?.trim(),
+      ref:           (ref || "").trim(),
+      category:      category || "unit",
+      description:   (description || "").trim(),
+      billingAmount: parseFloat(billingAmount) || 0,
+      billingCycle:  billingCycle || "monthly",
+      billingDay:    parseInt(billingDay, 10) || 1,
+      branchId:      branchId || null,
+      isActive:      isActive === "1"
+    });
+    res.redirect(`/zq-admin/suppliers/${req.params.id}/recurring?success=${encodeURIComponent(`Account "${name}" updated`)}`);
+  } catch (e) {
+    res.redirect(`/zq-admin/suppliers/${req.params.id}/recurring/${req.params.acctId}/edit?error=${encodeURIComponent(e.message)}`);
+  }
+});
+
+// ── POST /suppliers/:id/recurring/:acctId/record-payment — record payment ────
+router.post("/suppliers/:id/recurring/:acctId/record-payment", requireSupplierAdmin, async (req, res) => {
+  try {
+    const supplier = await SupplierProfile.findById(req.params.id).lean();
+    const Business = (await import("../models/business.js")).default;
+    const biz = supplier?.businessId ? await Business.findById(supplier.businessId).lean() : null;
+    if (!biz) return res.redirect(`/zq-admin/suppliers/${req.params.id}/recurring`);
+
+    const { amount, method, reference, notes } = req.body;
+    const { recordRecurringPayment } = await import("../services/recurringBilling.js");
+    await recordRecurringPayment({
+      businessId: biz._id,
+      accountId:  req.params.acctId,
+      amount:     parseFloat(amount) || 0,
+      method:     method || "cash",
+      reference:  reference || "",
+      notes:      notes || "",
+      clerkPhone: "admin",
+      date:       new Date()
+    });
+
+    res.redirect(`/zq-admin/suppliers/${req.params.id}/recurring/${req.params.acctId}/statement?success=${encodeURIComponent("Payment recorded")}`);
+  } catch (e) {
+    res.redirect(`/zq-admin/suppliers/${req.params.id}/recurring?error=${encodeURIComponent(e.message)}`);
+  }
+});
+
+// ── POST /suppliers/:id/recurring/:acctId/delete — deactivate account ────────
+router.post("/suppliers/:id/recurring/:acctId/delete", requireSupplierAdmin, async (req, res) => {
+  try {
+    const RecurringAccount = (await import("../models/recurringAccount.js")).default;
+    await RecurringAccount.findByIdAndUpdate(req.params.acctId, { isActive: false });
+    res.redirect(`/zq-admin/suppliers/${req.params.id}/recurring?success=Account+deactivated`);
+  } catch (e) {
+    res.redirect(`/zq-admin/suppliers/${req.params.id}/recurring?error=${encodeURIComponent(e.message)}`);
+  }
+});
+
 
 // ── GET /suppliers/:id/recurring — main recurring billing dashboard ───────────
 router.get("/suppliers/:id/recurring", requireSupplierAdmin, async (req, res) => {
@@ -11328,6 +11481,12 @@ router.get("/suppliers/:id/recurring", requireSupplierAdmin, async (req, res) =>
                style="background:#f0fdf4;color:#16a34a;border:none;padding:4px 10px;border-radius:6px;font-size:12px;text-decoration:none">📋 Statement</a>
             <a href="/zq-admin/suppliers/${supplier._id}/recurring/${acct._id}/tenant"
                style="background:#fef3c7;color:#92400e;border:none;padding:4px 10px;border-radius:6px;font-size:12px;text-decoration:none">👤 Tenant</a>
+            <button onclick="openPaymentModal('${acct._id}','${esc(acct.name)}')"
+               style="background:#7c3aed;color:white;border:none;padding:4px 10px;border-radius:6px;font-size:12px;cursor:pointer">💰 Pay</button>
+            <form method="POST" action="/zq-admin/suppliers/${supplier._id}/recurring/${acct._id}/delete" style="display:inline"
+                  onsubmit="return confirm('Deactivate ${esc(acct.name)}?')">
+              <button style="background:#fee2e2;color:#dc2626;border:none;padding:4px 10px;border-radius:6px;font-size:12px;cursor:pointer">⏸ Deactivate</button>
+            </form>
           </td>
         </tr>`;
     }).join("");
@@ -11384,7 +11543,58 @@ router.get("/suppliers/:id/recurring", requireSupplierAdmin, async (req, res) =>
         </table>` : `<p style="color:var(--muted);padding:12px">No accounts yet. Click "Add Account / Unit" to get started.</p>`}
       </div>`;
 
-    res.send(layout(`Recurring: ${biz.name}`, content));
+    // Payment modal — inline quick-payment form rendered client-side
+    const paymentModal = `
+      <div id="payModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center">
+        <div style="background:white;border-radius:12px;padding:28px;width:400px;max-width:95vw">
+          <h3 style="font-size:16px;font-weight:700;margin-bottom:16px">💰 Record Payment</h3>
+          <div id="payAcctName" style="font-weight:600;color:var(--muted);margin-bottom:14px;font-size:13px"></div>
+          <form id="payForm" method="POST">
+            <div style="margin-bottom:12px">
+              <label style="font-weight:600;display:block;margin-bottom:4px;font-size:13px">Amount *</label>
+              <input name="amount" type="number" step="0.01" required placeholder="300.00"
+                style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:7px;font-size:14px">
+            </div>
+            <div style="margin-bottom:12px">
+              <label style="font-weight:600;display:block;margin-bottom:4px;font-size:13px">Method</label>
+              <select name="method" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:7px;font-size:14px">
+                <option value="cash">💵 Cash</option>
+                <option value="ecocash">📱 EcoCash</option>
+                <option value="bank">🏦 Bank Transfer</option>
+                <option value="innbucks">💳 InnBucks</option>
+                <option value="zipit">🔄 ZipIt</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            <div style="margin-bottom:16px">
+              <label style="font-weight:600;display:block;margin-bottom:4px;font-size:13px">Reference (optional)</label>
+              <input name="reference" placeholder="EcoCash transaction ref"
+                style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:7px;font-size:14px">
+            </div>
+            <div style="display:flex;gap:10px">
+              <button type="submit" style="background:var(--blue);color:white;padding:10px 20px;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;flex:1">
+                ✅ Record Payment
+              </button>
+              <button type="button" onclick="document.getElementById('payModal').style.display='none'"
+                style="background:#f1f5f9;color:var(--text);padding:10px 20px;border:none;border-radius:8px;font-size:14px;cursor:pointer">
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+      <script>
+        function openPaymentModal(acctId, acctName) {
+          document.getElementById('payAcctName').textContent = '🏠 ' + acctName;
+          document.getElementById('payForm').action = '/zq-admin/suppliers/${supplier._id}/recurring/' + acctId + '/record-payment';
+          document.getElementById('payModal').style.display = 'flex';
+        }
+        document.getElementById('payModal')?.addEventListener('click', function(e) {
+          if (e.target === this) this.style.display = 'none';
+        });
+      </script>`;
+
+    res.send(layout(`Recurring: ${biz.name}`, content + paymentModal));
   } catch (e) {
     res.send(layout("Recurring Billing", `<div class="alert red">Error: ${e.message}</div>`));
   }
@@ -11798,5 +12008,165 @@ router.get("/suppliers/:id/recurring/:acctId/statement", requireSupplierAdmin, a
     res.redirect(`/zq-admin/suppliers/${req.params.id}/recurring?error=${encodeURIComponent(e.message)}`);
   }
 });
+
+
+// ── GET /suppliers/:id/recurring/:acctId/edit — edit account ─────────────────
+router.get("/suppliers/:id/recurring/:acctId/edit", requireSupplierAdmin, async (req, res) => {
+  try {
+    const supplier = await SupplierProfile.findById(req.params.id).lean();
+    const Business         = (await import("../models/business.js")).default;
+    const RecurringAccount = (await import("../models/recurringAccount.js")).default;
+    const Branch           = (await import("../models/branch.js")).default;
+    const biz  = supplier?.businessId ? await Business.findById(supplier.businessId).lean() : null;
+    const acct = await RecurringAccount.findById(req.params.acctId).lean();
+    if (!acct || !biz) return res.redirect(`/zq-admin/suppliers/${req.params.id}/recurring`);
+
+    const branches = await Branch.find({ businessId: biz._id }).lean();
+    const errMsg     = req.query.error   ? `<div class="alert red">❌ ${esc(req.query.error)}</div>`   : "";
+    const successMsg = req.query.success ? `<div class="alert green">✅ ${esc(req.query.success)}</div>` : "";
+
+    const catOpts = ["unit","flat","room","student","policy","member","plot","other"]
+      .map(c => `<option value="${c}" ${acct.category === c ? "selected" : ""}>${c.charAt(0).toUpperCase()+c.slice(1)}</option>`)
+      .join("");
+    const cycleOpts = ["monthly","quarterly","termly","annual"]
+      .map(c => `<option value="${c}" ${acct.billingCycle === c ? "selected" : ""}>${c.charAt(0).toUpperCase()+c.slice(1)}</option>`)
+      .join("");
+    const branchOpts = `<option value="">— No branch —</option>` +
+      branches.map(b => `<option value="${b._id}" ${String(acct.branchId) === String(b._id) ? "selected" : ""}>${esc(b.name)}</option>`).join("");
+
+    const content = `
+      <div style="margin-bottom:16px">
+        <a href="/zq-admin/suppliers/${supplier._id}/recurring" style="color:var(--blue);text-decoration:none">← Back to Recurring Billing</a>
+      </div>
+      <h2 style="font-size:20px;font-weight:700;margin-bottom:20px">✏️ Edit Account — ${esc(acct.name)}</h2>
+      ${errMsg}${successMsg}
+      <div class="card" style="max-width:600px">
+        <form method="POST" action="/zq-admin/suppliers/${supplier._id}/recurring/${acct._id}/edit">
+          <div style="margin-bottom:14px">
+            <label style="font-weight:600;display:block;margin-bottom:6px">Account / Unit Name *</label>
+            <input name="name" required value="${esc(acct.name)}"
+              style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:7px;font-size:14px">
+          </div>
+          <div style="margin-bottom:14px">
+            <label style="font-weight:600;display:block;margin-bottom:6px">Short Reference Code</label>
+            <input name="ref" value="${esc(acct.ref || "")}"
+              style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:7px;font-size:14px">
+          </div>
+          <div style="margin-bottom:14px">
+            <label style="font-weight:600;display:block;margin-bottom:6px">Category</label>
+            <select name="category" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:7px;font-size:14px">${catOpts}</select>
+          </div>
+          <div style="margin-bottom:14px">
+            <label style="font-weight:600;display:block;margin-bottom:6px">Description</label>
+            <input name="description" value="${esc(acct.description || "")}"
+              style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:7px;font-size:14px">
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+            <div>
+              <label style="font-weight:600;display:block;margin-bottom:6px">Charge Amount *</label>
+              <input name="billingAmount" type="number" step="0.01" required value="${acct.billingAmount || 0}"
+                style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:7px;font-size:14px">
+            </div>
+            <div>
+              <label style="font-weight:600;display:block;margin-bottom:6px">Billing Cycle</label>
+              <select name="billingCycle" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:7px;font-size:14px">${cycleOpts}</select>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+            <div>
+              <label style="font-weight:600;display:block;margin-bottom:6px">Billing Day (1–28)</label>
+              <input name="billingDay" type="number" min="1" max="28" value="${acct.billingDay || 1}"
+                style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:7px;font-size:14px">
+            </div>
+            <div>
+              <label style="font-weight:600;display:block;margin-bottom:6px">Branch</label>
+              <select name="branchId" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:7px;font-size:14px">${branchOpts}</select>
+            </div>
+          </div>
+          <div style="margin-bottom:14px">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+              <input type="checkbox" name="isActive" value="1" ${acct.isActive !== false ? "checked" : ""}
+                style="width:16px;height:16px">
+              <span style="font-weight:600">Account is active</span>
+            </label>
+          </div>
+          <div style="display:flex;gap:10px;margin-top:20px">
+            <button type="submit" style="background:var(--blue);color:white;padding:10px 20px;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">
+              ✅ Save Changes
+            </button>
+            <a href="/zq-admin/suppliers/${supplier._id}/recurring"
+               style="background:#f1f5f9;color:var(--text);padding:10px 20px;border-radius:8px;font-size:14px;text-decoration:none">
+              Cancel
+            </a>
+          </div>
+        </form>
+      </div>`;
+
+    res.send(layout(`Recurring: ${acct.name}`, content));
+  } catch (e) {
+    res.redirect(`/zq-admin/suppliers/${req.params.id}/recurring?error=${encodeURIComponent(e.message)}`);
+  }
+});
+
+// ── POST /suppliers/:id/recurring/:acctId/edit — save account edits ──────────
+router.post("/suppliers/:id/recurring/:acctId/edit", requireSupplierAdmin, async (req, res) => {
+  try {
+    const RecurringAccount = (await import("../models/recurringAccount.js")).default;
+    const { name, ref, category, description, billingAmount, billingCycle, billingDay, branchId, isActive } = req.body;
+    await RecurringAccount.findByIdAndUpdate(req.params.acctId, {
+      name:          name?.trim(),
+      ref:           (ref || "").trim(),
+      category:      category || "unit",
+      description:   (description || "").trim(),
+      billingAmount: parseFloat(billingAmount) || 0,
+      billingCycle:  billingCycle || "monthly",
+      billingDay:    parseInt(billingDay, 10) || 1,
+      branchId:      branchId || null,
+      isActive:      isActive === "1"
+    });
+    res.redirect(`/zq-admin/suppliers/${req.params.id}/recurring?success=${encodeURIComponent(`Account "${name}" updated`)}`);
+  } catch (e) {
+    res.redirect(`/zq-admin/suppliers/${req.params.id}/recurring/${req.params.acctId}/edit?error=${encodeURIComponent(e.message)}`);
+  }
+});
+
+// ── POST /suppliers/:id/recurring/:acctId/record-payment — record payment ────
+router.post("/suppliers/:id/recurring/:acctId/record-payment", requireSupplierAdmin, async (req, res) => {
+  try {
+    const supplier = await SupplierProfile.findById(req.params.id).lean();
+    const Business = (await import("../models/business.js")).default;
+    const biz = supplier?.businessId ? await Business.findById(supplier.businessId).lean() : null;
+    if (!biz) return res.redirect(`/zq-admin/suppliers/${req.params.id}/recurring`);
+
+    const { amount, method, reference, notes } = req.body;
+    const { recordRecurringPayment } = await import("../services/recurringBilling.js");
+    await recordRecurringPayment({
+      businessId: biz._id,
+      accountId:  req.params.acctId,
+      amount:     parseFloat(amount) || 0,
+      method:     method || "cash",
+      reference:  reference || "",
+      notes:      notes || "",
+      clerkPhone: "admin",
+      date:       new Date()
+    });
+
+    res.redirect(`/zq-admin/suppliers/${req.params.id}/recurring/${req.params.acctId}/statement?success=${encodeURIComponent("Payment recorded")}`);
+  } catch (e) {
+    res.redirect(`/zq-admin/suppliers/${req.params.id}/recurring?error=${encodeURIComponent(e.message)}`);
+  }
+});
+
+// ── POST /suppliers/:id/recurring/:acctId/delete — deactivate account ────────
+router.post("/suppliers/:id/recurring/:acctId/delete", requireSupplierAdmin, async (req, res) => {
+  try {
+    const RecurringAccount = (await import("../models/recurringAccount.js")).default;
+    await RecurringAccount.findByIdAndUpdate(req.params.acctId, { isActive: false });
+    res.redirect(`/zq-admin/suppliers/${req.params.id}/recurring?success=Account+deactivated`);
+  } catch (e) {
+    res.redirect(`/zq-admin/suppliers/${req.params.id}/recurring?error=${encodeURIComponent(e.message)}`);
+  }
+});
+
 
 export default router;
