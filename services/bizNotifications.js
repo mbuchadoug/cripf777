@@ -372,7 +372,7 @@ export async function getDailyRunningBalance(businessId, branchId, currency = "U
 
   // FIX: Compute true opening from ALL transactions before today's midnight.
   // This replaces the old CashBalance.findOne() lookup which returned 0 whenever
-  // no one manually set an opening balance that morning — causing every notification
+  // no one manually set an opening balance that morning - causing every notification
   // to show wrong "Cash at hand" values with no carry-forward from yesterday.
   const [pmtsBefore, rcptsBefore, expsBefore, payoutsBefore,
          payments, receipts, expenses, payouts] = await Promise.all([

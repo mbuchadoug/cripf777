@@ -69,8 +69,6 @@ import {
   sendSupplierUpgradeMenu,
   sendSupplierAccountMenu,
   sendSupplierMoreOptionsMenu,
-  sendRecurringBillingMenu,
-  sendRbAccountPicker,
 } from "./metaMenus.js";
 
 import { getBizForPhone, saveBizSafe } from "./bizHelpers.js";
@@ -3785,22 +3783,7 @@ a.startsWith("sup_load_preset_") ||
       a === "view_all_receipts" ||
       a === "cashbal_branch_all" ||
       a === "sup_search_type_product" ||
-      a === "__document_uploaded__" ||
-      // ── Recurring Billing ─────────────────────────────────────────────────
-      a === "recurring_billing_menu" ||
-      a === "rb_accounts" ||
-      a === "rb_record_payment" ||
-      a === "rb_generate_invoices" ||
-      a === "rb_account_stmt" ||
-      a === "rb_tenant_stmt" ||
-      a === "rb_reminders" ||
-      a === "rb_add_expense" ||
-      a.startsWith("rb_acct_") ||
-      a.startsWith("rb_tenant_") ||
-      a.startsWith("rb_period_") ||
-      a.startsWith("rb_pay_method_") ||
-      a === "rb_period_all" ||
-      a === "rb_period_custom"
+      a === "__document_uploaded__"
     
     );
   // ── Parse skip / edit commands ────────────────────────────────────────────
@@ -3900,47 +3883,6 @@ Reply *menu* to start.`);
 
 let biz = await getBizForPhone(from);
 const isGhostSupplierBiz = !!(biz && biz.name?.startsWith("pending_supplier_"));
-
-  // ── Tenant self-service: if no biz and phone matches a RecurringTenant with canSelfServe ──
-  // Allows tenants to check their balance by WhatsApping the chatbot number.
-  if (!biz && !isMetaAction) {
-    try {
-      const { getTenantBalanceSummary } = await import("./recurringBilling.js");
-      const RecurringTenant = (await import("../models/recurringTenant.js")).default;
-      // Search across all businesses for this phone
-      let tp = phone;
-      if (tp.startsWith("0")) tp = "263" + tp.slice(1);
-      const tRecord = await RecurringTenant.findOne({ phone: tp, isActive: true, canSelfServe: true }).lean();
-      if (tRecord) {
-        const Business = (await import("../models/business.js")).default;
-        const tbiz = await Business.findById(tRecord.businessId).lean();
-        if (tbiz) {
-          const tData = await getTenantBalanceSummary(phone, tRecord.businessId);
-          if (tData) {
-            const cur = tData.cur;
-            let msg = `👤 *Welcome, ${tData.tenant.name}*\n`;
-            if (tData.account) msg += `🏠 ${tData.account.name}\n`;
-            msg += `📍 ${tbiz.name}\n━━━━━━━━━━━━━━━━━━━━\n`;
-            if (tData.balance > 0) {
-              msg += `💰 *Balance Due: ${tData.balance.toFixed(2)} ${cur}*\n`;
-              if (tData.outstanding.length > 0) {
-                const oldest = tData.outstanding[0];
-                msg += `📄 Invoice: ${oldest.number} — ${oldest.period}\n`;
-                msg += `📆 Due: ${new Date(oldest.dueDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}\n`;
-              }
-            } else {
-              msg += `✅ *Account is clear — no balance due*\n`;
-            }
-            msg += `\nContact ${tbiz.name} for your full statement.`;
-            await sendText(from, msg);
-            return;
-          }
-        }
-      }
-    } catch (_tse) {
-      // Non-blocking — if this fails, continue normal flow
-    }
-  }
 
 // ── Ownership check for registration flows ───────────────────────────────────
 // getBizForPhone may return a biz where this phone is only a notification contact.
@@ -10496,149 +10438,6 @@ Type *done* to save`,
     });
   }
 
-  // ── Recurring Billing ────────────────────────────────────────────────────
-  // Entry point from Business Tools menu → "🏠 Recurring Billing"
-  // All rb_* actions are routed here. Multi-step flows use twilioStateBridge states.
-  // ─────────────────────────────────────────────────────────────────────────
-
-  if (a === "recurring_billing_menu") {
-    if (!biz) return sendMainMenu(from);
-    return sendRecurringBillingMenu(from);
-  }
-
-  // ── View all accounts/units ───────────────────────────────────────────────
-  if (a === "rb_accounts") {
-    if (!biz) return sendMainMenu(from);
-    const { listAccountsForChatbot } = await import("./recurringBilling.js");
-    const branchId = caller?.role !== "owner" ? caller?.branchId || null : null;
-    const accounts = await listAccountsForChatbot(biz._id, branchId);
-    if (!accounts.length) {
-      await sendText(from, "🏠 *Accounts & Units*\n\nNo active accounts found.\n\nAdd units via the admin portal first.");
-      return sendRecurringBillingMenu(from);
-    }
-    const cur = biz.currency || "USD";
-    let msg = `🏠 *Accounts & Units — ${biz.name}*\n━━━━━━━━━━━━━━━━━━━━\n`;
-    for (const acct of accounts) {
-      const balSign = (acct.currentBalance || 0) > 0 ? "🔴" : "✅";
-      const tenantName = acct._tenant?.name || "Vacant";
-      msg += `\n${balSign} *${acct.name}*${acct.ref ? ` (${acct.ref})` : ""}\n`;
-      msg += `   👤 ${tenantName}\n`;
-      msg += `   💵 ${acct.billingAmount} ${cur}/${acct.billingCycle}\n`;
-      msg += `   💰 Balance: ${(acct.currentBalance || 0).toFixed(2)} ${cur}\n`;
-    }
-    await sendText(from, msg);
-    return sendRecurringBillingMenu(from);
-  }
-
-  // ── Record payment — triggers state flow ──────────────────────────────────
-  if (a === "rb_record_payment") {
-    if (!biz) return sendMainMenu(from);
-    const { listAccountsForChatbot } = await import("./recurringBilling.js");
-    const branchId = caller?.role !== "owner" ? caller?.branchId || null : null;
-    const accounts = await listAccountsForChatbot(biz._id, branchId);
-    biz.sessionState = "rb_payment_pick_account";
-    biz.sessionData  = {};
-    await saveBizSafe(biz);
-    return sendRbAccountPicker(from, accounts);
-  }
-
-  // ── Account statement — triggers state flow ───────────────────────────────
-  if (a === "rb_account_stmt") {
-    if (!biz) return sendMainMenu(from);
-    const { listAccountsForChatbot } = await import("./recurringBilling.js");
-    const branchId = caller?.role !== "owner" ? caller?.branchId || null : null;
-    const accounts = await listAccountsForChatbot(biz._id, branchId);
-    biz.sessionState = "rb_acct_stmt_pick_account";
-    biz.sessionData  = {};
-    await saveBizSafe(biz);
-    return sendRbAccountPicker(from, accounts);
-  }
-
-  // ── Tenant statement — triggers state flow ────────────────────────────────
-  if (a === "rb_tenant_stmt") {
-    if (!biz) return sendMainMenu(from);
-    const { listAccountsForChatbot } = await import("./recurringBilling.js");
-    const branchId = caller?.role !== "owner" ? caller?.branchId || null : null;
-    const accounts = await listAccountsForChatbot(biz._id, branchId);
-    biz.sessionState = "rb_tenant_stmt_pick_account";
-    biz.sessionData  = {};
-    await saveBizSafe(biz);
-    return sendRbAccountPicker(from, accounts);
-  }
-
-  // ── Add unit expense — triggers state flow ────────────────────────────────
-  if (a === "rb_add_expense") {
-    if (!biz) return sendMainMenu(from);
-    const { listAccountsForChatbot } = await import("./recurringBilling.js");
-    const branchId = caller?.role !== "owner" ? caller?.branchId || null : null;
-    const accounts = await listAccountsForChatbot(biz._id, branchId);
-    biz.sessionState = "rb_expense_pick_account";
-    biz.sessionData  = {};
-    await saveBizSafe(biz);
-    return sendRbAccountPicker(from, accounts);
-  }
-
-  // ── Bulk generate invoices for current period ─────────────────────────────
-  if (a === "rb_generate_invoices") {
-    if (!biz) return sendMainMenu(from);
-    biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
-    await sendText(from, "⏳ Generating invoices for all active accounts...");
-    try {
-      const { bulkGenerateInvoices } = await import("./recurringBilling.js");
-      const branchId = caller?.role !== "owner" ? caller?.branchId || null : null;
-      const result = await bulkGenerateInvoices({ biz, branchId, clerkPhone: phone });
-      await sendText(from,
-        `✅ *Invoices Generated*\n\n📄 Created:  ${result.created}\n⏭ Skipped:  ${result.skipped} (already invoiced)\n📊 Total accounts: ${result.total}` +
-        (result.errors.length ? `\n\n⚠️ Errors:\n${result.errors.slice(0, 3).map(e => `  • ${e}`).join("\n")}` : "")
-      );
-    } catch (e) {
-      await sendText(from, `❌ Invoice generation failed: ${e.message}`);
-    }
-    return sendRecurringBillingMenu(from);
-  }
-
-  // ── Send payment reminders to all tenants with outstanding balances ────────
-  if (a === "rb_reminders") {
-    if (!biz) return sendMainMenu(from);
-    biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
-    await sendText(from, "📢 Sending payment reminders to tenants...");
-    try {
-      const { broadcastPaymentReminders } = await import("./recurringBilling.js");
-      const branchId = caller?.role !== "owner" ? caller?.branchId || null : null;
-      const result = await broadcastPaymentReminders({ biz, branchId });
-      await sendText(from,
-        `✅ *Reminders Sent*\n\n📤 Sent: ${result.sent}\n⏭ Skipped (no balance): ${result.skipped}` +
-        (result.errors.length ? `\n⚠️ Errors: ${result.errors.length}` : "")
-      );
-    } catch (e) {
-      await sendText(from, `❌ Failed to send reminders: ${e.message}`);
-    }
-    return sendRecurringBillingMenu(from);
-  }
-
-  // ── rb_acct_{id} tapped outside a state flow → show account summary ───────
-  if (a?.startsWith("rb_acct_") && biz && !biz.sessionState?.startsWith("rb_")) {
-    const acctId = a.replace("rb_acct_", "");
-    try {
-      const RecurringAccount = (await import("../models/recurringAccount.js")).default;
-      const { recomputeAccountBalance } = await import("./recurringBilling.js");
-      const acct = await RecurringAccount.findOne({ _id: acctId, businessId: biz._id }).lean();
-      if (!acct) { await sendText(from, "❌ Account not found."); return sendRecurringBillingMenu(from); }
-      const balance = await recomputeAccountBalance(biz._id, acct._id);
-      const cur = acct.currency || biz.currency || "USD";
-      await sendText(from,
-        `🏠 *${acct.name}*${acct.ref ? ` (${acct.ref})` : ""}\n` +
-        `📋 ${acct.description || acct.category}\n` +
-        `💵 Charge: ${acct.billingAmount} ${cur}/${acct.billingCycle}\n` +
-        `💰 Balance: *${balance.toFixed(2)} ${cur}*\n` +
-        `📅 Last invoiced: ${acct.lastInvoicedAt ? new Date(acct.lastInvoicedAt).toLocaleDateString("en-GB") : "Never"}`
-      );
-    } catch (e) {
-      await sendText(from, `❌ Error: ${e.message}`);
-    }
-    return sendRecurringBillingMenu(from);
-  }
-
   // ── Reports ────────────────────────────────────────────────────────────────
   //
   // Two reports only: Detailed Ledger + Clerk Statement (+ self-serve variant).
@@ -11588,12 +11387,7 @@ const shortcodeBlockedStates = [
   "report_choose_branch",
   "cash_handover_amount",
   "cash_handover_incoming",
-  "cash_handover_note",
-  // Recurring billing text-input states
-  "rb_payment_enter_amount",
-  "rb_expense_enter_details",
-  "rb_acct_stmt_custom_date",
-  "rb_tenant_stmt_pick_period"
+  "cash_handover_note"
 ];
 
 if (
@@ -19238,12 +19032,7 @@ if (!isMetaAction && text && text.trim().length > 1) {
     "report_date_filter", "report_clerk_pick_custom",
     "report_detailed", "report_detailed_week", "report_detailed_month", "report_detailed_year",
     "report_clerk_statement", "report_clerk_pick", "report_clerk_self", "report_choose_branch",
-    "cash_handover_amount", "cash_handover_incoming", "cash_handover_note",
-    // Recurring billing states
-    "rb_payment_pick_account", "rb_payment_enter_amount", "rb_payment_confirm",
-    "rb_acct_stmt_pick_account", "rb_acct_stmt_pick_period", "rb_acct_stmt_custom_date",
-    "rb_tenant_stmt_pick_account", "rb_tenant_stmt_pick_tenant", "rb_tenant_stmt_pick_period",
-    "rb_expense_pick_account", "rb_expense_enter_details"
+    "cash_handover_amount", "cash_handover_incoming", "cash_handover_note"
   ]);
 
   if (biz && _bizActiveStates.has(biz.sessionState)) {
