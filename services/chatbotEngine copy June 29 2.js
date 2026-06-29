@@ -8201,8 +8201,8 @@ if (!isMetaAction) {
           `The school will contact you on *${_parentContact}* shortly.\n\n` +
           `_Keep WhatsApp open \u2014 the school may message you here too._`,
         buttons: [
-          { id: `sfaq_enquiry_${_saEarlyId}`,      title: "\u2753 Ask a Question" },
-          { id: `sfaq_back_${_saEarlyId}`,          title: "\ud83c\udfeb School Profile" }
+          { id: `sfaq_enquiry_${_saEarlyId}`, title: "\u2753 Ask a Question" },
+          { id: "school_search_refine",        title: "\ud83c\udfeb More Schools"  }
         ]
       });
       try {
@@ -13215,7 +13215,7 @@ if (
         `_Keep WhatsApp open - the school may message you here too._`,
       buttons: [
         { id: `sfaq_enquiry_${_saId}`, title: "❓ Ask a Question" },
-        { id: `sfaq_back_${_saId}`,    title: "🏫 School Profile" }
+        { id: "school_search_refine",  title: "🏫 More Schools"  }
       ]
     });
     // Save full contact + email + WhatsApp notify school
