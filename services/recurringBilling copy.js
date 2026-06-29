@@ -18,17 +18,7 @@
 import path      from "path";
 import fs        from "fs";
 import puppeteer from "puppeteer";
-import mongoose  from "mongoose";
 import { sendText, sendDocument } from "./metaSender.js";
-
-// ── Safe ObjectId cast — prevents string vs ObjectId mismatch in aggregates ──
-// MongoDB .find() auto-casts strings; aggregate $match does NOT.
-// Always cast IDs before using them in aggregate pipelines.
-function oid(id) {
-  if (!id) return null;
-  try { return new mongoose.Types.ObjectId(String(id)); }
-  catch { return null; }
-}
 
 // ── Lazy model imports ────────────────────────────────────────────────────────
 const getModels = async () => ({
@@ -189,10 +179,8 @@ export async function recordRecurringPayment({
   const { RecurringInvoice, RecurringPayment, RecurringAccount } = await getModels();
 
   // Find oldest outstanding invoice for this account
-  // .findOne() auto-casts but cast explicitly for safety
   const invoice = await RecurringInvoice.findOne({
-    businessId: oid(businessId) || businessId,
-    accountId:  oid(accountId)  || accountId,
+    businessId, accountId,
     status: { $in: ["unpaid", "partial", "overdue"] }
   }).sort({ periodStart: 1 }).lean();
 
@@ -234,16 +222,13 @@ export async function recordRecurringPayment({
 
 export async function recomputeAccountBalance(businessId, accountId) {
   const { RecurringInvoice, RecurringPayment, RecurringExpense, RecurringAccount } = await getModels();
-  // Cast to ObjectId — aggregate $match does not auto-cast strings
-  const bizOid  = oid(businessId);
-  const acctOid = oid(accountId);
   const [invoices, payments] = await Promise.all([
     RecurringInvoice.aggregate([
-      { $match: { businessId: bizOid, accountId: acctOid, status: { $ne: "cancelled" } } },
+      { $match: { businessId, accountId, status: { $ne: "cancelled" } } },
       { $group: { _id: null, t: { $sum: "$amount" } } }
     ]),
     RecurringPayment.aggregate([
-      { $match: { businessId: bizOid, accountId: acctOid } },
+      { $match: { businessId, accountId } },
       { $group: { _id: null, t: { $sum: "$amount" } } }
     ])
   ]);
@@ -266,26 +251,21 @@ export async function buildAccountStatement({ businessId, accountId, periodStart
 
   const tenant = await RecurringTenant.findOne({ accountId, isActive: true }).lean();
 
-  // Cast to ObjectId — aggregate $match does not auto-cast strings
-  const bizOid  = oid(businessId);
-  const acctOid = oid(accountId);
-
   // Opening balance = all charges - all payments before periodStart
-  const bQ    = { businessId, accountId };          // for .find() — auto-casts
-  const bQAgg = { businessId: bizOid, accountId: acctOid };  // for aggregate $match
+  const bQ = { businessId, accountId };
   const [prevCharged, prevPaid] = await Promise.all([
     RecurringInvoice.aggregate([
-      { $match: { ...bQAgg, status: { $ne: "cancelled" }, periodStart: { $lt: periodStart } } },
+      { $match: { ...bQ, status: { $ne: "cancelled" }, periodStart: { $lt: periodStart } } },
       { $group: { _id: null, t: { $sum: "$amount" } } }
     ]),
     RecurringPayment.aggregate([
-      { $match: { ...bQAgg, date: { $lt: periodStart } } },
+      { $match: { ...bQ, date: { $lt: periodStart } } },
       { $group: { _id: null, t: { $sum: "$amount" } } }
     ])
   ]);
   const openingBalance = (prevCharged[0]?.t || 0) - (prevPaid[0]?.t || 0);
 
-  // This period's transactions — .find() auto-casts strings so bQ is fine here
+  // This period's transactions
   const [invoices, payments, expenses] = await Promise.all([
     RecurringInvoice.find({ ...bQ, periodStart: { $gte: periodStart }, periodEnd: { $lte: periodEnd } })
       .sort({ periodStart: 1 }).lean(),
@@ -362,28 +342,20 @@ export async function buildTenantStatement({ businessId, tenantId, periodStart, 
   const account = await RecurringAccount.findById(tenant.accountId).lean();
   const cur = account?.currency || "USD";
 
-  // Cast to ObjectId — aggregate $match does not auto-cast strings
-  const bizOid    = oid(businessId);
-  const tenantOid = oid(tenantId);
-
-  // bQ for .find() (auto-casts), bQAgg for aggregate $match (must be ObjectId)
-  const bQ    = { businessId, tenantId };
-  const bQAgg = { businessId: bizOid, tenantId: tenantOid };
-
   // Opening balance before periodStart
+  const bQ = { businessId, tenantId };
   const [prevCharged, prevPaid] = await Promise.all([
     RecurringInvoice.aggregate([
-      { $match: { ...bQAgg, status: { $ne: "cancelled" }, periodStart: { $lt: periodStart } } },
+      { $match: { ...bQ, status: { $ne: "cancelled" }, periodStart: { $lt: periodStart } } },
       { $group: { _id: null, t: { $sum: "$amount" } } }
     ]),
     RecurringPayment.aggregate([
-      { $match: { ...bQAgg, date: { $lt: periodStart } } },
+      { $match: { ...bQ, date: { $lt: periodStart } } },
       { $group: { _id: null, t: { $sum: "$amount" } } }
     ])
   ]);
   const openingBalance = (prevCharged[0]?.t || 0) - (prevPaid[0]?.t || 0);
 
-  // .find() auto-casts so bQ is fine here
   const [invoices, payments] = await Promise.all([
     RecurringInvoice.find({ ...bQ, periodStart: { $gte: periodStart }, periodEnd: { $lte: periodEnd } })
       .sort({ periodStart: 1 }).lean(),
@@ -757,7 +729,7 @@ export async function getTenantBalanceSummary(phone, businessId) {
   if (!tenant) return null;
 
   const account = await RecurringAccount.findById(tenant.accountId).lean();
-  const balance = await recomputeAccountBalance(businessId, String(tenant.accountId));
+  const balance = await recomputeAccountBalance(businessId, tenant.accountId);
   const cur     = account?.currency || "USD";
 
   const outstanding = await RecurringInvoice.find({
