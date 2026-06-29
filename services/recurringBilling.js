@@ -377,7 +377,12 @@ export async function buildTenantStatement({ businessId, tenantId, periodStart, 
       { $group: { _id: null, t: { $sum: "$amount" } } }
     ])
   ]);
-  const openingBalance = (prevCharged[0]?.t || 0) - (prevPaid[0]?.t || 0);
+  // Add admin-entered legacy opening balance (arrears/credit before system setup)
+  // Only applied if openingBalanceDate is before the statement period start
+  const legacyOpening = tenant.openingBalance || 0;
+  const legacyDate    = tenant.openingBalanceDate ? new Date(tenant.openingBalanceDate) : null;
+  const legacyCarryIn = (legacyDate && legacyDate < periodStart) ? legacyOpening : 0;
+  const openingBalance = legacyCarryIn + (prevCharged[0]?.t || 0) - (prevPaid[0]?.t || 0);
 
   // Current period transactions — .find() auto-casts strings
   const [invoices, payments] = await Promise.all([

@@ -50,6 +50,13 @@ const RecurringTenantSchema = new mongoose.Schema({
   // Receive payment reminders and receipts via WhatsApp
   notificationsEnabled: { type: Boolean, default: true },
 
+  // ── Opening balance (migration / system setup) ──────────────────────────────
+  // Admin-entered balance the tenant had before ZimQuote was set up.
+  // Positive = tenant owes money. Negative = tenant is in credit.
+  // Set once at setup — never auto-updated by the system.
+  openingBalance:     { type: Number, default: 0 },
+  openingBalanceDate: { type: Date,   default: null },
+
   // ── Notes ───────────────────────────────────────────────────────────────────
   notes:     { type: String, default: "" },
   createdBy: { type: String, default: null }
