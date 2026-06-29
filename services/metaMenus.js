@@ -1093,3 +1093,41 @@ export async function sendSchoolMoreOptionsMenu(to, schoolDoc) {
     { id: "school_account",            title: "⬅ Back" }
   ]);
 }
+
+
+/* =============================================================================
+   RECURRING BILLING MENU
+   Entry point from Business Tools → "🏠 Recurring Billing"
+   Clerks and owners both use this. All items route to rb_* action handlers.
+============================================================================= */
+export async function sendRecurringBillingMenu(to) {
+  return sendList(to, "🏠 *Recurring Billing*", [
+    { id: "rb_accounts",          title: "🏠 Accounts & Units"  },
+    { id: "rb_record_payment",    title: "💰 Record Payment"     },
+    { id: "rb_generate_invoices", title: "📄 Generate Invoices"  },
+    { id: "rb_account_stmt",      title: "📋 Account Statement"  },
+    { id: "rb_tenant_stmt",       title: "👤 Tenant Statement"   },
+    { id: "rb_reminders",         title: "📢 Send Reminders"     },
+    { id: "rb_add_expense",       title: "🔧 Add Unit Expense"   },
+    { id: ACTIONS.BACK,           title: "⬅ Back"                }
+  ]);
+}
+
+/* =============================================================================
+   RECURRING BILLING ACCOUNT PICKER
+   Generates a dynamic list of accounts for the clerk to pick from.
+   Used by: record payment, account statement, tenant statement, add expense.
+============================================================================= */
+export async function sendRbAccountPicker(to, accounts) {
+  if (!accounts || !accounts.length) {
+    const { sendText } = await import("./metaSender.js");
+    await sendText(to, "❌ No active accounts found. Add units via the admin portal first.");
+    return sendRecurringBillingMenu(to);
+  }
+  const items = accounts.map(a => ({
+    id:    `rb_acct_${a._id}`,
+    title: `${a.name}${a.ref ? " (" + a.ref + ")" : ""}${a._tenant ? " · " + a._tenant.name : ""}`
+  }));
+  items.push({ id: ACTIONS.BACK, title: "⬅ Back" });
+  return sendList(to, "🏠 Select account / unit:", items);
+}
