@@ -305,15 +305,24 @@ export async function startSchoolApplicationForm({ from, school, UserSession }) 
 
   const intakeLabel = form.intakeYear ? form.intakeYear : "";
 
-  // Send info card + web/PDF options first, then start WhatsApp form immediately
-  // No intermediate "Apply on WhatsApp" button - go straight to Step 1
-  await sendText(from,
-    profileCard +
-    `\n📝 *How to Apply${intakeLabel ? " - " + intakeLabel : ""}*\n\n` +
-    `🌐 *Web form:* ${webFormUrl}\n` +
-    (_rawFormUrl ? `📄 *PDF form:* ${_rawFormUrl}\n` : "") +
-    `\n_Replying here completes your WhatsApp application directly._`
-  );
+  await sendButtons(from, {
+    text:
+      profileCard +
+      `\n📝 *How to Apply${intakeLabel ? " - " + intakeLabel : ""}*\n\n` +
+      `You have *3 options:*\n\n` +
+      `1️⃣ *WhatsApp form* - tap button below, answer 5 questions\n\n` +
+      `2️⃣ *Web form* - fill online on your phone or computer:\n` +
+      `${webFormUrl}\n\n` +
+      `3️⃣ *Download PDF* - print and hand in at the school:\n` +
+      (_rawFormUrl
+        ? `${_rawFormUrl}\n`
+        : `_No PDF form set yet - contact school directly_\n`) +
+      `\n_All submissions go directly to ${school.schoolName}._`,
+    buttons: [
+      { id: `school_apply_start_${school._id}`, title: "📝 Apply on WhatsApp" },
+      { id: `sfaq_enquiry_${school._id}`,       title: "❓ Ask a Question"    }
+    ]
+  });
 
   if (_brochureUrl) {
     try {
@@ -337,13 +346,11 @@ export async function startSchoolApplicationForm({ from, school, UserSession }) 
     } catch (_re) { console.warn("[SCHOOL RAW FORM SEND]", _re.message); }
   }
 
-  // Save state as awaiting_student_name immediately (skip awaiting_start)
-  // so the parent's next typed message is processed as Step 1 answer
   await UserSession.findOneAndUpdate(
     { phone: _normPhone(from) },
     { $set: {
         "tempData.schoolApplyId":    String(school._id),
-        "tempData.schoolApplyState": "awaiting_student_name",
+        "tempData.schoolApplyState": "awaiting_start",
         "tempData.schoolApplyData":  JSON.stringify({
           schoolId:     String(school._id),
           schoolName:   school.schoolName,
@@ -353,15 +360,5 @@ export async function startSchoolApplicationForm({ from, school, UserSession }) 
       }
     },
     { upsert: true }
-  );
-
-  // Send Step 1 immediately after saving state
-  await sendText(from,
-    `📝 *Application - ${school.schoolName}*\n` +
-    (intakeLabel ? `_${intakeLabel}_\n` : "") +
-    `\nAnswer 5 quick questions and your application goes directly to the school.\n\n` +
-    `*Step 1 of 5*\n` +
-    `What is the *student's full name?*\n` +
-    `_e.g. Tatenda Moyo_`
   );
 }

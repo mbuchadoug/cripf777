@@ -4355,6 +4355,10 @@ if (
   a === "school_reg_city_other" ||
   a === "school_reg_confirm_yes" ||
   a === "school_reg_confirm_no" ||
+  // FIX: parents tapping "Apply on WhatsApp" button must not hit welcome-screen gate
+  a.startsWith("school_apply_start_") ||
+  // FIX: grade list-reply taps during application must pass through
+  a.startsWith("sa_grade_") ||
   a === "school_admin_manage_facilities" ||
   a === "school_admin_manage_extramural" ||
   a === "school_admin_edit_fees" ||
@@ -7511,7 +7515,9 @@ if (parsed.city || parsed.area) {
     !!sess?.tempData?.supplierSearchCategory ||
     !!sess?.tempData?.supplierSearchProduct ||
     // FIX: no-biz buyers in sc_ quote flow must not be sent to welcome screen
-    !!sess?.tempData?.scState;
+    !!sess?.tempData?.scState ||
+    // FIX: parents mid-application must not be sent to product search or welcome screen
+    (!!sess?.tempData?.schoolApplyState && sess.tempData.schoolApplyState !== "awaiting_start");
 
   // Allow supplier search/order actions through for non-registered users
 const allowedWithoutBiz =

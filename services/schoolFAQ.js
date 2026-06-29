@@ -392,6 +392,13 @@ export async function handleSchoolFAQAction({ from, action, biz, saveBiz }) {
     return showSchoolFAQMenu(from, backMatch[1], biz, saveBiz);
   }
 
+  // sfaq_enquiry_<id> - sent in application confirmation buttons
+  // Routes to the message/ask-a-question flow for that school
+  const enquiryMatch = a.match(/^sfaq_enquiry_([a-f0-9]{24})$/i);
+  if (enquiryMatch) {
+    return _handleAction(from, enquiryMatch[1], "message", biz, saveBiz);
+  }
+
   // Action buttons: sfaq_act_<act>_<schoolId>
   const actMatch = a.match(/^sfaq_act_([a-zA-Z0-9_-]+)_([a-f0-9]{24})$/i);
   if (actMatch) {
