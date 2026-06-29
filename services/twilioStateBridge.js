@@ -362,6 +362,7 @@ const restrictedStateMap = {
   }
 
   const trimmed = text.trim();
+  const a = trimmed;  // action id — for rb_* handlers called with text: actionId
   const state = biz.sessionState;
 
   if (state === "ready") return false;

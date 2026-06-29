@@ -1118,16 +1118,28 @@ export async function sendRecurringBillingMenu(to) {
    Generates a dynamic list of accounts for the clerk to pick from.
    Used by: record payment, account statement, tenant statement, add expense.
 ============================================================================= */
-export async function sendRbAccountPicker(to, accounts) {
+export async function sendRbAccountPicker(to, accounts, offset = 0) {
   if (!accounts || !accounts.length) {
     const { sendText } = await import("./metaSender.js");
     await sendText(to, "❌ No active accounts found. Add units via the admin portal first.");
     return sendRecurringBillingMenu(to);
   }
-  const items = accounts.map(a => ({
+  // Meta hard limit: 10 rows per list. Show 8 accounts + Back + optional More.
+  const PAGE = 8;
+  const page = accounts.slice(offset, offset + PAGE);
+  const hasMore = accounts.length > offset + PAGE;
+
+  const items = page.map(a => ({
     id:    `rb_acct_${a._id}`,
     title: `${a.name}${a.ref ? " (" + a.ref + ")" : ""}${a._tenant ? " · " + a._tenant.name : ""}`
   }));
+
+  if (hasMore) items.push({ id: `rb_more_${offset + PAGE}`, title: "➡ More accounts..." });
   items.push({ id: ACTIONS.BACK, title: "⬅ Back" });
-  return sendList(to, "🏠 Select account / unit:", items);
+
+  const label = accounts.length > PAGE
+    ? `🏠 Select account (${offset + 1}–${Math.min(offset + PAGE, accounts.length)} of ${accounts.length}):`
+    : "🏠 Select account / unit:";
+
+  return sendList(to, label, items);
 }

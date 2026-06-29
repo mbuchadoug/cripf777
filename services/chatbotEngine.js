@@ -10536,6 +10536,17 @@ Type *done* to save`,
     return sendRecurringBillingMenu(from);
   }
 
+  // ── Account picker pagination ─────────────────────────────────────────────
+  if (a?.startsWith("rb_more_")) {
+    if (!biz) return sendMainMenu(from);
+    const offset = parseInt(a.replace("rb_more_", ""), 10) || 0;
+    const { listAccountsForChatbot } = await import("./recurringBilling.js");
+    const { sendRbAccountPicker } = await import("./metaMenus.js");
+    const branchId = caller?.role !== "owner" ? caller?.branchId || null : null;
+    const accounts = await listAccountsForChatbot(biz._id, branchId);
+    return sendRbAccountPicker(from, accounts, offset);
+  }
+
   // ── Record payment — triggers state flow ──────────────────────────────────
   if (a === "rb_record_payment") {
     if (!biz) return sendMainMenu(from);
@@ -19965,6 +19976,28 @@ if (biz) {
   // This prevents expense/sales/product-entry text from being hijacked by supplier city search.
   if (!isMetaAction && biz && !biz.name?.startsWith("pending_supplier_")) {
     const handled = await continueTwilioFlow({ from, text });
+    if (handled) return;
+  }
+
+  // ── Recurring billing: interactive buttons that arrive as isMetaAction but
+  // must still be routed through continueTwilioFlow when inside a rb_* state.
+  // Without this, rb_acct_*, rb_tenant_*, rb_period_*, rb_pay_method_* button
+  // taps are swallowed here and never reach the twilioStateBridge state handlers.
+  if (
+    isMetaAction && biz &&
+    biz.sessionState?.startsWith("rb_") &&
+    (
+      a?.startsWith("rb_acct_")    ||
+      a?.startsWith("rb_tenant_")  ||
+      a?.startsWith("rb_period_")  ||
+      a?.startsWith("rb_pay_method_") ||
+      a === "rb_period_all"        ||
+      a === "rb_period_custom"     ||
+      a?.startsWith("rb_more_")     ||
+      a === "recurring_billing_menu"
+    )
+  ) {
+    const handled = await continueTwilioFlow({ from, text: a });
     if (handled) return;
   }
 
