@@ -281,7 +281,7 @@ export async function buildAccountStatement({ businessId, accountId, periodStart
 
   // This period's transactions — .find() auto-casts strings so bQ is fine
   const [invoices, payments, expenses] = await Promise.all([
-    RecurringInvoice.find({ ...bQ, periodStart: { $gte: periodStart }, periodEnd: { $lte: periodEnd } })
+    RecurringInvoice.find({ ...bQ, periodStart: { $gte: periodStart, $lte: periodEnd } })
       .sort({ periodStart: 1 }).lean(),
     RecurringPayment.find({ ...bQ, date: { $gte: periodStart, $lte: periodEnd } })
       .sort({ date: 1 }).lean(),
@@ -381,7 +381,7 @@ export async function buildTenantStatement({ businessId, tenantId, periodStart, 
 
   // Current period transactions — .find() auto-casts strings
   const [invoices, payments] = await Promise.all([
-    RecurringInvoice.find({ ...bQ, periodStart: { $gte: periodStart }, periodEnd: { $lte: periodEnd } })
+    RecurringInvoice.find({ ...bQ, periodStart: { $gte: periodStart, $lte: periodEnd } })
       .sort({ periodStart: 1 }).lean(),
     RecurringPayment.find({ ...bQ, date: { $gte: periodStart, $lte: periodEnd } })
       .sort({ date: 1 }).lean()

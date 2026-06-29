@@ -3614,7 +3614,9 @@ Thank you for your payment.`
     let periodStart, periodEnd, pl;
     if (a === "rb_period_all") {
       periodStart = new Date(2020, 0, 1, 0, 0, 0, 0);
-      periodEnd   = new Date(); periodEnd.setHours(23, 59, 59, 999);
+      // Extend to end of next month so current-month invoices always appear
+      const _now = new Date();
+      periodEnd   = new Date(_now.getFullYear(), _now.getMonth() + 2, 0, 23, 59, 59, 999);
       pl = "All Time";
     } else if (a?.startsWith("rb_period_")) {
       const parts = a.replace("rb_period_", "").split("_");
