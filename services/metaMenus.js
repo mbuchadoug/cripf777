@@ -298,10 +298,9 @@ export async function sendBusinessToolsMenu(to, biz) {
           { id: ACTIONS.USERS_MENU,    title: "👥 Users",    section: "users" }
         ]
       : []),
-    { id: ACTIONS.SETTINGS_MENU,    title: "⚙ Settings" },
-    { id: "my_supplier_account",    title: "🏪 My Business" },
+    { id: ACTIONS.SETTINGS_MENU,   title: "⚙ Settings"         },
     { id: "recurring_billing_menu", title: "🏠 Recurring Billing" },
-    { id: ACTIONS.BACK,             title: "⬅ Back" }
+    { id: ACTIONS.BACK,             title: "⬅ Back"              }
   ];
 
   const filtered = await filterMenuByRole({ from: to, biz, items });
@@ -419,38 +418,6 @@ export async function sendInvoiceConfirmMenu(to, summaryText) {
    Date filter is embedded in the menu list - one tap picks report + period.
    Admin: sees all clerks. Clerk/manager: sees only own statement.
 ============================================================================= */
-
-
-/* =============================================================================
-   RECURRING BILLING MENU  — chatbot entry for rent/fees/subscriptions
-============================================================================= */
-export async function sendRecurringBillingMenu(to) {
-  return sendList(to, "🏠 *Recurring Billing*", [
-    { id: "rb_accounts",         title: "🏠 Accounts & Units"    },
-    { id: "rb_record_payment",   title: "💰 Record Payment"       },
-    { id: "rb_generate_invoices",title: "📄 Generate Invoices"    },
-    { id: "rb_account_stmt",     title: "📋 Account Statement"    },
-    { id: "rb_tenant_stmt",      title: "👤 Tenant Statement"     },
-    { id: "rb_reminders",        title: "📢 Send Reminders"       },
-    { id: "rb_add_expense",      title: "🔧 Add Unit Expense"     },
-    { id: ACTIONS.BACK,          title: "⬅ Back"                  }
-  ]);
-}
-
-export async function sendRbAccountPicker(to, accounts) {
-  if (!accounts.length) {
-    const { sendText } = await import("./metaSender.js");
-    await sendText(to, "❌ No active accounts found. Add units via the admin portal first.");
-    return sendRecurringBillingMenu(to);
-  }
-  const items = accounts.map(a => ({
-    id:    `rb_acct_${a._id}`,
-    title: `${a.name}${a.ref ? " (" + a.ref + ")" : ""}${a._tenant ? " · " + a._tenant.name : ""}`
-  }));
-  items.push({ id: ACTIONS.BACK, title: "⬅ Back" });
-  return sendList(to, "🏠 Select account / unit:", items);
-}
-
 export async function sendReportsMenu(to, isGold = false, isSilver = false) {
   const biz = await (await import("./bizHelpers.js")).getBizForPhone(to);
   if (!biz) return sendMainMenu(to);
