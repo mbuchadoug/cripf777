@@ -11743,11 +11743,7 @@ router.get("/suppliers/:id/recurring/:acctId/tenant", requireSupplierAdmin, asyn
         <td>${esc(t.phone || "-")}</td>
         <td>${esc(t.email || "-")}</td>
         <td>${t.startDate ? new Date(t.startDate).toLocaleDateString("en-GB") : "-"}</td>
-          <td style="text-align:right;font-weight:600;color:${(t.openingBalance||0) > 0 ? "var(--red)" : (t.openingBalance||0) < 0 ? "var(--green)" : "var(--muted)"}">
-            ${(t.openingBalance||0) !== 0 ? (t.openingBalance||0).toFixed(2) : "—"}
-            ${t.openingBalanceDate ? `<div style="font-weight:400;color:var(--muted);font-size:10px">as at ${new Date(t.openingBalanceDate).toLocaleDateString("en-GB")}</div>` : ""}
-          </td>
-          <td>${t.canSelfServe ? badge("Self-serve","green") : badge("Staff only","gray")}</td>
+        <td>${t.canSelfServe ? badge("Self-serve","green") : badge("Staff only","gray")}</td>
         <td>${t.isActive ? badge("Active","green") : badge("Inactive","red")}</td>
         <td style="display:flex;gap:6px">
           <form method="POST" action="/zq-admin/suppliers/${supplier._id}/recurring/${acct._id}/tenant/${t._id}/toggle">
@@ -11789,17 +11785,6 @@ router.get("/suppliers/:id/recurring/:acctId/tenant", requireSupplierAdmin, asyn
             <input name="startDate" type="date"
               style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:7px;font-size:13px">
           </div>
-          <div>
-            <label style="font-weight:600;display:block;margin-bottom:4px;font-size:12px">Opening Balance</label>
-            <input name="openingBalance" type="number" step="0.01" placeholder="0.00"
-              style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:7px;font-size:13px">
-            <div style="color:var(--muted);font-size:10px;margin-top:2px">Arrears before system setup (positive = owes, negative = credit)</div>
-          </div>
-          <div>
-            <label style="font-weight:600;display:block;margin-bottom:4px;font-size:12px">Balance As At</label>
-            <input name="openingBalanceDate" type="date"
-              style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:7px;font-size:13px">
-          </div>
           <button type="submit" style="background:var(--blue);color:white;padding:9px 16px;border:none;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap">
             ✅ Add Tenant
           </button>
@@ -11814,7 +11799,6 @@ router.get("/suppliers/:id/recurring/:acctId/tenant", requireSupplierAdmin, asyn
             <th style="padding:10px 12px;text-align:left">Phone</th>
             <th style="padding:10px 12px;text-align:left">Email</th>
             <th style="padding:10px 12px;text-align:left">Move-in</th>
-            <th style="padding:10px 12px;text-align:right">Opening Bal</th>
             <th style="padding:10px 12px;text-align:left">Self-serve</th>
             <th style="padding:10px 12px;text-align:left">Status</th>
             <th style="padding:10px 12px;text-align:left">Actions</th>
@@ -11843,16 +11827,14 @@ router.post("/suppliers/:id/recurring/:acctId/tenant/add", requireSupplierAdmin,
     if (p.startsWith("0")) p = "263" + p.slice(1);
 
     await RecurringTenant.create({
-      businessId:          biz._id,
-      accountId:           req.params.acctId,
-      name:                name.trim(),
-      phone:               p,
-      startDate:           startDate ? new Date(startDate) : null,
-      isActive:            true,
-      canSelfServe:        false,
-      notificationsEnabled: true,
-      openingBalance:      parseFloat(req.body.openingBalance) || 0,
-      openingBalanceDate:  req.body.openingBalanceDate ? new Date(req.body.openingBalanceDate) : null
+      businessId: biz._id,
+      accountId:  req.params.acctId,
+      name:       name.trim(),
+      phone:      p,
+      startDate:  startDate ? new Date(startDate) : null,
+      isActive:   true,
+      canSelfServe: false,
+      notificationsEnabled: true
     });
 
     res.redirect(`/zq-admin/suppliers/${req.params.id}/recurring/${req.params.acctId}/tenant?success=${encodeURIComponent(`Tenant "${name}" added`)}`);
