@@ -21,13 +21,13 @@ import puppeteer from "puppeteer";
 import mongoose  from "mongoose";
 import { sendText, sendDocument } from "./metaSender.js";
 
-// ── Safe ObjectId cast — prevents string vs ObjectId mismatch in aggregates ──
-// MongoDB .find() auto-casts strings; aggregate $match does NOT.
-// Always cast IDs before using them in aggregate pipelines.
+// ── Safe ObjectId cast ────────────────────────────────────────────────────────
+// MongoDB aggregate $match does NOT auto-cast strings to ObjectIds.
+// Mongoose .find() does. Always use oid() before aggregate $match.
 function oid(id) {
   if (!id) return null;
   try { return new mongoose.Types.ObjectId(String(id)); }
-  catch { return null; }
+  catch (_) { return null; }
 }
 
 // ── Lazy model imports ────────────────────────────────────────────────────────
@@ -189,7 +189,6 @@ export async function recordRecurringPayment({
   const { RecurringInvoice, RecurringPayment, RecurringAccount } = await getModels();
 
   // Find oldest outstanding invoice for this account
-  // .findOne() auto-casts but cast explicitly for safety
   const invoice = await RecurringInvoice.findOne({
     businessId: oid(businessId) || businessId,
     accountId:  oid(accountId)  || accountId,
@@ -234,7 +233,6 @@ export async function recordRecurringPayment({
 
 export async function recomputeAccountBalance(businessId, accountId) {
   const { RecurringInvoice, RecurringPayment, RecurringExpense, RecurringAccount } = await getModels();
-  // Cast to ObjectId — aggregate $match does not auto-cast strings
   const bizOid  = oid(businessId);
   const acctOid = oid(accountId);
   const [invoices, payments] = await Promise.all([
@@ -266,13 +264,9 @@ export async function buildAccountStatement({ businessId, accountId, periodStart
 
   const tenant = await RecurringTenant.findOne({ accountId, isActive: true }).lean();
 
-  // Cast to ObjectId — aggregate $match does not auto-cast strings
-  const bizOid  = oid(businessId);
-  const acctOid = oid(accountId);
-
   // Opening balance = all charges - all payments before periodStart
-  const bQ    = { businessId, accountId };          // for .find() — auto-casts
-  const bQAgg = { businessId: bizOid, accountId: acctOid };  // for aggregate $match
+  const bQ    = { businessId, accountId };           // for .find() which auto-casts
+  const bQAgg = { businessId: oid(businessId), accountId: oid(accountId) }; // for aggregate
   const [prevCharged, prevPaid] = await Promise.all([
     RecurringInvoice.aggregate([
       { $match: { ...bQAgg, status: { $ne: "cancelled" }, periodStart: { $lt: periodStart } } },
@@ -285,7 +279,7 @@ export async function buildAccountStatement({ businessId, accountId, periodStart
   ]);
   const openingBalance = (prevCharged[0]?.t || 0) - (prevPaid[0]?.t || 0);
 
-  // This period's transactions — .find() auto-casts strings so bQ is fine here
+  // This period's transactions — .find() auto-casts strings so bQ is fine
   const [invoices, payments, expenses] = await Promise.all([
     RecurringInvoice.find({ ...bQ, periodStart: { $gte: periodStart }, periodEnd: { $lte: periodEnd } })
       .sort({ periodStart: 1 }).lean(),
@@ -302,7 +296,7 @@ export async function buildAccountStatement({ businessId, accountId, periodStart
       date:        inv.periodStart,
       type:        "CHARGE",
       typeLabel:   "Rent / Charge",
-      description: `${inv.period} charge — ${inv.number}`,
+      description: `${inv.period} charge - ${inv.number}`,
       debit:       inv.amount,
       credit:      0
     });
@@ -321,7 +315,7 @@ export async function buildAccountStatement({ businessId, accountId, periodStart
     rows.push({
       date:        exp.date,
       type:        "EXPENSE",
-      typeLabel:   `Expense — ${exp.category}`,
+      typeLabel:   `Expense - ${exp.category}`,
       description: exp.description,
       debit:       exp.amount,
       credit:      0
@@ -352,7 +346,7 @@ export async function buildAccountStatement({ businessId, accountId, periodStart
 }
 
 // ── Tenant Statement ──────────────────────────────────────────────────────────
-// Shows a tenant's full history across all periods — cumulative running balance.
+// Shows a tenant's full history across all periods - cumulative running balance.
 
 export async function buildTenantStatement({ businessId, tenantId, periodStart, periodEnd }) {
   const { RecurringInvoice, RecurringPayment, RecurringTenant, RecurringAccount } = await getModels();
@@ -362,15 +356,17 @@ export async function buildTenantStatement({ businessId, tenantId, periodStart, 
   const account = await RecurringAccount.findById(tenant.accountId).lean();
   const cur = account?.currency || "USD";
 
-  // Cast to ObjectId — aggregate $match does not auto-cast strings
-  const bizOid    = oid(businessId);
-  const tenantOid = oid(tenantId);
+  // ── KEY FIX ──────────────────────────────────────────────────────────────────
+  // Query by accountId (always reliable) NOT tenantId.
+  // Reason 1: invoices may have tenantId=null if tenant was added after invoicing.
+  // Reason 2: aggregate $match does not auto-cast string IDs to ObjectId.
+  // Both bugs caused the statement to return 0 rows even with a valid invoice.
+  // accountId is always set on every invoice — it's the safe query key.
+  const accountId = String(tenant.accountId);
+  const bQ    = { businessId, accountId };                              // for .find() (auto-casts)
+  const bQAgg = { businessId: oid(businessId), accountId: oid(accountId) }; // for aggregate
 
-  // bQ for .find() (auto-casts), bQAgg for aggregate $match (must be ObjectId)
-  const bQ    = { businessId, tenantId };
-  const bQAgg = { businessId: bizOid, tenantId: tenantOid };
-
-  // Opening balance before periodStart
+  // Opening balance = all charges minus all payments before periodStart
   const [prevCharged, prevPaid] = await Promise.all([
     RecurringInvoice.aggregate([
       { $match: { ...bQAgg, status: { $ne: "cancelled" }, periodStart: { $lt: periodStart } } },
@@ -383,7 +379,7 @@ export async function buildTenantStatement({ businessId, tenantId, periodStart, 
   ]);
   const openingBalance = (prevCharged[0]?.t || 0) - (prevPaid[0]?.t || 0);
 
-  // .find() auto-casts so bQ is fine here
+  // Current period transactions — .find() auto-casts strings
   const [invoices, payments] = await Promise.all([
     RecurringInvoice.find({ ...bQ, periodStart: { $gte: periodStart }, periodEnd: { $lte: periodEnd } })
       .sort({ periodStart: 1 }).lean(),
@@ -395,7 +391,7 @@ export async function buildTenantStatement({ businessId, tenantId, periodStart, 
   for (const inv of invoices) {
     rows.push({
       date: inv.periodStart, type: "CHARGE",
-      description: `${inv.period} — ${inv.number}`,
+      description: `${inv.period} - ${inv.number}`,
       debit: inv.amount, credit: 0
     });
   }
@@ -501,7 +497,7 @@ function pdfHeader(biz, docTitle, meta) {
 function pdfFooter(biz, docTitle) {
   return `
     <div class="footer">
-      <span>${esc(biz.name)} — ${esc(docTitle)}</span>
+      <span>${esc(biz.name)} - ${esc(docTitle)}</span>
       <span>Generated ${fmtDateTime(new Date())} · ZimQuote</span>
     </div>`;
 }
@@ -706,7 +702,7 @@ export async function broadcastPaymentReminders({ biz, branchId = null }) {
 
       const cur = account.currency || biz.currency || "USD";
       const msg =
-`🏠 *Payment Reminder — ${biz.name}*
+`🏠 *Payment Reminder - ${biz.name}*
 
 Dear ${account.name} ${tenant.name},
 You have an outstanding balance of *${fmtMoney(balance, cur)}*.
@@ -733,7 +729,7 @@ export async function sendInvoiceToTenant({ biz, invoice, account, tenant }) {
   const { filename, url } = await generateRecurringInvoicePDF({ biz, invoice, account, tenant });
   const cur = invoice.currency || "USD";
   await sendText(tenant.phone,
-`🧾 *Invoice — ${biz.name}*
+`🧾 *Invoice - ${biz.name}*
 ${account?.name ? `🏠 ${account.name}` : ""}
 📅 Period: ${invoice.period}
 💵 Amount: *${fmtMoney(invoice.amount, cur)}*
@@ -757,7 +753,7 @@ export async function getTenantBalanceSummary(phone, businessId) {
   if (!tenant) return null;
 
   const account = await RecurringAccount.findById(tenant.accountId).lean();
-  const balance = await recomputeAccountBalance(businessId, String(tenant.accountId));
+  const balance = await recomputeAccountBalance(businessId, tenant.accountId);
   const cur     = account?.currency || "USD";
 
   const outstanding = await RecurringInvoice.find({

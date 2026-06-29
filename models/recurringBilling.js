@@ -282,7 +282,7 @@ export async function buildAccountStatement({ businessId, accountId, periodStart
       date:        inv.periodStart,
       type:        "CHARGE",
       typeLabel:   "Rent / Charge",
-      description: `${inv.period} charge — ${inv.number}`,
+      description: `${inv.period} charge - ${inv.number}`,
       debit:       inv.amount,
       credit:      0
     });
@@ -301,7 +301,7 @@ export async function buildAccountStatement({ businessId, accountId, periodStart
     rows.push({
       date:        exp.date,
       type:        "EXPENSE",
-      typeLabel:   `Expense — ${exp.category}`,
+      typeLabel:   `Expense - ${exp.category}`,
       description: exp.description,
       debit:       exp.amount,
       credit:      0
@@ -332,7 +332,7 @@ export async function buildAccountStatement({ businessId, accountId, periodStart
 }
 
 // ── Tenant Statement ──────────────────────────────────────────────────────────
-// Shows a tenant's full history across all periods — cumulative running balance.
+// Shows a tenant's full history across all periods - cumulative running balance.
 
 export async function buildTenantStatement({ businessId, tenantId, periodStart, periodEnd }) {
   const { RecurringInvoice, RecurringPayment, RecurringTenant, RecurringAccount } = await getModels();
@@ -367,7 +367,7 @@ export async function buildTenantStatement({ businessId, tenantId, periodStart, 
   for (const inv of invoices) {
     rows.push({
       date: inv.periodStart, type: "CHARGE",
-      description: `${inv.period} — ${inv.number}`,
+      description: `${inv.period} - ${inv.number}`,
       debit: inv.amount, credit: 0
     });
   }
@@ -473,7 +473,7 @@ function pdfHeader(biz, docTitle, meta) {
 function pdfFooter(biz, docTitle) {
   return `
     <div class="footer">
-      <span>${esc(biz.name)} — ${esc(docTitle)}</span>
+      <span>${esc(biz.name)} - ${esc(docTitle)}</span>
       <span>Generated ${fmtDateTime(new Date())} · ZimQuote</span>
     </div>`;
 }
@@ -678,7 +678,7 @@ export async function broadcastPaymentReminders({ biz, branchId = null }) {
 
       const cur = account.currency || biz.currency || "USD";
       const msg =
-`🏠 *Payment Reminder — ${biz.name}*
+`🏠 *Payment Reminder - ${biz.name}*
 
 Dear ${account.name} ${tenant.name},
 You have an outstanding balance of *${fmtMoney(balance, cur)}*.
@@ -705,7 +705,7 @@ export async function sendInvoiceToTenant({ biz, invoice, account, tenant }) {
   const { filename, url } = await generateRecurringInvoicePDF({ biz, invoice, account, tenant });
   const cur = invoice.currency || "USD";
   await sendText(tenant.phone,
-`🧾 *Invoice — ${biz.name}*
+`🧾 *Invoice - ${biz.name}*
 ${account?.name ? `🏠 ${account.name}` : ""}
 📅 Period: ${invoice.period}
 💵 Amount: *${fmtMoney(invoice.amount, cur)}*

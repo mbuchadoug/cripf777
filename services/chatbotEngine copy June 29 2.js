@@ -3925,11 +3925,11 @@ const isGhostSupplierBiz = !!(biz && biz.name?.startsWith("pending_supplier_"));
               msg += `💰 *Balance Due: ${tData.balance.toFixed(2)} ${cur}*\n`;
               if (tData.outstanding.length > 0) {
                 const oldest = tData.outstanding[0];
-                msg += `📄 Invoice: ${oldest.number} — ${oldest.period}\n`;
+                msg += `📄 Invoice: ${oldest.number} - ${oldest.period}\n`;
                 msg += `📆 Due: ${new Date(oldest.dueDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}\n`;
               }
             } else {
-              msg += `✅ *Account is clear — no balance due*\n`;
+              msg += `✅ *Account is clear - no balance due*\n`;
             }
             msg += `\nContact ${tbiz.name} for your full statement.`;
             await sendText(from, msg);
@@ -3938,7 +3938,7 @@ const isGhostSupplierBiz = !!(biz && biz.name?.startsWith("pending_supplier_"));
         }
       }
     } catch (_tse) {
-      // Non-blocking — if this fails, continue normal flow
+      // Non-blocking - if this fails, continue normal flow
     }
   }
 
@@ -10523,7 +10523,7 @@ Type *done* to save`,
       return sendRecurringBillingMenu(from);
     }
     const cur = biz.currency || "USD";
-    let msg = `🏠 *Accounts & Units — ${biz.name}*\n━━━━━━━━━━━━━━━━━━━━\n`;
+    let msg = `🏠 *Accounts & Units - ${biz.name}*\n━━━━━━━━━━━━━━━━━━━━\n`;
     for (const acct of accounts) {
       const balSign = (acct.currentBalance || 0) > 0 ? "🔴" : "✅";
       const tenantName = acct._tenant?.name || "Vacant";
@@ -10536,7 +10536,7 @@ Type *done* to save`,
     return sendRecurringBillingMenu(from);
   }
 
-  // ── Record payment — triggers state flow ──────────────────────────────────
+  // ── Record payment - triggers state flow ──────────────────────────────────
   if (a === "rb_record_payment") {
     if (!biz) return sendMainMenu(from);
     const { listAccountsForChatbot } = await import("./recurringBilling.js");
@@ -10548,7 +10548,7 @@ Type *done* to save`,
     return sendRbAccountPicker(from, accounts);
   }
 
-  // ── Account statement — triggers state flow ───────────────────────────────
+  // ── Account statement - triggers state flow ───────────────────────────────
   if (a === "rb_account_stmt") {
     if (!biz) return sendMainMenu(from);
     const { listAccountsForChatbot } = await import("./recurringBilling.js");
@@ -10560,7 +10560,7 @@ Type *done* to save`,
     return sendRbAccountPicker(from, accounts);
   }
 
-  // ── Tenant statement — triggers state flow ────────────────────────────────
+  // ── Tenant statement - triggers state flow ────────────────────────────────
   if (a === "rb_tenant_stmt") {
     if (!biz) return sendMainMenu(from);
     const { listAccountsForChatbot } = await import("./recurringBilling.js");
@@ -10572,7 +10572,7 @@ Type *done* to save`,
     return sendRbAccountPicker(from, accounts);
   }
 
-  // ── Add unit expense — triggers state flow ────────────────────────────────
+  // ── Add unit expense - triggers state flow ────────────────────────────────
   if (a === "rb_add_expense") {
     if (!biz) return sendMainMenu(from);
     const { listAccountsForChatbot } = await import("./recurringBilling.js");

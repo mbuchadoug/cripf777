@@ -1,7 +1,7 @@
 /**
  * models/recurringAccount.js
  * ─────────────────────────────────────────────────────────────
- * A "billable account" — the thing that gets charged on a schedule.
+ * A "billable account" - the thing that gets charged on a schedule.
  *
  * For a property manager : a flat / unit / room  (e.g. "Flat 3A")
  * For a school           : a student              (e.g. "John Moyo - Grade 7A")
@@ -36,7 +36,7 @@ const RecurringAccountSchema = new mongoose.Schema({
   // ── Identity ────────────────────────────────────────────────────────────────
   // name   : human-readable label e.g. "Flat 3A", "Room 12", "John Moyo"
   // ref    : short code for statements e.g. "F3A", "R12", "JM7A"
-  // category: what kind of account this is — drives label language in UI/reports
+  // category: what kind of account this is - drives label language in UI/reports
   name: { type: String, required: true, trim: true },
   ref:  { type: String, trim: true, default: "" },
   description: { type: String, default: "" },
@@ -67,7 +67,7 @@ const RecurringAccountSchema = new mongoose.Schema({
   isActive:  { type: Boolean, default: true, index: true },
   isVacant:  { type: Boolean, default: false },
 
-  // ── Financials (cached for quick dashboard — recomputed on statement) ────────
+  // ── Financials (cached for quick dashboard - recomputed on statement) ────────
   currentBalance: { type: Number, default: 0 },    // positive = money owed TO business
   lastInvoicedAt: { type: Date,   default: null },
   lastPaidAt:     { type: Date,   default: null },

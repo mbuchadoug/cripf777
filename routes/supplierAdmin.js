@@ -11264,10 +11264,10 @@ router.post("/apply/school/:id/submit", async (req, res) => {
 
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PATCH: supplierAdmin.js — Recurring Billing admin routes
+// PATCH: supplierAdmin.js - Recurring Billing admin routes
 //
 // WHERE TO INSERT: Add this entire block BEFORE "
-// ── GET /suppliers/:id/recurring/:acctId/edit — edit account ─────────────────
+// ── GET /suppliers/:id/recurring/:acctId/edit - edit account ─────────────────
 router.get("/suppliers/:id/recurring/:acctId/edit", requireSupplierAdmin, async (req, res) => {
   try {
     const supplier = await SupplierProfile.findById(req.params.id).lean();
@@ -11288,14 +11288,14 @@ router.get("/suppliers/:id/recurring/:acctId/edit", requireSupplierAdmin, async 
     const cycleOpts = ["monthly","quarterly","termly","annual"]
       .map(c => `<option value="${c}" ${acct.billingCycle === c ? "selected" : ""}>${c.charAt(0).toUpperCase()+c.slice(1)}</option>`)
       .join("");
-    const branchOpts = `<option value="">— No branch —</option>` +
+    const branchOpts = `<option value="">- No branch -</option>` +
       branches.map(b => `<option value="${b._id}" ${String(acct.branchId) === String(b._id) ? "selected" : ""}>${esc(b.name)}</option>`).join("");
 
     const content = `
       <div style="margin-bottom:16px">
         <a href="/zq-admin/suppliers/${supplier._id}/recurring" style="color:var(--blue);text-decoration:none">← Back to Recurring Billing</a>
       </div>
-      <h2 style="font-size:20px;font-weight:700;margin-bottom:20px">✏️ Edit Account — ${esc(acct.name)}</h2>
+      <h2 style="font-size:20px;font-weight:700;margin-bottom:20px">✏️ Edit Account - ${esc(acct.name)}</h2>
       ${errMsg}${successMsg}
       <div class="card" style="max-width:600px">
         <form method="POST" action="/zq-admin/suppliers/${supplier._id}/recurring/${acct._id}/edit">
@@ -11365,7 +11365,7 @@ router.get("/suppliers/:id/recurring/:acctId/edit", requireSupplierAdmin, async 
   }
 });
 
-// ── POST /suppliers/:id/recurring/:acctId/edit — save account edits ──────────
+// ── POST /suppliers/:id/recurring/:acctId/edit - save account edits ──────────
 router.post("/suppliers/:id/recurring/:acctId/edit", requireSupplierAdmin, async (req, res) => {
   try {
     const RecurringAccount = (await import("../models/recurringAccount.js")).default;
@@ -11387,7 +11387,7 @@ router.post("/suppliers/:id/recurring/:acctId/edit", requireSupplierAdmin, async
   }
 });
 
-// ── POST /suppliers/:id/recurring/:acctId/record-payment — record payment ────
+// ── POST /suppliers/:id/recurring/:acctId/record-payment - record payment ────
 router.post("/suppliers/:id/recurring/:acctId/record-payment", requireSupplierAdmin, async (req, res) => {
   try {
     const supplier = await SupplierProfile.findById(req.params.id).lean();
@@ -11414,7 +11414,7 @@ router.post("/suppliers/:id/recurring/:acctId/record-payment", requireSupplierAd
   }
 });
 
-// ── POST /suppliers/:id/recurring/:acctId/delete — deactivate account ────────
+// ── POST /suppliers/:id/recurring/:acctId/delete - deactivate account ────────
 router.post("/suppliers/:id/recurring/:acctId/delete", requireSupplierAdmin, async (req, res) => {
   try {
     const RecurringAccount = (await import("../models/recurringAccount.js")).default;
@@ -11426,7 +11426,7 @@ router.post("/suppliers/:id/recurring/:acctId/delete", requireSupplierAdmin, asy
 });
 
 
-// ── GET /suppliers/:id/recurring — main recurring billing dashboard ───────────
+// ── GET /suppliers/:id/recurring - main recurring billing dashboard ───────────
 router.get("/suppliers/:id/recurring", requireSupplierAdmin, async (req, res) => {
   try {
     const supplier = await SupplierProfile.findById(req.params.id).lean();
@@ -11472,7 +11472,7 @@ router.get("/suppliers/:id/recurring", requireSupplierAdmin, async (req, res) =>
               <small style="color:var(--muted)">${acct._tenant?.phone ? esc(acct._tenant.phone) : ""}</small></td>
           <td>${acct.billingAmount} ${cur}/${acct.billingCycle}</td>
           <td><strong style="color:${acct.currentBalance > 0 ? "var(--red)" : "var(--green)"}">${(acct.currentBalance || 0).toFixed(2)} ${cur}</strong></td>
-          <td>${acct._invoice ? `<small>${esc(acct._invoice.number)} · ${esc(acct._invoice.period)}</small>` : '<span style="color:var(--muted)">—</span>'}</td>
+          <td>${acct._invoice ? `<small>${esc(acct._invoice.number)} · ${esc(acct._invoice.period)}</small>` : '<span style="color:var(--muted)">-</span>'}</td>
           <td>${badge(statusLabel, statusColor)}</td>
           <td style="display:flex;gap:6px;flex-wrap:wrap">
             <a href="/zq-admin/suppliers/${supplier._id}/recurring/${acct._id}/edit"
@@ -11543,7 +11543,7 @@ router.get("/suppliers/:id/recurring", requireSupplierAdmin, async (req, res) =>
         </table>` : `<p style="color:var(--muted);padding:12px">No accounts yet. Click "Add Account / Unit" to get started.</p>`}
       </div>`;
 
-    // Payment modal — inline quick-payment form rendered client-side
+    // Payment modal - inline quick-payment form rendered client-side
     const paymentModal = `
       <div id="payModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center">
         <div style="background:white;border-radius:12px;padding:28px;width:400px;max-width:95vw">
@@ -11669,7 +11669,7 @@ router.get("/suppliers/:id/recurring/new-account", requireSupplierAdmin, async (
             <div>
               <label style="font-weight:600;display:block;margin-bottom:6px">Branch</label>
               <select name="branchId" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:7px;font-size:14px">
-                <option value="">— No branch —</option>
+                <option value="">- No branch -</option>
                 ${branches.map(b => `<option value="${b._id}">${esc(b.name)}</option>`).join("")}
               </select>
             </div>
@@ -11722,7 +11722,7 @@ router.post("/suppliers/:id/recurring/new-account", requireSupplierAdmin, async 
   }
 });
 
-// ── GET /suppliers/:id/recurring/:acctId/tenant — manage tenant ──────────────
+// ── GET /suppliers/:id/recurring/:acctId/tenant - manage tenant ──────────────
 router.get("/suppliers/:id/recurring/:acctId/tenant", requireSupplierAdmin, async (req, res) => {
   try {
     const supplier = await SupplierProfile.findById(req.params.id).lean();
@@ -11740,9 +11740,9 @@ router.get("/suppliers/:id/recurring/:acctId/tenant", requireSupplierAdmin, asyn
     const tenantRows = tenants.map(t => `
       <tr>
         <td><strong>${esc(t.name)}</strong></td>
-        <td>${esc(t.phone || "—")}</td>
-        <td>${esc(t.email || "—")}</td>
-        <td>${t.startDate ? new Date(t.startDate).toLocaleDateString("en-GB") : "—"}</td>
+        <td>${esc(t.phone || "-")}</td>
+        <td>${esc(t.email || "-")}</td>
+        <td>${t.startDate ? new Date(t.startDate).toLocaleDateString("en-GB") : "-"}</td>
         <td>${t.canSelfServe ? badge("Self-serve","green") : badge("Staff only","gray")}</td>
         <td>${t.isActive ? badge("Active","green") : badge("Inactive","red")}</td>
         <td style="display:flex;gap:6px">
@@ -11763,7 +11763,7 @@ router.get("/suppliers/:id/recurring/:acctId/tenant", requireSupplierAdmin, asyn
       <div style="margin-bottom:16px">
         <a href="/zq-admin/suppliers/${supplier._id}/recurring" style="color:var(--blue);text-decoration:none">← Back to Recurring Billing</a>
       </div>
-      <h2 style="font-size:20px;font-weight:700;margin-bottom:4px">👤 Tenants — ${esc(acct.name)}</h2>
+      <h2 style="font-size:20px;font-weight:700;margin-bottom:4px">👤 Tenants - ${esc(acct.name)}</h2>
       <div style="color:var(--muted);margin-bottom:20px">${esc(biz.name)}</div>
       ${errMsg}${successMsg}
       <div class="card" style="margin-bottom:20px">
@@ -11942,8 +11942,8 @@ router.get("/suppliers/:id/recurring/:acctId/statement", requireSupplierAdmin, a
         <td>${new Date(r.date).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</td>
         <td>${esc(r.typeLabel || r.type)}</td>
         <td>${esc(r.description)}</td>
-        <td style="text-align:right;color:${r.debit > 0 ? "var(--red)" : "var(--muted)"}">${r.debit > 0 ? r.debit.toFixed(2) : "—"}</td>
-        <td style="text-align:right;color:${r.credit > 0 ? "var(--green)" : "var(--muted)"}">${r.credit > 0 ? r.credit.toFixed(2) : "—"}</td>
+        <td style="text-align:right;color:${r.debit > 0 ? "var(--red)" : "var(--muted)"}">${r.debit > 0 ? r.debit.toFixed(2) : "-"}</td>
+        <td style="text-align:right;color:${r.credit > 0 ? "var(--green)" : "var(--muted)"}">${r.credit > 0 ? r.credit.toFixed(2) : "-"}</td>
         <td style="text-align:right;font-weight:700;color:${r.balance > 0 ? "var(--red)" : "var(--green)"}">${r.balance.toFixed(2)} ${cur}</td>
       </tr>`).join("");
 
@@ -11953,7 +11953,7 @@ router.get("/suppliers/:id/recurring/:acctId/statement", requireSupplierAdmin, a
       </div>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
         <div>
-          <h2 style="font-size:20px;font-weight:700">📋 Account Statement — ${esc(acct.name)}</h2>
+          <h2 style="font-size:20px;font-weight:700">📋 Account Statement - ${esc(acct.name)}</h2>
           ${stmt.tenant ? `<div style="color:var(--muted)">👤 ${esc(stmt.tenant.name)}</div>` : ""}
         </div>
         <div style="display:flex;gap:10px;align-items:center">
@@ -12010,7 +12010,7 @@ router.get("/suppliers/:id/recurring/:acctId/statement", requireSupplierAdmin, a
 });
 
 
-// ── GET /suppliers/:id/recurring/:acctId/edit — edit account ─────────────────
+// ── GET /suppliers/:id/recurring/:acctId/edit - edit account ─────────────────
 router.get("/suppliers/:id/recurring/:acctId/edit", requireSupplierAdmin, async (req, res) => {
   try {
     const supplier = await SupplierProfile.findById(req.params.id).lean();
@@ -12031,14 +12031,14 @@ router.get("/suppliers/:id/recurring/:acctId/edit", requireSupplierAdmin, async 
     const cycleOpts = ["monthly","quarterly","termly","annual"]
       .map(c => `<option value="${c}" ${acct.billingCycle === c ? "selected" : ""}>${c.charAt(0).toUpperCase()+c.slice(1)}</option>`)
       .join("");
-    const branchOpts = `<option value="">— No branch —</option>` +
+    const branchOpts = `<option value="">- No branch -</option>` +
       branches.map(b => `<option value="${b._id}" ${String(acct.branchId) === String(b._id) ? "selected" : ""}>${esc(b.name)}</option>`).join("");
 
     const content = `
       <div style="margin-bottom:16px">
         <a href="/zq-admin/suppliers/${supplier._id}/recurring" style="color:var(--blue);text-decoration:none">← Back to Recurring Billing</a>
       </div>
-      <h2 style="font-size:20px;font-weight:700;margin-bottom:20px">✏️ Edit Account — ${esc(acct.name)}</h2>
+      <h2 style="font-size:20px;font-weight:700;margin-bottom:20px">✏️ Edit Account - ${esc(acct.name)}</h2>
       ${errMsg}${successMsg}
       <div class="card" style="max-width:600px">
         <form method="POST" action="/zq-admin/suppliers/${supplier._id}/recurring/${acct._id}/edit">
@@ -12108,7 +12108,7 @@ router.get("/suppliers/:id/recurring/:acctId/edit", requireSupplierAdmin, async 
   }
 });
 
-// ── POST /suppliers/:id/recurring/:acctId/edit — save account edits ──────────
+// ── POST /suppliers/:id/recurring/:acctId/edit - save account edits ──────────
 router.post("/suppliers/:id/recurring/:acctId/edit", requireSupplierAdmin, async (req, res) => {
   try {
     const RecurringAccount = (await import("../models/recurringAccount.js")).default;
@@ -12130,7 +12130,7 @@ router.post("/suppliers/:id/recurring/:acctId/edit", requireSupplierAdmin, async
   }
 });
 
-// ── POST /suppliers/:id/recurring/:acctId/record-payment — record payment ────
+// ── POST /suppliers/:id/recurring/:acctId/record-payment - record payment ────
 router.post("/suppliers/:id/recurring/:acctId/record-payment", requireSupplierAdmin, async (req, res) => {
   try {
     const supplier = await SupplierProfile.findById(req.params.id).lean();
@@ -12157,7 +12157,7 @@ router.post("/suppliers/:id/recurring/:acctId/record-payment", requireSupplierAd
   }
 });
 
-// ── POST /suppliers/:id/recurring/:acctId/delete — deactivate account ────────
+// ── POST /suppliers/:id/recurring/:acctId/delete - deactivate account ────────
 router.post("/suppliers/:id/recurring/:acctId/delete", requireSupplierAdmin, async (req, res) => {
   try {
     const RecurringAccount = (await import("../models/recurringAccount.js")).default;

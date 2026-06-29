@@ -362,7 +362,7 @@ const restrictedStateMap = {
   }
 
   const trimmed = text.trim();
-  const a = trimmed;  // action id — for rb_* handlers called with text: actionId
+  const a = trimmed;  // action id - for rb_* handlers called with text: actionId
   const state = biz.sessionState;
 
   if (state === "ready") return false;
@@ -3450,7 +3450,7 @@ Remaining balance: *${(acct?.currentBalance || 0).toFixed(2)} ${cur}*`
       if (tenant?.phone && tenant?.notificationsEnabled) {
         try {
           await sendText(tenant.phone,
-`✅ *Payment Received — ${biz.name}*
+`✅ *Payment Received - ${biz.name}*
 
 🏠 ${rbAccountName}
 💵 Amount: *${rbPaymentAmount} ${cur}*
@@ -3677,7 +3677,7 @@ ${stmt.rows.length} transactions
     await saveBizSafe(biz);
 
     await sendButtons(from, {
-      text: `🔧 *Add Expense — ${acct.name}*\n\nType description and amount on one line:\n*Plumber call-out 25*\n*Light bulb 3.50*\n*Zesa prepaid 40*`,
+      text: `🔧 *Add Expense - ${acct.name}*\n\nType description and amount on one line:\n*Plumber call-out 25*\n*Light bulb 3.50*\n*Zesa prepaid 40*`,
       buttons: [{ id: "recurring_billing_menu", title: "⬅ Cancel" }]
     });
     return true;
