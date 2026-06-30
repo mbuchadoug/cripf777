@@ -11509,9 +11509,10 @@ router.get("/suppliers/:id/recurring", requireSupplierAdmin, async (req, res) =>
              style="background:var(--blue);color:white;padding:9px 16px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600">
             ➕ Add Account / Unit
           </a>
-          <form method="POST" action="/zq-admin/suppliers/${supplier._id}/recurring/bulk-generate" style="display:inline">
+          <form method="POST" action="/zq-admin/suppliers/${supplier._id}/recurring/bulk-generate" style="display:inline"
+                onsubmit="return confirm('This runs the full monthly batch across every account/tenant. Already-invoiced accounts are skipped automatically (locked to once per period). For a single account, use the 🧾 Invoice button on its row instead. Continue?')">
             <button style="background:#16a34a;color:white;padding:9px 16px;border-radius:8px;border:none;font-size:13px;font-weight:600;cursor:pointer">
-              📄 Generate This Month's Invoices
+              📄 Generate This Month's Invoices (ALL)
             </button>
           </form>
           <form method="POST" action="/zq-admin/suppliers/${supplier._id}/recurring/send-reminders" style="display:inline">

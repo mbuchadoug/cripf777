@@ -1143,3 +1143,33 @@ export async function sendRbAccountPicker(to, accounts, offset = 0) {
 
   return sendList(to, label, items);
 }
+
+/* =============================================================================
+   NUMBERED PICKER - replaces interactive lists wherever the number of items
+   can exceed Meta's hard 10-row cap (accounts, tenants, billables).
+   Sends a single plain-text message with a numbered menu; the person replies
+   with the number(s) they want (handled by the calling state in
+   twilioStateBridge.js, which stores the ordered list of ids in
+   biz.sessionData so a typed "3" can be mapped back to the right record).
+   No pagination, no "More..." taps, works the same whether there are 3 items
+   or 300 - this directly fixes lists silently truncating to 8-10 entries.
+============================================================================= */
+export async function sendNumberedPicker(to, title, items, opts = {}) {
+  const { sendText } = await import("./metaSender.js");
+  if (!items || !items.length) {
+    await sendText(to, opts.emptyText || "Nothing to show here yet.");
+    return [];
+  }
+  let msg = `${title}\n${"─".repeat(22)}\n`;
+  items.forEach((it, i) => {
+    msg += `\n*${i + 1}.* ${it.label}`;
+  });
+  msg += `\n${"─".repeat(22)}`;
+  msg += `\n\n✏️ Reply with the *number* (e.g. *${Math.min(2, items.length)}*)`;
+  if (opts.allowBatch) {
+    msg += `\n💰 For several payments at once, use *number x amount*, comma-separated:\n   e.g. *1x700, 5x450, 12x300*`;
+  }
+  msg += `\n0️⃣ Reply *0* to cancel`;
+  await sendText(to, msg);
+  return items.map(it => it.id);
+}

@@ -27,6 +27,42 @@ import {
 } from "./invoiceHelpers.js";
 
 
+// ── Parse a reply to a numbered picker ────────────────────────────────────────
+// Handles three shapes of reply:
+//   "0"                      → cancel
+//   "3"                      → single pick, item index 3, no amount
+//   "1x700, 5x450.50, 12x300" → batch pick, each with its own amount
+// Returns { type: "cancel" } | { type: "single", index } | { type: "batch", items: [{index, amount}] } | { type: "invalid" }
+function parsePickerSelection(text, maxIndex) {
+  const t = String(text || "").trim();
+  if (!t) return { type: "invalid" };
+  if (t === "0" || /^cancel$/i.test(t)) return { type: "cancel" };
+
+  // Batch syntax: contains "x" pairing an index with an amount, optionally
+  // comma/space separated, e.g. "1x700, 5x450" or "1x700 3x200".
+  if (/\d\s*x\s*[\d.]+/i.test(t)) {
+    const parts = t.split(/[,\n]+/).map(p => p.trim()).filter(Boolean);
+    const items = [];
+    for (const part of parts) {
+      const m = part.match(/^(\d+)\s*x\s*([\d.]+)$/i);
+      if (!m) return { type: "invalid" };
+      const index  = parseInt(m[1], 10);
+      const amount = parseFloat(m[2]);
+      if (!index || index < 1 || index > maxIndex || isNaN(amount) || amount <= 0) return { type: "invalid" };
+      items.push({ index, amount });
+    }
+    if (!items.length) return { type: "invalid" };
+    return { type: "batch", items };
+  }
+
+  // Single plain number
+  const n = parseInt(t, 10);
+  if (!isNaN(n) && n >= 1 && n <= maxIndex && String(n) === t) {
+    return { type: "single", index: n };
+  }
+  return { type: "invalid" };
+}
+
 function currencySymbol(cur) {
   const c = (cur || "").toUpperCase();
   if (c === "USD") return "$";
@@ -324,6 +360,8 @@ const restrictedStateMap = {
     // Recurring billing
     rb_payment_pick_account:     "payments",
     rb_payment_pick_tenant:      "payments",
+    rb_payment_review:           "payments",
+    rb_invoice_pick_account:     "payments",
     rb_payment_enter_amount:     "payments",
     rb_payment_confirm:          "payments",
     rb_acct_stmt_pick_account:   "reports",
@@ -3348,86 +3386,92 @@ _This handover is logged and will appear in today's report._`
   // RECURRING BILLING STATE HANDLERS
   // ══════════════════════════════════════════════════════════════════════════
 
-  // ── Payment flow step 1: account picked ───────────────────────────────────
+  // ── Payment flow step 1: numbered billables list shown, reply parsed ───────
+  // One row per tenant (or per vacant account) - see listBillablesForChatbot.
+  // Reply "3" to pick one and enter its amount next, or "1x700, 5x450" to
+  // record several payments in one go (skips straight to a review screen).
   if (state === "rb_payment_pick_account") {
-    if (!a?.startsWith("rb_acct_")) {
-      await sendText(from, "❌ Please select an account from the list.");
-      return true;
-    }
-    const acctId = a.replace("rb_acct_", "");
-    const RecurringAccount = (await import("../models/recurringAccount.js")).default;
-    const RecurringTenant  = (await import("../models/recurringTenant.js")).default;
-    const acct   = await RecurringAccount.findOne({ _id: acctId, businessId: biz._id }).lean();
-    if (!acct) {
-      await sendText(from, "❌ Account not found.");
+    const list = biz.sessionData?.rbBillables;
+    if (!list || !list.length) {
+      await sendText(from, "❌ Session expired. Please start again.");
       biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
-      return sendMainMenu(from);
+      const { sendRecurringBillingMenu } = await import("./metaMenus.js");
+      return sendRecurringBillingMenu(from);
     }
-    // An account can host several tenants on different rentals (e.g. one
-    // "Main House" account with Room 1 and Room 2 paying different rent).
-    // If there's more than one, the clerk must say WHICH tenant the payment
-    // is for - otherwise it could get applied to the wrong person's invoice.
-    const tenants = await RecurringTenant.find({ accountId: acct._id, isActive: true }).lean();
-    const cur = acct.currency || biz.currency || "USD";
 
-    if (tenants.length > 1) {
-      biz.sessionState = "rb_payment_pick_tenant";
-      biz.sessionData   = { rbAccountId: acctId, rbAccountName: acct.name, rbCurrency: cur };
+    const sel = parsePickerSelection(trimmed, list.length);
+
+    if (sel.type === "cancel") {
+      biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
+      const { sendRecurringBillingMenu } = await import("./metaMenus.js");
+      await sendText(from, "❌ Cancelled.");
+      return sendRecurringBillingMenu(from);
+    }
+
+    if (sel.type === "single") {
+      const row = list[sel.index - 1];
+      biz.sessionState = "rb_payment_enter_amount";
+      biz.sessionData.rbAccountId   = row.accountId;
+      biz.sessionData.rbTenantId    = row.tenantId;
+      biz.sessionData.rbAccountName = row.accountName;
+      biz.sessionData.rbTenantName  = row.tenantName === "Vacant" ? null : row.tenantName;
+      biz.sessionData.rbCurrency    = row.currency;
       await saveBizSafe(biz);
-      const items = tenants.map(t => ({ id: `rb_tenant_${t._id}`, title: t.name }));
-      items.push({ id: "recurring_billing_menu", title: "⬅ Cancel" });
-      await sendList(from, `🏠 *${acct.name}* has ${tenants.length} tenants.\n👤 Who is this payment for?`, items);
+      await sendButtons(from, {
+        text: `💰 *Record Payment*\n\n🏠 ${row.label}\n💰 Current balance: *${row.balance.toFixed(2)} ${row.currency}*\n\nEnter the amount received (e.g. *300*):`,
+        buttons: [{ id: "recurring_billing_menu", title: "⬅ Cancel" }]
+      });
       return true;
     }
 
-    const tenant = tenants[0] || null;
-    const { recomputeTenantBalance, recomputeAccountBalance } = await import("./recurringBilling.js");
-    const balance = tenant
-      ? await recomputeTenantBalance(biz._id, tenant._id)
-      : await recomputeAccountBalance(biz._id, acct._id);
+    if (sel.type === "batch") {
+      const lines = sel.items.map(it => ({ ...list[it.index - 1], amount: it.amount }));
+      const total = lines.reduce((s, l) => s + l.amount, 0);
+      const cur   = lines[0]?.currency || biz.currency || "USD";
 
-    biz.sessionState = "rb_payment_enter_amount";
-    biz.sessionData  = {
-      rbAccountId:   acctId,
-      rbAccountName: acct.name,
-      rbTenantId:    tenant?._id?.toString() || null,
-      rbTenantName:  tenant?.name || null,
-      rbCurrency:    cur
-    };
-    await saveBizSafe(biz);
+      biz.sessionState = "rb_payment_review";
+      biz.sessionData.rbBatchLines = lines;
+      await saveBizSafe(biz);
 
-    await sendButtons(from, {
-      text: `💰 *Record Payment*\n\n🏠 Account: *${acct.name}*${tenant ? `\n👤 Tenant: ${tenant.name}` : ""}\n💰 Current balance: *${balance.toFixed(2)} ${cur}*\n\nEnter the amount received (e.g. *300*):`,
-      buttons: [{ id: "recurring_billing_menu", title: "⬅ Cancel" }]
-    });
+      let msg = `📝 *Please Review - ${lines.length} Payment${lines.length > 1 ? "s" : ""}*\n${"─".repeat(22)}\n`;
+      lines.forEach((l, i) => { msg += `\n*${i + 1}.* ${l.label} — *${l.amount.toFixed(2)} ${cur}*`; });
+      msg += `\n${"─".repeat(22)}\n*TOTAL: ${total.toFixed(2)} ${cur}*`;
+      msg += `\n\n✅ Reply *YES* to save all\n✏️ Reply *0* to cancel`;
+      await sendText(from, msg);
+      return true;
+    }
+
+    await sendText(from, "❌ Sorry, I didn't understand that. Reply with a number from the list (e.g. *3*), or *1x700, 5x450* for several at once.");
     return true;
   }
 
-  // ── Payment flow step 1b: tenant picked (only when account has >1 tenant) ──
-  if (state === "rb_payment_pick_tenant") {
-    if (!a?.startsWith("rb_tenant_")) { await sendText(from, "❌ Please select a tenant."); return true; }
-    const tenantId = a.replace("rb_tenant_", "");
-    const RecurringTenant = (await import("../models/recurringTenant.js")).default;
-    const tenant = await RecurringTenant.findById(tenantId).lean();
-    if (!tenant) { await sendText(from, "❌ Tenant not found."); return true; }
-
-    const { recomputeTenantBalance } = await import("./recurringBilling.js");
-    const balance = await recomputeTenantBalance(biz._id, tenant._id);
-    const cur = biz.sessionData.rbCurrency || biz.currency || "USD";
-
-    biz.sessionState = "rb_payment_enter_amount";
-    biz.sessionData.rbTenantId   = tenant._id.toString();
-    biz.sessionData.rbTenantName = tenant.name;
+  // ── Payment flow: batch review confirmed ────────────────────────────────────
+  if (state === "rb_payment_review") {
+    if (/^0$|^cancel$/i.test(trimmed)) {
+      biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
+      const { sendRecurringBillingMenu } = await import("./metaMenus.js");
+      await sendText(from, "❌ Cancelled. Nothing was saved.");
+      return sendRecurringBillingMenu(from);
+    }
+    if (!/^yes$|^confirm$/i.test(trimmed)) {
+      await sendText(from, "Reply *YES* to save all these payments, or *0* to cancel.");
+      return true;
+    }
+    biz.sessionState = "rb_payment_confirm";
     await saveBizSafe(biz);
-
-    await sendButtons(from, {
-      text: `💰 *Record Payment*\n\n🏠 Account: *${biz.sessionData.rbAccountName}*\n👤 Tenant: ${tenant.name}\n💰 Current balance: *${balance.toFixed(2)} ${cur}*\n\nEnter the amount received (e.g. *300*):`,
-      buttons: [{ id: "recurring_billing_menu", title: "⬅ Cancel" }]
-    });
+    await sendList(from, `💳 Select payment method for all ${biz.sessionData.rbBatchLines.length} payments:`, [
+      { id: "rb_pay_method_cash",     title: "💵 Cash"          },
+      { id: "rb_pay_method_ecocash",  title: "📱 EcoCash"       },
+      { id: "rb_pay_method_bank",     title: "🏦 Bank Transfer"  },
+      { id: "rb_pay_method_innbucks", title: "💳 InnBucks"       },
+      { id: "rb_pay_method_zipit",    title: "🔄 ZipIt"         },
+      { id: "rb_pay_method_other",    title: "🔄 Other"         },
+      { id: "recurring_billing_menu", title: "⬅ Cancel"         }
+    ]);
     return true;
   }
 
-  // ── Payment flow step 2: amount entered ───────────────────────────────────
+  // ── Payment flow step 2: amount entered (single-item path only) ───────────
   if (state === "rb_payment_enter_amount") {
     const raw = trimmed.replace(/[^0-9.]/g, "");
     const amount = Number(raw);
@@ -3452,17 +3496,57 @@ _This handover is logged and will appear in today's report._`
     return true;
   }
 
-  // ── Payment flow step 3: method selected → save ───────────────────────────
+  // ── Payment flow step 3: method selected → save (single OR batch) ─────────
   if (state === "rb_payment_confirm" && a?.startsWith("rb_pay_method_")) {
     const method = a.replace("rb_pay_method_", "");
-    const { rbAccountId, rbTenantId, rbPaymentAmount, rbCurrency, rbAccountName, rbTenantName } = biz.sessionData;
-    biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
+    const batchLines = biz.sessionData?.rbBatchLines;
+    biz.sessionState = "ready";
+    const savedSessionData = biz.sessionData;
+    biz.sessionData = {};
+    await saveBizSafe(biz);
 
+    const { recordRecurringPayment } = await import("./recurringBilling.js");
+    const RecurringAccount = (await import("../models/recurringAccount.js")).default;
+    const RecurringTenant  = (await import("../models/recurringTenant.js")).default;
+    const today = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+
+    // ── Batch path: several payments saved in one go ─────────────────────────
+    if (batchLines && batchLines.length) {
+      let savedCount = 0, savedTotal = 0;
+      const cur = batchLines[0]?.currency || biz.currency || "USD";
+      const receiptLines = [];
+      for (const line of batchLines) {
+        try {
+          await recordRecurringPayment({
+            businessId: biz._id, accountId: line.accountId, tenantId: line.tenantId || null,
+            amount: line.amount, method, clerkPhone: phone, date: new Date()
+          });
+          savedCount++; savedTotal += line.amount;
+          receiptLines.push(`✅ ${line.label} — ${line.amount.toFixed(2)} ${cur}`);
+
+          if (line.tenantId) {
+            const tenant = await RecurringTenant.findById(line.tenantId).lean();
+            if (tenant?.phone && tenant?.notificationsEnabled) {
+              try {
+                await sendText(tenant.phone,
+`✅ *Payment Received - ${biz.name}*\n\n🏠 ${line.accountName}\n💵 Amount: *${line.amount.toFixed(2)} ${cur}*\n💳 Method: ${method}\n📅 ${today}\n\nThank you for your payment.`);
+              } catch (_) {}
+            }
+          }
+        } catch (e) {
+          receiptLines.push(`❌ ${line.label} — FAILED (${e.message})`);
+        }
+      }
+      await sendText(from,
+        `✅ *${savedCount}/${batchLines.length} Payments Recorded*\n${"─".repeat(22)}\n${receiptLines.join("\n")}\n${"─".repeat(22)}\n*TOTAL SAVED: ${savedTotal.toFixed(2)} ${cur}*\n💳 Method: ${method}\n📅 ${today}`
+      );
+      const { sendRecurringBillingMenu } = await import("./metaMenus.js");
+      return sendRecurringBillingMenu(from);
+    }
+
+    // ── Single-item path (unchanged behaviour) ────────────────────────────────
+    const { rbAccountId, rbTenantId, rbPaymentAmount, rbCurrency, rbAccountName, rbTenantName } = savedSessionData;
     try {
-      const { recordRecurringPayment } = await import("./recurringBilling.js");
-      const RecurringAccount = (await import("../models/recurringAccount.js")).default;
-      const RecurringTenant  = (await import("../models/recurringTenant.js")).default;
-
       const { payment, invoice } = await recordRecurringPayment({
         businessId: biz._id,
         accountId:  rbAccountId,
@@ -3482,13 +3566,12 @@ _This handover is logged and will appear in today's report._`
 🏠 Account: *${rbAccountName}*${rbTenantName ? `\n👤 Tenant: ${rbTenantName}` : ""}
 💵 Amount: *${rbPaymentAmount} ${cur}*
 💳 Method: ${method}
-📅 ${new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+📅 ${today}
 ${invoice ? `📄 Applied to: ${invoice.number} (${invoice.period})` : "💡 Recorded as advance payment"}
 
 Remaining balance: *${(acct?.currentBalance || 0).toFixed(2)} ${cur}*`
       );
 
-      // Notify tenant if they have notifications enabled and a phone number
       const tenant = rbTenantId ? await RecurringTenant.findById(rbTenantId).lean() : null;
       if (tenant?.phone && tenant?.notificationsEnabled) {
         try {
@@ -3498,7 +3581,7 @@ Remaining balance: *${(acct?.currentBalance || 0).toFixed(2)} ${cur}*`
 🏠 ${rbAccountName}
 💵 Amount: *${rbPaymentAmount} ${cur}*
 💳 Method: ${method}
-📅 ${new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+📅 ${today}
 
 Thank you for your payment.`
           );
@@ -3514,11 +3597,24 @@ Thank you for your payment.`
 
   // ── Account statement: account picked → period picker ─────────────────────
   if (state === "rb_acct_stmt_pick_account") {
-    if (!a?.startsWith("rb_acct_")) {
-      await sendText(from, "❌ Please select an account.");
+    const list = biz.sessionData?.rbPickList;
+    if (!list || !list.length) {
+      await sendText(from, "❌ Session expired. Please start again.");
+      biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
+      return sendMainMenu(from);
+    }
+    const sel = parsePickerSelection(trimmed, list.length);
+    if (sel.type === "cancel") {
+      biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
+      const { sendRecurringBillingMenu } = await import("./metaMenus.js");
+      await sendText(from, "❌ Cancelled.");
+      return sendRecurringBillingMenu(from);
+    }
+    if (sel.type !== "single") {
+      await sendText(from, "❌ Please reply with a single number from the list (e.g. *3*).");
       return true;
     }
-    const acctId = a.replace("rb_acct_", "");
+    const acctId = list[sel.index - 1];
     biz.sessionState = "rb_acct_stmt_pick_period";
     biz.sessionData  = { rbAccountId: acctId };
     await saveBizSafe(biz);
@@ -3585,50 +3681,47 @@ Thank you for your payment.`
     return sendRecurringBillingMenu(from);
   }
 
-  // ── Tenant statement: account picked → tenant picker ─────────────────────
+  // ── Tenant statement: tenant picked directly (flat numbered list) → period ─
   if (state === "rb_tenant_stmt_pick_account") {
-    if (!a?.startsWith("rb_acct_")) { await sendText(from, "❌ Please select an account."); return true; }
-    const acctId = a.replace("rb_acct_", "");
-    const RecurringTenant = (await import("../models/recurringTenant.js")).default;
-    const tenants = await RecurringTenant.find({ accountId: acctId, isActive: true }).lean();
-
-    if (!tenants.length) {
-      await sendText(from, "❌ No active tenants found for this account.");
+    const list = biz.sessionData?.rbPickList;
+    if (!list || !list.length) {
+      await sendText(from, "❌ Session expired. Please start again.");
+      biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
+      return sendMainMenu(from);
+    }
+    const sel = parsePickerSelection(trimmed, list.length);
+    if (sel.type === "cancel") {
+      biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
       const { sendRecurringBillingMenu } = await import("./metaMenus.js");
+      await sendText(from, "❌ Cancelled.");
       return sendRecurringBillingMenu(from);
     }
-
-    biz.sessionData.rbAccountId = acctId;
-
-    if (tenants.length === 1) {
-      biz.sessionData.rbTenantId = tenants[0]._id.toString();
-      biz.sessionState = "rb_tenant_stmt_pick_period";
-      await saveBizSafe(biz);
-    } else {
-      biz.sessionState = "rb_tenant_stmt_pick_tenant";
-      await saveBizSafe(biz);
+    if (sel.type !== "single") {
+      await sendText(from, "❌ Please reply with a single number from the list (e.g. *3*).");
+      return true;
     }
+    const picked = list[sel.index - 1];
+
+    biz.sessionState = "rb_tenant_stmt_pick_period";
+    biz.sessionData   = { rbAccountId: picked.accountId, rbTenantId: picked.tenantId };
+    await saveBizSafe(biz);
 
     const now = new Date();
-    if (tenants.length === 1) {
-      const months = [-2, -1, 0].map(offset => {
-        const d = new Date(now.getFullYear(), now.getMonth() + offset, 1);
-        return { label: d.toLocaleDateString("en-GB", { month: "long", year: "numeric" }), month: d.getMonth(), year: d.getFullYear() };
-      });
-      await sendList(from, `👤 Tenant: *${tenants[0].name}*\n📅 Select period:`, [
-        ...months.map(m => ({ id: `rb_period_${m.year}_${m.month}`, title: m.label })),
-        { id: "rb_period_all",          title: "📊 All Time"    },
-        { id: "recurring_billing_menu", title: "⬅ Cancel"       }
-      ]);
-    } else {
-      const items = tenants.map(t => ({ id: `rb_tenant_${t._id}`, title: t.name }));
-      items.push({ id: "recurring_billing_menu", title: "⬅ Cancel" });
-      await sendList(from, "👤 Select tenant:", items);
-    }
+    const months = [-2, -1, 0].map(offset => {
+      const d = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+      return { label: d.toLocaleDateString("en-GB", { month: "long", year: "numeric" }), month: d.getMonth(), year: d.getFullYear() };
+    });
+    await sendList(from, `👤 *${picked.label}*\n📅 Select period:`, [
+      ...months.map(m => ({ id: `rb_period_${m.year}_${m.month}`, title: m.label })),
+      { id: "rb_period_all",          title: "📊 All Time"    },
+      { id: "recurring_billing_menu", title: "⬅ Cancel"       }
+    ]);
     return true;
   }
 
-  // ── Tenant statement: tenant picked → period picker ───────────────────────
+  // ── (Legacy) Tenant statement: tenant picked from old 2-step flow ──────────
+  // No longer reachable from the main menu (replaced by the flat numbered
+  // list above), kept only in case anything else still transitions here.
   if (state === "rb_tenant_stmt_pick_tenant") {
     if (!a?.startsWith("rb_tenant_")) { await sendText(from, "❌ Please select a tenant."); return true; }
     const tenantId = a.replace("rb_tenant_", "");
@@ -3711,8 +3804,24 @@ ${stmt.rows.length} transactions
 
   // ── Unit expense: account picked → enter details ──────────────────────────
   if (state === "rb_expense_pick_account") {
-    if (!a?.startsWith("rb_acct_")) { await sendText(from, "❌ Please select an account."); return true; }
-    const acctId = a.replace("rb_acct_", "");
+    const list = biz.sessionData?.rbPickList;
+    if (!list || !list.length) {
+      await sendText(from, "❌ Session expired. Please start again.");
+      biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
+      return sendMainMenu(from);
+    }
+    const sel = parsePickerSelection(trimmed, list.length);
+    if (sel.type === "cancel") {
+      biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
+      const { sendRecurringBillingMenu } = await import("./metaMenus.js");
+      await sendText(from, "❌ Cancelled.");
+      return sendRecurringBillingMenu(from);
+    }
+    if (sel.type !== "single") {
+      await sendText(from, "❌ Please reply with a single number from the list (e.g. *3*).");
+      return true;
+    }
+    const acctId = list[sel.index - 1];
     const RecurringAccount = (await import("../models/recurringAccount.js")).default;
     const acct = await RecurringAccount.findOne({ _id: acctId, businessId: biz._id }).lean();
     if (!acct) { await sendText(from, "❌ Account not found."); const { sendRecurringBillingMenu } = await import("./metaMenus.js"); return sendRecurringBillingMenu(from); }
@@ -3759,6 +3868,76 @@ ${stmt.rows.length} transactions
       );
     } catch (e) {
       await sendText(from, `❌ Failed to save expense: ${e.message}`);
+    }
+
+    const { sendRecurringBillingMenu } = await import("./metaMenus.js");
+    return sendRecurringBillingMenu(from);
+  }
+
+  // ── Invoice picker: numbered selection → raise ONE invoice ─────────────────
+  // Day-to-day invoicing goes through here, ONE account/tenant at a time -
+  // calmer and easier to verify than firing for everyone at once. The
+  // once-per-period lock is ALWAYS on here (force is never exposed over
+  // WhatsApp - that stays an admin-panel-only override) so a monthly
+  // account can never be billed twice in the same month by mistake.
+  // Typing "ALL" is the one explicit exception - a deliberate, documented
+  // power command that runs the full monthly batch (still subject to the
+  // same once-per-period lock for every account).
+  if (state === "rb_invoice_pick_account") {
+    if (/^all$/i.test(trimmed)) {
+      biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
+      await sendText(from, "⏳ Generating invoices for ALL active accounts/tenants (already-invoiced ones are skipped automatically)...");
+      try {
+        const { bulkGenerateInvoices } = await import("./recurringBilling.js");
+        const branchId = getEffectiveBranchId(caller, biz.sessionData);
+        const result = await bulkGenerateInvoices({ biz, branchId, clerkPhone: phone });
+        await sendText(from,
+          `✅ *Invoices Generated*\n\n📄 Created: ${result.created}\n⏭ Skipped: ${result.skipped} (already invoiced this period)\n📊 Total: ${result.total}` +
+          (result.errors.length ? `\n\n⚠️ Errors:\n${result.errors.slice(0, 3).map(e => `  • ${e}`).join("\n")}` : "")
+        );
+      } catch (e) {
+        await sendText(from, `❌ Invoice generation failed: ${e.message}`);
+      }
+      const { sendRecurringBillingMenu } = await import("./metaMenus.js");
+      return sendRecurringBillingMenu(from);
+    }
+
+    const list = biz.sessionData?.rbBillables;
+    if (!list || !list.length) {
+      await sendText(from, "❌ Session expired. Please start again.");
+      biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
+      return sendMainMenu(from);
+    }
+    const sel = parsePickerSelection(trimmed, list.length);
+    if (sel.type === "cancel") {
+      biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
+      const { sendRecurringBillingMenu } = await import("./metaMenus.js");
+      await sendText(from, "❌ Cancelled.");
+      return sendRecurringBillingMenu(from);
+    }
+    if (sel.type !== "single") {
+      await sendText(from, "❌ Please reply with a single number (e.g. *3*), or type *ALL* to run the full monthly batch.");
+      return true;
+    }
+    const row = list[sel.index - 1];
+    biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
+
+    try {
+      const { generateInvoiceForAccount, generateInvoiceForTenant } = await import("./recurringBilling.js");
+      const result = row.tenantId
+        ? await generateInvoiceForTenant({ biz, accountId: row.accountId, tenantId: row.tenantId, clerkPhone: phone })
+        : await generateInvoiceForAccount({ biz, accountId: row.accountId, clerkPhone: phone });
+
+      if (!result.created) {
+        await sendText(from, `⏭ *Already invoiced* for this period.\n\n${row.label}\n📄 Existing invoice: ${result.invoice.number} (${result.invoice.period})\n\n_Invoicing is locked to once per billing period. To raise an extra invoice anyway, use the admin portal's "Force" option._`);
+      } else {
+        const cur = result.invoice.currency;
+        await sendText(from,
+          `✅ *Invoice Raised*\n\n${row.label}\n📄 ${result.invoice.number}\n📅 ${result.invoice.period}\n💵 *${result.invoice.amount.toFixed(2)} ${cur}*\n📆 Due: ${new Date(result.invoice.dueDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`
+        );
+      }
+    } catch (e) {
+      await sendText(from, `❌ ${e.message}`);
     }
 
     const { sendRecurringBillingMenu } = await import("./metaMenus.js");
