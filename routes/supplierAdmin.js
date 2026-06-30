@@ -7,6 +7,7 @@ import SupplierOrder from "../models/supplierOrder.js";
 import SupplierSubscriptionPayment from "../models/supplierSubscriptionPayment.js";
 import PhoneContact from "../models/phoneContact.js";   // ← ADD THIS LINE
 import SupplierLinkVisitor from "../models/supplierLinkVisitor.js";
+import financialAdminRoutes from "./supplierFinancialAdmin.js";
 import SearchCommandLog from "../models/searchCommandLog.js";
 import { sendBuyerSearchHelpTemplate } from "../services/buyerSearchFollowUp.js";
 import BuyerRequest from "../models/buyerRequest2.js";
@@ -7329,6 +7330,7 @@ router.get("/vip-sellers", requireSupplierAdmin, async (req, res) => {
 });
 
 router.use("/suppliers/:id/smart-link", smartLinkRoutes);
+router.use("/suppliers/:id/finance", financialAdminRoutes);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SUPPLIER SMART LINK CONTACTS VIEWER
@@ -13224,4 +13226,6 @@ router.post("/suppliers/:id/recurring/:acctId/expense/:expId/delete", requireSup
   }
 });
 
+
+export { layout, esc };
 export default router;
