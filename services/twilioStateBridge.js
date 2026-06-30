@@ -60,6 +60,17 @@ function parsePickerSelection(text, maxIndex) {
   if (!isNaN(n) && n >= 1 && n <= maxIndex && String(n) === t) {
     return { type: "single", index: n };
   }
+
+  // Multi-select: several plain numbers, comma/space separated, no amounts -
+  // e.g. "1,5,12" or "1 5 12". Used for invoicing several tenants/accounts
+  // at once where each uses its own normal rate (no per-item override).
+  if (/^[\d,\s]+$/.test(t) && /\d/.test(t)) {
+    const indices = t.split(/[,\s]+/).map(s => s.trim()).filter(Boolean).map(s => parseInt(s, 10));
+    if (indices.length > 1 && indices.every(i => !isNaN(i) && i >= 1 && i <= maxIndex)) {
+      return { type: "multi", indices: [...new Set(indices)] };
+    }
+  }
+
   return { type: "invalid" };
 }
 
@@ -362,6 +373,7 @@ const restrictedStateMap = {
     rb_payment_pick_tenant:      "payments",
     rb_payment_review:           "payments",
     rb_invoice_pick_account:     "payments",
+    rb_invoice_review:           "payments",
     rb_payment_enter_amount:     "payments",
     rb_payment_confirm:          "payments",
     rb_acct_stmt_pick_account:   "reports",
@@ -3915,31 +3927,93 @@ ${stmt.rows.length} transactions
       await sendText(from, "❌ Cancelled.");
       return sendRecurringBillingMenu(from);
     }
-    if (sel.type !== "single") {
-      await sendText(from, "❌ Please reply with a single number (e.g. *3*), or type *ALL* to run the full monthly batch.");
+    if (sel.type === "single") {
+      const row = list[sel.index - 1];
+      biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
+
+      try {
+        const { generateInvoiceForAccount, generateInvoiceForTenant } = await import("./recurringBilling.js");
+        const result = row.tenantId
+          ? await generateInvoiceForTenant({ biz, accountId: row.accountId, tenantId: row.tenantId, clerkPhone: phone })
+          : await generateInvoiceForAccount({ biz, accountId: row.accountId, clerkPhone: phone });
+
+        if (!result.created) {
+          await sendText(from, `⏭ *Already invoiced* for this period.\n\n${row.label}\n📄 Existing invoice: ${result.invoice.number} (${result.invoice.period})\n\n_Invoicing is locked to once per billing period. To raise an extra invoice anyway, use the admin portal's "Force" option._`);
+        } else {
+          const cur = result.invoice.currency;
+          await sendText(from,
+            `✅ *Invoice Raised*\n\n${row.label}\n📄 ${result.invoice.number}\n📅 ${result.invoice.period}\n💵 *${result.invoice.amount.toFixed(2)} ${cur}*\n📆 Due: ${new Date(result.invoice.dueDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`
+          );
+        }
+      } catch (e) {
+        await sendText(from, `❌ ${e.message}`);
+      }
+
+      const { sendRecurringBillingMenu } = await import("./metaMenus.js");
+      return sendRecurringBillingMenu(from);
+    }
+
+    // ── Multi-select: invoice SEVERAL tenants/accounts at once ───────────────
+    // Each picked row keeps its own normal rate (no per-item override here -
+    // use the admin panel if a one-off amount is needed for just one of them).
+    if (sel.type === "multi") {
+      const picked = sel.indices.map(i => list[i - 1]);
+      biz.sessionState = "rb_invoice_review";
+      biz.sessionData.rbInvoiceBatch = picked;
+      await saveBizSafe(biz);
+
+      let msg = `📝 *Please Review - Invoice ${picked.length} ${picked.length > 1 ? "Tenants/Accounts" : "Account"}*\n${"─".repeat(22)}\n`;
+      picked.forEach((r, i) => { msg += `\n*${i + 1}.* ${r.label}`; });
+      msg += `\n${"─".repeat(22)}`;
+      msg += `\n\nEach will be invoiced at their normal rate. Already-invoiced ones this period will be skipped automatically.`;
+      msg += `\n\n✅ Reply *YES* to raise all ${picked.length} invoices\n✏️ Reply *0* to cancel`;
+      await sendText(from, msg);
       return true;
     }
-    const row = list[sel.index - 1];
-    biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
 
-    try {
-      const { generateInvoiceForAccount, generateInvoiceForTenant } = await import("./recurringBilling.js");
-      const result = row.tenantId
-        ? await generateInvoiceForTenant({ biz, accountId: row.accountId, tenantId: row.tenantId, clerkPhone: phone })
-        : await generateInvoiceForAccount({ biz, accountId: row.accountId, clerkPhone: phone });
+    await sendText(from, "❌ Please reply with a single number (e.g. *3*), several numbers (e.g. *1,5,12*), or type *ALL* to run the full monthly batch.");
+    return true;
+  }
 
-      if (!result.created) {
-        await sendText(from, `⏭ *Already invoiced* for this period.\n\n${row.label}\n📄 Existing invoice: ${result.invoice.number} (${result.invoice.period})\n\n_Invoicing is locked to once per billing period. To raise an extra invoice anyway, use the admin portal's "Force" option._`);
-      } else {
-        const cur = result.invoice.currency;
-        await sendText(from,
-          `✅ *Invoice Raised*\n\n${row.label}\n📄 ${result.invoice.number}\n📅 ${result.invoice.period}\n💵 *${result.invoice.amount.toFixed(2)} ${cur}*\n📆 Due: ${new Date(result.invoice.dueDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`
-        );
-      }
-    } catch (e) {
-      await sendText(from, `❌ ${e.message}`);
+  // ── Invoice picker: multi-select batch confirmed ────────────────────────────
+  if (state === "rb_invoice_review") {
+    if (/^0$|^cancel$/i.test(trimmed)) {
+      biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
+      const { sendRecurringBillingMenu } = await import("./metaMenus.js");
+      await sendText(from, "❌ Cancelled. No invoices were raised.");
+      return sendRecurringBillingMenu(from);
+    }
+    if (!/^yes$|^confirm$/i.test(trimmed)) {
+      await sendText(from, "Reply *YES* to raise all these invoices, or *0* to cancel.");
+      return true;
     }
 
+    const batch = biz.sessionData?.rbInvoiceBatch || [];
+    biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
+
+    const { generateInvoiceForAccount, generateInvoiceForTenant } = await import("./recurringBilling.js");
+    let raised = 0, skipped = 0;
+    const receiptLines = [];
+    for (const row of batch) {
+      try {
+        const result = row.tenantId
+          ? await generateInvoiceForTenant({ biz, accountId: row.accountId, tenantId: row.tenantId, clerkPhone: phone })
+          : await generateInvoiceForAccount({ biz, accountId: row.accountId, clerkPhone: phone });
+        if (result.created) {
+          raised++;
+          receiptLines.push(`✅ ${row.label} — ${result.invoice.number} (${result.invoice.amount.toFixed(2)} ${result.invoice.currency})`);
+        } else {
+          skipped++;
+          receiptLines.push(`⏭ ${row.label} — already invoiced (${result.invoice.number})`);
+        }
+      } catch (e) {
+        receiptLines.push(`❌ ${row.label} — FAILED (${e.message})`);
+      }
+    }
+
+    await sendText(from,
+      `✅ *${raised}/${batch.length} Invoices Raised*${skipped ? ` · ⏭ ${skipped} skipped (already invoiced)` : ""}\n${"─".repeat(22)}\n${receiptLines.join("\n")}`
+    );
     const { sendRecurringBillingMenu } = await import("./metaMenus.js");
     return sendRecurringBillingMenu(from);
   }

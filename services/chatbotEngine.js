@@ -10655,7 +10655,7 @@ Type *done* to save`,
       }))
     };
     await saveBizSafe(biz);
-    await sendText(from, `ℹ️ Invoicing is *locked to once per billing period* - if an account/tenant was already invoiced this month, it will be skipped automatically. Pick who to invoice now:`);
+    await sendText(from, `ℹ️ Invoicing is *locked to once per billing period* - if an account/tenant was already invoiced this month, it will be skipped automatically.\n\nPick ONE number to invoice now, SEVERAL numbers (e.g. *1,5,12*) to invoice them together, or type *ALL* for the full monthly batch:`);
     return sendNumberedPicker(from, "📄 *Generate Invoice* - who is this for?",
       billables.map(b => ({ id: b.label, label: b.label }))
     );
@@ -11654,8 +11654,16 @@ const shortcodeBlockedStates = [
   "cash_handover_incoming",
   "cash_handover_note",
   // Recurring billing text-input states
+  "rb_payment_pick_account",
+  "rb_payment_pick_tenant",
+  "rb_payment_review",
   "rb_payment_enter_amount",
+  "rb_acct_stmt_pick_account",
+  "rb_tenant_stmt_pick_account",
+  "rb_expense_pick_account",
   "rb_expense_enter_details",
+  "rb_invoice_pick_account",
+  "rb_invoice_review",
   "rb_acct_stmt_custom_date",
   "rb_tenant_stmt_pick_period"
 ];
@@ -19305,7 +19313,7 @@ if (!isMetaAction && text && text.trim().length > 1) {
     "cash_handover_amount", "cash_handover_incoming", "cash_handover_note",
     // Recurring billing states
     "rb_payment_pick_account", "rb_payment_pick_tenant", "rb_payment_review", "rb_payment_enter_amount", "rb_payment_confirm",
-    "rb_invoice_pick_account",
+    "rb_invoice_pick_account", "rb_invoice_review",
     "rb_acct_stmt_pick_account", "rb_acct_stmt_pick_period", "rb_acct_stmt_custom_date",
     "rb_tenant_stmt_pick_account", "rb_tenant_stmt_pick_tenant", "rb_tenant_stmt_pick_period",
     "rb_expense_pick_account", "rb_expense_enter_details"
