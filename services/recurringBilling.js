@@ -219,6 +219,32 @@ export async function recordRecurringPayment({
   return { payment, invoice: invoiceId ? await RecurringInvoice.findById(invoiceId).lean() : null };
 }
 
+// ── Recompute an invoice's amountPaid/balance/status from its payments ───────
+// Used after a payment is edited or deleted (from the admin panel) so the
+// invoice never drifts out of sync with what was actually paid against it.
+// Recomputes from the full set of linked payments rather than patching a
+// delta, so repeated edits can never accumulate rounding/logic errors.
+export async function recomputeInvoiceFromPayments(invoiceId) {
+  if (!invoiceId) return null;
+  const { RecurringInvoice, RecurringPayment } = await getModels();
+  const invoice = await RecurringInvoice.findById(invoiceId).lean();
+  if (!invoice) return null;
+
+  const paid = await RecurringPayment.aggregate([
+    { $match: { invoiceId: invoice._id } },
+    { $group: { _id: null, t: { $sum: "$amount" } } }
+  ]);
+  const newPaid    = paid[0]?.t || 0;
+  const newBalance = Math.max(0, (invoice.amount || 0) - newPaid);
+  const newStatus  = invoice.status === "cancelled" ? "cancelled"
+    : newBalance <= 0 ? "paid" : newPaid > 0 ? "partial" : "unpaid";
+
+  await RecurringInvoice.findByIdAndUpdate(invoiceId, {
+    amountPaid: newPaid, balance: newBalance, status: newStatus
+  });
+  return { amountPaid: newPaid, balance: newBalance, status: newStatus };
+}
+
 // ── Sum of tenant-level migration "opening balances" for an account ──────────
 // Tenants can carry a one-time, admin-entered arrears/credit figure
 // (RecurringTenant.openingBalance) representing what they owed BEFORE the
