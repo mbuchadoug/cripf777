@@ -10536,7 +10536,7 @@ Type *done* to save`,
       } else {
         for (const t of acct._tenants) {
           const rate = t.billingAmount != null ? `${t.billingAmount} ${cur}/${t.billingCycle || acct.billingCycle} (custom)` : `${acct.billingAmount} ${cur}/${acct.billingCycle}`;
-          msg += `   👤 ${t.name} — ${rate} — Bal: ${(t.currentBalance || 0).toFixed(2)} ${cur}\n`;
+          msg += `   👤 ${t.name} - ${rate} - Bal: ${(t.currentBalance || 0).toFixed(2)} ${cur}\n`;
         }
       }
     }
@@ -10565,7 +10565,7 @@ Type *done* to save`,
     };
     await saveBizSafe(biz);
     return sendNumberedPicker(from, "💰 *Record Payment* - who is this for?",
-      billables.map(b => ({ id: b.label, label: `${b.label} — Bal: ${b.balance.toFixed(2)} ${b.currency}` })),
+      billables.map(b => ({ id: b.label, label: `${b.label} - Bal: ${b.balance.toFixed(2)} ${b.currency}` })),
       { allowBatch: true }
     );
   }
@@ -10581,7 +10581,7 @@ Type *done* to save`,
     biz.sessionData  = { rbPickList: accounts.map(a2 => a2._id.toString()) };
     await saveBizSafe(biz);
     return sendNumberedPicker(from, "📋 *Account Statement* - select an account",
-      accounts.map(a2 => ({ id: a2._id.toString(), label: `${a2.name}${a2.ref ? " (" + a2.ref + ")" : ""} — Bal: ${(a2.currentBalance || 0).toFixed(2)} ${a2.currency || "USD"}` }))
+      accounts.map(a2 => ({ id: a2._id.toString(), label: `${a2.name}${a2.ref ? " (" + a2.ref + ")" : ""} - Bal: ${(a2.currentBalance || 0).toFixed(2)} ${a2.currency || "USD"}` }))
     );
   }
 
@@ -10602,7 +10602,7 @@ Type *done* to save`,
     biz.sessionData  = { rbPickList: billables.map(b => ({ tenantId: b.tenantId.toString(), accountId: b.accountId.toString(), label: b.label })) };
     await saveBizSafe(biz);
     return sendNumberedPicker(from, "👤 *Tenant Statement* - select a tenant",
-      billables.map(b => ({ id: b.tenantId.toString(), label: `${b.label} — Bal: ${b.balance.toFixed(2)} ${b.currency}` }))
+      billables.map(b => ({ id: b.tenantId.toString(), label: `${b.label} - Bal: ${b.balance.toFixed(2)} ${b.currency}` }))
     );
   }
 

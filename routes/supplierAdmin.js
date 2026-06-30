@@ -11853,7 +11853,7 @@ router.get("/suppliers/:id/recurring/:acctId/tenant", requireSupplierAdmin, asyn
           ${hasOverride ? `<div style="font-weight:400">${badge("Custom rate","blue")}</div>` : ""}
         </td>
           <td style="text-align:right;font-weight:600;color:${(t.openingBalance||0) > 0 ? "var(--red)" : (t.openingBalance||0) < 0 ? "var(--green)" : "var(--muted)"}">
-            ${(t.openingBalance||0) !== 0 ? (t.openingBalance||0).toFixed(2) : "—"}
+            ${(t.openingBalance||0) !== 0 ? (t.openingBalance||0).toFixed(2) : "-"}
             ${t.openingBalanceDate ? `<div style="font-weight:400;color:var(--muted);font-size:10px">as at ${new Date(t.openingBalanceDate).toLocaleDateString("en-GB")}</div>` : ""}
           </td>
           <td>${t.canSelfServe ? badge("Self-serve","green") : badge("Staff only","gray")}</td>

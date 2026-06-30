@@ -53,7 +53,7 @@ const RecurringTenantSchema = new mongoose.Schema({
   // ── Opening balance (migration / system setup) ──────────────────────────────
   // Admin-entered balance the tenant had before ZimQuote was set up.
   // Positive = tenant owes money. Negative = tenant is in credit.
-  // Set once at setup — never auto-updated by the system.
+  // Set once at setup - never auto-updated by the system.
   openingBalance:     { type: Number, default: 0 },
   openingBalanceDate: { type: Date,   default: null },
 
@@ -65,7 +65,7 @@ const RecurringTenantSchema = new mongoose.Schema({
   // they OVERRIDE the parent RecurringAccount's billing settings for THIS
   // tenant only. Leave null/blank to simply inherit the account's settings
   // (this is the default and matches the original single-tenant-per-account
-  // behaviour exactly — nothing changes for existing accounts).
+  // behaviour exactly - nothing changes for existing accounts).
   billingAmount:      { type: Number, default: null },
   billingCycle: {
     type:    String,
@@ -78,7 +78,7 @@ const RecurringTenantSchema = new mongoose.Schema({
   // Falls back to "<period> charge" when blank.
   billingDescription: { type: String, default: "" },
 
-  // ── Cached balance (THIS tenant's own share only — recomputed on demand) ────
+  // ── Cached balance (THIS tenant's own share only - recomputed on demand) ────
   // Unlike RecurringAccount.currentBalance (which is the sum of EVERY tenant
   // under that account), this is scoped to just this tenant, so multiple
   // tenants sharing one account never see each other's balance.

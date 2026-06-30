@@ -972,7 +972,7 @@ export async function listBillablesForChatbot(businessId, branchId = null) {
         accountId: acct._id, tenantId: null,
         accountName: acct.name, tenantName: "Vacant",
         balance, currency: acct.currency || "USD",
-        label: `${acct.name} — Vacant`
+        label: `${acct.name} - Vacant`
       });
       continue;
     }
@@ -982,7 +982,7 @@ export async function listBillablesForChatbot(businessId, branchId = null) {
         accountId: acct._id, tenantId: t._id,
         accountName: acct.name, tenantName: t.name,
         balance, currency: acct.currency || "USD",
-        label: `${acct.name} — ${t.name}`
+        label: `${acct.name} - ${t.name}`
       });
     }
   }

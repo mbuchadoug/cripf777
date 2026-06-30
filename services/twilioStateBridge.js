@@ -3446,7 +3446,7 @@ _This handover is logged and will appear in today's report._`
       await saveBizSafe(biz);
 
       let msg = `📝 *Please Review - ${lines.length} Payment${lines.length > 1 ? "s" : ""}*\n${"─".repeat(22)}\n`;
-      lines.forEach((l, i) => { msg += `\n*${i + 1}.* ${l.label} — *${l.amount.toFixed(2)} ${cur}*`; });
+      lines.forEach((l, i) => { msg += `\n*${i + 1}.* ${l.label} - *${l.amount.toFixed(2)} ${cur}*`; });
       msg += `\n${"─".repeat(22)}\n*TOTAL: ${total.toFixed(2)} ${cur}*`;
       msg += `\n\n✅ Reply *YES* to save all\n✏️ Reply *0* to cancel`;
       await sendText(from, msg);
@@ -3534,7 +3534,7 @@ _This handover is logged and will appear in today's report._`
             amount: line.amount, method, clerkPhone: phone, date: new Date()
           });
           savedCount++; savedTotal += line.amount;
-          receiptLines.push(`✅ ${line.label} — ${line.amount.toFixed(2)} ${cur}`);
+          receiptLines.push(`✅ ${line.label} - ${line.amount.toFixed(2)} ${cur}`);
 
           if (line.tenantId) {
             const tenant = await RecurringTenant.findById(line.tenantId).lean();
@@ -3546,7 +3546,7 @@ _This handover is logged and will appear in today's report._`
             }
           }
         } catch (e) {
-          receiptLines.push(`❌ ${line.label} — FAILED (${e.message})`);
+          receiptLines.push(`❌ ${line.label} - FAILED (${e.message})`);
         }
       }
       await sendText(from,
@@ -4001,13 +4001,13 @@ ${stmt.rows.length} transactions
           : await generateInvoiceForAccount({ biz, accountId: row.accountId, clerkPhone: phone });
         if (result.created) {
           raised++;
-          receiptLines.push(`✅ ${row.label} — ${result.invoice.number} (${result.invoice.amount.toFixed(2)} ${result.invoice.currency})`);
+          receiptLines.push(`✅ ${row.label} - ${result.invoice.number} (${result.invoice.amount.toFixed(2)} ${result.invoice.currency})`);
         } else {
           skipped++;
-          receiptLines.push(`⏭ ${row.label} — already invoiced (${result.invoice.number})`);
+          receiptLines.push(`⏭ ${row.label} - already invoiced (${result.invoice.number})`);
         }
       } catch (e) {
-        receiptLines.push(`❌ ${row.label} — FAILED (${e.message})`);
+        receiptLines.push(`❌ ${row.label} - FAILED (${e.message})`);
       }
     }
 
