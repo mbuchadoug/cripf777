@@ -11773,7 +11773,7 @@ router.get("/suppliers/:id/recurring/:acctId/tenant", requireSupplierAdmin, asyn
       <div class="card" style="margin-bottom:20px">
         <div style="font-weight:700;margin-bottom:14px">Add Tenant</div>
         <form method="POST" action="/zq-admin/suppliers/${supplier._id}/recurring/${acct._id}/tenant/add"
-              style="display:grid;grid-template-columns:repeat(3,1fr) auto;gap:10px;align-items:end">
+              style="display:grid;grid-template-columns:repeat(5,1fr) auto;gap:10px;align-items:end">
           <div>
             <label style="font-weight:600;display:block;margin-bottom:4px;font-size:12px">Name *</label>
             <input name="name" required placeholder="John Moyo"
@@ -11838,7 +11838,7 @@ router.post("/suppliers/:id/recurring/:acctId/tenant/add", requireSupplierAdmin,
     const biz = supplier?.businessId ? await Business.findById(supplier.businessId).lean() : null;
     if (!biz) return res.redirect(`/zq-admin/suppliers/${req.params.id}/recurring`);
 
-    const { name, phone, startDate } = req.body;
+    const { name, phone, startDate, openingBalance, openingBalanceDate } = req.body;
     let p = (phone || "").replace(/\D/g, "");
     if (p.startsWith("0")) p = "263" + p.slice(1);
 
@@ -11851,8 +11851,8 @@ router.post("/suppliers/:id/recurring/:acctId/tenant/add", requireSupplierAdmin,
       isActive:            true,
       canSelfServe:        false,
       notificationsEnabled: true,
-      openingBalance:      parseFloat(req.body.openingBalance) || 0,
-      openingBalanceDate:  req.body.openingBalanceDate ? new Date(req.body.openingBalanceDate) : null
+      openingBalance:      parseFloat(openingBalance) || 0,
+      openingBalanceDate:  openingBalanceDate ? new Date(openingBalanceDate) : null
     });
 
     res.redirect(`/zq-admin/suppliers/${req.params.id}/recurring/${req.params.acctId}/tenant?success=${encodeURIComponent(`Tenant "${name}" added`)}`);

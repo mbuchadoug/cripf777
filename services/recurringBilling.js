@@ -17,18 +17,9 @@
 
 import path      from "path";
 import fs        from "fs";
-import puppeteer from "puppeteer";
 import mongoose  from "mongoose";
+import puppeteer from "puppeteer";
 import { sendText, sendDocument } from "./metaSender.js";
-
-// ── Safe ObjectId cast ────────────────────────────────────────────────────────
-// MongoDB aggregate $match does NOT auto-cast strings to ObjectIds.
-// Mongoose .find() does. Always use oid() before aggregate $match.
-function oid(id) {
-  if (!id) return null;
-  try { return new mongoose.Types.ObjectId(String(id)); }
-  catch (_) { return null; }
-}
 
 // ── Lazy model imports ────────────────────────────────────────────────────────
 const getModels = async () => ({
@@ -190,8 +181,7 @@ export async function recordRecurringPayment({
 
   // Find oldest outstanding invoice for this account
   const invoice = await RecurringInvoice.findOne({
-    businessId: oid(businessId) || businessId,
-    accountId:  oid(accountId)  || accountId,
+    businessId, accountId,
     status: { $in: ["unpaid", "partial", "overdue"] }
   }).sort({ periodStart: 1 }).lean();
 
@@ -229,25 +219,41 @@ export async function recordRecurringPayment({
   return { payment, invoice: invoiceId ? await RecurringInvoice.findById(invoiceId).lean() : null };
 }
 
+// ── Sum of tenant-level migration "opening balances" for an account ──────────
+// Tenants can carry a one-time, admin-entered arrears/credit figure
+// (RecurringTenant.openingBalance) representing what they owed BEFORE the
+// system was set up. This is never auto-updated and is independent of any
+// invoice/payment history. Every balance calculation for the account must
+// fold this in, or migrated debt silently disappears. We sum across ALL
+// tenants ever linked to the account (not just isActive ones) so toggling a
+// tenant inactive doesn't make their migrated arrears vanish from the books.
+async function getTenantOpeningBalanceTotal(accountId) {
+  const { RecurringTenant } = await getModels();
+  const agg = await RecurringTenant.aggregate([
+    { $match: { accountId: new mongoose.Types.ObjectId(accountId) } },
+    { $group: { _id: null, t: { $sum: "$openingBalance" } } }
+  ]);
+  return agg[0]?.t || 0;
+}
+
 // ── Recompute and cache the account's current balance ────────────────────────
 
 export async function recomputeAccountBalance(businessId, accountId) {
   const { RecurringInvoice, RecurringPayment, RecurringExpense, RecurringAccount } = await getModels();
-  const bizOid  = oid(businessId);
-  const acctOid = oid(accountId);
-  const [invoices, payments] = await Promise.all([
+  const [invoices, payments, tenantOpening] = await Promise.all([
     RecurringInvoice.aggregate([
-      { $match: { businessId: bizOid, accountId: acctOid, status: { $ne: "cancelled" } } },
+      { $match: { businessId, accountId, status: { $ne: "cancelled" } } },
       { $group: { _id: null, t: { $sum: "$amount" } } }
     ]),
     RecurringPayment.aggregate([
-      { $match: { businessId: bizOid, accountId: acctOid } },
+      { $match: { businessId, accountId } },
       { $group: { _id: null, t: { $sum: "$amount" } } }
-    ])
+    ]),
+    getTenantOpeningBalanceTotal(accountId)
   ]);
   const totalCharged = invoices[0]?.t || 0;
   const totalPaid    = payments[0]?.t || 0;
-  const balance      = totalCharged - totalPaid;
+  const balance      = tenantOpening + totalCharged - totalPaid;
   await RecurringAccount.findByIdAndUpdate(accountId, { currentBalance: balance });
   return balance;
 }
@@ -264,24 +270,26 @@ export async function buildAccountStatement({ businessId, accountId, periodStart
 
   const tenant = await RecurringTenant.findOne({ accountId, isActive: true }).lean();
 
-  // Opening balance = all charges - all payments before periodStart
-  const bQ    = { businessId, accountId };           // for .find() which auto-casts
-  const bQAgg = { businessId: oid(businessId), accountId: oid(accountId) }; // for aggregate
+  // Opening balance = migrated arrears from BEFORE the system existed
+  // (tenant.openingBalance, entered once at setup) + all charges - all
+  // payments recorded in-system before periodStart.
+  const tenantOpening = await getTenantOpeningBalanceTotal(accountId);
+  const bQ = { businessId, accountId };
   const [prevCharged, prevPaid] = await Promise.all([
     RecurringInvoice.aggregate([
-      { $match: { ...bQAgg, status: { $ne: "cancelled" }, periodStart: { $lt: periodStart } } },
+      { $match: { ...bQ, status: { $ne: "cancelled" }, periodStart: { $lt: periodStart } } },
       { $group: { _id: null, t: { $sum: "$amount" } } }
     ]),
     RecurringPayment.aggregate([
-      { $match: { ...bQAgg, date: { $lt: periodStart } } },
+      { $match: { ...bQ, date: { $lt: periodStart } } },
       { $group: { _id: null, t: { $sum: "$amount" } } }
     ])
   ]);
-  const openingBalance = (prevCharged[0]?.t || 0) - (prevPaid[0]?.t || 0);
+  const openingBalance = tenantOpening + (prevCharged[0]?.t || 0) - (prevPaid[0]?.t || 0);
 
-  // This period's transactions — .find() auto-casts strings so bQ is fine
+  // This period's transactions
   const [invoices, payments, expenses] = await Promise.all([
-    RecurringInvoice.find({ ...bQ, periodStart: { $gte: periodStart, $lte: periodEnd } })
+    RecurringInvoice.find({ ...bQ, periodStart: { $gte: periodStart }, periodEnd: { $lte: periodEnd } })
       .sort({ periodStart: 1 }).lean(),
     RecurringPayment.find({ ...bQ, date: { $gte: periodStart, $lte: periodEnd } })
       .sort({ date: 1 }).lean(),
@@ -356,37 +364,23 @@ export async function buildTenantStatement({ businessId, tenantId, periodStart, 
   const account = await RecurringAccount.findById(tenant.accountId).lean();
   const cur = account?.currency || "USD";
 
-  // ── KEY FIX ──────────────────────────────────────────────────────────────────
-  // Query by accountId (always reliable) NOT tenantId.
-  // Reason 1: invoices may have tenantId=null if tenant was added after invoicing.
-  // Reason 2: aggregate $match does not auto-cast string IDs to ObjectId.
-  // Both bugs caused the statement to return 0 rows even with a valid invoice.
-  // accountId is always set on every invoice — it's the safe query key.
-  const accountId = String(tenant.accountId);
-  const bQ    = { businessId, accountId };                              // for .find() (auto-casts)
-  const bQAgg = { businessId: oid(businessId), accountId: oid(accountId) }; // for aggregate
-
-  // Opening balance = all charges minus all payments before periodStart
+  // Opening balance = tenant's migrated arrears (entered once at setup) +
+  // all in-system charges - all in-system payments before periodStart.
+  const bQ = { businessId, tenantId };
   const [prevCharged, prevPaid] = await Promise.all([
     RecurringInvoice.aggregate([
-      { $match: { ...bQAgg, status: { $ne: "cancelled" }, periodStart: { $lt: periodStart } } },
+      { $match: { ...bQ, status: { $ne: "cancelled" }, periodStart: { $lt: periodStart } } },
       { $group: { _id: null, t: { $sum: "$amount" } } }
     ]),
     RecurringPayment.aggregate([
-      { $match: { ...bQAgg, date: { $lt: periodStart } } },
+      { $match: { ...bQ, date: { $lt: periodStart } } },
       { $group: { _id: null, t: { $sum: "$amount" } } }
     ])
   ]);
-  // Add admin-entered legacy opening balance (arrears/credit before system setup)
-  // Only applied if openingBalanceDate is before the statement period start
-  const legacyOpening = tenant.openingBalance || 0;
-  const legacyDate    = tenant.openingBalanceDate ? new Date(tenant.openingBalanceDate) : null;
-  const legacyCarryIn = (legacyDate && legacyDate < periodStart) ? legacyOpening : 0;
-  const openingBalance = legacyCarryIn + (prevCharged[0]?.t || 0) - (prevPaid[0]?.t || 0);
+  const openingBalance = (tenant.openingBalance || 0) + (prevCharged[0]?.t || 0) - (prevPaid[0]?.t || 0);
 
-  // Current period transactions — .find() auto-casts strings
   const [invoices, payments] = await Promise.all([
-    RecurringInvoice.find({ ...bQ, periodStart: { $gte: periodStart, $lte: periodEnd } })
+    RecurringInvoice.find({ ...bQ, periodStart: { $gte: periodStart }, periodEnd: { $lte: periodEnd } })
       .sort({ periodStart: 1 }).lean(),
     RecurringPayment.find({ ...bQ, date: { $gte: periodStart, $lte: periodEnd } })
       .sort({ date: 1 }).lean()
