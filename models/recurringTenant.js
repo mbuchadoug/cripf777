@@ -57,6 +57,33 @@ const RecurringTenantSchema = new mongoose.Schema({
   openingBalance:     { type: Number, default: 0 },
   openingBalanceDate: { type: Date,   default: null },
 
+  // ── Per-tenant billing override (REAL-WORLD SCENARIO) ────────────────────────
+  // An account (unit/building) can host MULTIPLE tenants who each pay a
+  // DIFFERENT amount (e.g. a boarding house "Main House" account with Room 1
+  // paying $80 and Room 2 paying $120, or a school "Grade 7" account with
+  // siblings on different fee plans). When any of these are set (non-null),
+  // they OVERRIDE the parent RecurringAccount's billing settings for THIS
+  // tenant only. Leave null/blank to simply inherit the account's settings
+  // (this is the default and matches the original single-tenant-per-account
+  // behaviour exactly — nothing changes for existing accounts).
+  billingAmount:      { type: Number, default: null },
+  billingCycle: {
+    type:    String,
+    enum:    ["monthly", "quarterly", "termly", "annual", "custom", null],
+    default: null
+  },
+  billingDay:         { type: Number, default: null, min: 1, max: 28 },
+  customIntervalDays: { type: Number, default: null },
+  // Optional override for the invoice line description, e.g. "Room 2 Rent".
+  // Falls back to "<period> charge" when blank.
+  billingDescription: { type: String, default: "" },
+
+  // ── Cached balance (THIS tenant's own share only — recomputed on demand) ────
+  // Unlike RecurringAccount.currentBalance (which is the sum of EVERY tenant
+  // under that account), this is scoped to just this tenant, so multiple
+  // tenants sharing one account never see each other's balance.
+  currentBalance: { type: Number, default: 0 },
+
   // ── Notes ───────────────────────────────────────────────────────────────────
   notes:     { type: String, default: "" },
   createdBy: { type: String, default: null }

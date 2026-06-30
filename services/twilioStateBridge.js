@@ -323,6 +323,7 @@ const restrictedStateMap = {
     report_date_filter:       "reports",
     // Recurring billing
     rb_payment_pick_account:     "payments",
+    rb_payment_pick_tenant:      "payments",
     rb_payment_enter_amount:     "payments",
     rb_payment_confirm:          "payments",
     rb_acct_stmt_pick_account:   "reports",
@@ -3362,10 +3363,28 @@ _This handover is logged and will appear in today's report._`
       biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
       return sendMainMenu(from);
     }
-    const tenant = await RecurringTenant.findOne({ accountId: acct._id, isActive: true }).lean();
+    // An account can host several tenants on different rentals (e.g. one
+    // "Main House" account with Room 1 and Room 2 paying different rent).
+    // If there's more than one, the clerk must say WHICH tenant the payment
+    // is for - otherwise it could get applied to the wrong person's invoice.
+    const tenants = await RecurringTenant.find({ accountId: acct._id, isActive: true }).lean();
     const cur = acct.currency || biz.currency || "USD";
-    const { recomputeAccountBalance } = await import("./recurringBilling.js");
-    const balance = await recomputeAccountBalance(biz._id, acct._id);
+
+    if (tenants.length > 1) {
+      biz.sessionState = "rb_payment_pick_tenant";
+      biz.sessionData   = { rbAccountId: acctId, rbAccountName: acct.name, rbCurrency: cur };
+      await saveBizSafe(biz);
+      const items = tenants.map(t => ({ id: `rb_tenant_${t._id}`, title: t.name }));
+      items.push({ id: "recurring_billing_menu", title: "⬅ Cancel" });
+      await sendList(from, `🏠 *${acct.name}* has ${tenants.length} tenants.\n👤 Who is this payment for?`, items);
+      return true;
+    }
+
+    const tenant = tenants[0] || null;
+    const { recomputeTenantBalance, recomputeAccountBalance } = await import("./recurringBilling.js");
+    const balance = tenant
+      ? await recomputeTenantBalance(biz._id, tenant._id)
+      : await recomputeAccountBalance(biz._id, acct._id);
 
     biz.sessionState = "rb_payment_enter_amount";
     biz.sessionData  = {
@@ -3379,6 +3398,30 @@ _This handover is logged and will appear in today's report._`
 
     await sendButtons(from, {
       text: `💰 *Record Payment*\n\n🏠 Account: *${acct.name}*${tenant ? `\n👤 Tenant: ${tenant.name}` : ""}\n💰 Current balance: *${balance.toFixed(2)} ${cur}*\n\nEnter the amount received (e.g. *300*):`,
+      buttons: [{ id: "recurring_billing_menu", title: "⬅ Cancel" }]
+    });
+    return true;
+  }
+
+  // ── Payment flow step 1b: tenant picked (only when account has >1 tenant) ──
+  if (state === "rb_payment_pick_tenant") {
+    if (!a?.startsWith("rb_tenant_")) { await sendText(from, "❌ Please select a tenant."); return true; }
+    const tenantId = a.replace("rb_tenant_", "");
+    const RecurringTenant = (await import("../models/recurringTenant.js")).default;
+    const tenant = await RecurringTenant.findById(tenantId).lean();
+    if (!tenant) { await sendText(from, "❌ Tenant not found."); return true; }
+
+    const { recomputeTenantBalance } = await import("./recurringBilling.js");
+    const balance = await recomputeTenantBalance(biz._id, tenant._id);
+    const cur = biz.sessionData.rbCurrency || biz.currency || "USD";
+
+    biz.sessionState = "rb_payment_enter_amount";
+    biz.sessionData.rbTenantId   = tenant._id.toString();
+    biz.sessionData.rbTenantName = tenant.name;
+    await saveBizSafe(biz);
+
+    await sendButtons(from, {
+      text: `💰 *Record Payment*\n\n🏠 Account: *${biz.sessionData.rbAccountName}*\n👤 Tenant: ${tenant.name}\n💰 Current balance: *${balance.toFixed(2)} ${cur}*\n\nEnter the amount received (e.g. *300*):`,
       buttons: [{ id: "recurring_billing_menu", title: "⬅ Cancel" }]
     });
     return true;

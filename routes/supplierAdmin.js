@@ -11447,7 +11447,8 @@ router.get("/suppliers/:id/recurring", requireSupplierAdmin, async (req, res) =>
 
     // Attach tenant and latest invoice to each account
     for (const acct of accounts) {
-      acct._tenant  = await RecurringTenant.findOne({ accountId: acct._id, isActive: true }).lean();
+      acct._tenants = await RecurringTenant.find({ accountId: acct._id, isActive: true }).lean();
+      acct._tenant  = acct._tenants[0] || null;
       acct._invoice = await RecurringInvoice.findOne({ accountId: acct._id, status: { $in: ["unpaid","partial","overdue"] } })
         .sort({ periodStart: -1 }).lean();
     }
@@ -11468,7 +11469,7 @@ router.get("/suppliers/:id/recurring", requireSupplierAdmin, async (req, res) =>
         <tr>
           <td><strong>${esc(acct.name)}</strong>${acct.ref ? ` <small style="color:var(--muted)">(${esc(acct.ref)})</small>` : ""}<br>
               <small style="color:var(--muted)">${esc(acct.description || acct.category)}</small></td>
-          <td>${acct._tenant ? esc(acct._tenant.name) : '<span style="color:var(--muted)">Vacant</span>'}<br>
+          <td>${acct._tenant ? esc(acct._tenant.name) + (acct._tenants.length > 1 ? ` <small style="color:var(--blue);font-weight:600">+${acct._tenants.length - 1} more</small>` : "") : '<span style="color:var(--muted)">Vacant</span>'}<br>
               <small style="color:var(--muted)">${acct._tenant?.phone ? esc(acct._tenant.phone) : ""}</small></td>
           <td>${acct.billingAmount} ${cur}/${acct.billingCycle}</td>
           <td><strong style="color:${acct.currentBalance > 0 ? "var(--red)" : "var(--green)"}">${(acct.currentBalance || 0).toFixed(2)} ${cur}</strong></td>
@@ -11483,6 +11484,8 @@ router.get("/suppliers/:id/recurring", requireSupplierAdmin, async (req, res) =>
                style="background:#fef3c7;color:#92400e;border:none;padding:4px 10px;border-radius:6px;font-size:12px;text-decoration:none">👤 Tenant</a>
             <a href="/zq-admin/suppliers/${supplier._id}/recurring/${acct._id}/records"
                style="background:#ede9fe;color:#5b21b6;border:none;padding:4px 10px;border-radius:6px;font-size:12px;text-decoration:none">📂 Records</a>
+            <button onclick="openInvoiceModal('${acct._id}','${esc(acct.name)}')"
+               style="background:#0f172a;color:white;border:none;padding:4px 10px;border-radius:6px;font-size:12px;cursor:pointer">🧾 Invoice</button>
             <button onclick="openPaymentModal('${acct._id}','${esc(acct.name)}')"
                style="background:#7c3aed;color:white;border:none;padding:4px 10px;border-radius:6px;font-size:12px;cursor:pointer">💰 Pay</button>
             <form method="POST" action="/zq-admin/suppliers/${supplier._id}/recurring/${acct._id}/delete" style="display:inline"
@@ -11634,7 +11637,62 @@ router.get("/suppliers/:id/recurring", requireSupplierAdmin, async (req, res) =>
         });
       </script>`;
 
-    res.send(layout(`Recurring: ${biz.name}`, content + paymentModal + deleteModal));
+    // Invoice-now modal - manual ad-hoc invoicing for a single account
+    // (vacant or single-tenant only - multi-tenant accounts get redirected
+    // by the server to invoice each tenant individually).
+    const invoiceModal = `
+      <div id="invModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center">
+        <div style="background:white;border-radius:12px;padding:28px;width:420px;max-width:95vw">
+          <h3 style="font-size:16px;font-weight:700;margin-bottom:8px">🧾 Invoice Now</h3>
+          <div id="invAcctName" style="font-weight:600;color:var(--muted);margin-bottom:14px;font-size:13px"></div>
+          <p style="font-size:12px;color:var(--muted);margin-bottom:14px">
+            Leave fields blank to use the account's normal billing amount, cycle and due day.
+            If this account has more than one tenant, you'll be told to invoice them individually instead.
+          </p>
+          <form id="invForm" method="POST">
+            <div style="margin-bottom:12px">
+              <label style="font-weight:600;display:block;margin-bottom:4px;font-size:13px">Amount Override (optional)</label>
+              <input name="amount" type="number" step="0.01" placeholder="Leave blank to use default"
+                style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:7px;font-size:14px">
+            </div>
+            <div style="margin-bottom:12px">
+              <label style="font-weight:600;display:block;margin-bottom:4px;font-size:13px">Period Label (optional)</label>
+              <input name="periodLabel" placeholder="e.g. June 2026"
+                style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:7px;font-size:14px">
+            </div>
+            <div style="margin-bottom:14px">
+              <label style="font-weight:600;display:block;margin-bottom:4px;font-size:13px">Due Date (optional)</label>
+              <input name="dueDate" type="date"
+                style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:7px;font-size:14px">
+            </div>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:16px">
+              <input type="checkbox" name="force" value="1" style="width:16px;height:16px">
+              <span style="font-weight:600;font-size:13px">Force - raise an extra invoice even if already invoiced this period</span>
+            </label>
+            <div style="display:flex;gap:10px">
+              <button type="submit" style="background:#0f172a;color:white;padding:10px 20px;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;flex:1">
+                🧾 Raise Invoice
+              </button>
+              <button type="button" onclick="document.getElementById('invModal').style.display='none'"
+                style="background:#f1f5f9;color:var(--text);padding:10px 20px;border:none;border-radius:8px;font-size:14px;cursor:pointer">
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+      <script>
+        function openInvoiceModal(acctId, acctName) {
+          document.getElementById('invAcctName').textContent = '🏠 ' + acctName;
+          document.getElementById('invForm').action = '/zq-admin/suppliers/${supplier._id}/recurring/' + acctId + '/invoice-now';
+          document.getElementById('invModal').style.display = 'flex';
+        }
+        document.getElementById('invModal')?.addEventListener('click', function(e) {
+          if (e.target === this) this.style.display = 'none';
+        });
+      </script>`;
+
+    res.send(layout(`Recurring: ${biz.name}`, content + paymentModal + deleteModal + invoiceModal));
   } catch (e) {
     res.send(layout("Recurring Billing", `<div class="alert red">Error: ${e.message}</div>`));
   }
@@ -11777,19 +11835,29 @@ router.get("/suppliers/:id/recurring/:acctId/tenant", requireSupplierAdmin, asyn
     const errMsg     = req.query.error   ? `<div class="alert red">❌ ${esc(req.query.error)}</div>`   : "";
     const successMsg = req.query.success ? `<div class="alert green">✅ ${esc(req.query.success)}</div>` : "";
 
-    const tenantRows = tenants.map(t => `
+    const cycleOptsBlank = [["", "- Use account default -"], ["monthly","Monthly"], ["quarterly","Quarterly"], ["termly","Termly"], ["annual","Annual"]]
+      .map(([v,l]) => `<option value="${v}">${l}</option>`).join("");
+
+    const tenantRows = tenants.map(t => {
+      const hasOverride = t.billingAmount != null;
+      const effAmount   = hasOverride ? t.billingAmount : acct.billingAmount;
+      const effCycle    = t.billingCycle || acct.billingCycle;
+      return `
       <tr>
         <td><strong>${esc(t.name)}</strong></td>
         <td>${esc(t.phone || "-")}</td>
         <td>${esc(t.email || "-")}</td>
-        <td>${t.startDate ? new Date(t.startDate).toLocaleDateString("en-GB") : "-"}</td>
+        <td style="text-align:right;font-weight:600">
+          ${(effAmount||0).toFixed(2)} ${acct.currency || "USD"} <small style="color:var(--muted)">/${effCycle}</small>
+          ${hasOverride ? `<div style="font-weight:400">${badge("Custom rate","blue")}</div>` : ""}
+        </td>
           <td style="text-align:right;font-weight:600;color:${(t.openingBalance||0) > 0 ? "var(--red)" : (t.openingBalance||0) < 0 ? "var(--green)" : "var(--muted)"}">
             ${(t.openingBalance||0) !== 0 ? (t.openingBalance||0).toFixed(2) : "—"}
             ${t.openingBalanceDate ? `<div style="font-weight:400;color:var(--muted);font-size:10px">as at ${new Date(t.openingBalanceDate).toLocaleDateString("en-GB")}</div>` : ""}
           </td>
           <td>${t.canSelfServe ? badge("Self-serve","green") : badge("Staff only","gray")}</td>
         <td>${t.isActive ? badge("Active","green") : badge("Inactive","red")}</td>
-        <td style="display:flex;gap:6px">
+        <td style="display:flex;gap:6px;flex-wrap:wrap">
           <form method="POST" action="/zq-admin/suppliers/${supplier._id}/recurring/${acct._id}/tenant/${t._id}/toggle">
             <button style="background:#fef3c7;color:#92400e;border:none;padding:4px 10px;border-radius:6px;font-size:12px;cursor:pointer">
               ${t.isActive ? "⏸ Deactivate" : "▶ Activate"}
@@ -11800,6 +11868,12 @@ router.get("/suppliers/:id/recurring/:acctId/tenant", requireSupplierAdmin, asyn
               ${t.canSelfServe ? "🔒 Disable Self-serve" : "🔓 Enable Self-serve"}
             </button>
           </form>
+          <button onclick="openTenantInvoiceModal('${t._id}','${esc(t.name)}')"
+             style="background:#0f172a;color:white;border:none;padding:4px 10px;border-radius:6px;font-size:12px;cursor:pointer">🧾 Invoice</button>
+          <button onclick="openTenantPayModal('${t._id}','${esc(t.name)}')"
+             style="background:#7c3aed;color:white;border:none;padding:4px 10px;border-radius:6px;font-size:12px;cursor:pointer">💰 Pay</button>
+          <a href="/zq-admin/suppliers/${supplier._id}/recurring/${acct._id}/tenant/${t._id}/statement"
+             style="background:#f0fdf4;color:#16a34a;border:none;padding:4px 10px;border-radius:6px;font-size:12px;text-decoration:none">📋 Statement</a>
           <a href="/zq-admin/suppliers/${supplier._id}/recurring/${acct._id}/tenant/${t._id}/edit"
              style="background:#ede9fe;color:#5b21b6;border:none;padding:4px 10px;border-radius:6px;font-size:12px;text-decoration:none">✏️ Edit</a>
           <form method="POST" action="/zq-admin/suppliers/${supplier._id}/recurring/${acct._id}/tenant/${t._id}/delete"
@@ -11807,19 +11881,23 @@ router.get("/suppliers/:id/recurring/:acctId/tenant", requireSupplierAdmin, asyn
             <button style="background:#fee2e2;color:#dc2626;border:none;padding:4px 10px;border-radius:6px;font-size:12px;cursor:pointer">🗑 Delete</button>
           </form>
         </td>
-      </tr>`).join("");
+      </tr>`;
+    }).join("");
 
     const content = `
       <div style="margin-bottom:16px">
         <a href="/zq-admin/suppliers/${supplier._id}/recurring" style="color:var(--blue);text-decoration:none">← Back to Recurring Billing</a>
       </div>
       <h2 style="font-size:20px;font-weight:700;margin-bottom:4px">👤 Tenants - ${esc(acct.name)}</h2>
-      <div style="color:var(--muted);margin-bottom:20px">${esc(biz.name)}</div>
+      <div style="color:var(--muted);margin-bottom:20px">${esc(biz.name)} · Default rate: ${(acct.billingAmount||0).toFixed(2)} ${acct.currency || "USD"}/${acct.billingCycle}</div>
       ${errMsg}${successMsg}
+      ${tenants.filter(t => t.isActive).length > 1 ? `<div class="alert" style="background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;padding:10px 14px;border-radius:8px;margin-bottom:16px;font-size:13px">
+        ℹ️ This account has ${tenants.filter(t => t.isActive).length} active tenants - each can have their own rent/cycle below ("Rate Override"), and each is invoiced and paid separately using the 🧾/💰 buttons on their row.
+      </div>` : ""}
       <div class="card" style="margin-bottom:20px">
         <div style="font-weight:700;margin-bottom:14px">Add Tenant</div>
         <form method="POST" action="/zq-admin/suppliers/${supplier._id}/recurring/${acct._id}/tenant/add"
-              style="display:grid;grid-template-columns:repeat(5,1fr) auto;gap:10px;align-items:end">
+              style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
           <div>
             <label style="font-weight:600;display:block;margin-bottom:4px;font-size:12px">Name *</label>
             <input name="name" required placeholder="John Moyo"
@@ -11839,16 +11917,36 @@ router.get("/suppliers/:id/recurring/:acctId/tenant", requireSupplierAdmin, asyn
             <label style="font-weight:600;display:block;margin-bottom:4px;font-size:12px">Opening Balance</label>
             <input name="openingBalance" type="number" step="0.01" placeholder="0.00"
               style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:7px;font-size:13px">
-            <div style="color:var(--muted);font-size:10px;margin-top:2px">Arrears before system setup (positive = owes, negative = credit)</div>
+            <div style="color:var(--muted);font-size:10px;margin-top:2px">Arrears before system setup</div>
           </div>
           <div>
             <label style="font-weight:600;display:block;margin-bottom:4px;font-size:12px">Balance As At</label>
             <input name="openingBalanceDate" type="date"
               style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:7px;font-size:13px">
           </div>
-          <button type="submit" style="background:var(--blue);color:white;padding:9px 16px;border:none;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap">
-            ✅ Add Tenant
-          </button>
+          <div></div>
+          <div style="grid-column:1/4;border-top:1px solid var(--border);margin-top:4px;padding-top:12px">
+            <div style="font-weight:600;font-size:13px;margin-bottom:2px">Rate Override <span style="font-weight:400;color:var(--muted);font-size:11px">(only needed when this tenant pays a different rent than the account default - e.g. several rooms sharing one "Building" account)</span></div>
+          </div>
+          <div>
+            <label style="font-weight:600;display:block;margin-bottom:4px;font-size:12px">Custom Amount</label>
+            <input name="billingAmount" type="number" step="0.01" placeholder="Leave blank to use account default (${acct.billingAmount||0})"
+              style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:7px;font-size:13px">
+          </div>
+          <div>
+            <label style="font-weight:600;display:block;margin-bottom:4px;font-size:12px">Custom Cycle</label>
+            <select name="billingCycle" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:7px;font-size:13px">${cycleOptsBlank}</select>
+          </div>
+          <div>
+            <label style="font-weight:600;display:block;margin-bottom:4px;font-size:12px">Invoice Line Label</label>
+            <input name="billingDescription" placeholder="e.g. Room 2 Rent"
+              style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:7px;font-size:13px">
+          </div>
+          <div style="grid-column:1/4">
+            <button type="submit" style="background:var(--blue);color:white;padding:9px 16px;border:none;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap">
+              ✅ Add Tenant
+            </button>
+          </div>
         </form>
       </div>
       <div class="card">
@@ -11859,7 +11957,7 @@ router.get("/suppliers/:id/recurring/:acctId/tenant", requireSupplierAdmin, asyn
             <th style="padding:10px 12px;text-align:left">Name</th>
             <th style="padding:10px 12px;text-align:left">Phone</th>
             <th style="padding:10px 12px;text-align:left">Email</th>
-            <th style="padding:10px 12px;text-align:left">Move-in</th>
+            <th style="padding:10px 12px;text-align:right">Rent / Cycle</th>
             <th style="padding:10px 12px;text-align:right">Opening Bal</th>
             <th style="padding:10px 12px;text-align:left">Self-serve</th>
             <th style="padding:10px 12px;text-align:left">Status</th>
@@ -11869,7 +11967,95 @@ router.get("/suppliers/:id/recurring/:acctId/tenant", requireSupplierAdmin, asyn
         </table>` : `<p style="color:var(--muted)">No tenants yet.</p>`}
       </div>`;
 
-    res.send(layout(`Recurring: ${acct.name}`, content));
+    // Per-tenant Invoice and Payment modals
+    const tenantModals = `
+      <div id="tInvModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center">
+        <div style="background:white;border-radius:12px;padding:28px;width:420px;max-width:95vw">
+          <h3 style="font-size:16px;font-weight:700;margin-bottom:8px">🧾 Invoice Tenant</h3>
+          <div id="tInvName" style="font-weight:600;color:var(--muted);margin-bottom:14px;font-size:13px"></div>
+          <p style="font-size:12px;color:var(--muted);margin-bottom:14px">Leave fields blank to use this tenant's normal rate, cycle and due day.</p>
+          <form id="tInvForm" method="POST">
+            <div style="margin-bottom:12px">
+              <label style="font-weight:600;display:block;margin-bottom:4px;font-size:13px">Amount Override</label>
+              <input name="amount" type="number" step="0.01" placeholder="Leave blank for default"
+                style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:7px;font-size:14px">
+            </div>
+            <div style="margin-bottom:12px">
+              <label style="font-weight:600;display:block;margin-bottom:4px;font-size:13px">Period Label</label>
+              <input name="periodLabel" placeholder="e.g. June 2026"
+                style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:7px;font-size:14px">
+            </div>
+            <div style="margin-bottom:14px">
+              <label style="font-weight:600;display:block;margin-bottom:4px;font-size:13px">Due Date</label>
+              <input name="dueDate" type="date"
+                style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:7px;font-size:14px">
+            </div>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:16px">
+              <input type="checkbox" name="force" value="1" style="width:16px;height:16px">
+              <span style="font-weight:600;font-size:13px">Force - raise an extra invoice even if already invoiced this period</span>
+            </label>
+            <div style="display:flex;gap:10px">
+              <button type="submit" style="background:#0f172a;color:white;padding:10px 20px;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;flex:1">
+                🧾 Raise Invoice
+              </button>
+              <button type="button" onclick="document.getElementById('tInvModal').style.display='none'"
+                style="background:#f1f5f9;color:var(--text);padding:10px 20px;border:none;border-radius:8px;font-size:14px;cursor:pointer">Cancel</button>
+            </div>
+          </form>
+        </div>
+      </div>
+      <div id="tPayModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center">
+        <div style="background:white;border-radius:12px;padding:28px;width:400px;max-width:95vw">
+          <h3 style="font-size:16px;font-weight:700;margin-bottom:16px">💰 Record Payment</h3>
+          <div id="tPayName" style="font-weight:600;color:var(--muted);margin-bottom:14px;font-size:13px"></div>
+          <form id="tPayForm" method="POST">
+            <div style="margin-bottom:12px">
+              <label style="font-weight:600;display:block;margin-bottom:4px;font-size:13px">Amount *</label>
+              <input name="amount" type="number" step="0.01" required placeholder="300.00"
+                style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:7px;font-size:14px">
+            </div>
+            <div style="margin-bottom:12px">
+              <label style="font-weight:600;display:block;margin-bottom:4px;font-size:13px">Method</label>
+              <select name="method" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:7px;font-size:14px">
+                <option value="cash">💵 Cash</option>
+                <option value="ecocash">📱 EcoCash</option>
+                <option value="bank">🏦 Bank Transfer</option>
+                <option value="innbucks">💳 InnBucks</option>
+                <option value="zipit">🔄 ZipIt</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            <div style="margin-bottom:16px">
+              <label style="font-weight:600;display:block;margin-bottom:4px;font-size:13px">Reference (optional)</label>
+              <input name="reference" placeholder="EcoCash transaction ref"
+                style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:7px;font-size:14px">
+            </div>
+            <div style="display:flex;gap:10px">
+              <button type="submit" style="background:var(--blue);color:white;padding:10px 20px;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;flex:1">
+                ✅ Record Payment
+              </button>
+              <button type="button" onclick="document.getElementById('tPayModal').style.display='none'"
+                style="background:#f1f5f9;color:var(--text);padding:10px 20px;border:none;border-radius:8px;font-size:14px;cursor:pointer">Cancel</button>
+            </div>
+          </form>
+        </div>
+      </div>
+      <script>
+        function openTenantInvoiceModal(tid, tname) {
+          document.getElementById('tInvName').textContent = '👤 ' + tname;
+          document.getElementById('tInvForm').action = '/zq-admin/suppliers/${supplier._id}/recurring/${acct._id}/tenant/' + tid + '/invoice-now';
+          document.getElementById('tInvModal').style.display = 'flex';
+        }
+        document.getElementById('tInvModal')?.addEventListener('click', function(e) { if (e.target === this) this.style.display = 'none'; });
+        function openTenantPayModal(tid, tname) {
+          document.getElementById('tPayName').textContent = '👤 ' + tname;
+          document.getElementById('tPayForm').action = '/zq-admin/suppliers/${supplier._id}/recurring/${acct._id}/tenant/' + tid + '/record-payment';
+          document.getElementById('tPayModal').style.display = 'flex';
+        }
+        document.getElementById('tPayModal')?.addEventListener('click', function(e) { if (e.target === this) this.style.display = 'none'; });
+      </script>`;
+
+    res.send(layout(`Recurring: ${acct.name}`, content + tenantModals));
   } catch (e) {
     res.redirect(`/zq-admin/suppliers/${req.params.id}/recurring?error=${encodeURIComponent(e.message)}`);
   }
@@ -11884,7 +12070,7 @@ router.post("/suppliers/:id/recurring/:acctId/tenant/add", requireSupplierAdmin,
     const biz = supplier?.businessId ? await Business.findById(supplier.businessId).lean() : null;
     if (!biz) return res.redirect(`/zq-admin/suppliers/${req.params.id}/recurring`);
 
-    const { name, phone, startDate, openingBalance, openingBalanceDate } = req.body;
+    const { name, phone, startDate, openingBalance, openingBalanceDate, billingAmount, billingCycle, billingDescription } = req.body;
     let p = (phone || "").replace(/\D/g, "");
     if (p.startsWith("0")) p = "263" + p.slice(1);
 
@@ -11898,7 +12084,11 @@ router.post("/suppliers/:id/recurring/:acctId/tenant/add", requireSupplierAdmin,
       canSelfServe:        false,
       notificationsEnabled: true,
       openingBalance:      parseFloat(openingBalance) || 0,
-      openingBalanceDate:  openingBalanceDate ? new Date(openingBalanceDate) : null
+      openingBalanceDate:  openingBalanceDate ? new Date(openingBalanceDate) : null,
+      // Blank = inherit the account's billing settings (most tenants).
+      billingAmount:       billingAmount !== "" && billingAmount != null ? parseFloat(billingAmount) : null,
+      billingCycle:        billingCycle || null,
+      billingDescription:  (billingDescription || "").trim()
     });
 
     res.redirect(`/zq-admin/suppliers/${req.params.id}/recurring/${req.params.acctId}/tenant?success=${encodeURIComponent(`Tenant "${name}" added`)}`);
@@ -12175,6 +12365,28 @@ router.get("/suppliers/:id/recurring/:acctId/tenant/:tid/edit", requireSupplierA
             <textarea name="notes" rows="2"
               style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:7px;font-size:14px">${esc(tenant.notes || "")}</textarea>
           </div>
+          <div style="border-top:1px solid var(--border);padding-top:14px;margin-bottom:14px">
+            <div style="font-weight:600;font-size:13px;margin-bottom:8px">Rate Override <span style="font-weight:400;color:var(--muted);font-size:11px">(blank = use account's default rate of ${acct.billingAmount||0} ${acct.currency||"USD"}/${acct.billingCycle})</span></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+              <div>
+                <label style="font-weight:600;display:block;margin-bottom:6px;font-size:12px">Custom Amount</label>
+                <input name="billingAmount" type="number" step="0.01" value="${tenant.billingAmount != null ? tenant.billingAmount : ""}" placeholder="Account default"
+                  style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:7px;font-size:14px">
+              </div>
+              <div>
+                <label style="font-weight:600;display:block;margin-bottom:6px;font-size:12px">Custom Cycle</label>
+                <select name="billingCycle" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:7px;font-size:14px">
+                  <option value="">- Account default -</option>
+                  ${["monthly","quarterly","termly","annual"].map(c => `<option value="${c}" ${tenant.billingCycle === c ? "selected" : ""}>${c.charAt(0).toUpperCase()+c.slice(1)}</option>`).join("")}
+                </select>
+              </div>
+              <div>
+                <label style="font-weight:600;display:block;margin-bottom:6px;font-size:12px">Invoice Line Label</label>
+                <input name="billingDescription" value="${esc(tenant.billingDescription || "")}" placeholder="e.g. Room 2 Rent"
+                  style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:7px;font-size:14px">
+              </div>
+            </div>
+          </div>
           <div style="display:flex;gap:18px;margin-bottom:14px">
             <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
               <input type="checkbox" name="isActive" value="1" ${tenant.isActive !== false ? "checked" : ""} style="width:16px;height:16px">
@@ -12211,7 +12423,7 @@ router.get("/suppliers/:id/recurring/:acctId/tenant/:tid/edit", requireSupplierA
 router.post("/suppliers/:id/recurring/:acctId/tenant/:tid/edit", requireSupplierAdmin, async (req, res) => {
   try {
     const RecurringTenant = (await import("../models/recurringTenant.js")).default;
-    const { name, phone, email, startDate, endDate, openingBalance, openingBalanceDate, notes, isActive, canSelfServe, notificationsEnabled } = req.body;
+    const { name, phone, email, startDate, endDate, openingBalance, openingBalanceDate, notes, isActive, canSelfServe, notificationsEnabled, billingAmount, billingCycle, billingDescription } = req.body;
 
     let p = (phone || "").replace(/\D/g, "");
     if (p.startsWith("0")) p = "263" + p.slice(1);
@@ -12227,7 +12439,10 @@ router.post("/suppliers/:id/recurring/:acctId/tenant/:tid/edit", requireSupplier
       notes:                notes || "",
       isActive:             isActive === "1",
       canSelfServe:         canSelfServe === "1",
-      notificationsEnabled: notificationsEnabled === "1"
+      notificationsEnabled: notificationsEnabled === "1",
+      billingAmount:        billingAmount !== "" && billingAmount != null ? parseFloat(billingAmount) : null,
+      billingCycle:         billingCycle || null,
+      billingDescription:   (billingDescription || "").trim()
     });
 
     res.redirect(`/zq-admin/suppliers/${req.params.id}/recurring/${req.params.acctId}/tenant?success=${encodeURIComponent(`Tenant "${name}" updated`)}`);
@@ -12257,6 +12472,214 @@ router.post("/suppliers/:id/recurring/:acctId/tenant/:tid/delete", requireSuppli
     await RecurringTenant.findByIdAndDelete(req.params.tid);
 
     res.redirect(`/zq-admin/suppliers/${req.params.id}/recurring/${req.params.acctId}/tenant?success=${encodeURIComponent(`Tenant "${tenant.name}" deleted`)}`);
+  } catch (e) {
+    res.redirect(`/zq-admin/suppliers/${req.params.id}/recurring/${req.params.acctId}/tenant?error=${encodeURIComponent(e.message)}`);
+  }
+});
+
+// ── POST /suppliers/:id/recurring/:acctId/tenant/:tid/record-payment ─────────
+// Scoped to ONE tenant's own outstanding invoices - required once an account
+// can have several tenants on different rentals, so a payment from Tenant A
+// can never get applied to Tenant B's invoice just because it's older.
+router.post("/suppliers/:id/recurring/:acctId/tenant/:tid/record-payment", requireSupplierAdmin, async (req, res) => {
+  try {
+    const supplier = await SupplierProfile.findById(req.params.id).lean();
+    const Business = (await import("../models/business.js")).default;
+    const biz = supplier?.businessId ? await Business.findById(supplier.businessId).lean() : null;
+    if (!biz) return res.redirect(`/zq-admin/suppliers/${req.params.id}/recurring`);
+
+    const { amount, method, reference, notes } = req.body;
+    const { recordRecurringPayment } = await import("../services/recurringBilling.js");
+    await recordRecurringPayment({
+      businessId: biz._id,
+      accountId:  req.params.acctId,
+      tenantId:   req.params.tid,
+      amount:     parseFloat(amount) || 0,
+      method:     method || "cash",
+      reference:  reference || "",
+      notes:      notes || "",
+      clerkPhone: "admin",
+      date:       new Date()
+    });
+
+    res.redirect(`/zq-admin/suppliers/${req.params.id}/recurring/${req.params.acctId}/tenant?success=${encodeURIComponent("Payment recorded")}`);
+  } catch (e) {
+    res.redirect(`/zq-admin/suppliers/${req.params.id}/recurring/${req.params.acctId}/tenant?error=${encodeURIComponent(e.message)}`);
+  }
+});
+
+// ── POST /suppliers/:id/recurring/:acctId/invoice-now - manually invoice an account ──
+// Only works for vacant accounts or accounts with exactly ONE active tenant.
+// Accounts with several tenants on different rentals must be invoiced per
+// tenant (see the tenant/:tid/invoice-now route below) - a single account
+// charge can't sensibly cover several different rents at once.
+router.post("/suppliers/:id/recurring/:acctId/invoice-now", requireSupplierAdmin, async (req, res) => {
+  try {
+    const supplier = await SupplierProfile.findById(req.params.id).lean();
+    const Business = (await import("../models/business.js")).default;
+    const biz = supplier?.businessId ? await Business.findById(supplier.businessId).lean() : null;
+    if (!biz) return res.redirect(`/zq-admin/suppliers/${req.params.id}/recurring`);
+
+    const { amount, periodLabel, dueDate, force } = req.body;
+    const { generateInvoiceForAccount } = await import("../services/recurringBilling.js");
+    const result = await generateInvoiceForAccount({
+      biz, accountId: req.params.acctId,
+      clerkPhone: "admin",
+      force: force === "1",
+      amountOverride:      amount ? parseFloat(amount) : null,
+      periodLabelOverride: periodLabel || null,
+      dueDateOverride:     dueDate || null
+    });
+
+    const msg = result.created
+      ? `Invoice ${result.invoice.number} raised for ${result.invoice.amount.toFixed(2)} ${result.invoice.currency}`
+      : `Already invoiced for this period (use "Force" to raise an extra one)`;
+    res.redirect(`/zq-admin/suppliers/${req.params.id}/recurring/${req.params.acctId}/records?${result.created ? "success" : "error"}=${encodeURIComponent(msg)}`);
+  } catch (e) {
+    res.redirect(`/zq-admin/suppliers/${req.params.id}/recurring?error=${encodeURIComponent(e.message)}`);
+  }
+});
+
+// ── POST /suppliers/:id/recurring/:acctId/tenant/:tid/invoice-now - invoice ONE tenant ──
+// The multi-tenant path: each tenant is invoiced using THEIR OWN effective
+// billing (their override if set, otherwise the account's default).
+router.post("/suppliers/:id/recurring/:acctId/tenant/:tid/invoice-now", requireSupplierAdmin, async (req, res) => {
+  try {
+    const supplier = await SupplierProfile.findById(req.params.id).lean();
+    const Business = (await import("../models/business.js")).default;
+    const biz = supplier?.businessId ? await Business.findById(supplier.businessId).lean() : null;
+    if (!biz) return res.redirect(`/zq-admin/suppliers/${req.params.id}/recurring`);
+
+    const { amount, periodLabel, dueDate, description, force } = req.body;
+    const { generateInvoiceForTenant } = await import("../services/recurringBilling.js");
+    const result = await generateInvoiceForTenant({
+      biz, accountId: req.params.acctId, tenantId: req.params.tid,
+      clerkPhone: "admin",
+      force: force === "1",
+      amountOverride:      amount ? parseFloat(amount) : null,
+      periodLabelOverride: periodLabel || null,
+      dueDateOverride:     dueDate || null,
+      descriptionOverride: description || null
+    });
+
+    const msg = result.created
+      ? `Invoice ${result.invoice.number} raised for ${result.invoice.amount.toFixed(2)} ${result.invoice.currency}`
+      : `Already invoiced for this period (use "Force" to raise an extra one)`;
+    res.redirect(`/zq-admin/suppliers/${req.params.id}/recurring/${req.params.acctId}/tenant?${result.created ? "success" : "error"}=${encodeURIComponent(msg)}`);
+  } catch (e) {
+    res.redirect(`/zq-admin/suppliers/${req.params.id}/recurring/${req.params.acctId}/tenant?error=${encodeURIComponent(e.message)}`);
+  }
+});
+
+// ── GET /suppliers/:id/recurring/:acctId/tenant/:tid/statement - per-tenant statement ──
+// Distinct from the account statement: this shows ONLY this tenant's own
+// charges/payments/balance, which matters once an account hosts several
+// tenants on different rentals (the account statement mixes everyone).
+router.get("/suppliers/:id/recurring/:acctId/tenant/:tid/statement", requireSupplierAdmin, async (req, res) => {
+  try {
+    const supplier = await SupplierProfile.findById(req.params.id).lean();
+    const Business        = (await import("../models/business.js")).default;
+    const RecurringAccount = (await import("../models/recurringAccount.js")).default;
+    const RecurringTenant  = (await import("../models/recurringTenant.js")).default;
+    const biz  = supplier?.businessId ? await Business.findById(supplier.businessId).lean() : null;
+    const acct = await RecurringAccount.findById(req.params.acctId).lean();
+    const tenant = await RecurringTenant.findById(req.params.tid).lean();
+    if (!acct || !biz || !tenant) return res.redirect(`/zq-admin/suppliers/${req.params.id}/recurring`);
+
+    const now   = new Date();
+    const year  = parseInt(req.query.year  || now.getFullYear(), 10);
+    const month = parseInt(req.query.month !== undefined ? req.query.month : now.getMonth(), 10);
+    const periodStart = new Date(year, month, 1, 0, 0, 0, 0);
+    const periodEnd   = new Date(year, month + 1, 0, 23, 59, 59, 999);
+    const pl = periodStart.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+
+    const { buildTenantStatement, generateTenantStatementPDF } = await import("../services/recurringBilling.js");
+    const stmt = await buildTenantStatement({ businessId: biz._id, tenantId: tenant._id, periodStart, periodEnd });
+    const cur  = stmt.cur;
+
+    if (req.query.pdf === "1") {
+      const { filename, filepath } = await generateTenantStatementPDF({ biz, stmt, periodLabel: pl });
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      const { createReadStream } = await import("fs");
+      createReadStream(filepath).pipe(res);
+      return;
+    }
+
+    const months = Array.from({ length: 12 }, (_, i) => {
+      const d = new Date(now.getFullYear(), i, 1);
+      return `<option value="${now.getFullYear()}_${i}" ${now.getFullYear() === year && i === month ? "selected" : ""}>
+        ${d.toLocaleDateString("en-GB", { month: "long", year: "numeric" })}
+      </option>`;
+    }).join("");
+
+    const rowsHtml = stmt.rows.map(r => `
+      <tr>
+        <td>${new Date(r.date).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</td>
+        <td>${esc(r.type === "CHARGE" ? "Charge" : "Payment")}</td>
+        <td>${esc(r.description)}</td>
+        <td style="text-align:right;color:${r.debit > 0 ? "var(--red)" : "var(--muted)"}">${r.debit > 0 ? r.debit.toFixed(2) : "-"}</td>
+        <td style="text-align:right;color:${r.credit > 0 ? "var(--green)" : "var(--muted)"}">${r.credit > 0 ? r.credit.toFixed(2) : "-"}</td>
+        <td style="text-align:right;font-weight:700;color:${r.balance > 0 ? "var(--red)" : "var(--green)"}">${r.balance.toFixed(2)} ${cur}</td>
+      </tr>`).join("");
+
+    const content = `
+      <div style="margin-bottom:16px">
+        <a href="/zq-admin/suppliers/${supplier._id}/recurring/${acct._id}/tenant" style="color:var(--blue);text-decoration:none">← Back to Tenants</a>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+        <div>
+          <h2 style="font-size:20px;font-weight:700">📋 Tenant Statement - ${esc(tenant.name)}</h2>
+          <div style="color:var(--muted)">🏠 ${esc(acct.name)}</div>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center">
+          <form method="GET" style="display:flex;gap:8px;align-items:center">
+            <select name="period" onchange="const[y,m]=this.value.split('_');this.form.elements.year.value=y;this.form.elements.month.value=m;this.form.submit()"
+              style="padding:8px 10px;border:1px solid var(--border);border-radius:7px;font-size:13px">
+              ${months}
+            </select>
+            <input type="hidden" name="year" value="${year}">
+            <input type="hidden" name="month" value="${month}">
+          </form>
+          <a href="?year=${year}&month=${month}&pdf=1"
+             style="background:var(--blue);color:white;padding:9px 14px;border-radius:7px;text-decoration:none;font-size:13px;font-weight:600">
+            📄 Download PDF
+          </a>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px">
+        ${stat((stmt.openingBalance).toFixed(2) + " " + cur, "Opening Balance", "")}
+        ${stat(stmt.totalCharged.toFixed(2) + " " + cur, "Total Charged", "red")}
+        ${stat(stmt.totalPaid.toFixed(2) + " " + cur, "Total Paid", "green")}
+        ${stat(stmt.closingBalance.toFixed(2) + " " + cur, "Closing Balance", stmt.closingBalance > 0 ? "red" : "")}
+      </div>
+
+      <div class="card">
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+          <thead><tr style="background:#0f172a;color:white">
+            <th style="padding:10px 12px;text-align:left">Date</th>
+            <th style="padding:10px 12px;text-align:left">Type</th>
+            <th style="padding:10px 12px;text-align:left">Description</th>
+            <th style="padding:10px 12px;text-align:right">Charges</th>
+            <th style="padding:10px 12px;text-align:right">Payments</th>
+            <th style="padding:10px 12px;text-align:right">Balance</th>
+          </tr></thead>
+          <tbody>
+            <tr style="background:#eff6ff;font-weight:700">
+              <td colspan="5" style="padding:10px 12px">Opening Balance (carried forward)</td>
+              <td style="padding:10px 12px;text-align:right;color:${stmt.openingBalance > 0 ? "var(--red)" : "var(--green)"}">${stmt.openingBalance.toFixed(2)} ${cur}</td>
+            </tr>
+            ${rowsHtml}
+            <tr style="background:#f0fdf4;font-weight:700;font-size:14px">
+              <td colspan="4" style="padding:12px">CLOSING BALANCE</td>
+              <td colspan="2" style="padding:12px;text-align:right;color:${stmt.closingBalance > 0 ? "var(--red)" : "var(--green)"}">${stmt.closingBalance.toFixed(2)} ${cur}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>`;
+
+    res.send(layout(`Tenant Statement: ${tenant.name}`, content));
   } catch (e) {
     res.redirect(`/zq-admin/suppliers/${req.params.id}/recurring/${req.params.acctId}/tenant?error=${encodeURIComponent(e.message)}`);
   }
@@ -12518,8 +12941,9 @@ router.post("/suppliers/:id/recurring/:acctId/invoice/:invId/edit", requireSuppl
       notes:   notes || ""
     });
 
-    const { recomputeAccountBalance } = await import("../services/recurringBilling.js");
+    const { recomputeAccountBalance, recomputeTenantBalance } = await import("../services/recurringBilling.js");
     await recomputeAccountBalance(inv.businessId, inv.accountId);
+    if (inv.tenantId) await recomputeTenantBalance(inv.businessId, inv.tenantId);
 
     res.redirect(`/zq-admin/suppliers/${req.params.id}/recurring/${req.params.acctId}/records?success=${encodeURIComponent(`Invoice "${inv.number}" updated`)}`);
   } catch (e) {
@@ -12542,8 +12966,9 @@ router.post("/suppliers/:id/recurring/:acctId/invoice/:invId/delete", requireSup
     await RecurringPayment.updateMany({ invoiceId: inv._id }, { $set: { invoiceId: null } });
     await RecurringInvoice.findByIdAndDelete(req.params.invId);
 
-    const { recomputeAccountBalance } = await import("../services/recurringBilling.js");
+    const { recomputeAccountBalance, recomputeTenantBalance } = await import("../services/recurringBilling.js");
     await recomputeAccountBalance(inv.businessId, inv.accountId);
+    if (inv.tenantId) await recomputeTenantBalance(inv.businessId, inv.tenantId);
 
     res.redirect(`/zq-admin/suppliers/${req.params.id}/recurring/${req.params.acctId}/records?success=${encodeURIComponent(`Invoice "${inv.number}" deleted`)}`);
   } catch (e) {
@@ -12639,9 +13064,10 @@ router.post("/suppliers/:id/recurring/:acctId/payment/:payId/edit", requireSuppl
       notes:     notes || ""
     });
 
-    const { recomputeInvoiceFromPayments, recomputeAccountBalance } = await import("../services/recurringBilling.js");
+    const { recomputeInvoiceFromPayments, recomputeAccountBalance, recomputeTenantBalance } = await import("../services/recurringBilling.js");
     if (pay.invoiceId) await recomputeInvoiceFromPayments(pay.invoiceId);
     await recomputeAccountBalance(pay.businessId, pay.accountId);
+    if (pay.tenantId) await recomputeTenantBalance(pay.businessId, pay.tenantId);
 
     res.redirect(`/zq-admin/suppliers/${req.params.id}/recurring/${req.params.acctId}/records?success=Payment+updated`);
   } catch (e) {
@@ -12658,9 +13084,10 @@ router.post("/suppliers/:id/recurring/:acctId/payment/:payId/delete", requireSup
 
     await RecurringPayment.findByIdAndDelete(req.params.payId);
 
-    const { recomputeInvoiceFromPayments, recomputeAccountBalance } = await import("../services/recurringBilling.js");
+    const { recomputeInvoiceFromPayments, recomputeAccountBalance, recomputeTenantBalance } = await import("../services/recurringBilling.js");
     if (pay.invoiceId) await recomputeInvoiceFromPayments(pay.invoiceId);
     await recomputeAccountBalance(pay.businessId, pay.accountId);
+    if (pay.tenantId) await recomputeTenantBalance(pay.businessId, pay.tenantId);
 
     res.redirect(`/zq-admin/suppliers/${req.params.id}/recurring/${req.params.acctId}/records?success=Payment+deleted`);
   } catch (e) {

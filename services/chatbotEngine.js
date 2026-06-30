@@ -19257,7 +19257,7 @@ if (!isMetaAction && text && text.trim().length > 1) {
     "report_clerk_statement", "report_clerk_pick", "report_clerk_self", "report_choose_branch",
     "cash_handover_amount", "cash_handover_incoming", "cash_handover_note",
     // Recurring billing states
-    "rb_payment_pick_account", "rb_payment_enter_amount", "rb_payment_confirm",
+    "rb_payment_pick_account", "rb_payment_pick_tenant", "rb_payment_enter_amount", "rb_payment_confirm",
     "rb_acct_stmt_pick_account", "rb_acct_stmt_pick_period", "rb_acct_stmt_custom_date",
     "rb_tenant_stmt_pick_account", "rb_tenant_stmt_pick_tenant", "rb_tenant_stmt_pick_period",
     "rb_expense_pick_account", "rb_expense_enter_details"

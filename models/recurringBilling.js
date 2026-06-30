@@ -17,6 +17,7 @@
 
 import path      from "path";
 import fs        from "fs";
+import mongoose  from "mongoose";
 import puppeteer from "puppeteer";
 import { sendText, sendDocument } from "./metaSender.js";
 
@@ -83,6 +84,23 @@ function esc(str) {
     .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
+// ── Effective billing settings for a (account, tenant) pair ──────────────────
+// A tenant's own billingAmount/billingCycle/billingDay/customIntervalDays
+// OVERRIDE the account's when set (non-null). This is what lets several
+// tenants share one account (e.g. one building, several rooms) while each
+// being charged a different amount on a different schedule. When tenant is
+// null (vacant account / legacy single-charge account), the account's own
+// settings are used as-is.
+function effectiveBilling(tenant, account) {
+  return {
+    amount:             tenant?.billingAmount       ?? account.billingAmount,
+    cycle:              tenant?.billingCycle         ?? account.billingCycle,
+    billingDay:         tenant?.billingDay           ?? account.billingDay,
+    customIntervalDays: tenant?.customIntervalDays   ?? account.customIntervalDays,
+    description:        tenant?.billingDescription || ""
+  };
+}
+
 // ── Invoice number generator ──────────────────────────────────────────────────
 
 export async function nextRecurringInvoiceNumber(businessId, prefix = "RENT") {
@@ -100,72 +118,157 @@ export async function nextRecurringInvoiceNumber(businessId, prefix = "RENT") {
   return `${prefix}-${String(seq).padStart(4, "0")}`;
 }
 
+// ── Raise ONE invoice for a single billable (account, or account+tenant) ─────
+// This is the single source of truth for "create an invoice" - both the
+// monthly bulk run AND the admin's manual "Invoice Now" buttons go through
+// this. tenant=null means a vacant/legacy account-level invoice (no specific
+// tenant). force=true skips the "already invoiced this period" guard, for
+// ad-hoc/extra invoices outside the normal cycle.
+async function raiseInvoiceForBillable({
+  biz, acct, tenant = null, referenceDate = new Date(), clerkPhone = null,
+  force = false, amountOverride = null, periodLabelOverride = null,
+  dueDateOverride = null, descriptionOverride = null
+}) {
+  const { RecurringInvoice, RecurringAccount } = await getModels();
+  const billing = effectiveBilling(tenant, acct);
+  const bounds  = periodBounds(billing.cycle, referenceDate);
+
+  if (!force) {
+    // Duplicate guard is scoped to (account, tenant) so that several tenants
+    // sharing one account can each be invoiced once per period without
+    // tripping each other's "already invoiced" check.
+    const dupQ = {
+      businessId:  biz._id,
+      accountId:   acct._id,
+      tenantId:    tenant?._id || null,
+      periodStart: { $gte: bounds.start },
+      periodEnd:   { $lte: bounds.end }
+    };
+    const existing = await RecurringInvoice.findOne(dupQ).lean();
+    if (existing) return { created: false, skipped: true, invoice: existing };
+  }
+
+  const amount = amountOverride != null && amountOverride !== "" ? Number(amountOverride) : (billing.amount || 0);
+  const number = await nextRecurringInvoiceNumber(biz._id, biz.recurringPrefix || "RENT");
+  const dueDate = dueDateOverride ? new Date(dueDateOverride) : (() => {
+    const d = new Date(bounds.start);
+    d.setDate(billing.billingDay || 1);
+    return d;
+  })();
+  const periodLabelText = periodLabelOverride || bounds.label;
+  const lineDescription = descriptionOverride || billing.description || `${periodLabelText} charge`;
+
+  const invoice = await RecurringInvoice.create({
+    businessId:  biz._id,
+    branchId:    acct.branchId || null,
+    accountId:   acct._id,
+    tenantId:    tenant?._id || null,
+    number,
+    period:      periodLabelText,
+    periodStart: bounds.start,
+    periodEnd:   bounds.end,
+    dueDate,
+    amount,
+    amountPaid:  0,
+    balance:     amount,
+    currency:    acct.currency || biz.currency || "USD",
+    status:      "unpaid",
+    lines:       [{ description: lineDescription, amount }],
+    createdBy:   clerkPhone
+  });
+
+  await RecurringAccount.findByIdAndUpdate(acct._id, { lastInvoicedAt: new Date() });
+
+  return { created: true, skipped: false, invoice };
+}
+
 // ── Generate invoices for all active accounts ─────────────────────────────────
-// Raises one invoice per active account for the current billing period.
-// Skips any account that already has an invoice for that period.
+// Raises one invoice per active TENANT (not per account) for the current
+// billing period - this is what lets a single account/building with several
+// tenants on different rents each get their own correctly-priced invoice.
+// Accounts with zero active tenants (vacant units, or accounts that have
+// never had per-tenant billing set up) still get ONE account-level invoice,
+// exactly as before. Skips any (account, tenant) already invoiced this period.
 // Returns { created, skipped, errors[] }
 
 export async function bulkGenerateInvoices({ biz, branchId = null, clerkPhone = null, referenceDate = new Date() }) {
-  const { RecurringAccount, RecurringTenant, RecurringInvoice } = await getModels();
+  const { RecurringAccount, RecurringTenant } = await getModels();
 
   const q = { businessId: biz._id, isActive: true };
   if (branchId) q.branchId = branchId;
   const accounts = await RecurringAccount.find(q).lean();
 
-  let created = 0, skipped = 0;
+  let created = 0, skipped = 0, totalBillables = 0;
   const errors = [];
 
   for (const acct of accounts) {
     try {
-      const bounds = periodBounds(acct.billingCycle, referenceDate);
+      const tenants = await RecurringTenant.find({ accountId: acct._id, isActive: true }).lean();
 
-      // Check if already invoiced for this period
-      const existing = await RecurringInvoice.findOne({
-        businessId: biz._id,
-        accountId:  acct._id,
-        periodStart: { $gte: bounds.start },
-        periodEnd:   { $lte: bounds.end }
-      }).lean();
+      if (!tenants.length) {
+        totalBillables++;
+        const r = await raiseInvoiceForBillable({ biz, acct, tenant: null, referenceDate, clerkPhone });
+        if (r.created) created++; else skipped++;
+        continue;
+      }
 
-      if (existing) { skipped++; continue; }
-
-      // Find primary tenant for this account
-      const { RecurringTenant: RT } = await getModels();
-      const tenant = await RT.findOne({ accountId: acct._id, isActive: true }).lean();
-
-      const number = await nextRecurringInvoiceNumber(biz._id, biz.recurringPrefix || "RENT");
-      const dueDate = new Date(bounds.start);
-      dueDate.setDate(acct.billingDay || 1);
-
-      await RecurringInvoice.create({
-        businessId:  biz._id,
-        branchId:    acct.branchId || null,
-        accountId:   acct._id,
-        tenantId:    tenant?._id || null,
-        number,
-        period:      bounds.label,
-        periodStart: bounds.start,
-        periodEnd:   bounds.end,
-        dueDate,
-        amount:      acct.billingAmount,
-        amountPaid:  0,
-        balance:     acct.billingAmount,
-        currency:    acct.currency || biz.currency || "USD",
-        status:      "unpaid",
-        lines:       [{ description: `${bounds.label} charge`, amount: acct.billingAmount }],
-        createdBy:   clerkPhone
-      });
-
-      // Update account's lastInvoicedAt
-      await RecurringAccount.findByIdAndUpdate(acct._id, { lastInvoicedAt: new Date() });
-
-      created++;
+      for (const tenant of tenants) {
+        totalBillables++;
+        const r = await raiseInvoiceForBillable({ biz, acct, tenant, referenceDate, clerkPhone });
+        if (r.created) created++; else skipped++;
+      }
     } catch (e) {
       errors.push(`${acct.name}: ${e.message}`);
     }
   }
 
-  return { created, skipped, total: accounts.length, errors };
+  return { created, skipped, total: totalBillables, errors };
+}
+
+// ── Admin: manually invoice ONE account right now ─────────────────────────────
+// Only sensible for vacant accounts (no tenants) or accounts with exactly ONE
+// active tenant - a single override (amount/period/due date) can't apply
+// sensibly to several differently-priced tenants at once. For multi-tenant
+// accounts this throws a clear error telling the admin to invoice tenants
+// individually (see generateInvoiceForTenant below).
+export async function generateInvoiceForAccount({
+  biz, accountId, referenceDate = new Date(), clerkPhone = null, force = false,
+  amountOverride = null, periodLabelOverride = null, dueDateOverride = null
+}) {
+  const { RecurringAccount, RecurringTenant } = await getModels();
+  const acct = await RecurringAccount.findById(accountId).lean();
+  if (!acct) throw new Error("Account not found");
+
+  const tenants = await RecurringTenant.find({ accountId: acct._id, isActive: true }).lean();
+  if (tenants.length > 1) {
+    throw new Error(`"${acct.name}" has ${tenants.length} tenants on different accounts/rentals - invoice each tenant individually from the Tenants page instead.`);
+  }
+
+  const tenant = tenants[0] || null;
+  return raiseInvoiceForBillable({
+    biz, acct, tenant, referenceDate, clerkPhone, force,
+    amountOverride, periodLabelOverride, dueDateOverride
+  });
+}
+
+// ── Admin: manually invoice ONE specific tenant right now ────────────────────
+// This is the path for multi-tenant accounts (different rentals in the same
+// unit/building) - each tenant is invoiced using THEIR OWN effective billing
+// (their override, or the account's default if they don't have one).
+export async function generateInvoiceForTenant({
+  biz, accountId, tenantId, referenceDate = new Date(), clerkPhone = null, force = false,
+  amountOverride = null, periodLabelOverride = null, dueDateOverride = null, descriptionOverride = null
+}) {
+  const { RecurringAccount, RecurringTenant } = await getModels();
+  const acct   = await RecurringAccount.findById(accountId).lean();
+  const tenant = await RecurringTenant.findById(tenantId).lean();
+  if (!acct)   throw new Error("Account not found");
+  if (!tenant) throw new Error("Tenant not found");
+
+  return raiseInvoiceForBillable({
+    biz, acct, tenant, referenceDate, clerkPhone, force,
+    amountOverride, periodLabelOverride, dueDateOverride, descriptionOverride
+  });
 }
 
 // ── Record a payment against an account ──────────────────────────────────────
@@ -178,11 +281,17 @@ export async function recordRecurringPayment({
 }) {
   const { RecurringInvoice, RecurringPayment, RecurringAccount } = await getModels();
 
-  // Find oldest outstanding invoice for this account
-  const invoice = await RecurringInvoice.findOne({
-    businessId, accountId,
-    status: { $in: ["unpaid", "partial", "overdue"] }
-  }).sort({ periodStart: 1 }).lean();
+  // Find oldest outstanding invoice. When a tenantId is supplied (the normal
+  // case once an account has more than one tenant), the search is scoped to
+  // THAT tenant's own invoices only - otherwise a payment from Tenant A could
+  // silently get applied to Tenant B's invoice just because it happened to
+  // be older. When tenantId is null/omitted (vacant accounts, or accounts
+  // that have never had per-tenant billing set up) it falls back to the
+  // whole account, exactly as before.
+  const invoiceQuery = tenantId
+    ? { businessId, accountId, tenantId, status: { $in: ["unpaid", "partial", "overdue"] } }
+    : { businessId, accountId, status: { $in: ["unpaid", "partial", "overdue"] } };
+  const invoice = await RecurringInvoice.findOne(invoiceQuery).sort({ periodStart: 1 }).lean();
 
   let invoiceId = null;
   let curPeriod = "";
@@ -212,17 +321,62 @@ export async function recordRecurringPayment({
     createdBy: clerkPhone
   });
 
-  // Update cached balance on account
+  // Update cached balances - account total, and (if scoped to a tenant) that
+  // tenant's own balance, so multi-tenant accounts stay accurate everywhere.
   await recomputeAccountBalance(businessId, accountId);
+  if (tenantId) await recomputeTenantBalance(businessId, tenantId);
 
   return { payment, invoice: invoiceId ? await RecurringInvoice.findById(invoiceId).lean() : null };
+}
+
+// ── Recompute an invoice's amountPaid/balance/status from its payments ───────
+// Used after a payment is edited or deleted (from the admin panel) so the
+// invoice never drifts out of sync with what was actually paid against it.
+// Recomputes from the full set of linked payments rather than patching a
+// delta, so repeated edits can never accumulate rounding/logic errors.
+export async function recomputeInvoiceFromPayments(invoiceId) {
+  if (!invoiceId) return null;
+  const { RecurringInvoice, RecurringPayment } = await getModels();
+  const invoice = await RecurringInvoice.findById(invoiceId).lean();
+  if (!invoice) return null;
+
+  const paid = await RecurringPayment.aggregate([
+    { $match: { invoiceId: invoice._id } },
+    { $group: { _id: null, t: { $sum: "$amount" } } }
+  ]);
+  const newPaid    = paid[0]?.t || 0;
+  const newBalance = Math.max(0, (invoice.amount || 0) - newPaid);
+  const newStatus  = invoice.status === "cancelled" ? "cancelled"
+    : newBalance <= 0 ? "paid" : newPaid > 0 ? "partial" : "unpaid";
+
+  await RecurringInvoice.findByIdAndUpdate(invoiceId, {
+    amountPaid: newPaid, balance: newBalance, status: newStatus
+  });
+  return { amountPaid: newPaid, balance: newBalance, status: newStatus };
+}
+
+// ── Sum of tenant-level migration "opening balances" for an account ──────────
+// Tenants can carry a one-time, admin-entered arrears/credit figure
+// (RecurringTenant.openingBalance) representing what they owed BEFORE the
+// system was set up. This is never auto-updated and is independent of any
+// invoice/payment history. Every balance calculation for the account must
+// fold this in, or migrated debt silently disappears. We sum across ALL
+// tenants ever linked to the account (not just isActive ones) so toggling a
+// tenant inactive doesn't make their migrated arrears vanish from the books.
+async function getTenantOpeningBalanceTotal(accountId) {
+  const { RecurringTenant } = await getModels();
+  const agg = await RecurringTenant.aggregate([
+    { $match: { accountId: new mongoose.Types.ObjectId(accountId) } },
+    { $group: { _id: null, t: { $sum: "$openingBalance" } } }
+  ]);
+  return agg[0]?.t || 0;
 }
 
 // ── Recompute and cache the account's current balance ────────────────────────
 
 export async function recomputeAccountBalance(businessId, accountId) {
   const { RecurringInvoice, RecurringPayment, RecurringExpense, RecurringAccount } = await getModels();
-  const [invoices, payments] = await Promise.all([
+  const [invoices, payments, tenantOpening] = await Promise.all([
     RecurringInvoice.aggregate([
       { $match: { businessId, accountId, status: { $ne: "cancelled" } } },
       { $group: { _id: null, t: { $sum: "$amount" } } }
@@ -230,12 +384,41 @@ export async function recomputeAccountBalance(businessId, accountId) {
     RecurringPayment.aggregate([
       { $match: { businessId, accountId } },
       { $group: { _id: null, t: { $sum: "$amount" } } }
-    ])
+    ]),
+    getTenantOpeningBalanceTotal(accountId)
   ]);
   const totalCharged = invoices[0]?.t || 0;
   const totalPaid    = payments[0]?.t || 0;
-  const balance      = totalCharged - totalPaid;
+  const balance      = tenantOpening + totalCharged - totalPaid;
   await RecurringAccount.findByIdAndUpdate(accountId, { currentBalance: balance });
+  return balance;
+}
+
+// ── Recompute and cache ONE TENANT's own balance ──────────────────────────────
+// Distinct from recomputeAccountBalance, which sums EVERY tenant under an
+// account. This is scoped to a single tenant's own invoices/payments/opening
+// balance - required once an account can host multiple tenants on different
+// rentals, so each tenant's self-service balance check, payment reminder,
+// and admin display reflect only THEIR debt, never their neighbours'.
+export async function recomputeTenantBalance(businessId, tenantId) {
+  const { RecurringInvoice, RecurringPayment, RecurringTenant } = await getModels();
+  const tenant = await RecurringTenant.findById(tenantId).lean();
+  if (!tenant) return 0;
+
+  const [invoices, payments] = await Promise.all([
+    RecurringInvoice.aggregate([
+      { $match: { businessId, tenantId: tenant._id, status: { $ne: "cancelled" } } },
+      { $group: { _id: null, t: { $sum: "$amount" } } }
+    ]),
+    RecurringPayment.aggregate([
+      { $match: { businessId, tenantId: tenant._id } },
+      { $group: { _id: null, t: { $sum: "$amount" } } }
+    ])
+  ]);
+  const totalCharged = invoices[0]?.t || 0;
+  const totalPaid     = payments[0]?.t || 0;
+  const balance        = (tenant.openingBalance || 0) + totalCharged - totalPaid;
+  await RecurringTenant.findByIdAndUpdate(tenantId, { currentBalance: balance });
   return balance;
 }
 
@@ -251,7 +434,10 @@ export async function buildAccountStatement({ businessId, accountId, periodStart
 
   const tenant = await RecurringTenant.findOne({ accountId, isActive: true }).lean();
 
-  // Opening balance = all charges - all payments before periodStart
+  // Opening balance = migrated arrears from BEFORE the system existed
+  // (tenant.openingBalance, entered once at setup) + all charges - all
+  // payments recorded in-system before periodStart.
+  const tenantOpening = await getTenantOpeningBalanceTotal(accountId);
   const bQ = { businessId, accountId };
   const [prevCharged, prevPaid] = await Promise.all([
     RecurringInvoice.aggregate([
@@ -263,7 +449,7 @@ export async function buildAccountStatement({ businessId, accountId, periodStart
       { $group: { _id: null, t: { $sum: "$amount" } } }
     ])
   ]);
-  const openingBalance = (prevCharged[0]?.t || 0) - (prevPaid[0]?.t || 0);
+  const openingBalance = tenantOpening + (prevCharged[0]?.t || 0) - (prevPaid[0]?.t || 0);
 
   // This period's transactions
   const [invoices, payments, expenses] = await Promise.all([
@@ -342,7 +528,8 @@ export async function buildTenantStatement({ businessId, tenantId, periodStart, 
   const account = await RecurringAccount.findById(tenant.accountId).lean();
   const cur = account?.currency || "USD";
 
-  // Opening balance before periodStart
+  // Opening balance = tenant's migrated arrears (entered once at setup) +
+  // all in-system charges - all in-system payments before periodStart.
   const bQ = { businessId, tenantId };
   const [prevCharged, prevPaid] = await Promise.all([
     RecurringInvoice.aggregate([
@@ -354,7 +541,7 @@ export async function buildTenantStatement({ businessId, tenantId, periodStart, 
       { $group: { _id: null, t: { $sum: "$amount" } } }
     ])
   ]);
-  const openingBalance = (prevCharged[0]?.t || 0) - (prevPaid[0]?.t || 0);
+  const openingBalance = (tenant.openingBalance || 0) + (prevCharged[0]?.t || 0) - (prevPaid[0]?.t || 0);
 
   const [invoices, payments] = await Promise.all([
     RecurringInvoice.find({ ...bQ, periodStart: { $gte: periodStart }, periodEnd: { $lte: periodEnd } })
@@ -673,7 +860,9 @@ export async function broadcastPaymentReminders({ biz, branchId = null }) {
       const account = await RecurringAccount.findById(tenant.accountId).lean();
       if (!account) { skipped++; continue; }
 
-      const balance = await recomputeAccountBalance(biz._id, account._id);
+      // Each tenant's OWN balance - not the account total, which would
+      // include every other tenant sharing that unit/building.
+      const balance = await recomputeTenantBalance(biz._id, tenant._id);
       if (balance <= 0) { skipped++; continue; }
 
       const cur = account.currency || biz.currency || "USD";
@@ -729,11 +918,14 @@ export async function getTenantBalanceSummary(phone, businessId) {
   if (!tenant) return null;
 
   const account = await RecurringAccount.findById(tenant.accountId).lean();
-  const balance = await recomputeAccountBalance(businessId, tenant.accountId);
+  // Scoped to THIS tenant only - an account can host several tenants on
+  // different rentals, and a tenant must never see another tenant's balance
+  // or invoices just because they happen to share the same unit/building.
+  const balance = await recomputeTenantBalance(businessId, tenant._id);
   const cur     = account?.currency || "USD";
 
   const outstanding = await RecurringInvoice.find({
-    businessId, accountId: tenant.accountId,
+    businessId, tenantId: tenant._id,
     status: { $in: ["unpaid", "partial", "overdue"] }
   }).sort({ periodStart: 1 }).lean();
 
@@ -747,9 +939,13 @@ export async function listAccountsForChatbot(businessId, branchId = null) {
   const q = { businessId, isActive: true };
   if (branchId) q.branchId = branchId;
   const accounts = await RecurringAccount.find(q).sort({ name: 1 }).lean();
-  // Attach primary tenant to each
+  // Attach all active tenants. _tenant stays as the first one for any
+  // existing code that only ever expected a single tenant (back-compat);
+  // _tenants is the full list, needed once an account can host more than
+  // one tenant on different rentals.
   for (const acct of accounts) {
-    acct._tenant = await RecurringTenant.findOne({ accountId: acct._id, isActive: true }).lean();
+    acct._tenants = await RecurringTenant.find({ accountId: acct._id, isActive: true }).lean();
+    acct._tenant  = acct._tenants[0] || null;
   }
   return accounts;
 }
