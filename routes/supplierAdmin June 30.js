@@ -1616,10 +1616,6 @@ const successMsg = req.query.success
     🏠 Recurring Billing
   </a>
 
-  <a href="/zq-admin/suppliers/${supplier._id}/finance" class="btn" style="background:#b45309;color:white">
-    💰 Financial Records (act as clerk)
-  </a>
-
   <form method="POST" action="/zq-admin/suppliers/${supplier._id}/delete" style="display:inline"
         onsubmit="return confirm('⚠️ PERMANENTLY DELETE ${esc(supplier.businessName)}?\n\nThis removes:\n• Supplier profile\n• Business account & branch\n• Products & prices\n• Subscription payments\n• Search logs\n\nThis cannot be undone.')">
     <button class="btn btn-red">🗑 Delete Supplier</button>
