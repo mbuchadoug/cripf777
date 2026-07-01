@@ -3,33 +3,36 @@
 // "Act as clerk" financial admin workspace.
 //
 // Lets Typhon (ZQ admin) pick a specific staff member of a business — e.g.
-// Stella — and enter Income (cash in), Expenses (cash out), Payouts,
-// Owner Drawings, and Cash Handovers exactly as that person would on the
-// WhatsApp chatbot, with the record attributed to them (createdBy).
-// Admin can also view, edit, reverse, or delete that person's records.
+// Stella — and enter/view/edit/reverse/delete Income (cash in), Expenses
+// (cash out), Payouts, Owner Drawings, and Cash Handovers exactly as that
+// person would on the WhatsApp chatbot.
 //
-// WHY "reverse" instead of only "delete":
-// Deleting a record removes it from history entirely. Reversing keeps the
-// original entry visible for audit (who entered what, and who reversed it,
-// and when) but zeroes out its effect on cash totals by setting amount -> 0
-// and storing the original amount separately. Existing reports
-// (reportHelpers.js, dailyReportEnhanced.js) sum the amount/total field
-// directly, so a reversed record naturally contributes $0 everywhere
-// without needing any change to those report files. Delete is still
-// available for records that should never have existed (data-entry typos).
+// ── THE ROOT CAUSE OF THE MISSING INCOME BUG ─────────────────────────────────
+// Clerks record income on WhatsApp as Invoice (type="receipt") and
+// InvoicePayment documents, NOT as CashIncome. The previous version of this
+// file only queried CashIncome — a new model that no WhatsApp flow ever
+// writes to — so the clerk's sales/income was always missing here, even
+// though it appeared correctly in chatbot reports (which query Invoice +
+// InvoicePayment). CashIncome is still supported as a parallel model for
+// records entered directly through this admin workspace, so admin entries
+// don't pollute the formal document numbering sequence.
 //
-// RECOMPUTE:
-// Reports build themselves live from these same collections on every view
-// (buildLedger, buildClerkStatement, buildDrawingsSection, buildHandoverLog
-// in reportHelpers.js), so editing a record here is enough. The one cached
-// value - CashBalance's daily snapshot - is refreshed via
-// saveClosingBalance() after every add / edit / reverse / delete.
+// ── HOW INCOME IS NOW QUERIED ────────────────────────────────────────────────
+// For display (view): Invoice (type=receipt) + InvoicePayment + CashIncome
+// For add via admin:  CashIncome only (keeps Invoice numbering clean)
+// For balance calc:   all three (matches reportHelpers.js exactly)
 //
-// MOUNT THIS in supplierAdmin.js with:
+// ── RECOMPUTE ────────────────────────────────────────────────────────────────
+// Every write calls saveClosingBalance() for the affected day (and old day
+// if date was changed). Reports (reportHelpers.js buildLedger,
+// buildClerkStatement, etc.) read live from the collections, so they pick
+// up the change immediately.
+//
+// MOUNT in supplierAdmin.js:
 //   import financialAdminRoutes from "./supplierFinancialAdmin.js";
 //   router.use("/suppliers/:id/finance", financialAdminRoutes);
 //
-// and make sure supplierAdmin.js exports `layout` and `esc`:
+// supplierAdmin.js must also export layout and esc:
 //   export { layout, esc };
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -79,6 +82,16 @@ async function findStaffByPhone(businessId, phone) {
   return UserRole.findOne({ businessId, phone }).lean();
 }
 
+// Resolve a clientId to a display name (for invoice/payment rows)
+async function resolveClient(clientId) {
+  if (!clientId) return "Walk-in";
+  try {
+    const Client = (await import("../models/client.js")).default;
+    const c = await Client.findById(clientId).lean();
+    return c?.name || c?.phone || "Walk-in";
+  } catch (_) { return "Walk-in"; }
+}
+
 function branchOptions(branches, selectedId) {
   return [`<option value="">— Whole business (no specific branch) —</option>`]
     .concat(branches.map(b =>
@@ -86,7 +99,7 @@ function branchOptions(branches, selectedId) {
     )).join("");
 }
 
-const fieldStyle = `width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:7px;font-size:14px`;
+const fs = `width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:7px;font-size:14px`;
 function field(label, inputHtml) {
   return `<div style="margin-bottom:14px">
     <label style="font-weight:600;display:block;margin-bottom:6px;font-size:13px">${label}</label>
@@ -95,24 +108,170 @@ function field(label, inputHtml) {
 }
 
 function alertBlock(req) {
-  const err = req.query.error ? `<div class="alert red">❌ ${esc(req.query.error)}</div>` : "";
+  const err = req.query.error   ? `<div class="alert red">❌ ${esc(req.query.error)}</div>`     : "";
   const ok  = req.query.success ? `<div class="alert green">✅ ${esc(req.query.success)}</div>` : "";
   return err + ok;
 }
 
 const money = (n, cur = "USD") => `${cur === "ZWL" ? "Z$" : cur === "ZAR" ? "R" : "$"}${Number(n || 0).toFixed(2)}`;
-const dt = d => new Date(d).toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+const dt    = d => new Date(d).toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 const roleColor = r => ({ owner: "#7c3aed", admin: "#2563eb", manager: "#0d9488", clerk: "#b45309" }[r] || "#64748b");
-const initials = name => (name || "?").trim().split(/\s+/).map(w => w[0]).slice(0, 2).join("").toUpperCase();
+const initials  = name => (name || "?").trim().split(/\s+/).map(w => w[0]).slice(0, 2).join("").toUpperCase();
+const DRAW_RE   = /draw|owner|personal|private|director/i;
 
 function workspaceUrl(supplierId, phone, path = "") {
   return `/zq-admin/suppliers/${supplierId}/finance/${encodeURIComponent(phone)}${path}`;
 }
 
+// ── Fetch ALL income rows for a clerk across all three sources ─────────────
+// Returns an array of normalised income display rows ready for the activity
+// feed. Mirrors exactly what buildClerkStatement in reportHelpers.js queries.
+async function fetchClerkIncome(biz, phone, since) {
+  const Invoice        = (await import("../models/invoice.js")).default;
+  const InvoicePayment = (await import("../models/invoicePayment.js")).default;
+  const CashIncome     = (await import("../models/cashIncome.js")).default;
+
+  const dateQ = { $gte: since };
+  const bizQ  = { businessId: biz._id };
+
+  const [receipts, payments, adminIncome] = await Promise.all([
+    // Cash sales (receipts) created by clerk on WhatsApp
+    Invoice.find({ ...bizQ, type: "receipt", createdBy: phone, createdAt: dateQ }).lean(),
+    // Invoice payments recorded by clerk on WhatsApp
+    InvoicePayment.find({ ...bizQ, createdBy: phone, createdAt: dateQ }).lean(),
+    // Manual income entered via this admin workspace on clerk's behalf
+    CashIncome.find({ ...bizQ, createdBy: phone, createdAt: dateQ }).lean(),
+  ]);
+
+  const rows = [];
+
+  // Receipts (cash sales)
+  for (const r of receipts) {
+    const items = (r.items || []).slice(0, 2).map(i => i.item || i.name || "Item").join(", ");
+    rows.push({
+      _id: r._id, type: "receipt", icon: "🧾",
+      label: `Cash Sale${r.number ? " · " + r.number : ""}`,
+      date: r.createdAt, amount: r.total || 0, sign: 1,
+      desc: items || "Receipt",
+      rec: r, editable: false  // Invoice docs not directly editable here — use admin receipt route
+    });
+  }
+
+  // Invoice payments
+  for (const p of payments) {
+    let label = "Invoice Payment";
+    if (p.invoiceId) {
+      try {
+        const Invoice = (await import("../models/invoice.js")).default;
+        const inv = await Invoice.findById(p.invoiceId).lean();
+        if (inv) {
+          const clientName = await resolveClient(inv.clientId);
+          label = `Inv Payment · ${inv.number}${clientName !== "Walk-in" ? " – " + clientName : ""}`;
+        }
+      } catch (_) {}
+    }
+    rows.push({
+      _id: p._id, type: "invoicepayment", icon: "💳",
+      label, date: p.createdAt, amount: p.amount || 0, sign: 1,
+      desc: p.method ? `via ${p.method}` : "",
+      rec: p, editable: false  // InvoicePayments are part of invoice workflow
+    });
+  }
+
+  // Manual admin income (CashIncome)
+  for (const r of adminIncome) {
+    rows.push({
+      _id: r._id, type: "income", icon: "💵",
+      label: r.category || "Income",
+      date: r.createdAt, amount: r.amount || 0, sign: 1,
+      desc: r.description || "",
+      rec: r, editable: true, reversible: !r.reversed,
+      reversed: r.reversed, originalAmount: r.originalAmount
+    });
+  }
+
+  return rows;
+}
+
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 1. CLERK PICKER — GET /suppliers/:id/finance
-// "Choose who you want to act as" landing page.
+// 1. COMBINED BUSINESS-WIDE VIEW  — GET /suppliers/:id/finance/all
+// Must be registered BEFORE /:phone to avoid route collision.
+// ═══════════════════════════════════════════════════════════════════════════
+router.get("/all", requireSupplierAdmin, async (req, res) => {
+  try {
+    const { supplier, biz } = await loadBizContext(req);
+    if (!biz) return res.redirect(`/zq-admin/suppliers/${req.params.id}/finance`);
+
+    const Invoice        = (await import("../models/invoice.js")).default;
+    const InvoicePayment = (await import("../models/invoicePayment.js")).default;
+    const Expense        = (await import("../models/expense.js")).default;
+    const CashPayout     = (await import("../models/cashPayout.js")).default;
+    const CashHandover   = (await import("../models/cashHandover.js")).default;
+    const CashIncome     = (await import("../models/cashIncome.js")).default;
+
+    const branchId = req.query.branchId || "";
+    const days     = parseInt(req.query.days, 10) || 30;
+    const since    = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    const branches = await listBranches(biz._id);
+    const staff    = await listStaff(biz._id);
+    const staffMap = Object.fromEntries(staff.map(s => [s.phone, s.name || s.phone]));
+
+    const bQ = { businessId: biz._id, ...(branchId ? { branchId } : {}) };
+
+    const [receipts, payments, adminIncome, expenses, payouts, handovers] = await Promise.all([
+      Invoice.find({ ...bQ, type: "receipt", createdAt: { $gte: since } }).sort({ createdAt: -1 }).limit(100).lean(),
+      InvoicePayment.find({ ...bQ, createdAt: { $gte: since } }).sort({ createdAt: -1 }).limit(100).lean(),
+      CashIncome.find({ ...bQ, createdAt: { $gte: since } }).sort({ createdAt: -1 }).limit(50).lean(),
+      Expense.find({ ...bQ, createdAt: { $gte: since } }).sort({ createdAt: -1 }).limit(100).lean(),
+      CashPayout.find({ ...bQ, date: { $gte: since } }).sort({ date: -1 }).limit(100).lean(),
+      CashHandover.find({ ...bQ, handoverAt: { $gte: since } }).sort({ handoverAt: -1 }).limit(100).lean(),
+    ]);
+
+    const rows = [];
+    receipts.forEach(r => rows.push({ icon: "🧾", label: "Cash Sale", date: r.createdAt, amount: r.total || 0, sign: 1, desc: r.number || "", by: r.createdBy, reversed: false }));
+    payments.forEach(r => rows.push({ icon: "💳", label: "Inv Payment", date: r.createdAt, amount: r.amount || 0, sign: 1, desc: r.method || "", by: r.createdBy, reversed: false }));
+    adminIncome.forEach(r => rows.push({ icon: "💵", label: r.category || "Income", date: r.createdAt, amount: r.amount || 0, sign: 1, desc: r.description || "", by: r.createdBy, reversed: r.reversed }));
+    expenses.forEach(r => rows.push({ icon: "💸", label: "Expense", date: r.createdAt, amount: r.amount || 0, sign: -1, desc: r.description || r.category || "", by: r.createdBy, reversed: r.reversed }));
+    payouts.forEach(r => rows.push({ icon: DRAW_RE.test(r.reason || "") ? "👑" : "🏧", label: DRAW_RE.test(r.reason || "") ? "Drawing" : "Payout", date: r.date, amount: r.amount || 0, sign: -1, desc: r.reason || "", by: r.createdBy, reversed: r.reversed }));
+    handovers.forEach(r => rows.push({ icon: "🔄", label: "Handover", date: r.handoverAt, amount: r.amountCounted || 0, sign: 0, desc: `${r.outgoingName || r.outgoingPhone} → ${r.incomingName || r.incomingPhone || "Owner"}`, by: r.outgoingPhone, reversed: r.reversed }));
+    rows.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    const rowHtml = rows.map(r => `<tr>
+      <td style="white-space:nowrap;font-size:12.5px;color:var(--muted)">${dt(r.date)}</td>
+      <td>${r.icon} ${esc(r.label)}${r.reversed ? ' <span class="badge badge-gray">REVERSED</span>' : ""}</td>
+      <td style="font-size:13px;color:var(--muted)">${esc(r.desc || "")}</td>
+      <td style="text-align:right">${r.sign === 0
+        ? money(r.amount, biz.currency)
+        : `<span style="color:${r.sign > 0 ? "var(--green)" : "var(--red)"};font-weight:700">${r.sign > 0 ? "+" : "−"}${money(r.amount, biz.currency)}</span>`
+      }</td>
+      <td>${r.by ? `<a href="${workspaceUrl(supplier._id, r.by)}" style="color:var(--blue);text-decoration:none">${esc(staffMap[r.by] || r.by)}</a>` : "—"}</td>
+    </tr>`).join("");
+
+    res.send(layout("All Financial Records", `
+      <a href="/zq-admin/suppliers/${supplier._id}/finance" class="back-link">← Back to Clerk Picker</a>
+      <div class="panel-head" style="margin-top:10px"><h3>🏢 All Records — ${esc(supplier.businessName)}</h3></div>
+
+      <form method="GET" style="display:flex;gap:10px;align-items:center;margin:14px 0 22px">
+        <select name="branchId" style="${fs}width:auto" onchange="this.form.submit()">${branchOptions(branches, branchId)}</select>
+        <select name="days" style="${fs}width:auto" onchange="this.form.submit()">${[7, 30, 90, 365].map(d => `<option value="${d}" ${d === days ? "selected" : ""}>Last ${d} days</option>`).join("")}</select>
+      </form>
+
+      <div class="panel">
+        <table class="data-table">
+          <thead><tr><th>When</th><th>Type</th><th>Detail</th><th style="text-align:right">Amount</th><th>Recorded by</th></tr></thead>
+          <tbody>${rowHtml || `<tr><td colspan="5" style="text-align:center;color:var(--muted)">No activity in this period</td></tr>`}</tbody>
+        </table>
+      </div>
+    `));
+  } catch (e) {
+    res.send(layout("Error", `<div class="alert red">${esc(e.message)}</div>`));
+  }
+});
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 2. CLERK PICKER — GET /suppliers/:id/finance
 // ═══════════════════════════════════════════════════════════════════════════
 router.get("/", requireSupplierAdmin, async (req, res) => {
   try {
@@ -146,7 +305,7 @@ router.get("/", requireSupplierAdmin, async (req, res) => {
         <div class="clerk-arrow">→</div>
       </a>`).join("")
       : `<div class="alert" style="background:#fff7ed;color:#b45309">
-          No staff registered yet for this business. Add staff first from
+          No staff registered yet. Add staff first from
           <a href="/zq-admin/suppliers/${supplier._id}/staff">👥 Staff &amp; Branches</a>.
         </div>`;
 
@@ -156,9 +315,9 @@ router.get("/", requireSupplierAdmin, async (req, res) => {
       <div class="panel-head" style="margin-top:10px">
         <h3>💰 Financial Records — ${esc(supplier.businessName)}</h3>
         <span style="font-size:12px;color:var(--muted)">
-          Choose who you want to act as. You'll enter income, expenses, payouts,
-          drawings, and handovers exactly as that person would on WhatsApp —
-          every record is saved under their name.
+          Choose who you want to act as. All sales, income, expenses, payouts,
+          drawings and handovers recorded under that person on WhatsApp are
+          shown — and you can add or correct records on their behalf.
         </span>
       </div>
 
@@ -192,80 +351,15 @@ router.get("/", requireSupplierAdmin, async (req, res) => {
 
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 7. COMBINED BUSINESS-WIDE VIEW (every clerk together) — read-only-ish list
-// Kept so nothing from the previous version is lost; reachable from the
-// clerk picker via "View combined records for the whole business".
-// ═══════════════════════════════════════════════════════════════════════════
-router.get("/all", requireSupplierAdmin, async (req, res) => {
-  try {
-    const { supplier, biz } = await loadBizContext(req);
-    if (!biz) return res.redirect(`/zq-admin/suppliers/${req.params.id}/finance`);
-
-    const Expense      = (await import("../models/expense.js")).default;
-    const CashPayout   = (await import("../models/cashPayout.js")).default;
-    const CashHandover = (await import("../models/cashHandover.js")).default;
-    const CashIncome   = (await import("../models/cashIncome.js")).default;
-
-    const branchId = req.query.branchId || "";
-    const days     = parseInt(req.query.days, 10) || 30;
-    const since    = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
-    const branches = await listBranches(biz._id);
-    const baseQ = { businessId: biz._id, ...(branchId ? { branchId } : {}) };
-
-    const [incomes, expenses, payouts, handovers] = await Promise.all([
-      CashIncome.find({ ...baseQ, createdAt: { $gte: since } }).sort({ createdAt: -1 }).limit(150).lean(),
-      Expense.find({ ...baseQ, createdAt: { $gte: since } }).sort({ createdAt: -1 }).limit(150).lean(),
-      CashPayout.find({ ...baseQ, date: { $gte: since } }).sort({ date: -1 }).limit(150).lean(),
-      CashHandover.find({ ...baseQ, handoverAt: { $gte: since } }).sort({ handoverAt: -1 }).limit(150).lean(),
-    ]);
-
-    const DRAW_RE = /draw|owner|personal|private|director/i;
-    const rows = [];
-    incomes.forEach(r => rows.push({ icon: "💵", label: "Income", date: r.createdAt, amount: r.amount, sign: 1, desc: r.description, by: r.createdBy, reversed: r.reversed }));
-    expenses.forEach(r => rows.push({ icon: "💸", label: "Expense", date: r.createdAt, amount: r.amount, sign: -1, desc: r.description, by: r.createdBy, reversed: r.reversed }));
-    payouts.forEach(r => rows.push({ icon: DRAW_RE.test(r.reason || "") ? "👑" : "🏧", label: DRAW_RE.test(r.reason || "") ? "Drawing" : "Payout", date: r.date, amount: r.amount, sign: -1, desc: r.reason, by: r.createdBy, reversed: r.reversed }));
-    handovers.forEach(r => rows.push({ icon: "🔄", label: "Handover", date: r.handoverAt, amount: r.amountCounted, sign: 0, desc: `${r.outgoingName || r.outgoingPhone} → ${r.incomingName || r.incomingPhone || "Owner"}`, by: r.outgoingPhone, reversed: r.reversed }));
-    rows.sort((a, b) => new Date(b.date) - new Date(a.date));
-
-    const rowHtml = rows.map(r => `<tr>
-      <td style="white-space:nowrap;font-size:12.5px;color:var(--muted)">${dt(r.date)}</td>
-      <td>${r.icon} ${esc(r.label)}${r.reversed ? ' <span class="badge badge-gray">REVERSED</span>' : ""}</td>
-      <td style="font-size:13px;color:var(--muted)">${esc(r.desc || "")}</td>
-      <td style="text-align:right">${r.sign === 0 ? money(r.amount, biz.currency) : `<span style="color:${r.sign > 0 ? "var(--green)" : "var(--red)"};font-weight:700">${r.sign > 0 ? "+" : "−"}${money(r.amount, biz.currency)}</span>`}</td>
-      <td>${r.by ? `<a href="${workspaceUrl(supplier._id, r.by)}" style="color:var(--blue);text-decoration:none">${esc(r.by)}</a>` : "—"}</td>
-    </tr>`).join("");
-
-    res.send(layout("All Financial Records", `
-      <a href="/zq-admin/suppliers/${supplier._id}/finance" class="back-link">← Back to Clerk Picker</a>
-      <div class="panel-head" style="margin-top:10px"><h3>🏢 All Records — ${esc(supplier.businessName)}</h3></div>
-
-      <form method="GET" style="display:flex;gap:10px;align-items:center;margin:14px 0 22px">
-        <select name="branchId" style="${fieldStyle}width:auto" onchange="this.form.submit()">${branchOptions(branches, branchId)}</select>
-        <select name="days" style="${fieldStyle}width:auto" onchange="this.form.submit()">${[7, 30, 90, 365].map(d => `<option value="${d}" ${d === days ? "selected" : ""}>Last ${d} days</option>`).join("")}</select>
-      </form>
-
-      <div class="panel">
-        <table class="data-table">
-          <thead><tr><th>When</th><th>Type</th><th>Detail</th><th style="text-align:right">Amount</th><th>Recorded for</th></tr></thead>
-          <tbody>${rowHtml || `<tr><td colspan="5" style="text-align:center;color:var(--muted)">No activity in this period</td></tr>`}</tbody>
-        </table>
-      </div>
-    `));
-  } catch (e) {
-    res.send(layout("Error", `<div class="alert red">${esc(e.message)}</div>`));
-  }
-});
-
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 2. PER-CLERK WORKSPACE — GET /suppliers/:id/finance/:phone
-// Big quick-action buttons + that person's records, editable inline.
+// 3. PER-CLERK WORKSPACE — GET /suppliers/:id/finance/:phone
+// Shows ALL income sources (receipts + invoice payments + admin income)
+// plus expenses, payouts, handovers. Add forms for everything.
 // ═══════════════════════════════════════════════════════════════════════════
 router.get("/:phone", requireSupplierAdmin, async (req, res) => {
   try {
     const { supplier, biz } = await loadBizContext(req);
     if (!biz) return res.redirect(`/zq-admin/suppliers/${req.params.id}/finance`);
-    const phone = req.params.phone;
+    const phone  = req.params.phone;
     const person = await findStaffByPhone(biz._id, phone);
     if (!person) return res.redirect(`/zq-admin/suppliers/${supplier._id}/finance?error=Staff+member+not+found`);
 
@@ -277,59 +371,115 @@ router.get("/:phone", requireSupplierAdmin, async (req, res) => {
     const Expense      = (await import("../models/expense.js")).default;
     const CashPayout   = (await import("../models/cashPayout.js")).default;
     const CashHandover = (await import("../models/cashHandover.js")).default;
-    const CashIncome   = (await import("../models/cashIncome.js")).default;
 
     const baseQ = { businessId: biz._id, createdAt: { $gte: since } };
 
-    const [incomes, expenses, payouts, handoversOut, handoversIn] = await Promise.all([
-      CashIncome.find({ ...baseQ, createdBy: phone }).lean(),
+    // ── Fetch all data in parallel ───────────────────────────────────────────
+    const [incomeRows, expenses, payouts, handoversOut, handoversIn] = await Promise.all([
+      fetchClerkIncome(biz, phone, since),
       Expense.find({ ...baseQ, createdBy: phone }).lean(),
       CashPayout.find({ businessId: biz._id, date: { $gte: since }, createdBy: phone }).lean(),
       CashHandover.find({ businessId: biz._id, handoverAt: { $gte: since }, outgoingPhone: phone }).lean(),
       CashHandover.find({ businessId: biz._id, handoverAt: { $gte: since }, incomingPhone: phone }).lean(),
     ]);
 
-    const DRAW_RE = /draw|owner|personal|private|director/i;
-
+    // ── Merge all into one time-sorted activity feed ─────────────────────────
     const rows = [];
-    incomes.forEach(r => rows.push({ type: "income", icon: "💵", label: "Income", date: r.createdAt, amount: r.amount, sign: 1, desc: r.description || r.category, rec: r }));
-    expenses.forEach(r => rows.push({ type: "expense", icon: "💸", label: "Expense", date: r.createdAt, amount: r.amount, sign: -1, desc: `${r.description || ""}${r.category ? ` (${r.category})` : ""}`, rec: r }));
-    payouts.forEach(r => rows.push({ type: "payout", icon: DRAW_RE.test(r.reason || "") ? "👑" : "🏧", label: DRAW_RE.test(r.reason || "") ? "Owner Drawing" : "Payout", date: r.date, amount: r.amount, sign: -1, desc: r.reason || "", rec: r }));
-    handoversOut.forEach(r => rows.push({ type: "handover", icon: "📤", label: `Handed to ${r.incomingName || r.incomingPhone || "Owner"}`, date: r.handoverAt, amount: r.amountCounted, sign: 0, desc: r.notes || "", rec: r }));
-    handoversIn.forEach(r => rows.push({ type: "handover", icon: "📥", label: `Received from ${r.outgoingName || r.outgoingPhone}`, date: r.handoverAt, amount: r.amountCounted, sign: 0, desc: r.notes || "", rec: r }));
+
+    // Income (receipts + invoice payments + admin income)
+    for (const r of incomeRows) {
+      rows.push({ ...r, sign: 1 });
+    }
+
+    // Expenses
+    for (const r of expenses) {
+      rows.push({
+        _id: r._id, type: "expense", icon: "💸",
+        label: "Expense",
+        date: r.createdAt, amount: r.amount || 0, sign: -1,
+        desc: `${r.description || ""}${r.category ? ` (${r.category})` : ""}`,
+        rec: r, editable: true, reversible: !r.reversed,
+        reversed: r.reversed, originalAmount: r.originalAmount
+      });
+    }
+
+    // Payouts / drawings
+    for (const r of payouts) {
+      const isDrawing = DRAW_RE.test(r.reason || "");
+      rows.push({
+        _id: r._id, type: "payout", icon: isDrawing ? "👑" : "🏧",
+        label: isDrawing ? "Owner Drawing" : "Payout",
+        date: r.date, amount: r.amount || 0, sign: -1,
+        desc: r.reason || "",
+        rec: r, editable: true, reversible: !r.reversed,
+        reversed: r.reversed, originalAmount: r.originalAmount
+      });
+    }
+
+    // Handovers (outgoing)
+    for (const r of handoversOut) {
+      rows.push({
+        _id: r._id, type: "handover", icon: "📤",
+        label: `Handed to ${r.incomingName || r.incomingPhone || "Owner"}`,
+        date: r.handoverAt, amount: r.amountCounted || 0, sign: 0,
+        desc: r.notes || "",
+        rec: r, editable: true, reversible: !r.reversed,
+        reversed: r.reversed
+      });
+    }
+
+    // Handovers (incoming)
+    for (const r of handoversIn) {
+      rows.push({
+        _id: r._id, type: "handover", icon: "📥",
+        label: `Received from ${r.outgoingName || r.outgoingPhone || "Owner"}`,
+        date: r.handoverAt, amount: r.amountCounted || 0, sign: 0,
+        desc: r.notes || "",
+        rec: r, editable: true, reversible: !r.reversed,
+        reversed: r.reversed
+      });
+    }
+
     rows.sort((a, b) => new Date(b.date) - new Date(a.date));
 
-    const totalIn  = incomes.filter(r => !r.reversed).reduce((s, r) => s + r.amount, 0);
-    const totalOut = expenses.filter(r => !r.reversed).reduce((s, r) => s + r.amount, 0)
-                   + payouts.filter(r => !r.reversed).reduce((s, r) => s + r.amount, 0);
+    // ── Summary stats ────────────────────────────────────────────────────────
+    const totalIn  = rows.filter(r => r.sign === 1 && !r.reversed).reduce((s, r) => s + r.amount, 0);
+    const totalOut = rows.filter(r => r.sign === -1 && !r.reversed).reduce((s, r) => s + r.amount, 0);
 
+    // ── Activity feed rows ───────────────────────────────────────────────────
     const rowHtml = rows.map(r => {
       const amountStr = r.sign === 0
-        ? `<span style="color:var(--text);font-weight:600">${money(r.amount, biz.currency)}</span>`
+        ? `<span style="font-weight:600">${money(r.amount, biz.currency)}</span>`
         : `<span style="color:${r.sign > 0 ? "var(--green)" : "var(--red)"};font-weight:700">${r.sign > 0 ? "+" : "−"}${money(r.amount, biz.currency)}</span>`;
-      const reversedTag = r.rec.reversed
-        ? `<span class="badge badge-gray" style="margin-left:6px">REVERSED${r.rec.originalAmount ? ` · was ${money(r.rec.originalAmount, biz.currency)}` : ""}</span>` : "";
-      const editUrl    = workspaceUrl(supplier._id, phone, `/${r.type}/${r.rec._id}/edit`);
-      const reverseUrl = workspaceUrl(supplier._id, phone, `/${r.type}/${r.rec._id}/reverse`);
-      const deleteUrl  = workspaceUrl(supplier._id, phone, `/${r.type}/${r.rec._id}/delete`);
-      const canReverse = r.type !== "handover" && !r.rec.reversed;
+
+      const reversedTag = r.reversed
+        ? `<span class="badge badge-gray" style="margin-left:6px;font-size:11px">REVERSED${r.originalAmount ? " · was " + money(r.originalAmount, biz.currency) : ""}</span>` : "";
+
+      // Only CashIncome, Expense, Payout, Handover are editable here.
+      // Invoice/InvoicePayment rows are read-only (managed via invoice admin).
+      const editUrl    = r.editable ? workspaceUrl(supplier._id, phone, `/${r.type}/${r._id}/edit`) : null;
+      const reverseUrl = workspaceUrl(supplier._id, phone, `/${r.type}/${r._id}/reverse`);
+      const deleteUrl  = workspaceUrl(supplier._id, phone, `/${r.type}/${r._id}/delete`);
+
+      const actionHtml = r.editable ? `
+        <a href="${editUrl}" class="btn btn-gray" style="padding:4px 9px;font-size:12px">Edit</a>
+        ${r.reversible ? `<form method="POST" action="${reverseUrl}" style="display:inline" onsubmit="return confirm('Reverse this ${esc(r.type)}? It stays visible for audit but no longer affects totals.')"><button class="btn btn-gray" style="padding:4px 9px;font-size:12px;color:#b45309">Reverse</button></form>` : ""}
+        <form method="POST" action="${deleteUrl}" style="display:inline" onsubmit="return confirm('Permanently delete this ${esc(r.type)}? This cannot be undone.')"><button class="btn btn-gray" style="padding:4px 9px;font-size:12px;color:var(--red)">Delete</button></form>
+      ` : `<span style="font-size:11.5px;color:var(--muted)">WA record</span>`;
 
       return `<tr>
-        <td style="white-space:nowrap;font-size:12.5px;color:var(--muted)">${dt(r.date)}</td>
-        <td>${r.icon} ${esc(r.label)}${reversedTag}</td>
-        <td style="font-size:13px;color:var(--muted)">${esc(r.desc)}</td>
+        <td style="white-space:nowrap;font-size:12px;color:var(--muted)">${dt(r.date)}</td>
+        <td style="font-size:13px">${r.icon} ${esc(r.label)}${reversedTag}</td>
+        <td style="font-size:12.5px;color:var(--muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.desc)}</td>
         <td style="text-align:right">${amountStr}</td>
-        <td style="white-space:nowrap">
-          <a href="${editUrl}" class="btn btn-gray" style="padding:4px 9px;font-size:12px">Edit</a>
-          ${canReverse ? `<form method="POST" action="${reverseUrl}" style="display:inline" onsubmit="return confirm('Reverse this ${r.type}? It stays visible for audit but no longer affects totals.')"><button class="btn btn-gray" style="padding:4px 9px;font-size:12px;color:#b45309">Reverse</button></form>` : ""}
-          <form method="POST" action="${deleteUrl}" style="display:inline" onsubmit="return confirm('Permanently delete this ${r.type}? This cannot be undone.')"><button class="btn btn-gray" style="padding:4px 9px;font-size:12px;color:var(--red)">Delete</button></form>
-        </td>
+        <td style="white-space:nowrap">${actionHtml}</td>
       </tr>`;
     }).join("");
 
     const todayStr = new Date().toISOString().slice(0, 10);
-    const nowLocal  = new Date().toISOString().slice(0, 16);
+    const nowLocal = new Date().toISOString().slice(0, 16);
 
+    // ── Render page ──────────────────────────────────────────────────────────
     res.send(layout(`Acting as ${person.name || phone}`, `
       <a href="/zq-admin/suppliers/${supplier._id}/finance" class="back-link">← Choose a different staff member</a>
       ${alertBlock(req)}
@@ -339,14 +489,15 @@ router.get("/:phone", requireSupplierAdmin, async (req, res) => {
           border-radius:12px;padding:16px 18px;margin:14px 0 22px}
         .persona-avatar{width:50px;height:50px;border-radius:50%;color:white;font-weight:700;font-size:17px;
           display:flex;align-items:center;justify-content:center;flex-shrink:0}
-        .quick-actions{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:24px}
+        .quick-actions{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px;margin-bottom:24px}
         .qa-btn{border:none;border-radius:10px;padding:14px 10px;font-size:13px;font-weight:600;color:white;
-          cursor:pointer;text-align:center;line-height:1.3}
+          cursor:pointer;text-align:center;line-height:1.3;width:100%}
         .qa-btn .qa-icon{font-size:20px;display:block;margin-bottom:4px}
-        .qa-panel{display:none;background:var(--white);border:1px solid var(--border);border-radius:12px;
+        .qa-panel{display:none;background:var(--white);border:2px solid var(--border);border-radius:12px;
           padding:20px;margin-bottom:24px;max-width:520px}
         .qa-panel.open{display:block}
         .stat-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:22px}
+        .info-note{font-size:11.5px;color:var(--muted);padding:6px 0;border-top:1px solid var(--border);margin-top:12px}
       </style>
 
       <div class="persona-bar">
@@ -359,116 +510,143 @@ router.get("/:phone", requireSupplierAdmin, async (req, res) => {
           </div>
         </div>
         <form method="GET" style="margin:0">
-          <select name="days" style="${fieldStyle}width:auto" onchange="this.form.submit()">
+          <select name="days" style="${fs}width:auto" onchange="this.form.submit()">
             ${[7, 30, 90, 365].map(d => `<option value="${d}" ${d === days ? "selected" : ""}>Last ${d} days</option>`).join("")}
           </select>
         </form>
       </div>
 
       <div class="stat-row">
-        <div class="stat-card stat-green"><div class="stat-val">${money(totalIn, biz.currency)}</div><div class="stat-lbl">Income recorded (${days}d)</div></div>
-        <div class="stat-card stat-red"><div class="stat-val">${money(totalOut, biz.currency)}</div><div class="stat-lbl">Out (expenses + payouts)</div></div>
-        <div class="stat-card"><div class="stat-val">${money(totalIn - totalOut, biz.currency)}</div><div class="stat-lbl">Net for this person</div></div>
+        <div class="stat-card stat-green">
+          <div class="stat-val">${money(totalIn, biz.currency)}</div>
+          <div class="stat-lbl">Total In (${days}d)</div>
+        </div>
+        <div class="stat-card stat-red">
+          <div class="stat-val">${money(totalOut, biz.currency)}</div>
+          <div class="stat-lbl">Total Out (${days}d)</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-val">${money(totalIn - totalOut, biz.currency)}</div>
+          <div class="stat-lbl">Net held (${days}d)</div>
+        </div>
       </div>
 
       <div class="quick-actions">
-        <button class="qa-btn" style="background:var(--green)" onclick="toggle('income')"><span class="qa-icon">💵</span>Cash In / Income</button>
-        <button class="qa-btn" style="background:var(--red)" onclick="toggle('expense')"><span class="qa-icon">💸</span>Cash Out / Expense</button>
-        <button class="qa-btn" style="background:#b45309" onclick="toggle('payout')"><span class="qa-icon">🏧</span>Payout</button>
-        <button class="qa-btn" style="background:#7c3aed" onclick="toggle('drawing')"><span class="qa-icon">👑</span>Owner Drawing</button>
-        <button class="qa-btn" style="background:var(--blue)" onclick="toggle('handover')"><span class="qa-icon">🔄</span>Cash Handover</button>
+        <button class="qa-btn" style="background:#16a34a" onclick="toggle('income')"><span class="qa-icon">💵</span>Add Income</button>
+        <button class="qa-btn" style="background:#dc2626" onclick="toggle('expense')"><span class="qa-icon">💸</span>Add Expense</button>
+        <button class="qa-btn" style="background:#b45309" onclick="toggle('payout')"><span class="qa-icon">🏧</span>Add Payout</button>
+        <button class="qa-btn" style="background:#7c3aed" onclick="toggle('drawing')"><span class="qa-icon">👑</span>Add Drawing</button>
+        <button class="qa-btn" style="background:#0369a1" onclick="toggle('handover')"><span class="qa-icon">🔄</span>Cash Handover</button>
       </div>
 
       <div id="panel-income" class="qa-panel">
-        <h4 style="margin-bottom:14px">💵 Record Income / Cash In — as ${esc(person.name || phone)}</h4>
+        <h4 style="margin-bottom:4px">💵 Add Income — as ${esc(person.name || phone)}</h4>
+        <p class="info-note" style="margin-bottom:14px">
+          ℹ️ This records a manual income entry attributed to ${esc(person.name || phone)}.
+          WhatsApp sales (receipts &amp; invoice payments) created by this person on the chatbot
+          already appear automatically in the activity list below — you don't need to re-enter those.
+        </p>
         <form method="POST" action="${workspaceUrl(supplier._id, phone, "/income/add")}">
-          ${field("Amount received *", `<input name="amount" type="number" step="0.01" min="0" required style="${fieldStyle}">`)}
-          ${field("What was it for?", `<input name="description" placeholder="e.g. Cash sale - 2x bags cement" style="${fieldStyle}">`)}
-          ${field("Category", `<select name="category" style="${fieldStyle}"><option>Sale</option><option>Other Income</option><option>Refund Received</option></select>`)}
-          ${field("Date", `<input name="date" type="date" value="${todayStr}" style="${fieldStyle}">`)}
-          ${field("Branch", `<select name="branchId" style="${fieldStyle}">${branchOptions(branches, person.branchId)}</select>`)}
+          ${field("Amount *", `<input name="amount" type="number" step="0.01" min="0" required style="${fs}">`)}
+          ${field("Description", `<input name="description" placeholder="e.g. Cash sale — 2 bags cement" style="${fs}">`)}
+          ${field("Category", `<select name="category" style="${fs}"><option>Sale</option><option>Other Income</option><option>Refund Received</option><option>Float Received</option></select>`)}
+          ${field("Date", `<input name="date" type="date" value="${todayStr}" style="${fs}">`)}
+          ${field("Branch", `<select name="branchId" style="${fs}">${branchOptions(branches, person.branchId)}</select>`)}
           <button class="btn btn-blue" style="width:100%">Save Income</button>
         </form>
       </div>
 
       <div id="panel-expense" class="qa-panel">
-        <h4 style="margin-bottom:14px">💸 Record Expense / Cash Out — as ${esc(person.name || phone)}</h4>
+        <h4 style="margin-bottom:14px">💸 Add Expense — as ${esc(person.name || phone)}</h4>
         <form method="POST" action="${workspaceUrl(supplier._id, phone, "/expense/add")}">
-          ${field("Description *", `<input name="description" required style="${fieldStyle}">`)}
-          ${field("Category", `<input name="category" placeholder="e.g. Stock, Rent, Transport" style="${fieldStyle}">`)}
-          ${field("Amount *", `<input name="amount" type="number" step="0.01" min="0" required style="${fieldStyle}">`)}
-          ${field("Date", `<input name="date" type="date" value="${todayStr}" style="${fieldStyle}">`)}
-          ${field("Branch", `<select name="branchId" style="${fieldStyle}">${branchOptions(branches, person.branchId)}</select>`)}
+          ${field("Description *", `<input name="description" required style="${fs}">`)}
+          ${field("Category", `<input name="category" placeholder="e.g. Stock, Rent, Fuel" style="${fs}">`)}
+          ${field("Amount *", `<input name="amount" type="number" step="0.01" min="0" required style="${fs}">`)}
+          ${field("Date", `<input name="date" type="date" value="${todayStr}" style="${fs}">`)}
+          ${field("Branch", `<select name="branchId" style="${fs}">${branchOptions(branches, person.branchId)}</select>`)}
           <button class="btn btn-blue" style="width:100%">Save Expense</button>
         </form>
       </div>
 
       <div id="panel-payout" class="qa-panel">
-        <h4 style="margin-bottom:14px">🏧 Record Cash Payout — as ${esc(person.name || phone)}</h4>
+        <h4 style="margin-bottom:14px">🏧 Add Payout — as ${esc(person.name || phone)}</h4>
         <form method="POST" action="${workspaceUrl(supplier._id, phone, "/payout/add")}">
           <input type="hidden" name="kind" value="payout">
-          ${field("Reason *", `<input name="reason" required placeholder="e.g. Paid delivery driver cash" style="${fieldStyle}">`)}
-          ${field("Amount *", `<input name="amount" type="number" step="0.01" min="0" required style="${fieldStyle}">`)}
-          ${field("Date", `<input name="date" type="date" value="${todayStr}" style="${fieldStyle}">`)}
-          ${field("Branch", `<select name="branchId" style="${fieldStyle}">${branchOptions(branches, person.branchId)}</select>`)}
+          ${field("Reason *", `<input name="reason" required placeholder="e.g. Paid delivery driver" style="${fs}">`)}
+          ${field("Amount *", `<input name="amount" type="number" step="0.01" min="0" required style="${fs}">`)}
+          ${field("Date", `<input name="date" type="date" value="${todayStr}" style="${fs}">`)}
+          ${field("Branch", `<select name="branchId" style="${fs}">${branchOptions(branches, person.branchId)}</select>`)}
           <button class="btn btn-blue" style="width:100%">Save Payout</button>
         </form>
       </div>
 
       <div id="panel-drawing" class="qa-panel">
-        <h4 style="margin-bottom:14px">👑 Record Owner Drawing — as ${esc(person.name || phone)}</h4>
+        <h4 style="margin-bottom:14px">👑 Add Owner Drawing — as ${esc(person.name || phone)}</h4>
         <form method="POST" action="${workspaceUrl(supplier._id, phone, "/payout/add")}">
           <input type="hidden" name="kind" value="drawing">
-          ${field("Note", `<input name="reason" placeholder="e.g. Personal withdrawal" style="${fieldStyle}">`)}
-          ${field("Amount *", `<input name="amount" type="number" step="0.01" min="0" required style="${fieldStyle}">`)}
-          ${field("Date", `<input name="date" type="date" value="${todayStr}" style="${fieldStyle}">`)}
-          ${field("Branch", `<select name="branchId" style="${fieldStyle}">${branchOptions(branches, person.branchId)}</select>`)}
+          ${field("Note", `<input name="reason" placeholder="e.g. Personal withdrawal" style="${fs}">`)}
+          ${field("Amount *", `<input name="amount" type="number" step="0.01" min="0" required style="${fs}">`)}
+          ${field("Date", `<input name="date" type="date" value="${todayStr}" style="${fs}">`)}
+          ${field("Branch", `<select name="branchId" style="${fs}">${branchOptions(branches, person.branchId)}</select>`)}
           <button class="btn btn-blue" style="width:100%">Save Drawing</button>
         </form>
       </div>
 
       <div id="panel-handover" class="qa-panel">
-        <h4 style="margin-bottom:14px">🔄 Record Cash Handover — involving ${esc(person.name || phone)}</h4>
+        <h4 style="margin-bottom:14px">🔄 Cash Handover — involving ${esc(person.name || phone)}</h4>
         <form method="POST" action="${workspaceUrl(supplier._id, phone, "/handover/add")}">
-          ${field("Direction *", `<select name="direction" style="${fieldStyle}">
-            <option value="out">${esc(person.name || phone)} hands cash to someone else</option>
-            <option value="in">${esc(person.name || phone)} receives cash from someone else</option>
+          ${field("Direction *", `<select name="direction" style="${fs}">
+            <option value="out">${esc(person.name || phone)} hands cash to someone else (outgoing)</option>
+            <option value="in">${esc(person.name || phone)} receives cash from someone else (incoming)</option>
           </select>`)}
-          ${field("Other person (blank = Owner)", `<select name="otherPhone" style="${fieldStyle}"><option value="">Owner / none</option>${staff.filter(s => s.phone !== phone).map(s => `<option value="${esc(s.phone)}">${esc(s.name || s.phone)} — ${esc(s.role)}</option>`).join("")}</select>`)}
-          ${field("Amount counted *", `<input name="amountCounted" type="number" step="0.01" min="0" required style="${fieldStyle}">`)}
-          ${field("Notes", `<input name="notes" placeholder="e.g. Float discrepancy noted" style="${fieldStyle}">`)}
-          ${field("Date/time", `<input name="handoverAt" type="datetime-local" value="${nowLocal}" style="${fieldStyle}">`)}
-          ${field("Branch", `<select name="branchId" style="${fieldStyle}">${branchOptions(branches, person.branchId)}</select>`)}
+          ${field("Other person (blank = Owner/business)", `<select name="otherPhone" style="${fs}">
+            <option value="">Owner / business</option>
+            ${staff.filter(s => s.phone !== phone).map(s => `<option value="${esc(s.phone)}">${esc(s.name || s.phone)} — ${esc(s.role)}</option>`).join("")}
+          </select>`)}
+          ${field("Amount counted *", `<input name="amountCounted" type="number" step="0.01" min="0" required style="${fs}">`)}
+          ${field("Notes (discrepancy, float, etc.)", `<input name="notes" style="${fs}">`)}
+          ${field("Date/time", `<input name="handoverAt" type="datetime-local" value="${nowLocal}" style="${fs}">`)}
+          ${field("Branch", `<select name="branchId" style="${fs}">${branchOptions(branches, person.branchId)}</select>`)}
           <button class="btn btn-blue" style="width:100%">Save Handover</button>
         </form>
       </div>
 
       <div class="panel">
-        <div class="panel-head"><h3>📋 Activity — ${esc(person.name || phone)} (last ${days} days)</h3></div>
+        <div class="panel-head">
+          <h3>📋 Activity — ${esc(person.name || phone)} (last ${days} days)</h3>
+          <span style="font-size:12px;color:var(--muted)">
+            "WA record" = entered on WhatsApp chatbot. Edit/Reverse/Delete available for admin-entered records.
+          </span>
+        </div>
         <table class="data-table">
           <thead><tr><th>When</th><th>Type</th><th>Detail</th><th style="text-align:right">Amount</th><th>Actions</th></tr></thead>
-          <tbody>${rowHtml || `<tr><td colspan="5" style="text-align:center;color:var(--muted)">No activity recorded for ${esc(person.name || phone)} in this period</td></tr>`}</tbody>
+          <tbody>${rowHtml || `<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">No activity for ${esc(person.name || phone)} in the last ${days} days</td></tr>`}</tbody>
         </table>
       </div>
 
       <script>
         function toggle(name) {
           document.querySelectorAll('.qa-panel').forEach(function(p) {
-            p.classList.toggle('open', p.id === 'panel-' + name && !p.classList.contains('open'));
+            if (p.id !== 'panel-' + name) p.classList.remove('open');
           });
           var el = document.getElementById('panel-' + name);
-          if (el && el.classList.contains('open')) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          if (el) {
+            el.classList.toggle('open');
+            if (el.classList.contains('open')) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          }
         }
       </script>
     `));
   } catch (e) {
-    res.send(layout("Error", `<div class="alert red">${esc(e.message)}</div>`));
+    res.send(layout("Error", `<div class="alert red">${esc(e.message)}<pre style="font-size:11px;margin-top:8px">${esc(e.stack || "")}</pre></div>`));
   }
 });
 
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 3. INCOME — add / edit / reverse / delete
+// 4. INCOME (CashIncome) — add / edit / reverse / delete
+// Only admin-entered income is editable. WhatsApp receipts and invoice
+// payments are read-only here (shown but not touched).
 // ═══════════════════════════════════════════════════════════════════════════
 router.post("/:phone/income/add", requireSupplierAdmin, async (req, res) => {
   const phone = req.params.phone;
@@ -477,7 +655,6 @@ router.post("/:phone/income/add", requireSupplierAdmin, async (req, res) => {
     const CashIncome = (await import("../models/cashIncome.js")).default;
     const { amount, description, category, date, branchId } = req.body;
     const d = date ? new Date(date) : new Date();
-
     await CashIncome.create({
       businessId: biz._id, branchId: branchId || null,
       amount: parseFloat(amount) || 0,
@@ -485,7 +662,6 @@ router.post("/:phone/income/add", requireSupplierAdmin, async (req, res) => {
       category: category || "Sale",
       createdBy: phone, createdAt: d
     });
-
     await recomputeDay(biz._id, branchId || null, d);
     res.redirect(`${workspaceUrl(supplier._id, phone)}?success=Income+recorded`);
   } catch (e) {
@@ -501,18 +677,17 @@ router.get("/:phone/income/:recId/edit", requireSupplierAdmin, async (req, res) 
     const rec = await CashIncome.findById(req.params.recId).lean();
     if (!rec) return res.redirect(workspaceUrl(supplier._id, phone));
     const branches = await listBranches(biz._id);
-
     res.send(layout("Edit Income", `
       <a href="${workspaceUrl(supplier._id, phone)}" class="back-link">← Back</a>
       <h2 style="font-size:20px;font-weight:700;margin:10px 0 20px">✏️ Edit Income</h2>
       ${alertBlock(req)}
       <div class="card" style="max-width:520px">
         <form method="POST" action="${workspaceUrl(supplier._id, phone, `/income/${rec._id}/edit`)}">
-          ${field("Amount *", `<input name="amount" type="number" step="0.01" min="0" required value="${rec.amount}" style="${fieldStyle}">`)}
-          ${field("Description", `<input name="description" value="${esc(rec.description || "")}" style="${fieldStyle}">`)}
-          ${field("Category", `<select name="category" style="${fieldStyle}">${["Sale", "Other Income", "Refund Received"].map(c => `<option ${rec.category === c ? "selected" : ""}>${c}</option>`).join("")}</select>`)}
-          ${field("Date", `<input name="date" type="date" value="${new Date(rec.createdAt).toISOString().slice(0,10)}" style="${fieldStyle}">`)}
-          ${field("Branch", `<select name="branchId" style="${fieldStyle}">${branchOptions(branches, rec.branchId)}</select>`)}
+          ${field("Amount *", `<input name="amount" type="number" step="0.01" min="0" required value="${rec.amount}" style="${fs}">`)}
+          ${field("Description", `<input name="description" value="${esc(rec.description || "")}" style="${fs}">`)}
+          ${field("Category", `<select name="category" style="${fs}">${["Sale","Other Income","Refund Received","Float Received"].map(c => `<option ${rec.category === c ? "selected" : ""}>${c}</option>`).join("")}</select>`)}
+          ${field("Date", `<input name="date" type="date" value="${new Date(rec.createdAt).toISOString().slice(0,10)}" style="${fs}">`)}
+          ${field("Branch", `<select name="branchId" style="${fs}">${branchOptions(branches, rec.branchId)}</select>`)}
           <div style="display:flex;gap:10px;margin-top:20px">
             <button class="btn btn-blue">✅ Save Changes</button>
             <a href="${workspaceUrl(supplier._id, phone)}" class="btn btn-gray">Cancel</a>
@@ -533,7 +708,6 @@ router.post("/:phone/income/:recId/edit", requireSupplierAdmin, async (req, res)
     if (!before) return res.redirect(workspaceUrl(supplier._id, phone));
     const { amount, description, category, date, branchId } = req.body;
     const d = date ? new Date(date) : before.createdAt;
-
     await CashIncome.findByIdAndUpdate(req.params.recId, {
       amount: parseFloat(amount) || 0,
       description: (description || "").trim(),
@@ -541,7 +715,6 @@ router.post("/:phone/income/:recId/edit", requireSupplierAdmin, async (req, res)
       branchId: branchId || null,
       createdAt: d
     });
-
     await recomputeDay(biz._id, before.branchId, before.createdAt);
     await recomputeDay(biz._id, branchId || null, d);
     res.redirect(`${workspaceUrl(supplier._id, phone)}?success=Income+updated`);
@@ -583,7 +756,7 @@ router.post("/:phone/income/:recId/delete", requireSupplierAdmin, async (req, re
 
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 4. EXPENSE — add / edit / reverse / delete
+// 5. EXPENSE — add / edit / reverse / delete
 // ═══════════════════════════════════════════════════════════════════════════
 router.post("/:phone/expense/add", requireSupplierAdmin, async (req, res) => {
   const phone = req.params.phone;
@@ -592,7 +765,6 @@ router.post("/:phone/expense/add", requireSupplierAdmin, async (req, res) => {
     const Expense = (await import("../models/expense.js")).default;
     const { description, category, amount, date, branchId } = req.body;
     const d = date ? new Date(date) : new Date();
-
     await Expense.create({
       businessId: biz._id, branchId: branchId || null,
       amount: parseFloat(amount) || 0,
@@ -600,7 +772,6 @@ router.post("/:phone/expense/add", requireSupplierAdmin, async (req, res) => {
       category: (category || "General").trim(),
       method: "cash", createdBy: phone, createdAt: d
     });
-
     await recomputeDay(biz._id, branchId || null, d);
     res.redirect(`${workspaceUrl(supplier._id, phone)}?success=Expense+recorded`);
   } catch (e) {
@@ -616,18 +787,17 @@ router.get("/:phone/expense/:recId/edit", requireSupplierAdmin, async (req, res)
     const exp = await Expense.findById(req.params.recId).lean();
     if (!exp) return res.redirect(workspaceUrl(supplier._id, phone));
     const branches = await listBranches(biz._id);
-
     res.send(layout("Edit Expense", `
       <a href="${workspaceUrl(supplier._id, phone)}" class="back-link">← Back</a>
       <h2 style="font-size:20px;font-weight:700;margin:10px 0 20px">✏️ Edit Expense</h2>
       ${alertBlock(req)}
       <div class="card" style="max-width:520px">
         <form method="POST" action="${workspaceUrl(supplier._id, phone, `/expense/${exp._id}/edit`)}">
-          ${field("Description *", `<input name="description" required value="${esc(exp.description || "")}" style="${fieldStyle}">`)}
-          ${field("Category", `<input name="category" value="${esc(exp.category || "")}" style="${fieldStyle}">`)}
-          ${field("Amount *", `<input name="amount" type="number" step="0.01" min="0" required value="${exp.amount}" style="${fieldStyle}">`)}
-          ${field("Date", `<input name="date" type="date" value="${new Date(exp.createdAt).toISOString().slice(0,10)}" style="${fieldStyle}">`)}
-          ${field("Branch", `<select name="branchId" style="${fieldStyle}">${branchOptions(branches, exp.branchId)}</select>`)}
+          ${field("Description *", `<input name="description" required value="${esc(exp.description || "")}" style="${fs}">`)}
+          ${field("Category", `<input name="category" value="${esc(exp.category || "")}" style="${fs}">`)}
+          ${field("Amount *", `<input name="amount" type="number" step="0.01" min="0" required value="${exp.amount}" style="${fs}">`)}
+          ${field("Date", `<input name="date" type="date" value="${new Date(exp.createdAt).toISOString().slice(0,10)}" style="${fs}">`)}
+          ${field("Branch", `<select name="branchId" style="${fs}">${branchOptions(branches, exp.branchId)}</select>`)}
           <div style="display:flex;gap:10px;margin-top:20px">
             <button class="btn btn-blue">✅ Save Changes</button>
             <a href="${workspaceUrl(supplier._id, phone)}" class="btn btn-gray">Cancel</a>
@@ -648,7 +818,6 @@ router.post("/:phone/expense/:recId/edit", requireSupplierAdmin, async (req, res
     if (!before) return res.redirect(workspaceUrl(supplier._id, phone));
     const { description, category, amount, date, branchId } = req.body;
     const d = date ? new Date(date) : before.createdAt;
-
     await Expense.findByIdAndUpdate(req.params.recId, {
       description: (description || "").trim(),
       category: (category || "General").trim(),
@@ -656,7 +825,6 @@ router.post("/:phone/expense/:recId/edit", requireSupplierAdmin, async (req, res
       branchId: branchId || null,
       createdAt: d
     });
-
     await recomputeDay(biz._id, before.branchId, before.createdAt);
     await recomputeDay(biz._id, branchId || null, d);
     res.redirect(`${workspaceUrl(supplier._id, phone)}?success=Expense+updated`);
@@ -698,7 +866,7 @@ router.post("/:phone/expense/:recId/delete", requireSupplierAdmin, async (req, r
 
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 5. PAYOUT / DRAWING — add / edit / reverse / delete
+// 6. PAYOUT / DRAWING — add / edit / reverse / delete
 // ═══════════════════════════════════════════════════════════════════════════
 router.post("/:phone/payout/add", requireSupplierAdmin, async (req, res) => {
   const phone = req.params.phone;
@@ -709,14 +877,12 @@ router.post("/:phone/payout/add", requireSupplierAdmin, async (req, res) => {
     const d = date ? new Date(date) : new Date();
     const finalReason = kind === "drawing" && !/draw/i.test(reason || "")
       ? `Owner drawing${reason ? ": " + reason.trim() : ""}` : (reason || "").trim();
-
     await CashPayout.create({
       businessId: biz._id, branchId: branchId || null,
       amount: parseFloat(amount) || 0,
       reason: finalReason || (kind === "drawing" ? "Owner drawing" : "Cash payout"),
       createdBy: phone, date: d
     });
-
     await recomputeDay(biz._id, branchId || null, d);
     res.redirect(`${workspaceUrl(supplier._id, phone)}?success=${kind === "drawing" ? "Drawing" : "Payout"}+recorded`);
   } catch (e) {
@@ -732,22 +898,21 @@ router.get("/:phone/payout/:recId/edit", requireSupplierAdmin, async (req, res) 
     const p = await CashPayout.findById(req.params.recId).lean();
     if (!p) return res.redirect(workspaceUrl(supplier._id, phone));
     const branches = await listBranches(biz._id);
-    const isDrawing = /draw|owner|personal|private|director/i.test(p.reason || "");
-
+    const isDrawing = DRAW_RE.test(p.reason || "");
     res.send(layout("Edit Payout", `
       <a href="${workspaceUrl(supplier._id, phone)}" class="back-link">← Back</a>
       <h2 style="font-size:20px;font-weight:700;margin:10px 0 20px">✏️ Edit Payout / Drawing</h2>
       ${alertBlock(req)}
       <div class="card" style="max-width:520px">
         <form method="POST" action="${workspaceUrl(supplier._id, phone, `/payout/${p._id}/edit`)}">
-          ${field("Type", `<select name="kind" style="${fieldStyle}">
+          ${field("Type", `<select name="kind" style="${fs}">
             <option value="payout" ${!isDrawing ? "selected" : ""}>Cash Payout</option>
             <option value="drawing" ${isDrawing ? "selected" : ""}>Owner Drawing</option>
           </select>`)}
-          ${field("Reason", `<input name="reason" value="${esc(p.reason || "")}" style="${fieldStyle}">`)}
-          ${field("Amount *", `<input name="amount" type="number" step="0.01" min="0" required value="${p.amount}" style="${fieldStyle}">`)}
-          ${field("Date", `<input name="date" type="date" value="${new Date(p.date).toISOString().slice(0,10)}" style="${fieldStyle}">`)}
-          ${field("Branch", `<select name="branchId" style="${fieldStyle}">${branchOptions(branches, p.branchId)}</select>`)}
+          ${field("Reason", `<input name="reason" value="${esc(p.reason || "")}" style="${fs}">`)}
+          ${field("Amount *", `<input name="amount" type="number" step="0.01" min="0" required value="${p.amount}" style="${fs}">`)}
+          ${field("Date", `<input name="date" type="date" value="${new Date(p.date).toISOString().slice(0,10)}" style="${fs}">`)}
+          ${field("Branch", `<select name="branchId" style="${fs}">${branchOptions(branches, p.branchId)}</select>`)}
           <div style="display:flex;gap:10px;margin-top:20px">
             <button class="btn btn-blue">✅ Save Changes</button>
             <a href="${workspaceUrl(supplier._id, phone)}" class="btn btn-gray">Cancel</a>
@@ -770,13 +935,11 @@ router.post("/:phone/payout/:recId/edit", requireSupplierAdmin, async (req, res)
     const d = date ? new Date(date) : before.date;
     const finalReason = kind === "drawing" && !/draw/i.test(reason || "")
       ? `Owner drawing${reason ? ": " + reason.trim() : ""}` : (reason || "").trim();
-
     await CashPayout.findByIdAndUpdate(req.params.recId, {
       amount: parseFloat(amount) || 0,
       reason: finalReason || (kind === "drawing" ? "Owner drawing" : "Cash payout"),
       branchId: branchId || null, date: d
     });
-
     await recomputeDay(biz._id, before.branchId, before.date);
     await recomputeDay(biz._id, branchId || null, d);
     res.redirect(`${workspaceUrl(supplier._id, phone)}?success=Payout+updated`);
@@ -818,8 +981,7 @@ router.post("/:phone/payout/:recId/delete", requireSupplierAdmin, async (req, re
 
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 6. CASH HANDOVER — add / edit / reverse / delete
-// (audit-only reversal — handovers don't move cash in/out, only custody)
+// 7. CASH HANDOVER — add / edit / reverse / delete
 // ═══════════════════════════════════════════════════════════════════════════
 router.post("/:phone/handover/add", requireSupplierAdmin, async (req, res) => {
   const phone = req.params.phone;
@@ -829,15 +991,12 @@ router.post("/:phone/handover/add", requireSupplierAdmin, async (req, res) => {
     const { direction, otherPhone, amountCounted, notes, handoverAt, branchId } = req.body;
     const person = await findStaffByPhone(biz._id, phone);
     const other  = otherPhone ? await findStaffByPhone(biz._id, otherPhone) : null;
-
     const outgoingPhone = direction === "in" ? (otherPhone || null) : phone;
     const incomingPhone = direction === "in" ? phone : (otherPhone || null);
     const outgoing = direction === "in" ? other : person;
     const incoming = direction === "in" ? person : other;
-
     const d = handoverAt ? new Date(handoverAt) : new Date();
     const dayBucket = new Date(d); dayBucket.setHours(0, 0, 0, 0);
-
     await CashHandover.create({
       businessId: biz._id, branchId: branchId || null,
       outgoingPhone, outgoingName: outgoing?.name || outgoingPhone || "Owner", outgoingRole: outgoing?.role || "owner",
@@ -845,7 +1004,6 @@ router.post("/:phone/handover/add", requireSupplierAdmin, async (req, res) => {
       amountCounted: parseFloat(amountCounted) || 0,
       notes: notes || "", handoverAt: d, date: dayBucket
     });
-
     await recomputeDay(biz._id, branchId || null, d);
     res.redirect(`${workspaceUrl(supplier._id, phone)}?success=Handover+recorded`);
   } catch (e) {
@@ -862,19 +1020,18 @@ router.get("/:phone/handover/:recId/edit", requireSupplierAdmin, async (req, res
     if (!h) return res.redirect(workspaceUrl(supplier._id, phone));
     const branches = await listBranches(biz._id);
     const staff    = await listStaff(biz._id);
-
     res.send(layout("Edit Handover", `
       <a href="${workspaceUrl(supplier._id, phone)}" class="back-link">← Back</a>
       <h2 style="font-size:20px;font-weight:700;margin:10px 0 20px">✏️ Edit Cash Handover</h2>
       ${alertBlock(req)}
       <div class="card" style="max-width:520px">
         <form method="POST" action="${workspaceUrl(supplier._id, phone, `/handover/${h._id}/edit`)}">
-          ${field("Outgoing (handed over from)", `<select name="outgoingPhone" style="${fieldStyle}"><option value="">Owner / none</option>${staff.map(s => `<option value="${esc(s.phone)}" ${s.phone === h.outgoingPhone ? "selected" : ""}>${esc(s.name || s.phone)}</option>`).join("")}</select>`)}
-          ${field("Incoming (received by)", `<select name="incomingPhone" style="${fieldStyle}"><option value="">Owner / none</option>${staff.map(s => `<option value="${esc(s.phone)}" ${s.phone === h.incomingPhone ? "selected" : ""}>${esc(s.name || s.phone)}</option>`).join("")}</select>`)}
-          ${field("Amount counted *", `<input name="amountCounted" type="number" step="0.01" min="0" required value="${h.amountCounted}" style="${fieldStyle}">`)}
-          ${field("Notes", `<input name="notes" value="${esc(h.notes || "")}" style="${fieldStyle}">`)}
-          ${field("Date/time", `<input name="handoverAt" type="datetime-local" value="${new Date(h.handoverAt).toISOString().slice(0,16)}" style="${fieldStyle}">`)}
-          ${field("Branch", `<select name="branchId" style="${fieldStyle}">${branchOptions(branches, h.branchId)}</select>`)}
+          ${field("Outgoing (handed cash from)", `<select name="outgoingPhone" style="${fs}"><option value="">Owner / none</option>${staff.map(s => `<option value="${esc(s.phone)}" ${s.phone === h.outgoingPhone ? "selected" : ""}>${esc(s.name || s.phone)}</option>`).join("")}</select>`)}
+          ${field("Incoming (received by)", `<select name="incomingPhone" style="${fs}"><option value="">Owner / none</option>${staff.map(s => `<option value="${esc(s.phone)}" ${s.phone === h.incomingPhone ? "selected" : ""}>${esc(s.name || s.phone)}</option>`).join("")}</select>`)}
+          ${field("Amount counted *", `<input name="amountCounted" type="number" step="0.01" min="0" required value="${h.amountCounted}" style="${fs}">`)}
+          ${field("Notes", `<input name="notes" value="${esc(h.notes || "")}" style="${fs}">`)}
+          ${field("Date/time", `<input name="handoverAt" type="datetime-local" value="${new Date(h.handoverAt).toISOString().slice(0,16)}" style="${fs}">`)}
+          ${field("Branch", `<select name="branchId" style="${fs}">${branchOptions(branches, h.branchId)}</select>`)}
           <div style="display:flex;gap:10px;margin-top:20px">
             <button class="btn btn-blue">✅ Save Changes</button>
             <a href="${workspaceUrl(supplier._id, phone)}" class="btn btn-gray">Cancel</a>
@@ -898,7 +1055,6 @@ router.post("/:phone/handover/:recId/edit", requireSupplierAdmin, async (req, re
     const incoming = incomingPhone ? await findStaffByPhone(biz._id, incomingPhone) : null;
     const d = handoverAt ? new Date(handoverAt) : before.handoverAt;
     const dayBucket = new Date(d); dayBucket.setHours(0, 0, 0, 0);
-
     await CashHandover.findByIdAndUpdate(req.params.recId, {
       branchId: branchId || null,
       outgoingPhone: outgoingPhone || null, outgoingName: outgoing?.name || outgoingPhone || "Owner", outgoingRole: outgoing?.role || "owner",
@@ -906,7 +1062,6 @@ router.post("/:phone/handover/:recId/edit", requireSupplierAdmin, async (req, re
       amountCounted: parseFloat(amountCounted) || 0,
       notes: notes || "", handoverAt: d, date: dayBucket
     });
-
     await recomputeDay(biz._id, before.branchId, before.handoverAt);
     await recomputeDay(biz._id, branchId || null, d);
     res.redirect(`${workspaceUrl(supplier._id, phone)}?success=Handover+updated`);
@@ -938,7 +1093,5 @@ router.post("/:phone/handover/:recId/delete", requireSupplierAdmin, async (req, 
     res.redirect(`${workspaceUrl(req.params.id, phone)}?error=${encodeURIComponent(e.message)}`);
   }
 });
-
-
 
 export default router;
