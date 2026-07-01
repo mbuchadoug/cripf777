@@ -114,6 +114,7 @@ async function fetchOpeningBalance(biz, branchId, date) {
     const Expense        = (await import("../models/expense.js")).default;
     const CashPayout     = (await import("../models/cashPayout.js")).default;
     const CashHandover   = (await import("../models/cashHandover.js")).default;
+    const CashIncome     = (await import("../models/cashIncome.js")).default;
 
     const before = new Date(date); before.setHours(0, 0, 0, 0);
     const bQ = {
@@ -122,14 +123,15 @@ async function fetchOpeningBalance(biz, branchId, date) {
       ...(branchId ? { branchId } : {})
     };
 
-    const [pmts, rcpts, exps, payouts] = await Promise.all([
+    const [pmts, rcpts, exps, payouts, income] = await Promise.all([
       InvoicePayment.aggregate([{ $match: bQ }, { $group: { _id: null, t: { $sum: "$amount" } } }]),
       Invoice.aggregate([{ $match: { ...bQ, type: "receipt" } }, { $group: { _id: null, t: { $sum: "$total" } } }]),
       Expense.aggregate([{ $match: bQ }, { $group: { _id: null, t: { $sum: "$amount" } } }]),
-      CashPayout.aggregate([{ $match: bQ }, { $group: { _id: null, t: { $sum: "$amount" } } }]).catch(() => [])
+      CashPayout.aggregate([{ $match: bQ }, { $group: { _id: null, t: { $sum: "$amount" } } }]).catch(() => []),
+      CashIncome.aggregate([{ $match: bQ }, { $group: { _id: null, t: { $sum: "$amount" } } }]).catch(() => [])
     ]);
 
-    const totalIn  = (pmts[0]?.t || 0) + (rcpts[0]?.t || 0);
+    const totalIn  = (pmts[0]?.t || 0) + (rcpts[0]?.t || 0) + (income[0]?.t || 0);
     const totalOut = (exps[0]?.t  || 0) + (payouts[0]?.t || 0);
     return totalIn - totalOut;
   } catch (_) { return 0; }
@@ -146,21 +148,23 @@ export async function saveClosingBalance(biz, branchId, date) {
     const Expense        = (await import("../models/expense.js")).default;
     const CashPayout     = (await import("../models/cashPayout.js")).default;
     const CashHandover   = (await import("../models/cashHandover.js")).default;
+    const CashIncome     = (await import("../models/cashIncome.js")).default;
 
     const day   = new Date(date); day.setHours(0, 0, 0, 0);
     const dayEnd = new Date(day);  dayEnd.setHours(23, 59, 59, 999);
 
     const bQ = { businessId: biz._id, createdAt: { $gte: day, $lte: dayEnd }, ...(branchId ? { branchId } : {}) };
 
-    const [payments, receipts, expenses, payouts] = await Promise.all([
+    const [payments, receipts, expenses, payouts, income] = await Promise.all([
       InvoicePayment.aggregate([{ $match: bQ }, { $group: { _id: null, t: { $sum: "$amount" } } }]),
       Invoice.aggregate([{ $match: { ...bQ, type: "receipt" } }, { $group: { _id: null, t: { $sum: "$total" } } }]),
       Expense.aggregate([{ $match: bQ }, { $group: { _id: null, t: { $sum: "$amount" } } }]),
-      CashPayout.aggregate([{ $match: bQ }, { $group: { _id: null, t: { $sum: "$amount" } } }]).catch(() => [])
+      CashPayout.aggregate([{ $match: bQ }, { $group: { _id: null, t: { $sum: "$amount" } } }]).catch(() => []),
+      CashIncome.aggregate([{ $match: bQ }, { $group: { _id: null, t: { $sum: "$amount" } } }]).catch(() => [])
     ]);
 
     const opening   = await fetchOpeningBalance(biz, branchId, day);
-    const totalIn   = (payments[0]?.t || 0) + (receipts[0]?.t || 0);
+    const totalIn   = (payments[0]?.t || 0) + (receipts[0]?.t || 0) + (income[0]?.t || 0);
     const totalOut  = (expenses[0]?.t  || 0) + (payouts[0]?.t  || 0);
     const closing   = opening + totalIn - totalOut;
 

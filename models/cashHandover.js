@@ -49,7 +49,12 @@ const CashHandoverSchema = new mongoose.Schema(
     handoverAt: { type: Date, default: Date.now, index: true },
 
     // ── Date bucket for fast daily range queries ───────────────
-    date: { type: Date, required: true, index: true }
+    date: { type: Date, required: true, index: true },
+
+    // ── Reversal trail (audit-only — handovers don't affect cash totals) ──────
+    reversed:   { type: Boolean, default: false },
+    reversedAt: { type: Date,   default: null },
+    reversedBy: { type: String, default: null }
   },
   { timestamps: true }
 );
