@@ -1,6 +1,6 @@
 // models/cashIncome.js
 // ─────────────────────────────────────────────────────────────
-// Manual "cash in" / income entries — money received that isn't
+// Manual "cash in" / income entries - money received that isn't
 // a full invoice/receipt sales document (e.g. quick cash sale,
 // other income, refund received). Used by the admin "act as
 // clerk" Financial Records workspace so income can be logged the

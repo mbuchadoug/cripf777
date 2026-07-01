@@ -2,16 +2,16 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // "Act as clerk" financial admin workspace.
 //
-// Lets Typhon (ZQ admin) pick a specific staff member of a business — e.g.
-// Stella — and enter/view/edit/reverse/delete Income (cash in), Expenses
+// Lets Typhon (ZQ admin) pick a specific staff member of a business - e.g.
+// Stella - and enter/view/edit/reverse/delete Income (cash in), Expenses
 // (cash out), Payouts, Owner Drawings, and Cash Handovers exactly as that
 // person would on the WhatsApp chatbot.
 //
 // ── THE ROOT CAUSE OF THE MISSING INCOME BUG ─────────────────────────────────
 // Clerks record income on WhatsApp as Invoice (type="receipt") and
 // InvoicePayment documents, NOT as CashIncome. The previous version of this
-// file only queried CashIncome — a new model that no WhatsApp flow ever
-// writes to — so the clerk's sales/income was always missing here, even
+// file only queried CashIncome - a new model that no WhatsApp flow ever
+// writes to - so the clerk's sales/income was always missing here, even
 // though it appeared correctly in chatbot reports (which query Invoice +
 // InvoicePayment). CashIncome is still supported as a parallel model for
 // records entered directly through this admin workspace, so admin entries
@@ -93,7 +93,7 @@ async function resolveClient(clientId) {
 }
 
 function branchOptions(branches, selectedId) {
-  return [`<option value="">— Whole business (no specific branch) —</option>`]
+  return [`<option value="">- Whole business (no specific branch) -</option>`]
     .concat(branches.map(b =>
       `<option value="${b._id}" ${String(b._id) === String(selectedId) ? "selected" : ""}>${esc(b.name)}</option>`
     )).join("");
@@ -153,7 +153,7 @@ async function fetchClerkIncome(biz, phone, since) {
       label: `Cash Sale${r.number ? " · " + r.number : ""}`,
       date: r.createdAt, amount: r.total || 0, sign: 1,
       desc: items || "Receipt",
-      rec: r, editable: false  // Invoice docs not directly editable here — use admin receipt route
+      rec: r, editable: false  // Invoice docs not directly editable here - use admin receipt route
     });
   }
 
@@ -195,7 +195,7 @@ async function fetchClerkIncome(biz, phone, since) {
 
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 1. COMBINED BUSINESS-WIDE VIEW  — GET /suppliers/:id/finance/all
+// 1. COMBINED BUSINESS-WIDE VIEW  - GET /suppliers/:id/finance/all
 // Must be registered BEFORE /:phone to avoid route collision.
 // ═══════════════════════════════════════════════════════════════════════════
 router.get("/all", requireSupplierAdmin, async (req, res) => {
@@ -245,12 +245,12 @@ router.get("/all", requireSupplierAdmin, async (req, res) => {
         ? money(r.amount, biz.currency)
         : `<span style="color:${r.sign > 0 ? "var(--green)" : "var(--red)"};font-weight:700">${r.sign > 0 ? "+" : "−"}${money(r.amount, biz.currency)}</span>`
       }</td>
-      <td>${r.by ? `<a href="${workspaceUrl(supplier._id, r.by)}" style="color:var(--blue);text-decoration:none">${esc(staffMap[r.by] || r.by)}</a>` : "—"}</td>
+      <td>${r.by ? `<a href="${workspaceUrl(supplier._id, r.by)}" style="color:var(--blue);text-decoration:none">${esc(staffMap[r.by] || r.by)}</a>` : "-"}</td>
     </tr>`).join("");
 
     res.send(layout("All Financial Records", `
       <a href="/zq-admin/suppliers/${supplier._id}/finance" class="back-link">← Back to Clerk Picker</a>
-      <div class="panel-head" style="margin-top:10px"><h3>🏢 All Records — ${esc(supplier.businessName)}</h3></div>
+      <div class="panel-head" style="margin-top:10px"><h3>🏢 All Records - ${esc(supplier.businessName)}</h3></div>
 
       <form method="GET" style="display:flex;gap:10px;align-items:center;margin:14px 0 22px">
         <select name="branchId" style="${fs}width:auto" onchange="this.form.submit()">${branchOptions(branches, branchId)}</select>
@@ -271,7 +271,7 @@ router.get("/all", requireSupplierAdmin, async (req, res) => {
 
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 2. CLERK PICKER — GET /suppliers/:id/finance
+// 2. CLERK PICKER - GET /suppliers/:id/finance
 // ═══════════════════════════════════════════════════════════════════════════
 router.get("/", requireSupplierAdmin, async (req, res) => {
   try {
@@ -313,11 +313,11 @@ router.get("/", requireSupplierAdmin, async (req, res) => {
       <a href="/zq-admin/suppliers/${supplier._id}" class="back-link">← Back to Profile</a>
 
       <div class="panel-head" style="margin-top:10px">
-        <h3>💰 Financial Records — ${esc(supplier.businessName)}</h3>
+        <h3>💰 Financial Records - ${esc(supplier.businessName)}</h3>
         <span style="font-size:12px;color:var(--muted)">
           Choose who you want to act as. All sales, income, expenses, payouts,
           drawings and handovers recorded under that person on WhatsApp are
-          shown — and you can add or correct records on their behalf.
+          shown - and you can add or correct records on their behalf.
         </span>
       </div>
 
@@ -351,7 +351,7 @@ router.get("/", requireSupplierAdmin, async (req, res) => {
 
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 3. PER-CLERK WORKSPACE — GET /suppliers/:id/finance/:phone
+// 3. PER-CLERK WORKSPACE - GET /suppliers/:id/finance/:phone
 // Shows ALL income sources (receipts + invoice payments + admin income)
 // plus expenses, payouts, handovers. Add forms for everything.
 // ═══════════════════════════════════════════════════════════════════════════
@@ -540,15 +540,15 @@ router.get("/:phone", requireSupplierAdmin, async (req, res) => {
       </div>
 
       <div id="panel-income" class="qa-panel">
-        <h4 style="margin-bottom:4px">💵 Add Income — as ${esc(person.name || phone)}</h4>
+        <h4 style="margin-bottom:4px">💵 Add Income - as ${esc(person.name || phone)}</h4>
         <p class="info-note" style="margin-bottom:14px">
           ℹ️ This records a manual income entry attributed to ${esc(person.name || phone)}.
           WhatsApp sales (receipts &amp; invoice payments) created by this person on the chatbot
-          already appear automatically in the activity list below — you don't need to re-enter those.
+          already appear automatically in the activity list below - you don't need to re-enter those.
         </p>
         <form method="POST" action="${workspaceUrl(supplier._id, phone, "/income/add")}">
           ${field("Amount *", `<input name="amount" type="number" step="0.01" min="0" required style="${fs}">`)}
-          ${field("Description", `<input name="description" placeholder="e.g. Cash sale — 2 bags cement" style="${fs}">`)}
+          ${field("Description", `<input name="description" placeholder="e.g. Cash sale - 2 bags cement" style="${fs}">`)}
           ${field("Category", `<select name="category" style="${fs}"><option>Sale</option><option>Other Income</option><option>Refund Received</option><option>Float Received</option></select>`)}
           ${field("Date", `<input name="date" type="date" value="${todayStr}" style="${fs}">`)}
           ${field("Branch", `<select name="branchId" style="${fs}">${branchOptions(branches, person.branchId)}</select>`)}
@@ -557,7 +557,7 @@ router.get("/:phone", requireSupplierAdmin, async (req, res) => {
       </div>
 
       <div id="panel-expense" class="qa-panel">
-        <h4 style="margin-bottom:14px">💸 Add Expense — as ${esc(person.name || phone)}</h4>
+        <h4 style="margin-bottom:14px">💸 Add Expense - as ${esc(person.name || phone)}</h4>
         <form method="POST" action="${workspaceUrl(supplier._id, phone, "/expense/add")}">
           ${field("Description *", `<input name="description" required style="${fs}">`)}
           ${field("Category", `<input name="category" placeholder="e.g. Stock, Rent, Fuel" style="${fs}">`)}
@@ -569,7 +569,7 @@ router.get("/:phone", requireSupplierAdmin, async (req, res) => {
       </div>
 
       <div id="panel-payout" class="qa-panel">
-        <h4 style="margin-bottom:14px">🏧 Add Payout — as ${esc(person.name || phone)}</h4>
+        <h4 style="margin-bottom:14px">🏧 Add Payout - as ${esc(person.name || phone)}</h4>
         <form method="POST" action="${workspaceUrl(supplier._id, phone, "/payout/add")}">
           <input type="hidden" name="kind" value="payout">
           ${field("Reason *", `<input name="reason" required placeholder="e.g. Paid delivery driver" style="${fs}">`)}
@@ -581,7 +581,7 @@ router.get("/:phone", requireSupplierAdmin, async (req, res) => {
       </div>
 
       <div id="panel-drawing" class="qa-panel">
-        <h4 style="margin-bottom:14px">👑 Add Owner Drawing — as ${esc(person.name || phone)}</h4>
+        <h4 style="margin-bottom:14px">👑 Add Owner Drawing - as ${esc(person.name || phone)}</h4>
         <form method="POST" action="${workspaceUrl(supplier._id, phone, "/payout/add")}">
           <input type="hidden" name="kind" value="drawing">
           ${field("Note", `<input name="reason" placeholder="e.g. Personal withdrawal" style="${fs}">`)}
@@ -593,7 +593,7 @@ router.get("/:phone", requireSupplierAdmin, async (req, res) => {
       </div>
 
       <div id="panel-handover" class="qa-panel">
-        <h4 style="margin-bottom:14px">🔄 Cash Handover — involving ${esc(person.name || phone)}</h4>
+        <h4 style="margin-bottom:14px">🔄 Cash Handover - involving ${esc(person.name || phone)}</h4>
         <form method="POST" action="${workspaceUrl(supplier._id, phone, "/handover/add")}">
           ${field("Direction *", `<select name="direction" style="${fs}">
             <option value="out">${esc(person.name || phone)} hands cash to someone else (outgoing)</option>
@@ -601,7 +601,7 @@ router.get("/:phone", requireSupplierAdmin, async (req, res) => {
           </select>`)}
           ${field("Other person (blank = Owner/business)", `<select name="otherPhone" style="${fs}">
             <option value="">Owner / business</option>
-            ${staff.filter(s => s.phone !== phone).map(s => `<option value="${esc(s.phone)}">${esc(s.name || s.phone)} — ${esc(s.role)}</option>`).join("")}
+            ${staff.filter(s => s.phone !== phone).map(s => `<option value="${esc(s.phone)}">${esc(s.name || s.phone)} - ${esc(s.role)}</option>`).join("")}
           </select>`)}
           ${field("Amount counted *", `<input name="amountCounted" type="number" step="0.01" min="0" required style="${fs}">`)}
           ${field("Notes (discrepancy, float, etc.)", `<input name="notes" style="${fs}">`)}
@@ -613,7 +613,7 @@ router.get("/:phone", requireSupplierAdmin, async (req, res) => {
 
       <div class="panel">
         <div class="panel-head">
-          <h3>📋 Activity — ${esc(person.name || phone)} (last ${days} days)</h3>
+          <h3>📋 Activity - ${esc(person.name || phone)} (last ${days} days)</h3>
           <span style="font-size:12px;color:var(--muted)">
             "WA record" = entered on WhatsApp chatbot. Edit/Reverse/Delete available for admin-entered records.
           </span>
@@ -644,7 +644,7 @@ router.get("/:phone", requireSupplierAdmin, async (req, res) => {
 
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 4. INCOME (CashIncome) — add / edit / reverse / delete
+// 4. INCOME (CashIncome) - add / edit / reverse / delete
 // Only admin-entered income is editable. WhatsApp receipts and invoice
 // payments are read-only here (shown but not touched).
 // ═══════════════════════════════════════════════════════════════════════════
@@ -756,7 +756,7 @@ router.post("/:phone/income/:recId/delete", requireSupplierAdmin, async (req, re
 
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 5. EXPENSE — add / edit / reverse / delete
+// 5. EXPENSE - add / edit / reverse / delete
 // ═══════════════════════════════════════════════════════════════════════════
 router.post("/:phone/expense/add", requireSupplierAdmin, async (req, res) => {
   const phone = req.params.phone;
@@ -866,7 +866,7 @@ router.post("/:phone/expense/:recId/delete", requireSupplierAdmin, async (req, r
 
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 6. PAYOUT / DRAWING — add / edit / reverse / delete
+// 6. PAYOUT / DRAWING - add / edit / reverse / delete
 // ═══════════════════════════════════════════════════════════════════════════
 router.post("/:phone/payout/add", requireSupplierAdmin, async (req, res) => {
   const phone = req.params.phone;
@@ -981,7 +981,7 @@ router.post("/:phone/payout/:recId/delete", requireSupplierAdmin, async (req, re
 
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 7. CASH HANDOVER — add / edit / reverse / delete
+// 7. CASH HANDOVER - add / edit / reverse / delete
 // ═══════════════════════════════════════════════════════════════════════════
 router.post("/:phone/handover/add", requireSupplierAdmin, async (req, res) => {
   const phone = req.params.phone;
