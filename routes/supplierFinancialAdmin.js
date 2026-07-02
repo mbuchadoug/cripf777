@@ -153,7 +153,7 @@ async function fetchClerkIncome(biz, phone, since) {
       label: `Cash Sale${r.number ? " · " + r.number : ""}`,
       date: r.createdAt, amount: r.total || 0, sign: 1,
       desc: items || "Receipt",
-      rec: r, editable: false  // Invoice docs not directly editable here - use admin receipt route
+      rec: r, editable: false, deletable: true, reversible: false  // delete only (sequential numbering)
     });
   }
 
@@ -174,7 +174,7 @@ async function fetchClerkIncome(biz, phone, since) {
       _id: p._id, type: "invoicepayment", icon: "💳",
       label, date: p.createdAt, amount: p.amount || 0, sign: 1,
       desc: p.method ? `via ${p.method}` : "",
-      rec: p, editable: false  // InvoicePayments are part of invoice workflow
+      rec: p, editable: false, deletable: true, reversible: false  // delete only (invoice balance auto-recalculates)
     });
   }
 
@@ -457,15 +457,15 @@ router.get("/:phone", requireSupplierAdmin, async (req, res) => {
 
       // Only CashIncome, Expense, Payout, Handover are editable here.
       // Invoice/InvoicePayment rows are read-only (managed via invoice admin).
-      const editUrl    = r.editable ? workspaceUrl(supplier._id, phone, `/${r.type}/${r._id}/edit`) : null;
-      const reverseUrl = workspaceUrl(supplier._id, phone, `/${r.type}/${r._id}/reverse`);
-      const deleteUrl  = workspaceUrl(supplier._id, phone, `/${r.type}/${r._id}/delete`);
+      const editUrl    = r.editable  ? workspaceUrl(supplier._id, phone, `/${r.type}/${r._id}/edit`)    : null;
+      const reverseUrl =               workspaceUrl(supplier._id, phone, `/${r.type}/${r._id}/reverse`);
+      const deleteUrl  = (r.editable || r.deletable) ? workspaceUrl(supplier._id, phone, `/${r.type}/${r._id}/delete`) : null;
 
-      const actionHtml = r.editable ? `
-        <a href="${editUrl}" class="btn btn-gray" style="padding:4px 9px;font-size:12px">Edit</a>
-        ${r.reversible ? `<form method="POST" action="${reverseUrl}" style="display:inline" onsubmit="return confirm('Reverse this ${esc(r.type)}? It stays visible for audit but no longer affects totals.')"><button class="btn btn-gray" style="padding:4px 9px;font-size:12px;color:#b45309">Reverse</button></form>` : ""}
-        <form method="POST" action="${deleteUrl}" style="display:inline" onsubmit="return confirm('Permanently delete this ${esc(r.type)}? This cannot be undone.')"><button class="btn btn-gray" style="padding:4px 9px;font-size:12px;color:var(--red)">Delete</button></form>
-      ` : `<span style="font-size:11.5px;color:var(--muted)">WA record</span>`;
+      const actionHtml = (r.editable || r.deletable) ? `
+        ${r.editable ? `<a href="${editUrl}" class="btn btn-gray" style="padding:4px 9px;font-size:12px">✏️ Edit</a>` : ""}
+        ${r.reversible ? `<form method="POST" action="${reverseUrl}" style="display:inline" onsubmit="return confirm('Reverse this ${esc(r.type)}? It stays visible for audit but no longer affects totals.')"><button class="btn btn-gray" style="padding:4px 9px;font-size:12px;color:#b45309">↩ Reverse</button></form>` : ""}
+        ${deleteUrl ? `<form method="POST" action="${deleteUrl}" style="display:inline" onsubmit="return confirm('⚠️ Permanently delete this ${esc(r.type)}?\n\nThis will remove the record and recompute all affected balances.\n\nThis cannot be undone.')"><button class="btn btn-gray" style="padding:4px 9px;font-size:12px;color:var(--red)">🗑 Delete</button></form>` : ""}
+      ` : `<span style="font-size:11.5px;color:var(--muted)">—</span>`;
 
       return `<tr>
         <td style="white-space:nowrap;font-size:12px;color:var(--muted)">${dt(r.date)}</td>
@@ -615,7 +615,7 @@ router.get("/:phone", requireSupplierAdmin, async (req, res) => {
         <div class="panel-head">
           <h3>📋 Activity - ${esc(person.name || phone)} (last ${days} days)</h3>
           <span style="font-size:12px;color:var(--muted)">
-            "WA record" = entered on WhatsApp chatbot. Edit/Reverse/Delete available for admin-entered records.
+            💡 Cash Sales &amp; Invoice Payments from WhatsApp show 🗑 Delete only. Admin-entered income shows full Edit/Reverse/Delete. All deletions recompute affected balances.
           </span>
         </div>
         <table class="data-table">
@@ -1089,6 +1089,65 @@ router.post("/:phone/handover/:recId/delete", requireSupplierAdmin, async (req, 
     const CashHandover = (await import("../models/cashHandover.js")).default;
     await CashHandover.findByIdAndDelete(req.params.recId);
     res.redirect(`${workspaceUrl(supplier._id, phone)}?success=Handover+deleted`);
+  } catch (e) {
+    res.redirect(`${workspaceUrl(req.params.id, phone)}?error=${encodeURIComponent(e.message)}`);
+  }
+});
+
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// RECEIPT DELETE — admin only, with balance recompute
+// Cash sales (Invoice type=receipt) cannot be edited here because receipt
+// numbering is sequential. Admin deletes the wrong one and clerk re-records.
+// ═══════════════════════════════════════════════════════════════════════════
+router.post("/:phone/receipt/:recId/delete", requireSupplierAdmin, async (req, res) => {
+  const phone = req.params.phone;
+  try {
+    const { supplier, biz } = await loadBizContext(req);
+    const Invoice = (await import("../models/invoice.js")).default;
+    const doc = await Invoice.findOneAndDelete({ _id: req.params.recId, businessId: biz._id, type: "receipt" }).lean();
+    if (doc) await recomputeDay(biz._id, doc.branchId, doc.createdAt);
+    res.redirect(`${workspaceUrl(supplier._id, phone)}?success=Cash+sale+deleted+and+balance+recomputed`);
+  } catch (e) {
+    res.redirect(`${workspaceUrl(req.params.id, phone)}?error=${encodeURIComponent(e.message)}`);
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// INVOICE PAYMENT DELETE — admin only, restores invoice balance + recomputes
+// Deleting a payment reverses its effect on the linked invoice's balance and
+// recomputes the daily CashBalance snapshot.
+// ═══════════════════════════════════════════════════════════════════════════
+router.post("/:phone/invoicepayment/:recId/delete", requireSupplierAdmin, async (req, res) => {
+  const phone = req.params.phone;
+  try {
+    const { supplier, biz } = await loadBizContext(req);
+    const InvoicePayment = (await import("../models/invoicePayment.js")).default;
+    const Invoice        = (await import("../models/invoice.js")).default;
+
+    const pmt = await InvoicePayment.findOneAndDelete({ _id: req.params.recId, businessId: biz._id }).lean();
+    if (!pmt) return res.redirect(`${workspaceUrl(supplier._id, phone)}?error=Payment+not+found`);
+
+    // Restore the invoice balance by reversing this payment
+    if (pmt.invoiceId) {
+      const inv = await Invoice.findById(pmt.invoiceId).lean();
+      if (inv) {
+        const newAmountPaid = Math.max(0, (inv.amountPaid || 0) - (pmt.amount || 0));
+        const newBalance    = (inv.total || 0) - newAmountPaid;
+        const newStatus     = newBalance <= 0.01 ? "paid"
+                            : newAmountPaid > 0  ? "partial"
+                            : "unpaid";
+        await Invoice.findByIdAndUpdate(pmt.invoiceId, {
+          amountPaid: newAmountPaid,
+          balance:    newBalance,
+          status:     newStatus
+        });
+      }
+    }
+
+    await recomputeDay(biz._id, pmt.branchId, pmt.createdAt);
+    res.redirect(`${workspaceUrl(supplier._id, phone)}?success=Payment+deleted+and+balance+recomputed`);
   } catch (e) {
     res.redirect(`${workspaceUrl(req.params.id, phone)}?error=${encodeURIComponent(e.message)}`);
   }

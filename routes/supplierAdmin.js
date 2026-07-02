@@ -11511,6 +11511,14 @@ router.get("/suppliers/:id/recurring", requireSupplierAdmin, async (req, res) =>
           <div style="color:var(--muted);font-size:13px">${esc(biz.name)}</div>
         </div>
         <div style="display:flex;gap:10px">
+          <a href="/zq-admin/suppliers/${supplier._id}/recurring/ledger"
+             style="background:#0f766e;color:white;padding:9px 16px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600">
+            📒 Full Ledger
+          </a>
+          <a href="/zq-admin/suppliers/${supplier._id}/recurring/clerk-statement"
+             style="background:#b45309;color:white;padding:9px 16px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600">
+            👤 Clerk Statement
+          </a>
           <a href="/zq-admin/suppliers/${supplier._id}/recurring/new-account"
              style="background:var(--blue);color:white;padding:9px 16px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600">
             ➕ Add Account / Unit
@@ -13229,6 +13237,557 @@ router.post("/suppliers/:id/recurring/:acctId/expense/:expId/delete", requireSup
     res.redirect(`/zq-admin/suppliers/${req.params.id}/recurring/${req.params.acctId}/records?error=${encodeURIComponent(e.message)}`);
   }
 });
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// RECURRING BILLING — CLERK CASH STATEMENT
+// GET /suppliers/:id/recurring/clerk-statement
+// GET /suppliers/:id/recurring/clerk-statement/:phone
+//
+// Two-step flow:
+//   Step 1: Admin lands on /clerk-statement → sees a list of staff to pick.
+//   Step 2: Admin picks a clerk → sees that clerk's full cash accountability
+//           statement for a chosen date range:
+//
+//   CASH IN  : RecurringPayments recorded by this clerk (tenant rent payments
+//              they collected and logged on WhatsApp)
+//   CASH OUT : Expenses from the Expense model (clerk's own entries via
+//              WhatsApp Business Tools — e.g. lunch, transport, petty cash)
+//   CASH OUT : RecurringExpenses for units (maintenance charged to accounts
+//              — e.g. plumber, lightbulbs, cleaning) that were recorded during
+//              this clerk's shift (we use createdAt date range rather than
+//              createdBy since RecurringExpense may not have a clerk link)
+//   CASH OUT : CashPayouts made by this clerk (formal payouts recorded in the
+//              cash management module — e.g. paying a supplier from the till)
+//
+//   Running balance = totalIn - totalOut = cash the clerk should have in hand.
+//   A positive balance means they owe the business that amount.
+//
+// Date filter: preset buttons (Today, This Week, This Month, Last Month,
+//              All Time) + HTML date pickers. No text entry.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ── Step 1: Pick a clerk ────────────────────────────────────────────────────
+router.get("/suppliers/:id/recurring/clerk-statement", requireSupplierAdmin, async (req, res) => {
+  try {
+    const supplier = await SupplierProfile.findById(req.params.id).lean();
+    if (!supplier) return res.redirect("/zq-admin/suppliers");
+    const Business = (await import("../models/business.js")).default;
+    const UserRole = (await import("../models/userRole.js")).default;
+    const biz = supplier.businessId ? await Business.findById(supplier.businessId).lean() : null;
+    if (!biz) return res.send(layout("Clerk Statement", `<div class="alert red">No business record linked.</div>`));
+
+    const staff = await UserRole.find({ businessId: biz._id, pending: false })
+      .sort({ role: 1, name: 1 }).lean();
+
+    const roleColor = r => ({ owner: "#7c3aed", admin: "#2563eb", manager: "#0d9488", clerk: "#b45309" }[r] || "#64748b");
+    const initials  = name => (name || "?").trim().split(/\s+/).map(w => w[0]).slice(0, 2).join("").toUpperCase();
+
+    const cards = staff.length ? staff.map(s => `
+      <a href="/zq-admin/suppliers/${supplier._id}/recurring/clerk-statement/${encodeURIComponent(s.phone)}"
+         style="display:flex;align-items:center;gap:14px;background:var(--white);border:1px solid var(--border);
+                border-radius:12px;padding:16px;text-decoration:none;color:var(--text)">
+        <div style="width:44px;height:44px;border-radius:50%;background:${roleColor(s.role)};color:white;
+                    font-weight:700;font-size:15px;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          ${esc(initials(s.name || s.phone))}
+        </div>
+        <div style="flex:1">
+          <div style="font-weight:700;font-size:14.5px">${esc(s.name || s.phone)}</div>
+          <div style="font-size:12px;color:var(--muted)">${esc(s.role)} · ${esc(s.phone)}</div>
+        </div>
+        <div style="color:var(--muted);font-size:18px">→</div>
+      </a>`).join("") : `<div class="alert">No staff found for this business.</div>`;
+
+    res.send(layout("Clerk Cash Statement", `
+      <a href="/zq-admin/suppliers/${supplier._id}/recurring" class="back-link">← Back to Recurring Billing</a>
+      <div style="margin:14px 0 22px">
+        <h2 style="font-size:20px;font-weight:700">👤 Clerk Cash Statement</h2>
+        <div style="color:var(--muted);font-size:13px">${esc(biz.name)} — Pick a clerk to view their cash statement</div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px">${cards}</div>
+    `));
+  } catch (e) {
+    res.send(layout("Error", `<div class="alert red">${esc(e.message)}</div>`));
+  }
+});
+
+// ── Step 2: Clerk's cash statement ─────────────────────────────────────────
+router.get("/suppliers/:id/recurring/clerk-statement/:phone", requireSupplierAdmin, async (req, res) => {
+  try {
+    const supplier = await SupplierProfile.findById(req.params.id).lean();
+    if (!supplier) return res.redirect("/zq-admin/suppliers");
+    const Business = (await import("../models/business.js")).default;
+    const UserRole = (await import("../models/userRole.js")).default;
+    const biz = supplier.businessId ? await Business.findById(supplier.businessId).lean() : null;
+    if (!biz) return res.redirect(`/zq-admin/suppliers/${req.params.id}/recurring`);
+
+    const clerkPhone = req.params.phone;
+    const clerk = await UserRole.findOne({ businessId: biz._id, phone: clerkPhone }).lean();
+    if (!clerk) return res.redirect(`/zq-admin/suppliers/${req.params.id}/recurring/clerk-statement?error=Clerk+not+found`);
+
+    // ── Date range ─────────────────────────────────────────────────────────
+    const now    = new Date();
+    const preset = req.query.preset || "month";
+    let from, to, periodLabel;
+
+    if (req.query.from && req.query.to) {
+      from = new Date(req.query.from); from.setHours(0, 0, 0, 0);
+      to   = new Date(req.query.to);   to.setHours(23, 59, 59, 999);
+      periodLabel = `${from.toLocaleDateString("en-GB")} – ${to.toLocaleDateString("en-GB")}`;
+    } else if (preset === "today") {
+      from = new Date(); from.setHours(0, 0, 0, 0);
+      to   = new Date(); to.setHours(23, 59, 59, 999);
+      periodLabel = "Today";
+    } else if (preset === "week") {
+      to   = new Date(); to.setHours(23, 59, 59, 999);
+      from = new Date(to); from.setDate(from.getDate() - 6); from.setHours(0, 0, 0, 0);
+      periodLabel = `Last 7 days`;
+    } else if (preset === "lastmonth") {
+      from = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0);
+      to   = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+      periodLabel = from.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+    } else if (preset === "alltime") {
+      from = new Date(biz.createdAt || "2020-01-01"); from.setHours(0, 0, 0, 0);
+      to   = new Date(); to.setHours(23, 59, 59, 999);
+      periodLabel = "All Time";
+    } else {
+      // Default: this calendar month
+      from = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+      to   = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+      periodLabel = from.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+    }
+
+    const fromStr = from.toISOString().slice(0, 10);
+    const toStr   = to.toISOString().slice(0, 10);
+    const cur     = biz.currency || "USD";
+    const fmt     = n => `${cur === "ZWL" ? "Z$" : "$"}${Number(n || 0).toFixed(2)}`;
+    const fmtDate = d => new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+    const fmtTime = d => new Date(d).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+
+    // ── Fetch all transactions for this clerk in parallel ───────────────────
+    const RecurringPayment = (await import("../models/recurringPayment.js")).default;
+    const RecurringAccount = (await import("../models/recurringAccount.js")).default;
+    const RecurringTenant  = (await import("../models/recurringTenant.js")).default;
+    const RecurringExpense = (await import("../models/recurringExpense.js")).default;
+    const Expense          = (await import("../models/expense.js")).default;
+    const CashPayout       = (await import("../models/cashPayout.js")).default;
+
+    const dateQ = { $gte: from, $lte: to };
+
+    const [payments, bizExpenses, unitExpenses, payouts] = await Promise.all([
+      // Rent/tenant payments THIS CLERK collected and recorded
+      RecurringPayment.find({
+        businessId: biz._id,
+        createdBy:  clerkPhone,
+        date:       dateQ
+      }).sort({ date: 1 }).lean(),
+
+      // Business-tool expenses entered by this clerk on WhatsApp
+      // (their personal petty cash entries: lunch, transport, etc.)
+      Expense.find({
+        businessId: biz._id,
+        createdBy:  clerkPhone,
+        createdAt:  dateQ,
+        reversed:   { $ne: true }
+      }).sort({ createdAt: 1 }).lean(),
+
+      // Maintenance/unit expenses for the business during this period
+      // (these may not have a createdBy so we show ALL for the period,
+      //  filtered to this business — admin can see what was spent on units)
+      RecurringExpense.find({
+        businessId: biz._id,
+        date:       dateQ
+      }).sort({ date: 1 }).lean(),
+
+      // Cash payouts made by this clerk (formal cash-out records)
+      CashPayout.find({
+        businessId: biz._id,
+        createdBy:  clerkPhone,
+        date:       dateQ,
+        reversed:   { $ne: true }
+      }).sort({ date: 1 }).lean()
+    ]);
+
+    // Resolve account and tenant names for payment rows
+    const acctIds  = [...new Set(payments.map(p => String(p.accountId)).filter(Boolean))];
+    const accts    = await RecurringAccount.find({ _id: { $in: acctIds } }).lean();
+    const acctMap  = Object.fromEntries(accts.map(a => [String(a._id), a.name]));
+    const tenantIds = [...new Set(payments.map(p => String(p.tenantId)).filter(Boolean))];
+    const tenants  = await RecurringTenant.find({ _id: { $in: tenantIds } }).lean();
+    const tenantMap = Object.fromEntries(tenants.map(t => [String(t._id), t.name]));
+
+    const acctIdsExp  = [...new Set(unitExpenses.map(x => String(x.accountId)).filter(Boolean))];
+    const acctsExp    = await RecurringAccount.find({ _id: { $in: acctIdsExp } }).lean();
+    const acctExpMap  = Object.fromEntries(acctsExp.map(a => [String(a._id), a.name]));
+
+    // ── Build unified rows ──────────────────────────────────────────────────
+    const rows = [];
+
+    for (const p of payments) {
+      const acctName   = acctMap[String(p.accountId)]   || "Unknown Account";
+      const tenantName = tenantMap[String(p.tenantId)]  || "";
+      rows.push({
+        date:    p.date,
+        icon:    "💰", typeLabel: "Rent Collected",
+        detail:  `${acctName}${tenantName ? " · " + tenantName : ""}${p.method !== "cash" ? " · " + p.method : ""}${p.reference ? " · " + p.reference : ""}`,
+        cashIn:  p.amount || 0, cashOut: 0,
+        color:   "var(--green)"
+      });
+    }
+
+    for (const e of bizExpenses) {
+      rows.push({
+        date:    e.createdAt,
+        icon:    "💸", typeLabel: `Expense · ${e.category || "Other"}`,
+        detail:  e.description || e.category || "",
+        cashIn:  0, cashOut: e.amount || 0,
+        color:   "#b45309"
+      });
+    }
+
+    for (const x of unitExpenses) {
+      rows.push({
+        date:    x.date,
+        icon:    "🔧", typeLabel: `Unit Expense · ${x.category || "Maintenance"}`,
+        detail:  `${acctExpMap[String(x.accountId)] || "Unit"} · ${x.description || ""}`,
+        cashIn:  0, cashOut: x.amount || 0,
+        color:   "#64748b"
+      });
+    }
+
+    for (const po of payouts) {
+      const isDrawing = /draw|owner|personal|private|director/i.test(po.reason || "");
+      rows.push({
+        date:    po.date,
+        icon:    isDrawing ? "👑" : "🏧",
+        typeLabel: isDrawing ? "Owner Drawing" : "Cash Payout",
+        detail:  po.reason || "",
+        cashIn:  0, cashOut: po.amount || 0,
+        color:   isDrawing ? "#7c3aed" : "#0369a1"
+      });
+    }
+
+    // Sort chronologically, then compute running balance
+    rows.sort((a, b) => new Date(a.date) - new Date(b.date));
+    let balance = 0;
+    for (const r of rows) {
+      balance += (r.cashIn || 0) - (r.cashOut || 0);
+      r.balance = balance;
+    }
+
+    // ── Totals ──────────────────────────────────────────────────────────────
+    const totalIn        = rows.reduce((s, r) => s + (r.cashIn  || 0), 0);
+    const totalOut       = rows.reduce((s, r) => s + (r.cashOut || 0), 0);
+    const totalCollected = payments.reduce((s, p) => s + (p.amount || 0), 0);
+    const totalBizExp    = bizExpenses.reduce((s, e) => s + (e.amount || 0), 0);
+    const totalUnitExp   = unitExpenses.reduce((s, x) => s + (x.amount || 0), 0);
+    const totalPayouts   = payouts.reduce((s, po) => s + (po.amount || 0), 0);
+    const cashAtHand     = balance;
+
+    // ── Render ──────────────────────────────────────────────────────────────
+    const presetBtn = (p, label) => {
+      const active = !req.query.from && preset === p;
+      return `<a href="?preset=${p}" style="padding:7px 14px;border-radius:7px;font-size:13px;text-decoration:none;
+        font-weight:${active ? 700 : 500};white-space:nowrap;
+        background:${active ? "var(--blue)" : "var(--white)"};
+        color:${active ? "white" : "var(--text)"};
+        border:1px solid ${active ? "var(--blue)" : "var(--border)"}">
+        ${label}
+      </a>`;
+    };
+
+    const tableRows = rows.length ? rows.map(r => `
+      <tr>
+        <td style="white-space:nowrap;font-size:12px;color:var(--muted)">${fmtDate(r.date)} ${fmtTime(r.date)}</td>
+        <td style="white-space:nowrap">${r.icon} <span style="font-size:12px;font-weight:600;color:${r.color}">${esc(r.typeLabel)}</span></td>
+        <td style="font-size:12.5px;color:var(--muted);max-width:250px">${esc(r.detail)}</td>
+        <td style="text-align:right;font-weight:600;color:var(--green)">${r.cashIn  > 0 ? fmt(r.cashIn)  : "—"}</td>
+        <td style="text-align:right;font-weight:600;color:var(--red)">${r.cashOut > 0 ? fmt(r.cashOut) : "—"}</td>
+        <td style="text-align:right;font-weight:700;color:${r.balance >= 0 ? "var(--blue)" : "var(--red)"}">
+          ${fmt(r.balance)}
+        </td>
+      </tr>`) .join("") : `<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--muted)">No transactions for this clerk in this period</td></tr>`;
+
+    const clerkName = esc(clerk.name || clerkPhone);
+    const alertBlock = req.query.error ? `<div class="alert red">❌ ${esc(req.query.error)}</div>` :
+                       req.query.success ? `<div class="alert green">✅ ${esc(req.query.success)}</div>` : "";
+
+    res.send(layout(`${clerkName} · Cash Statement`, `
+      <a href="/zq-admin/suppliers/${supplier._id}/recurring/clerk-statement" class="back-link">← Pick a different clerk</a>
+      ${alertBlock}
+
+      <!-- ── Clerk identity bar ─────────────────────────────────────── -->
+      <div style="display:flex;align-items:center;gap:14px;background:var(--white);border:1px solid var(--border);
+                  border-radius:12px;padding:16px 18px;margin:14px 0 22px">
+        <div style="width:50px;height:50px;border-radius:50%;background:#b45309;color:white;font-weight:700;font-size:17px;
+                    display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          ${esc((clerk.name || clerkPhone).trim().split(/\s+/).map(w => w[0]).slice(0,2).join("").toUpperCase())}
+        </div>
+        <div style="flex:1">
+          <div style="font-weight:700;font-size:16px">💼 Cash Statement — ${clerkName}</div>
+          <div style="font-size:12.5px;color:var(--muted)">${esc(clerk.role)} · ${esc(clerkPhone)} · ${esc(biz.name)}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:11.5px;color:var(--muted)">Period</div>
+          <div style="font-weight:700;font-size:14px">${esc(periodLabel)}</div>
+        </div>
+      </div>
+
+      <!-- ── Date filter ────────────────────────────────────────────── -->
+      <div class="card" style="margin-bottom:20px;padding:16px">
+        <div style="font-weight:600;font-size:13px;margin-bottom:10px">📅 Date Range</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+          ${presetBtn("today", "Today")}
+          ${presetBtn("week",  "This Week")}
+          ${presetBtn("month", "This Month")}
+          ${presetBtn("lastmonth", "Last Month")}
+          ${presetBtn("alltime", "All Time")}
+        </div>
+        <form method="GET" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+          <div>
+            <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">From</label>
+            <input type="date" name="from" value="${fromStr}"
+              style="padding:8px 10px;border:1px solid var(--border);border-radius:7px;font-size:13px">
+          </div>
+          <div>
+            <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">To</label>
+            <input type="date" name="to" value="${toStr}"
+              style="padding:8px 10px;border:1px solid var(--border);border-radius:7px;font-size:13px">
+          </div>
+          <button type="submit" class="btn btn-blue" style="padding:9px 18px">Apply</button>
+        </form>
+      </div>
+
+      <!-- ── Summary cards ──────────────────────────────────────────── -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:22px">
+        ${stat(fmt(totalCollected), "💰 Rent Collected", "green")}
+        ${stat(fmt(totalBizExp),    "💸 Own Expenses",   "red")}
+        ${stat(fmt(totalUnitExp),   "🔧 Unit Expenses",  "")}
+        ${stat(fmt(totalPayouts),   "🏧 Payouts Made",   "")}
+        ${stat(fmt(cashAtHand),     cashAtHand >= 0 ? "✅ Cash at Hand" : "⚠️ Shortfall", cashAtHand >= 0 ? "green" : "red")}
+      </div>
+
+      <!-- ── Ledger table ───────────────────────────────────────────── -->
+      <div class="panel">
+        <div class="panel-head">
+          <h3>📋 ${clerkName}'s Transactions · ${rows.length} record${rows.length !== 1 ? "s" : ""}</h3>
+          <span style="font-size:12px;color:var(--muted)">
+            Running balance = total collected − expenses − payouts = cash they should hold
+          </span>
+        </div>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Date / Time</th>
+              <th>Type</th>
+              <th>Details</th>
+              <th style="text-align:right">Cash In</th>
+              <th style="text-align:right">Cash Out</th>
+              <th style="text-align:right">Running Balance</th>
+            </tr>
+          </thead>
+          <tbody>${tableRows}</tbody>
+          <tfoot style="font-weight:700;background:#f8fafc;border-top:2px solid var(--border)">
+            <tr>
+              <td colspan="3" style="padding:10px 12px">Totals</td>
+              <td style="text-align:right;padding:10px 12px;color:var(--green)">${fmt(totalIn)}</td>
+              <td style="text-align:right;padding:10px 12px;color:var(--red)">${fmt(totalOut)}</td>
+              <td style="text-align:right;padding:10px 12px;color:${cashAtHand >= 0 ? "var(--blue)" : "var(--red)"}">
+                ${fmt(cashAtHand)} ${cashAtHand >= 0 ? "in hand" : "short"}
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      <div style="margin-top:14px;padding:12px 16px;background:#f0fdf4;border-radius:8px;font-size:13px;color:#166534">
+        ℹ️ <strong>How to read this:</strong>
+        Running balance shows how much cash this clerk should physically hold right now.
+        💰 Rent collected = cash in hand from tenants.
+        💸 Own expenses (lunch, transport) = taken from that cash.
+        🔧 Unit expenses (maintenance) = paid from that cash.
+        🏧 Payouts = formal cash-outs from the till.
+        Final balance = what they should hand over at end of shift.
+      </div>
+    `));
+  } catch (e) {
+    res.send(layout("Error", `<div class="alert red">${esc(e.message)}<pre style="font-size:11px">${esc(e.stack||"")}</pre></div>`));
+  }
+});
+
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// RECURRING BILLING — FULL LEDGER
+// GET /suppliers/:id/recurring/ledger
+//
+// Unified chronological ledger of ALL money movements across all recurring
+// accounts for this business:
+//   🧾 CHARGES     — RecurringInvoice (rent billed to tenants)
+//   💰 PAYMENTS    — RecurringPayment (rent collected from tenants)
+//   🔧 UNIT EXP    — RecurringExpense (per-account maintenance costs)
+//   💸 BIZ EXP     — Expense (WhatsApp business-tools clerk entries)
+//
+// Date filter: preset buttons + HTML date pickers (no text entry required).
+// Account filter: dropdown to scope to a single property/unit.
+// ═══════════════════════════════════════════════════════════════════════════
+router.get("/suppliers/:id/recurring/ledger", requireSupplierAdmin, async (req, res) => {
+  try {
+    const supplier = await SupplierProfile.findById(req.params.id).lean();
+    if (!supplier) return res.redirect("/zq-admin/suppliers");
+    const Business = (await import("../models/business.js")).default;
+    const biz = supplier.businessId ? await Business.findById(supplier.businessId).lean() : null;
+    if (!biz) return res.send(layout("Recurring Ledger", `<div class="alert red">No business record linked.</div>`));
+
+    const RecurringAccount = (await import("../models/recurringAccount.js")).default;
+    const RecurringInvoice = (await import("../models/recurringInvoice.js")).default;
+    const RecurringPayment = (await import("../models/recurringPayment.js")).default;
+    const RecurringExpense = (await import("../models/recurringExpense.js")).default;
+    const Expense          = (await import("../models/expense.js")).default;
+
+    const now    = new Date();
+    const preset = req.query.preset || "month";
+    let from, to, periodLabel;
+
+    if (req.query.from && req.query.to) {
+      from = new Date(req.query.from); from.setHours(0, 0, 0, 0);
+      to   = new Date(req.query.to);   to.setHours(23, 59, 59, 999);
+      periodLabel = `${from.toLocaleDateString("en-GB")} – ${to.toLocaleDateString("en-GB")}`;
+    } else if (preset === "today") {
+      from = new Date(); from.setHours(0, 0, 0, 0);
+      to   = new Date(); to.setHours(23, 59, 59, 999);
+      periodLabel = "Today";
+    } else if (preset === "lastmonth") {
+      from = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0);
+      to   = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+      periodLabel = from.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+    } else if (preset === "year") {
+      from = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
+      to   = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
+      periodLabel = `Year ${now.getFullYear()}`;
+    } else if (preset === "alltime") {
+      from = new Date(biz.createdAt || "2020-01-01"); from.setHours(0, 0, 0, 0);
+      to   = new Date(); to.setHours(23, 59, 59, 999);
+      periodLabel = "All Time";
+    } else {
+      from = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+      to   = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+      periodLabel = from.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+    }
+
+    const fromStr    = from.toISOString().slice(0, 10);
+    const toStr      = to.toISOString().slice(0, 10);
+    const cur        = biz.currency || "USD";
+    const fmt        = n => `${cur === "ZWL" ? "Z$" : "$"}${Number(n || 0).toFixed(2)}`;
+    const fmtDate    = d => new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+    const acctFilter = req.query.acctId || "";
+
+    const accounts = await RecurringAccount.find({ businessId: biz._id }).sort({ name: 1 }).lean();
+    const acctIds  = acctFilter ? accounts.filter(a => String(a._id) === acctFilter).map(a => a._id) : accounts.map(a => a._id);
+    const acctById = Object.fromEntries(accounts.map(a => [String(a._id), a.name]));
+
+    const bQ = { businessId: biz._id, accountId: { $in: acctIds } };
+
+    const [invoices, payments, acctExpenses, bizExpenses] = await Promise.all([
+      RecurringInvoice.find({ ...bQ, status: { $ne: "cancelled" }, periodStart: { $gte: from, $lte: to } }).sort({ periodStart: 1 }).lean(),
+      RecurringPayment.find({ ...bQ, date: { $gte: from, $lte: to } }).sort({ date: 1 }).lean(),
+      RecurringExpense.find({ ...bQ, date: { $gte: from, $lte: to } }).sort({ date: 1 }).lean(),
+      Expense.find({ businessId: biz._id, createdAt: { $gte: from, $lte: to } }).sort({ createdAt: 1 }).lean()
+    ]);
+
+    const rows = [];
+    for (const inv of invoices) {
+      rows.push({ date: inv.periodStart, icon: "🧾", type: "Charge",      account: acctById[String(inv.accountId)] || "—", desc: `${inv.period || ""} · ${inv.number || ""}`.replace(/^\s*·\s*/, ""), debit: inv.amount || 0, credit: 0, color: "var(--red)" });
+    }
+    for (const pay of payments) {
+      rows.push({ date: pay.date, icon: "💰", type: "Payment",     account: acctById[String(pay.accountId)] || "—", desc: `${pay.method || "Cash"}${pay.reference ? " · " + pay.reference : ""}`, debit: 0, credit: pay.amount || 0, color: "var(--green)" });
+    }
+    for (const exp of acctExpenses) {
+      rows.push({ date: exp.date, icon: "🔧", type: "Unit Expense", account: acctById[String(exp.accountId)] || "—", desc: `${exp.category || ""} · ${exp.description || ""}`.replace(/^\s*·\s*|\s*·\s*$/, ""), debit: exp.amount || 0, credit: 0, color: "#b45309" });
+    }
+    for (const exp of bizExpenses) {
+      rows.push({ date: exp.createdAt, icon: "💸", type: "Biz Expense",  account: "Business", desc: `${exp.category || ""} · ${exp.description || ""}`.replace(/^\s*·\s*|\s*·\s*$/, ""), debit: exp.amount || 0, credit: 0, color: "#64748b" });
+    }
+
+    rows.sort((a, b) => new Date(a.date) - new Date(b.date));
+    let balance = 0;
+    for (const r of rows) { balance += (r.credit || 0) - (r.debit || 0); r.balance = balance; }
+
+    const totalCharged  = rows.filter(r => r.type === "Charge").reduce((s, r) => s + r.debit, 0);
+    const totalReceived = rows.filter(r => r.type === "Payment").reduce((s, r) => s + r.credit, 0);
+    const totalUnitExp  = rows.filter(r => r.type === "Unit Expense").reduce((s, r) => s + r.debit, 0);
+    const totalBizExp   = rows.filter(r => r.type === "Biz Expense").reduce((s, r) => s + r.debit, 0);
+
+    const presetBtn = (p, label) => {
+      const active = !req.query.from && preset === p;
+      return `<a href="?preset=${p}${acctFilter ? "&acctId=" + acctFilter : ""}" style="padding:7px 14px;border-radius:7px;font-size:13px;text-decoration:none;white-space:nowrap;font-weight:${active ? 700 : 500};background:${active ? "var(--blue)" : "var(--white)"};color:${active ? "white" : "var(--text)"};border:1px solid ${active ? "var(--blue)" : "var(--border)"}">${label}</a>`;
+    };
+
+    const acctOptions = [`<option value="">All Accounts</option>`]
+      .concat(accounts.map(a => `<option value="${a._id}" ${String(a._id) === acctFilter ? "selected" : ""}>${esc(a.name)}</option>`)).join("");
+
+    const tableRows = rows.map(r => `
+      <tr>
+        <td style="white-space:nowrap;font-size:12px;color:var(--muted)">${fmtDate(r.date)}</td>
+        <td>${r.icon} <span style="font-size:12px;font-weight:600;color:${r.color}">${esc(r.type)}</span></td>
+        <td style="font-size:13px;font-weight:600">${esc(r.account)}</td>
+        <td style="font-size:12.5px;color:var(--muted)">${esc(r.desc)}</td>
+        <td style="text-align:right;color:var(--red);font-weight:600">${r.debit  > 0 ? fmt(r.debit)  : "—"}</td>
+        <td style="text-align:right;color:var(--green);font-weight:600">${r.credit > 0 ? fmt(r.credit) : "—"}</td>
+        <td style="text-align:right;font-weight:700;color:${r.balance < 0 ? "var(--green)" : r.balance > 0 ? "var(--red)" : "var(--muted)"}">${fmt(Math.abs(r.balance))} ${r.balance < 0 ? "CR" : r.balance > 0 ? "DR" : ""}</td>
+      </tr>`).join("");
+
+    res.send(layout("Recurring Ledger", `
+      <a href="/zq-admin/suppliers/${supplier._id}/recurring" class="back-link">← Back to Recurring Billing</a>
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin:14px 0 20px">
+        <div>
+          <h2 style="font-size:20px;font-weight:700">📒 Recurring Billing Ledger</h2>
+          <div style="color:var(--muted);font-size:13px">${esc(biz.name)} · ${esc(periodLabel)}</div>
+        </div>
+      </div>
+      <div class="card" style="margin-bottom:20px;padding:16px">
+        <div style="font-weight:600;font-size:13px;margin-bottom:10px">📅 Date Filter</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+          ${presetBtn("today","Today")} ${presetBtn("month","This Month")} ${presetBtn("lastmonth","Last Month")} ${presetBtn("year","This Year")} ${presetBtn("alltime","All Time")}
+        </div>
+        <form method="GET" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+          <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">From</label><input type="date" name="from" value="${fromStr}" style="padding:8px 10px;border:1px solid var(--border);border-radius:7px;font-size:13px"></div>
+          <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">To</label><input type="date" name="to" value="${toStr}" style="padding:8px 10px;border:1px solid var(--border);border-radius:7px;font-size:13px"></div>
+          <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Account</label><select name="acctId" style="padding:8px 10px;border:1px solid var(--border);border-radius:7px;font-size:13px">${acctOptions}</select></div>
+          <button type="submit" class="btn btn-blue" style="padding:9px 18px">Apply</button>
+        </form>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px">
+        ${stat(fmt(totalCharged), "🧾 Total Charged", "red")}
+        ${stat(fmt(totalReceived), "💰 Total Received", "green")}
+        ${stat(fmt(totalUnitExp), "🔧 Unit Expenses", "")}
+        ${stat(fmt(totalBizExp), "💸 Biz Expenses", "")}
+        ${stat(fmt(totalReceived - totalCharged - totalUnitExp - totalBizExp), balance >= 0 ? "✅ Net Surplus" : "⚠️ Net", balance >= 0 ? "green" : "red")}
+      </div>
+      <div class="panel">
+        <div class="panel-head">
+          <h3>All Transactions · ${rows.length} record${rows.length !== 1 ? "s" : ""}</h3>
+          <span style="font-size:12px;color:var(--muted)">🧾 Charge (DR) · 💰 Payment (CR) · 🔧 Unit Expense (DR) · 💸 Biz Expense (DR)</span>
+        </div>
+        <table class="data-table">
+          <thead><tr><th>Date</th><th>Type</th><th>Account</th><th>Description</th><th style="text-align:right">Debit</th><th style="text-align:right">Credit</th><th style="text-align:right">Balance</th></tr></thead>
+          <tbody>${tableRows || `<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--muted)">No transactions in this period</td></tr>`}</tbody>
+          <tfoot style="font-weight:700;background:#f8fafc;border-top:2px solid var(--border)">
+            <tr>
+              <td colspan="4" style="padding:10px 12px">Totals</td>
+              <td style="text-align:right;padding:10px 12px;color:var(--red)">${fmt(totalCharged + totalUnitExp + totalBizExp)}</td>
+              <td style="text-align:right;padding:10px 12px;color:var(--green)">${fmt(totalReceived)}</td>
+              <td style="text-align:right;padding:10px 12px;color:${balance <= 0 ? "var(--green)" : "var(--red)"}"> ${fmt(Math.abs(balance))} ${balance <= 0 ? "CR" : "DR"}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    `));
+  } catch (e) {
+    res.send(layout("Error", `<div class="alert red">${esc(e.message)}<pre style="font-size:11px">${esc(e.stack||"")}</pre></div>`));
+  }
+});
+
 
 
 export { layout, esc };
