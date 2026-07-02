@@ -429,29 +429,32 @@ export async function sendReportsMenu(to, isGold = false, isSilver = false) {
   // Clerk / manager: sees Detailed Ledger (branch-scoped) + My Statement only
   if (caller?.role === "clerk" || caller?.role === "manager") {
     return sendList(to, "📈 Reports - pick report & period:", [
-      { id: "rpt_ledger_today",  title: "📋 Ledger · Today"             },
-      { id: "rpt_ledger_week",   title: "📋 Ledger · This Week"         },
-      { id: "rpt_ledger_month",  title: "📋 Ledger · This Month"        },
-      { id: "rpt_ledger_custom", title: "📋 Ledger · Custom"      },
-      { id: "rpt_self_today",    title: "👤 My Stmt · Today"       },
-      { id: "rpt_self_week",     title: "👤 My Stmt · This Week"   },
-      { id: "rpt_self_month",    title: "👤 My Stmt · This Month"  },
-      { id: "rpt_self_custom",   title: "👤 My Stmt · Custom"      },
-      { id: ACTIONS.BACK,        title: "⬅ Back"                        }
+      { id: "rpt_ledger_today",   title: "📋 Ledger · Today"        },
+      { id: "rpt_ledger_week",    title: "📋 Ledger · This Week"    },
+      { id: "rpt_ledger_month",   title: "📋 Ledger · This Month"   },
+      { id: "rpt_ledger_custom",  title: "📋 Ledger · Custom Range" },
+      { id: "rpt_ledger_alltime", title: "📋 Ledger · All Time"     },
+      { id: "rpt_self_today",     title: "👤 My Stmt · Today"       },
+      { id: "rpt_self_week",      title: "👤 My Stmt · This Week"   },
+      { id: "rpt_self_month",     title: "👤 My Stmt · This Month"  },
+      { id: "rpt_self_custom",    title: "👤 My Stmt · Custom Range"},
+      { id: "rpt_self_alltime",   title: "👤 My Stmt · All Time"    }
     ]);
   }
 
   // Owner / admin: sees both reports + full clerk picker on clerk statement
+  // Ledger and Clerk each have 5 periods (today/week/month/custom/alltime) = 10 items exactly.
   return sendList(to, "📈 Reports - pick report & period:", [
-    { id: "rpt_ledger_today",  title: "📋 Ledger · Today"             },
-    { id: "rpt_ledger_week",   title: "📋 Ledger · This Week"         },
-    { id: "rpt_ledger_month",  title: "📋 Ledger · This Month"        },
-    { id: "rpt_ledger_custom", title: "📋 Ledger · Custom"      },
-    { id: "rpt_clerk_today",   title: "👤 Clerk · Today"    },
-    { id: "rpt_clerk_week",    title: "👤 Clerk · This Week" },
-    { id: "rpt_clerk_month",   title: "👤 Clerk · This Month"},
-    { id: "rpt_clerk_custom",  title: "👤 Clerk · Custom"   },
-    { id: ACTIONS.BACK,        title: "⬅ Back"                        }
+    { id: "rpt_ledger_today",   title: "📋 Ledger · Today"        },
+    { id: "rpt_ledger_week",    title: "📋 Ledger · This Week"    },
+    { id: "rpt_ledger_month",   title: "📋 Ledger · This Month"   },
+    { id: "rpt_ledger_custom",  title: "📋 Ledger · Custom Range" },
+    { id: "rpt_ledger_alltime", title: "📋 Ledger · All Time"     },
+    { id: "rpt_clerk_today",    title: "👤 Clerk · Today"         },
+    { id: "rpt_clerk_week",     title: "👤 Clerk · This Week"     },
+    { id: "rpt_clerk_month",    title: "👤 Clerk · This Month"    },
+    { id: "rpt_clerk_custom",   title: "👤 Clerk · Custom Range"  },
+    { id: "rpt_clerk_alltime",  title: "👤 Clerk · All Time"      }
   ]);
 }
 
@@ -463,15 +466,16 @@ export async function sendOverallReportsMenu(to, isGold = false, isSilver = fals
 // Branch-scoped variant - identical list; branchId already in sessionData
 export async function sendBranchReportsMenu(to, isGold = false, isSilver = false) {
   return sendList(to, "🏢 Branch Reports - pick report & period:", [
-    { id: "rpt_ledger_today",  title: "📋 Ledger · Today"             },
-    { id: "rpt_ledger_week",   title: "📋 Ledger · This Week"         },
-    { id: "rpt_ledger_month",  title: "📋 Ledger · This Month"        },
-    { id: "rpt_ledger_custom", title: "📋 Ledger · Custom"      },
-    { id: "rpt_clerk_today",   title: "👤 Clerk · Today"    },
-    { id: "rpt_clerk_week",    title: "👤 Clerk · This Week" },
-    { id: "rpt_clerk_month",   title: "👤 Clerk · This Month"},
-    { id: "rpt_clerk_custom",  title: "👤 Clerk · Custom"   },
-    { id: ACTIONS.BACK,        title: "⬅ Back to Reports"             }
+    { id: "rpt_ledger_today",   title: "📋 Ledger · Today"        },
+    { id: "rpt_ledger_week",    title: "📋 Ledger · This Week"    },
+    { id: "rpt_ledger_month",   title: "📋 Ledger · This Month"   },
+    { id: "rpt_ledger_custom",  title: "📋 Ledger · Custom Range" },
+    { id: "rpt_ledger_alltime", title: "📋 Ledger · All Time"     },
+    { id: "rpt_clerk_today",    title: "👤 Clerk · Today"         },
+    { id: "rpt_clerk_week",     title: "👤 Clerk · This Week"     },
+    { id: "rpt_clerk_month",    title: "👤 Clerk · This Month"    },
+    { id: "rpt_clerk_custom",   title: "👤 Clerk · Custom Range"  },
+    { id: "rpt_clerk_alltime",  title: "👤 Clerk · All Time"      }
   ]);
 }
 

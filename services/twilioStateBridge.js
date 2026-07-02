@@ -4036,14 +4036,23 @@ ${stmt.rows.length} transactions
     const range = parseCustomDateRange(raw);
     if (!range) {
       await sendText(from,
-        "❌ Couldn't understand that date range.\n\n" +
-        "Please type it in one of these formats:\n\n" +
-        "  *01 Jun - 27 Jun*  (same month)\n" +
-        "  *01 Apr - 01 Jul*  (across months ✅)\n" +
-        "  *01/06 - 27/06*\n" +
-        "  *01/06-02/07*  (no spaces, same result)\n" +
-        "  *2026-06-01 - 2026-07-01*\n\n" +
-        "Or type *cancel* to go back to the Reports menu."
+        "❌ Couldn't understand that date range. Please try again.\n\n" +
+        "*Valid formats:*\n" +
+        "  01 Jun - 27 Jun\n" +
+        "  01 Apr - 01 Jul\n" +
+        "  01/06 - 27/06\n" +
+        "  01/06-02/07  (no spaces)\n" +
+        "  2026-06-01 - 2026-07-01\n\n" +
+        "*Month abbreviations:*\n" +
+        "  Jan  Feb  Mar  Apr  May  Jun\n" +
+        "  Jul  Aug  Sep  Oct  Nov  Dec\n\n" +
+        "*Examples across months:*\n" +
+        "  01 Jan - 31 Mar  (Q1)\n" +
+        "  01 Apr - 30 Jun  (Q2)\n" +
+        "  01 Jul - 30 Sep  (Q3)\n" +
+        "  01 Oct - 31 Dec  (Q4)\n" +
+        "  01 Jan - 02 Jul  (half year)\n\n" +
+        "Type *cancel* to go back to the Reports menu."
       );
       return true;
     }

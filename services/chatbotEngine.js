@@ -10732,18 +10732,33 @@ Type *done* to save`,
     biz.sessionState = "report_detailed_month"; biz.sessionData = {}; await saveBizSafe(biz);
     return continueTwilioFlow({ from, text: "auto" });
   }
+  if (a === "rpt_ledger_alltime") {
+    if (!biz) return sendMainMenu(from);
+    const { runDetailedLedgerReport } = await import("./dailyReportEnhanced.js");
+    biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
+    return runDetailedLedgerReport({ biz, from, period: "alltime" });
+  }
+
   if (a === "rpt_ledger_custom") {
     if (!biz) return sendMainMenu(from);
     biz.sessionState = "report_date_filter";
     biz.sessionData  = { filterFor: "detailed" };
     await saveBizSafe(biz);
     return sendButtons(from, {
-      text: "🗓 *Detailed Ledger - Custom Range*\n\nType the date range:\n*01 Jun - 27 Jun*\n*01/06 - 27/06*\n*2026-06-01 - 2026-06-27*\n\nOr type *cancel* to go back.",
+      text: '🗓 *Detailed Ledger — Custom Date Range*\n\nType a date range in any of these formats:\n\n*Same month:*\n  01 Jun - 27 Jun\n  01/06 - 27/06\n\n*Across months:*\n  01 Apr - 01 Jul\n  01/04 - 01/07\n  01/04/2026 - 01/07/2026\n\n*ISO format:*\n  2026-06-01 - 2026-07-01\n\n*Month names (Jan–Dec):*\n  Jan  Feb  Mar  Apr  May  Jun\n  Jul  Aug  Sep  Oct  Nov  Dec\n\nOr type *cancel* to go back.',
       buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
     });
   }
 
   // ── Clerk Statement (admin/owner - picks a clerk) ─────────────────────────
+  if (a === "rpt_clerk_alltime") {
+    if (!biz) return sendMainMenu(from);
+    biz.sessionState = "report_clerk_pick";
+    biz.sessionData  = { clerkPeriod: "alltime" };
+    await saveBizSafe(biz);
+    return continueTwilioFlow({ from, text: "auto" });
+  }
+
   if (a === "rpt_clerk_today" || a === "rpt_clerk_week" || a === "rpt_clerk_month" || a === "rpt_clerk_custom") {
     if (!biz) return sendMainMenu(from);
     const clkPeriodMap = { rpt_clerk_today: "day", rpt_clerk_week: "week", rpt_clerk_month: "month", rpt_clerk_custom: "custom" };
@@ -10753,7 +10768,7 @@ Type *done* to save`,
       biz.sessionData  = { filterFor: "clerk" };
       await saveBizSafe(biz);
       return sendButtons(from, {
-        text: "🗓 *Clerk Statement - Custom Date Range*\n\nType the range:\n*01 Jun - 27 Jun*\n\nOr type *cancel* to go back.",
+        text: '🗓 *Clerk Statement — Custom Date Range*\n\nType a date range in any of these formats:\n\n*Same month:*\n  01 Jun - 27 Jun\n  01/06 - 27/06\n\n*Across months:*\n  01 Apr - 01 Jul\n  01/04/2026 - 01/07/2026\n\n*ISO format:*\n  2026-06-01 - 2026-07-01\n\n*Month names (Jan–Dec):*\n  Jan  Feb  Mar  Apr  May  Jun\n  Jul  Aug  Sep  Oct  Nov  Dec\n\nOr type *cancel* to go back.',
         buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
       });
     }
@@ -10764,6 +10779,14 @@ Type *done* to save`,
   }
 
   // ── Self Statement (clerk/manager - views own statement) ──────────────────
+  if (a === "rpt_self_alltime") {
+    if (!biz) return sendMainMenu(from);
+    biz.sessionState = "report_clerk_statement";
+    biz.sessionData  = { clerkPeriod: "alltime", clerkPhone: caller?.phone || null };
+    await saveBizSafe(biz);
+    return continueTwilioFlow({ from, text: "auto" });
+  }
+
   if (a === "rpt_self_today" || a === "rpt_self_week" || a === "rpt_self_month" || a === "rpt_self_custom") {
     if (!biz) return sendMainMenu(from);
     const selfPeriodMap = { rpt_self_today: "day", rpt_self_week: "week", rpt_self_month: "month", rpt_self_custom: "custom" };
@@ -10773,7 +10796,7 @@ Type *done* to save`,
       biz.sessionData  = { filterFor: "clerk_self" };
       await saveBizSafe(biz);
       return sendButtons(from, {
-        text: "🗓 *My Statement - Custom Date Range*\n\nType the range:\n*01 Jun - 27 Jun*\n\nOr type *cancel* to go back.",
+        text: '🗓 *My Statement — Custom Date Range*\n\nType a date range in any of these formats:\n\n*Same month:*\n  01 Jun - 27 Jun\n  01/06 - 27/06\n\n*Across months:*\n  01 Apr - 01 Jul\n  01/04/2026 - 01/07/2026\n\n*ISO format:*\n  2026-06-01 - 2026-07-01\n\n*Month names (Jan–Dec):*\n  Jan  Feb  Mar  Apr  May  Jun\n  Jul  Aug  Sep  Oct  Nov  Dec\n\nOr type *cancel* to go back.',
         buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
       });
     }
