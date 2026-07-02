@@ -398,9 +398,19 @@ export async function getDailyRunningBalance(businessId, branchId, currency = "U
   return { opening, cashIn, cashOut, closing: opening + cashIn - cashOut, currency };
 }
 
-/** Append a "💰 Cash at hand" line to notifications. */
-async function _balanceLine(biz, branchId) {
+/** Append a "💰 Cash at hand" line to notifications.
+ *  When clerkPhone is supplied, shows THAT CLERK'S personal custody balance
+ *  (what they physically hold), not the business-wide total.
+ *  When clerkPhone is null/omitted, falls back to business-wide daily balance.
+ */
+async function _balanceLine(biz, branchId, clerkPhone = null) {
   try {
+    if (clerkPhone) {
+      // Clerk-specific: sum all their credits minus debits up to now
+      const { fetchClerkCumulativeBalance } = await import("./dailyReportEnhanced.js");
+      const custody = await fetchClerkCumulativeBalance({ biz, clerkPhone, branchId, before: new Date() });
+      return `\n💰 *Cash at hand: ${fmt(custody, biz.currency)}*  (your current custody)`;
+    }
     const b = await getDailyRunningBalance(biz._id, branchId, biz.currency);
     return `\n💰 *Cash at hand: ${fmt(b.closing, biz.currency)}*` +
            `  (In: +${fmt(b.cashIn, biz.currency)} | Out: -${fmt(b.cashOut, biz.currency)})`;
@@ -427,13 +437,12 @@ export async function notifyDocumentCreated({
 }) {
   const emoji  = { invoice: "📄", quote: "📋", receipt: "🧾" }[docType] || "📄";
   const label  = docType.charAt(0).toUpperCase() + docType.slice(1);
-  const bal    = await _balanceLine(biz, branchId);
+  const bal    = await _balanceLine(biz, branchId, clerkPhone);
   const branch = branchName ? `\n  🏬 Branch: ${branchName}` : "";
   const clerk  = clerkPhone ? `\n  👤 By: ${clerkPhone}` : "";
 
   const _time = timeNow();
-  const _bal  = bal.replace(/\n💰 \*Cash at hand: |\*.*$/g, "").trim() ||
-                `${fmt((await getDailyRunningBalance(biz._id, branchId, biz.currency).catch(()=>({closing:0}))).closing, biz.currency)}`;
+  const _bal  = bal.replace(/\n💰 \*Cash at hand: |\*.*$/g, "").trim() || fmt(0, biz.currency);
   // strip markdown for template
   const _balClean = bal.replace(/[*_]/g, "").replace(/\n/g, " ").trim() || "-";
 
@@ -460,7 +469,7 @@ export async function notifyDocumentCreated({
 export async function notifyPaymentRecorded({
   biz, payment, invoiceNumber, clientName, clerkPhone, branchName, branchId
 }) {
-  const bal    = await _balanceLine(biz, branchId);
+  const bal    = await _balanceLine(biz, branchId, clerkPhone);
   const branch = branchName ? `\n  🏬 Branch: ${branchName}` : "";
   const clerk  = clerkPhone ? `\n  👤 By: ${clerkPhone}` : "";
 
@@ -492,7 +501,7 @@ export async function notifyExpensesRecorded({
   biz, expenses, clerkPhone, branchName, branchId
 }) {
   const total  = expenses.reduce((s, e) => s + (e.amount || 0), 0);
-  const bal    = await _balanceLine(biz, branchId);
+  const bal    = await _balanceLine(biz, branchId, clerkPhone);
   const branch = branchName ? `\n  🏬 Branch: ${branchName}` : "";
   const clerk  = clerkPhone ? `\n  👤 By: ${clerkPhone}` : "";
   const lines  = expenses
@@ -527,7 +536,7 @@ ${lines}
 export async function notifyPayoutRecorded({
   biz, payout, clerkPhone, branchName, branchId
 }) {
-  const bal    = await _balanceLine(biz, branchId);
+  const bal    = await _balanceLine(biz, branchId, clerkPhone);
   const branch = branchName ? `\n  🏬 Branch: ${branchName}` : "";
   const clerk  = clerkPhone ? `\n  👤 By: ${clerkPhone}` : "";
 

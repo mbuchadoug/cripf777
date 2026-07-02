@@ -184,13 +184,28 @@ export async function saveClosingBalance(biz, branchId, date) {
 // ─── Parse custom date range from text ───────────────────────────────────────
 // Accepts: "01 Jun - 22 Jun" | "01/06 - 22/06" | "2026-06-01 - 2026-06-22"
 export function parseCustomDateRange(text) {
-  // Split on space-surrounded separators first (preserves ISO date hyphens)
-  // e.g. "01 Jun - 22 Jun", "2026-06-01 - 2026-06-22", "01 Jun to 22 Jun"
-  let parts = (text || "").trim().split(/\s+(?:[-\u2013\u2014]|to)\s+/i).map(s => s.trim()).filter(Boolean);
+  const raw = (text || "").trim();
 
-  // Fallback: split on bare en-dash / em-dash (no spaces)
+  // Pass 1: space-surrounded separators (preserves ISO-date hyphens)
+  // Handles: "01 Jun - 27 Jun", "2026-06-01 - 2026-06-27", "01 Jun to 03 Jul"
+  let parts = raw.split(/\s+(?:[-\u2013\u2014]|to)\s+/i).map(s => s.trim()).filter(Boolean);
+
+  // Pass 2: bare en-dash / em-dash (no spaces around them)
   if (parts.length !== 2) {
-    parts = (text || "").trim().split(/[\u2013\u2014]/).map(s => s.trim()).filter(Boolean);
+    parts = raw.split(/[\u2013\u2014]/).map(s => s.trim()).filter(Boolean);
+  }
+
+  // Pass 3: bare hyphen between two DD/MM(/YYYY) tokens e.g. "01/06-02/07"
+  // Use explicit token detection rather than lookbehind (broad compat)
+  if (parts.length !== 2) {
+    const m3 = raw.match(/^(\d{1,2}\/\d{1,2}(?:\/\d{4})?)-+(\d{1,2}\/\d{1,2}(?:\/\d{4})?)$/);
+    if (m3) parts = [m3[1], m3[2]];
+  }
+
+  // Pass 4: bare hyphen between "DDMon" tokens e.g. "01Jun-03Jul"
+  if (parts.length !== 2) {
+    const m4 = raw.match(/^(\d{1,2}[A-Za-z]{3,9}(?:\s+\d{4})?)-+(\d{1,2}[A-Za-z]{3,9}(?:\s+\d{4})?)$/);
+    if (m4) parts = [m4[1], m4[2]];
   }
 
   if (parts.length !== 2) return null;
@@ -444,55 +459,80 @@ ${txCount} transactions recorded
 async function _buildRunningLedger({ biz, data, branchId, start, end, openingBalance }) {
   const CashPayout   = (await import("../models/cashPayout.js")).default;
   const CashHandover = (await import("../models/cashHandover.js")).default;
+  const CashIncome   = (await import("../models/cashIncome.js")).default;
 
   const bQ = { businessId: biz._id, createdAt: { $gte: start, $lte: end }, ...(branchId ? { branchId } : {}) };
-  const [payouts, handovers] = await Promise.all([
-    CashPayout.find(bQ).lean().catch(() => []),
-    CashHandover.find({ ...bQ, $or: [{ fromBranchId: branchId }, { toBranchId: branchId }] }).lean().catch(() => [])
+  // NOTE: CashHandover uses handoverAt (not createdAt) for its date field
+  const handoverQ = { businessId: biz._id, handoverAt: { $gte: start, $lte: end }, ...(branchId ? { branchId } : {}) };
+
+  const [payouts, handovers, adminIncome] = await Promise.all([
+    CashPayout.find({ ...bQ, reversed: { $ne: true } }).lean().catch(() => []),
+    CashHandover.find({ ...handoverQ, reversed: { $ne: true } }).lean().catch(() => []),
+    CashIncome.find({ ...bQ, reversed: { $ne: true } }).lean().catch(() => [])
   ]);
 
-  // Flatten all transactions into a single array with type/sign/metadata
+  // ── Flatten all transactions into a single array ──────────────────────────
   const rows = [];
 
+  // Invoice payments (money IN)
   for (const p of data.payments) {
     rows.push({ date: p.createdAt, type: "payment", credit: p.amount || 0, debit: 0,
-      description: `Invoice payment · ${p.invoiceRef || p.invoiceId || ""}`,
-      ref: p._id, recordedBy: p.recordedBy || null });
+      description: `Invoice payment · ${p.receiptNumber || p.invoiceId || ""}`,
+      ref: p._id, recordedBy: p.createdBy || p.recordedBy || null });
   }
+
+  // Cash sales / receipts (money IN)
   for (const r of data.receipts) {
+    const items = (r.items || []).slice(0, 2).map(i => i.item || i.name || "Item").join(", ");
     rows.push({ date: r.createdAt, type: "receipt", credit: r.total || 0, debit: 0,
-      description: `Cash sale · ${r.clientName || r.invoiceRef || "Receipt"}`,
-      ref: r._id, recordedBy: r.recordedBy || null });
+      description: `Cash sale · ${r.number ? r.number + " · " : ""}${items || "Receipt"}`,
+      ref: r._id, recordedBy: r.createdBy || r.recordedBy || null });
   }
+
+  // Admin-entered income (money IN)
+  for (const ic of adminIncome) {
+    rows.push({ date: ic.createdAt, type: "income", credit: ic.amount || 0, debit: 0,
+      description: `Income · ${ic.category || ""} · ${ic.description || ""}`.replace(/ · $/, ""),
+      ref: ic._id, recordedBy: ic.createdBy || null });
+  }
+
+  // Expenses (money OUT)
   for (const e of data.expenses) {
+    if (e.reversed) continue;
     rows.push({ date: e.createdAt, type: "expense", credit: 0, debit: e.amount || 0,
-      description: `Expense · ${e.category || ""} · ${e.description || ""}`,
-      ref: e._id, recordedBy: e.recordedBy || null });
+      description: `Expense · ${e.category || ""} · ${e.description || ""}`.replace(/ · $/, ""),
+      ref: e._id, recordedBy: e.createdBy || e.recordedBy || null });
   }
+
+  // Payouts & drawings (money OUT — NOT expenses, but reduce cash held)
   for (const po of payouts) {
-    rows.push({ date: po.createdAt, type: "payout", credit: 0, debit: po.amount || 0,
-      description: `Payout · ${po.reason || ""}`,
-      ref: po._id, recordedBy: po.recordedBy || null });
+    const isDrawing = /draw|owner|personal|private|director/i.test(po.reason || "");
+    rows.push({ date: po.date || po.createdAt, type: isDrawing ? "drawing" : "payout",
+      credit: 0, debit: po.amount || 0,
+      description: `${isDrawing ? "Owner Drawing" : "Cash Payout"} · ${po.reason || ""}`.replace(/ · $/, ""),
+      ref: po._id, recordedBy: po.createdBy || null });
   }
+
+  // Cash handovers (custody transfer — counted as out for outgoing branch, in for incoming)
   for (const h of handovers) {
-    const isOut = String(h.fromBranchId) === String(branchId);
+    // If we are scoped to a branch, direction is clear; otherwise show both sides
+    const isOutgoing = branchId ? String(h.branchId) === String(branchId) : true;
     rows.push({ date: h.handoverAt || h.createdAt, type: "handover",
-      credit: isOut ? 0 : (h.amountCounted || 0),
-      debit:  isOut ? (h.amountCounted || 0) : 0,
-      description: `Handover · ${h.outgoingName || ""} → ${h.incomingName || ""}`,
+      credit: isOutgoing ? 0 : (h.amountCounted || 0),
+      debit:  isOutgoing ? (h.amountCounted || 0) : 0,
+      description: `Handover · ${h.outgoingName || h.outgoingPhone || ""} → ${h.incomingName || h.incomingPhone || "Owner"}`,
       ref: h._id, recordedBy: h.outgoingPhone || null });
   }
 
-  // Sort chronologically
+  // ── Sort chronologically, then compute running balance ────────────────────
   rows.sort((a, b) => new Date(a.date) - new Date(b.date));
 
-  // Add running balance to each row
   let balance = openingBalance;
   let totalCredits = 0, totalDebits = 0;
   const runningRows = rows.map(r => {
-    balance   += r.credit - r.debit;
-    totalCredits += r.credit;
-    totalDebits  += r.debit;
+    balance      += (r.credit || 0) - (r.debit || 0);
+    totalCredits += (r.credit || 0);
+    totalDebits  += (r.debit  || 0);
     return { ...r, balance };
   });
 
@@ -609,6 +649,7 @@ export async function fetchClerkCumulativeBalance({ biz, clerkPhone, branchId, b
     const Expense        = (await import("../models/expense.js")).default;
     const CashPayout     = (await import("../models/cashPayout.js")).default;
     const CashHandover   = (await import("../models/cashHandover.js")).default;
+    const CashIncome     = (await import("../models/cashIncome.js")).default;
 
     const beforeDate = new Date(before); beforeDate.setHours(0, 0, 0, 0);
     const bQ = {
@@ -617,44 +658,48 @@ export async function fetchClerkCumulativeBalance({ biz, clerkPhone, branchId, b
       ...(branchId ? { branchId } : {})
     };
 
-    // FIX: documents are saved with createdBy, not recordedBy.
-    // Use $or to match either field so we never miss a transaction.
+    // Use $or to match createdBy OR recordedBy so we never miss a transaction.
     const clerkFilter = { $or: [{ createdBy: clerkPhone }, { recordedBy: clerkPhone }] };
 
-    const [pmts, rcpts, exps, payouts, handoversOut, handoversIn] = await Promise.all([
+    const [pmts, rcpts, adminIncome, exps, payouts, handoversOut, handoversIn] = await Promise.all([
       // Money the clerk collected (invoice payments created by them)
       InvoicePayment.aggregate([
         { $match: { ...bQ, ...clerkFilter } },
         { $group: { _id: null, t: { $sum: "$amount" } } }
       ]),
-      // Cash sales (receipts) the clerk raised
+      // Cash sales (receipts) the clerk raised on WhatsApp
       Invoice.aggregate([
         { $match: { ...bQ, type: "receipt", ...clerkFilter } },
         { $group: { _id: null, t: { $sum: "$total" } } }
       ]),
-      // Expenses the clerk recorded (debit from their custody)
+      // Admin-entered income on behalf of clerk (CashIncome model, non-reversed only)
+      CashIncome.aggregate([
+        { $match: { ...bQ, createdBy: clerkPhone, reversed: { $ne: true } } },
+        { $group: { _id: null, t: { $sum: "$amount" } } }
+      ]).catch(() => []),
+      // Expenses the clerk recorded (debit from their custody, non-reversed only)
       Expense.aggregate([
-        { $match: { ...bQ, ...clerkFilter } },
+        { $match: { ...bQ, ...clerkFilter, reversed: { $ne: true } } },
         { $group: { _id: null, t: { $sum: "$amount" } } }
       ]),
-      // Payouts the clerk made
+      // Payouts the clerk made (non-reversed only)
       CashPayout.aggregate([
-        { $match: { ...bQ, ...clerkFilter } },
+        { $match: { ...bQ, ...clerkFilter, reversed: { $ne: true } } },
         { $group: { _id: null, t: { $sum: "$amount" } } }
       ]).catch(() => []),
-      // FIX: schema uses outgoingPhone (not fromPhone) and amountCounted (not amount)
+      // Handovers OUT (clerk gave cash to someone else)
       CashHandover.aggregate([
-        { $match: { ...bQ, outgoingPhone: clerkPhone } },
+        { $match: { ...bQ, outgoingPhone: clerkPhone, reversed: { $ne: true } } },
         { $group: { _id: null, t: { $sum: "$amountCounted" } } }
       ]).catch(() => []),
-      // FIX: schema uses incomingPhone (not toPhone) and amountCounted (not amount)
+      // Handovers IN (clerk received cash from someone else)
       CashHandover.aggregate([
-        { $match: { ...bQ, incomingPhone: clerkPhone } },
+        { $match: { ...bQ, incomingPhone: clerkPhone, reversed: { $ne: true } } },
         { $group: { _id: null, t: { $sum: "$amountCounted" } } }
       ]).catch(() => [])
     ]);
 
-    const totalIn  = (pmts[0]?.t || 0) + (rcpts[0]?.t || 0) + (handoversIn[0]?.t  || 0);
+    const totalIn  = (pmts[0]?.t || 0) + (rcpts[0]?.t || 0) + (adminIncome[0]?.t || 0) + (handoversIn[0]?.t  || 0);
     const totalOut = (exps[0]?.t  || 0) + (payouts[0]?.t || 0) + (handoversOut[0]?.t || 0);
     return totalIn - totalOut;  // positive = clerk holds this much cash
   } catch (e) {

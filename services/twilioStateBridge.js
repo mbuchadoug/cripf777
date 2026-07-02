@@ -4037,11 +4037,13 @@ ${stmt.rows.length} transactions
     if (!range) {
       await sendText(from,
         "❌ Couldn't understand that date range.\n\n" +
-        "Try:\n" +
-        "  *01 Jun - 27 Jun*\n" +
+        "Please type it in one of these formats:\n\n" +
+        "  *01 Jun - 27 Jun*  (same month)\n" +
+        "  *01 Apr - 01 Jul*  (across months ✅)\n" +
         "  *01/06 - 27/06*\n" +
-        "  *2026-06-01 - 2026-06-27*\n\n" +
-        "Or type *cancel* to go back."
+        "  *01/06-02/07*  (no spaces, same result)\n" +
+        "  *2026-06-01 - 2026-07-01*\n\n" +
+        "Or type *cancel* to go back to the Reports menu."
       );
       return true;
     }
