@@ -193,6 +193,71 @@ async function fetchClerkIncome(biz, phone, since) {
   return rows;
 }
 
+// ── Fetch RECURRING BILLING rows for a clerk (payments IN + unit expenses OUT)
+// ── THE ROOT CAUSE OF "RECURRING RECORDS NOT SHOWING" ────────────────────────
+// Rent/fee collections and unit expenses recorded on the WhatsApp chatbot are
+// written to RecurringPayment / RecurringExpense (createdBy = clerk phone) -
+// models this file never queried, so they were invisible here even though the
+// clerk demonstrably held that cash. This helper surfaces them with the
+// account + tenant name and the tenant's current outstanding balance, exactly
+// matching what the clerk statement report now shows.
+//
+// NOTE: RecurringPayment/RecurringExpense use `date` (not createdAt) and have
+// NO branchId - branch context lives on the parent RecurringAccount.
+// Deleting a payment must also recompute the linked invoice + cached
+// account/tenant balances - the delete routes below use the same service
+// functions (recomputeInvoiceFromPayments etc.) the chatbot flows rely on.
+async function fetchClerkRecurring(biz, phone, since) {
+  try {
+    const RecurringPayment = (await import("../models/recurringPayment.js")).default;
+    const RecurringExpense = (await import("../models/recurringExpense.js")).default;
+    const RecurringAccount = (await import("../models/recurringAccount.js")).default;
+    const RecurringTenant  = (await import("../models/recurringTenant.js")).default;
+
+    const q = { businessId: biz._id, createdBy: phone, date: { $gte: since } };
+    const [payments, expenses] = await Promise.all([
+      RecurringPayment.find(q).lean(),
+      RecurringExpense.find(q).lean()
+    ]);
+    if (!payments.length && !expenses.length) return [];
+
+    // Batch-resolve names (no N+1)
+    const acctIds   = [...new Set([...payments, ...expenses].map(r => String(r.accountId)).filter(Boolean))];
+    const tenantIds = [...new Set(payments.map(p => p.tenantId && String(p.tenantId)).filter(Boolean))];
+    const [accts, tenants] = await Promise.all([
+      acctIds.length   ? RecurringAccount.find({ _id: { $in: acctIds } }).select("name ref currentBalance").lean() : [],
+      tenantIds.length ? RecurringTenant.find({ _id: { $in: tenantIds } }).select("name currentBalance").lean()   : []
+    ]);
+    const acctMap   = Object.fromEntries(accts.map(x => [String(x._id), x]));
+    const tenantMap = Object.fromEntries(tenants.map(x => [String(x._id), x]));
+
+    const rows = [];
+    for (const p of payments) {
+      const acct   = acctMap[String(p.accountId)];
+      const tenant = p.tenantId ? tenantMap[String(p.tenantId)] : null;
+      const owing  = tenant ? (tenant.currentBalance || 0) : (acct?.currentBalance || 0);
+      rows.push({
+        _id: p._id, type: "rbpayment", icon: "🏠",
+        label: `Billing Payment${tenant ? " · " + tenant.name : ""}`,
+        date: p.date || p.createdAt, amount: p.amount || 0, sign: 1,
+        desc: `${acct?.name || "Account"}${acct?.ref ? " (" + acct.ref + ")" : ""} · ${p.method || "cash"}${p.reference ? " · " + p.reference : ""} · owing ${owing.toFixed(2)}`,
+        rec: p, editable: false, deletable: true, reversible: false, reversed: false
+      });
+    }
+    for (const e of expenses) {
+      const acct = acctMap[String(e.accountId)];
+      rows.push({
+        _id: e._id, type: "rbexpense", icon: "🔧",
+        label: `Unit Expense${e.category ? " · " + e.category : ""}`,
+        date: e.date || e.createdAt, amount: e.amount || 0, sign: -1,
+        desc: `${acct?.name || "Account"}${acct?.ref ? " (" + acct.ref + ")" : ""} · ${e.description || ""}`,
+        rec: e, editable: false, deletable: true, reversible: false, reversed: false
+      });
+    }
+    return rows;
+  } catch (_) { return []; }
+}
+
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 1. COMBINED BUSINESS-WIDE VIEW  - GET /suppliers/:id/finance/all
@@ -219,18 +284,48 @@ router.get("/all", requireSupplierAdmin, async (req, res) => {
 
     const bQ = { businessId: biz._id, ...(branchId ? { branchId } : {}) };
 
-    const [receipts, payments, adminIncome, expenses, payouts, handovers] = await Promise.all([
+    // Recurring billing models: no branchId (branch lives on the parent
+    // account) and they use `date`, not createdAt. Loaded with the rest and
+    // name-resolved in one batch so rent collections finally appear here.
+    const RecurringPayment = (await import("../models/recurringPayment.js")).default;
+    const RecurringExpense = (await import("../models/recurringExpense.js")).default;
+    const RecurringAccount = (await import("../models/recurringAccount.js")).default;
+    const RecurringTenant  = (await import("../models/recurringTenant.js")).default;
+
+    const [receipts, payments, adminIncome, expenses, payouts, handovers, rbPayments, rbExpenses] = await Promise.all([
       Invoice.find({ ...bQ, type: "receipt", createdAt: { $gte: since } }).sort({ createdAt: -1 }).limit(100).lean(),
       InvoicePayment.find({ ...bQ, createdAt: { $gte: since } }).sort({ createdAt: -1 }).limit(100).lean(),
       CashIncome.find({ ...bQ, createdAt: { $gte: since } }).sort({ createdAt: -1 }).limit(50).lean(),
       Expense.find({ ...bQ, createdAt: { $gte: since } }).sort({ createdAt: -1 }).limit(100).lean(),
       CashPayout.find({ ...bQ, date: { $gte: since } }).sort({ date: -1 }).limit(100).lean(),
       CashHandover.find({ ...bQ, handoverAt: { $gte: since } }).sort({ handoverAt: -1 }).limit(100).lean(),
+      RecurringPayment.find({ businessId: biz._id, date: { $gte: since } }).sort({ date: -1 }).limit(100).lean().catch(() => []),
+      RecurringExpense.find({ businessId: biz._id, date: { $gte: since } }).sort({ date: -1 }).limit(100).lean().catch(() => []),
     ]);
+
+    // Batch-resolve recurring account/tenant names
+    const rbAcctIds   = [...new Set([...rbPayments, ...rbExpenses].map(r => String(r.accountId)).filter(Boolean))];
+    const rbTenantIds = [...new Set(rbPayments.map(p => p.tenantId && String(p.tenantId)).filter(Boolean))];
+    const [rbAccts, rbTenants] = await Promise.all([
+      rbAcctIds.length   ? RecurringAccount.find({ _id: { $in: rbAcctIds } }).select("name ref branchId").lean() : [],
+      rbTenantIds.length ? RecurringTenant.find({ _id: { $in: rbTenantIds } }).select("name").lean()             : []
+    ]);
+    const rbAcctMap   = Object.fromEntries(rbAccts.map(x => [String(x._id), x]));
+    const rbTenantMap = Object.fromEntries(rbTenants.map(x => [String(x._id), x]));
+    // Branch filter (recurring rows are branch-scoped via their parent account)
+    const rbBranchOk = r => !branchId || String(rbAcctMap[String(r.accountId)]?.branchId || "") === String(branchId);
 
     const rows = [];
     receipts.forEach(r => rows.push({ icon: "🧾", label: "Cash Sale", date: r.createdAt, amount: r.total || 0, sign: 1, desc: r.number || "", by: r.createdBy, reversed: false }));
     payments.forEach(r => rows.push({ icon: "💳", label: "Inv Payment", date: r.createdAt, amount: r.amount || 0, sign: 1, desc: r.method || "", by: r.createdBy, reversed: false }));
+    rbPayments.filter(rbBranchOk).forEach(r => {
+      const acct = rbAcctMap[String(r.accountId)]; const ten = r.tenantId ? rbTenantMap[String(r.tenantId)] : null;
+      rows.push({ icon: "🏠", label: "Billing Payment", date: r.date, amount: r.amount || 0, sign: 1, desc: `${acct?.name || "Account"}${ten ? " – " + ten.name : ""} · ${r.method || "cash"}`, by: r.createdBy, reversed: false });
+    });
+    rbExpenses.filter(rbBranchOk).forEach(r => {
+      const acct = rbAcctMap[String(r.accountId)];
+      rows.push({ icon: "🔧", label: "Unit Expense", date: r.date, amount: r.amount || 0, sign: -1, desc: `${acct?.name || "Account"} · ${r.description || r.category || ""}`, by: r.createdBy, reversed: false });
+    });
     adminIncome.forEach(r => rows.push({ icon: "💵", label: r.category || "Income", date: r.createdAt, amount: r.amount || 0, sign: 1, desc: r.description || "", by: r.createdBy, reversed: r.reversed }));
     expenses.forEach(r => rows.push({ icon: "💸", label: "Expense", date: r.createdAt, amount: r.amount || 0, sign: -1, desc: r.description || r.category || "", by: r.createdBy, reversed: r.reversed }));
     payouts.forEach(r => rows.push({ icon: DRAW_RE.test(r.reason || "") ? "👑" : "🏧", label: DRAW_RE.test(r.reason || "") ? "Drawing" : "Payout", date: r.date, amount: r.amount || 0, sign: -1, desc: r.reason || "", by: r.createdBy, reversed: r.reversed }));
@@ -375,8 +470,9 @@ router.get("/:phone", requireSupplierAdmin, async (req, res) => {
     const baseQ = { businessId: biz._id, createdAt: { $gte: since } };
 
     // ── Fetch all data in parallel ───────────────────────────────────────────
-    const [incomeRows, expenses, payouts, handoversOut, handoversIn] = await Promise.all([
+    const [incomeRows, recurringRows, expenses, payouts, handoversOut, handoversIn] = await Promise.all([
       fetchClerkIncome(biz, phone, since),
+      fetchClerkRecurring(biz, phone, since),
       Expense.find({ ...baseQ, createdBy: phone }).lean(),
       CashPayout.find({ businessId: biz._id, date: { $gte: since }, createdBy: phone }).lean(),
       CashHandover.find({ businessId: biz._id, handoverAt: { $gte: since }, outgoingPhone: phone }).lean(),
@@ -389,6 +485,12 @@ router.get("/:phone", requireSupplierAdmin, async (req, res) => {
     // Income (receipts + invoice payments + admin income)
     for (const r of incomeRows) {
       rows.push({ ...r, sign: 1 });
+    }
+
+    // Recurring billing (rent/fee collections + unit expenses) - rows arrive
+    // pre-shaped with their own sign (+1 payments, −1 expenses)
+    for (const r of recurringRows) {
+      rows.push(r);
     }
 
     // Expenses
@@ -615,7 +717,7 @@ router.get("/:phone", requireSupplierAdmin, async (req, res) => {
         <div class="panel-head">
           <h3>📋 Activity - ${esc(person.name || phone)} (last ${days} days)</h3>
           <span style="font-size:12px;color:var(--muted)">
-            💡 Cash Sales &amp; Invoice Payments from WhatsApp show 🗑 Delete only. Admin-entered income shows full Edit/Reverse/Delete. All deletions recompute affected balances.
+            💡 Cash Sales, Invoice Payments &amp; Recurring Billing (🏠 payments / 🔧 unit expenses) from WhatsApp show 🗑 Delete only - deleting a billing payment also restores the linked invoice and tenant/account balances. Admin-entered income shows full Edit/Reverse/Delete. All deletions recompute affected balances.
           </span>
         </div>
         <table class="data-table">
@@ -1109,6 +1211,61 @@ router.post("/:phone/receipt/:recId/delete", requireSupplierAdmin, async (req, r
     const doc = await Invoice.findOneAndDelete({ _id: req.params.recId, businessId: biz._id, type: "receipt" }).lean();
     if (doc) await recomputeDay(biz._id, doc.branchId, doc.createdAt);
     res.redirect(`${workspaceUrl(supplier._id, phone)}?success=Cash+sale+deleted+and+balance+recomputed`);
+  } catch (e) {
+    res.redirect(`${workspaceUrl(req.params.id, phone)}?error=${encodeURIComponent(e.message)}`);
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// RECURRING BILLING PAYMENT DELETE — admin only
+// Deletes the payment, then recomputes the linked recurring invoice
+// (amountPaid/balance/status from the remaining payments) and the cached
+// account + tenant balances - using the SAME service functions the chatbot
+// flows use, so nothing ever drifts. Delete-only (no edit/reverse): the
+// recurring models carry no reversal fields, and the clerk simply re-records
+// a corrected payment, exactly like invoice payments.
+// ═══════════════════════════════════════════════════════════════════════════
+router.post("/:phone/rbpayment/:recId/delete", requireSupplierAdmin, async (req, res) => {
+  const phone = req.params.phone;
+  try {
+    const { supplier, biz } = await loadBizContext(req);
+    const RecurringPayment = (await import("../models/recurringPayment.js")).default;
+
+    const pmt = await RecurringPayment.findOneAndDelete({ _id: req.params.recId, businessId: biz._id }).lean();
+    if (!pmt) return res.redirect(`${workspaceUrl(supplier._id, phone)}?error=Billing+payment+not+found`);
+
+    try {
+      const { recomputeInvoiceFromPayments, recomputeAccountBalance, recomputeTenantBalance } =
+        await import("./recurringBilling.js");
+      if (pmt.invoiceId) await recomputeInvoiceFromPayments(pmt.invoiceId);
+      if (pmt.accountId) await recomputeAccountBalance(biz._id, pmt.accountId);
+      if (pmt.tenantId)  await recomputeTenantBalance(biz._id, pmt.tenantId);
+    } catch (e) { console.error("[FinanceAdmin rb recompute]", e.message); }
+
+    res.redirect(`${workspaceUrl(supplier._id, phone)}?success=Billing+payment+deleted+and+balances+recomputed`);
+  } catch (e) {
+    res.redirect(`${workspaceUrl(req.params.id, phone)}?error=${encodeURIComponent(e.message)}`);
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// RECURRING UNIT EXPENSE DELETE — admin only
+// ═══════════════════════════════════════════════════════════════════════════
+router.post("/:phone/rbexpense/:recId/delete", requireSupplierAdmin, async (req, res) => {
+  const phone = req.params.phone;
+  try {
+    const { supplier, biz } = await loadBizContext(req);
+    const RecurringExpense = (await import("../models/recurringExpense.js")).default;
+
+    const exp = await RecurringExpense.findOneAndDelete({ _id: req.params.recId, businessId: biz._id }).lean();
+    if (!exp) return res.redirect(`${workspaceUrl(supplier._id, phone)}?error=Unit+expense+not+found`);
+
+    try {
+      const { recomputeAccountBalance } = await import("./recurringBilling.js");
+      if (exp.accountId) await recomputeAccountBalance(biz._id, exp.accountId);
+    } catch (e) { console.error("[FinanceAdmin rb recompute]", e.message); }
+
+    res.redirect(`${workspaceUrl(supplier._id, phone)}?success=Unit+expense+deleted`);
   } catch (e) {
     res.redirect(`${workspaceUrl(req.params.id, phone)}?error=${encodeURIComponent(e.message)}`);
   }
