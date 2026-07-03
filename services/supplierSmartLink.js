@@ -47,6 +47,7 @@ export const LINK_SOURCES = {
   sms:    "SMS / Flyer",
   ig:     "Instagram",
   yt:     "YouTube",
+  search: "ZimQuote Search",
   direct: "Direct / Unknown",
 };
 

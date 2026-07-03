@@ -102,6 +102,7 @@ import {
   parseShortcodeSearch,
   scoreSupplierMatch
 } from "./supplierSearch.js";
+import { sendNumberedSellerResults } from "./sellerSearchList.js";
 import {
   notifySupplierNewOrder,
   handleOrderAccepted,
@@ -4084,6 +4085,26 @@ if (!isMetaAction && /^ZQ:S:[a-z0-9_-]{1,60}$/i.test(text.trim())) {
   return;
 }
 
+// ── Numbered seller pick (TOP LEVEL) ─────────────────────────────────────────
+// After a Browse & Shop search, results are sent as a numbered seller list.
+// A buyer replying with "2" (or "more") opens that seller's smart-link store
+// (showSellerMenu → profile card + Get Quote/Order/Enquiry + seller notified).
+// tryHandleSellerPickText is heavily guarded internally: it only fires when a
+// fresh seller list exists in the session AND the user is not inside any other
+// text-entry flow (invoices, registration, sc_ quote flows, school forms, etc),
+// so typed numbers in every other flow are untouched. "0"/"00" never match.
+if (!isMetaAction && /^(?:[1-9][0-9]{0,2}|more)$/i.test(text.trim())) {
+  try {
+    const { tryHandleSellerPickText } = await import("./sellerSearchList.js");
+    const _spkHandled = await tryHandleSellerPickText({
+      from, phone, text: text.trim(), biz, saveBiz: saveBizSafe.bind(null, biz)
+    });
+    if (_spkHandled) return;
+  } catch (_spkErr) {
+    console.warn("[SELLER PICK INTERCEPT]", _spkErr.message);
+  }
+}
+
 // ── APPLY:SCHOOL:<id> - application form QR deep link (TOP LEVEL) ────────────
 // MUST be top-level: without this, APPLY:SCHOOL: falls through to the product
 // search flow and returns "Which city?" to the parent.
@@ -7320,11 +7341,12 @@ if (parsed.city || parsed.area) {
       { upsert: true }
     );
 
-    await sendList(
-      from,
-      `🏪 *Business matches for ${cleanProduct}* in ${locationLabel} - ${directBusinessMatches.length} found`,
-      rows
-    );
+    await sendNumberedSellerResults({
+      from, phone,
+      suppliers: directBusinessMatches,
+      searchTerm: cleanProduct,
+      locationLabel
+    });
 
     await _sendPostSearchActions(from, {
       product: cleanProduct,
@@ -7389,11 +7411,12 @@ if (parsed.city || parsed.area) {
       { upsert: true }
     );
 
-    await sendList(
-      from,
-      `🔍 *${cleanProduct}* in ${locationLabel} - ${offerResults.length} found`,
-      rows
-    );
+    await sendNumberedSellerResults({
+      from, phone,
+      offers: offerResults,
+      searchTerm: cleanProduct,
+      locationLabel
+    });
 
     await _sendPostSearchActions(from, {
       product: cleanProduct,
@@ -7480,11 +7503,12 @@ if (parsed.city || parsed.area) {
     { upsert: true }
   );
 
-  await sendList(
-    from,
-    `🔍 *${cleanProduct}*${parsed.city ? ` in ${parsed.city}` : ""} - ${supplierResults.length} found`,
-    rows
-  );
+  await sendNumberedSellerResults({
+    from, phone,
+    suppliers: supplierResults,
+    searchTerm: cleanProduct,
+    locationLabel: parsed.city || ""
+  });
 
   await _sendPostSearchActions(from, {
     product: cleanProduct,
@@ -7848,11 +7872,12 @@ if (
           });
         }
 
-        return sendList(
-          from,
-          `🔍 *${shortcode.product}* in ${locationLabel} - ${offerResults.length} found`,
-          rows
-        );
+        return sendNumberedSellerResults({
+          from, phone,
+          offers: offerResults,
+          searchTerm: shortcode.product,
+          locationLabel
+        });
       }
 
       // Only now fallback to supplier-level results
@@ -7880,11 +7905,12 @@ if (
           });
         }
 
-        return sendList(
-          from,
-          `🔍 *${shortcode.product}* in ${locationLabel} - ${results.length} found`,
-          rows
-        );
+        return sendNumberedSellerResults({
+          from, phone,
+          suppliers: results,
+          searchTerm: shortcode.product,
+          locationLabel
+        });
       }
 
       return sendButtons(from, {
@@ -7958,13 +7984,12 @@ if (
         ? `${shortcode.area}, ${shortcode.city}`
         : shortcode.city || null;
 
-      return sendList(
-        from,
-        locationLabel
-          ? `🔍 *${shortcode.product}* in ${locationLabel} - ${directBusinessMatches.length} found`
-          : `🏪 *Business matches for ${shortcode.product}* - ${directBusinessMatches.length} found`,
-        rows
-      );
+      return sendNumberedSellerResults({
+        from, phone,
+        suppliers: directBusinessMatches,
+        searchTerm: shortcode.product,
+        locationLabel: locationLabel || ""
+      });
     }
 
 
@@ -8021,7 +8046,7 @@ if (shortcode.city && results.length) {
         if (offerResults.length > 9) {
           rows.push({ id: "sup_search_next_page", title: `➡ More results (${offerResults.length - 9} more)` });
         }
-        return sendList(from, `🔍 *${shortcode.product}* in ${locationLabel} - ${offerResults.length} found`, rows);
+        return sendNumberedSellerResults({ from, phone, offers: offerResults, searchTerm: shortcode.product, locationLabel });
       }
 
       // Only reach here if no offers found anywhere - show businesses as last resort
@@ -8041,7 +8066,7 @@ if (shortcode.city && results.length) {
         );
         rows.push({ id: "sup_search_next_page", title: `➡ More results (${results.length - 9} more)` });
       }
-      return sendList(from, `🔍 *${shortcode.product}* in ${locationLabel} - ${results.length} found`, rows);
+      return sendNumberedSellerResults({ from, phone, suppliers: results, searchTerm: shortcode.product, locationLabel });
     }
 
     if (!shortcode.city && directBusinessMatches.length > 0) {
@@ -8063,7 +8088,7 @@ if (shortcode.city && results.length) {
         rows.push({ id: "sup_search_next_page", title: `➡ More results (${directBusinessMatches.length - 9} more)` });
       }
 
-      return sendList(from, `🏪 *Business matches for ${shortcode.product}* - ${directBusinessMatches.length} found`, rows);
+      return sendNumberedSellerResults({ from, phone, suppliers: directBusinessMatches, searchTerm: shortcode.product, locationLabel: "" });
     }
 
  // City was given but no results found - say so, offer to try all cities
@@ -11885,11 +11910,12 @@ if (shortcode.city) {
       });
     }
 
-    return sendList(
-      from,
-      `🔍 *${shortcode.product}* in ${locationLabel} - ${offerResults.length} found`,
-      rows
-    );
+    return sendNumberedSellerResults({
+      from, phone,
+      offers: offerResults,
+      searchTerm: shortcode.product,
+      locationLabel
+    });
   }
 
   // Offers exhausted - fall back to supplier-level results before giving up,
@@ -11918,7 +11944,7 @@ if (shortcode.city) {
     if (supplierFallback.length > 9) {
       supplierRows.push({ id: "sup_search_next_page", title: `➡ More results (${supplierFallback.length - 9} more)` });
     }
-    return sendList(from, `🔍 *${shortcode.product}* in ${locationLabel} - ${supplierFallback.length} found`, supplierRows);
+    return sendNumberedSellerResults({ from, phone, suppliers: supplierFallback, searchTerm: shortcode.product, locationLabel });
   }
 }
  // City was given but 0 results - show no-results message, NOT city picker
@@ -12158,11 +12184,12 @@ if (biz.sessionState === "supplier_search_city" && !isMetaAction && !schoolAdmin
         });
       }
 
-      return sendList(
-        from,
-        `🔍 *${cleanProduct}* in ${locationLabel} - ${offerResults.length} found`,
-        rows
-      );
+      return sendNumberedSellerResults({
+        from, phone,
+        offers: offerResults,
+        searchTerm: cleanProduct,
+        locationLabel
+      });
     }
 
     // No offers found anywhere - show no-results message
@@ -12358,7 +12385,7 @@ if (biz.sessionState === "supplier_search_city" && !isMetaAction && !schoolAdmin
               if (offerResults.length > 9) {
                 rows.push({ id: "sup_search_next_page", title: `➡ More results (${offerResults.length - 9} more)` });
               }
-              return sendList(from, `🔍 *${shortcode.product}* in ${locationLabel} - ${offerResults.length} found`, rows);
+              return sendNumberedSellerResults({ from, phone, offers: offerResults, searchTerm: shortcode.product, locationLabel });
             }
 
             // Offers exhausted - fall back to supplier-level results
@@ -12386,7 +12413,7 @@ if (biz.sessionState === "supplier_search_city" && !isMetaAction && !schoolAdmin
               if (results.length > 9) {
                 rows.push({ id: "sup_search_next_page", title: `➡ More results (${results.length - 9} more)` });
               }
-              return sendList(from, `🔍 *${shortcode.product}* in ${locationLabel} - ${results.length} found`, rows);
+              return sendNumberedSellerResults({ from, phone, suppliers: results, searchTerm: shortcode.product, locationLabel });
             }
             return sendButtons(from, {
               text: `😕 No results for *${shortcode.product}*${shortcode.city ? ` in *${shortcode.city}*` : ""}.\n\nTry a different city or search term.`,
@@ -16439,11 +16466,12 @@ if (a.startsWith("sup_search_city_")) {
         rows.push({ id: "sup_search_next_page", title: `➡ More results (${offerResults.length - 9} more)` });
       }
 
-      return sendList(
-        from,
-        `🔍 *${product}* in ${locationLabel} - ${offerResults.length} found`,
-        rows
-      );
+      return sendNumberedSellerResults({
+        from, phone,
+        offers: offerResults,
+        searchTerm: product,
+        locationLabel
+      });
     }
 
     // If there are no offer-level matches, then fall back to supplier-level business matches
@@ -16481,11 +16509,12 @@ if (a.startsWith("sup_search_city_")) {
         rows.push({ id: "sup_search_next_page", title: `➡ More results (${directBusinessMatches.length - 9} more)` });
       }
 
-      return sendList(
-        from,
-        `🏪 *Business matches for ${product}*${city ? ` in ${city}` : ""} - ${directBusinessMatches.length} found`,
-        rows
-      );
+      return sendNumberedSellerResults({
+        from, phone,
+        suppliers: directBusinessMatches,
+        searchTerm: product,
+        locationLabel: city || "All Cities"
+      });
     }
 
     return sendButtons(from, {
@@ -16551,11 +16580,13 @@ if (a.startsWith("sup_search_city_")) {
       rows.push({ id: "sup_search_next_page", title: `➡ More results (${supplierResults.length - 9} more)` });
     }
 
-    return sendList(
-      from,
-      `📂 *${category.replace(/_/g, " ")}* in ${locationLabel} - ${supplierResults.length} found`,
-      rows
-    );
+    return sendNumberedSellerResults({
+      from, phone,
+      suppliers: supplierResults,
+      searchTerm: "",
+      locationLabel,
+      titleLabel: `📂 ${category.replace(/_/g, " ")}`
+    });
   }
 
   return sendButtons(from, {
@@ -20196,7 +20227,7 @@ if (biz?.sessionState === "supplier_search_product" && !isMetaAction) {
       if (offerResults.length > 9) {
         rows.push({ id: "sup_search_next_page", title: `➡ More results (${offerResults.length - 9} more)` });
       }
-      return sendList(from, `🔍 *${cleanProduct}* in ${locationLabel} - ${offerResults.length} found`, rows);
+      return sendNumberedSellerResults({ from, phone, offers: offerResults, searchTerm: cleanProduct, locationLabel });
     }
 
     // ── Step 3: No offers - fall back to supplier cards ──────────────────────
@@ -20217,7 +20248,7 @@ if (biz?.sessionState === "supplier_search_product" && !isMetaAction) {
       rows.push({ id: "sup_search_next_page", title: `➡ More results (${allSupplierResults.length - 9} more)` });
       await saveBizSafe(biz);
     }
-    return sendList(from, `🔍 *${cleanProduct}* in ${locationLabel} - ${allSupplierResults.length} found`, rows);
+    return sendNumberedSellerResults({ from, phone, suppliers: allSupplierResults, searchTerm: cleanProduct, locationLabel });
   }
 
   // ── No location found - ask for city ───────────────────────────────────
