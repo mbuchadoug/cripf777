@@ -19402,10 +19402,34 @@ if (!isMetaAction && text && text.trim().length > 1) {
     "rb_acct_stmt_pick_account", "rb_acct_stmt_pick_period", "rb_acct_stmt_custom_date",
     "rb_tenant_stmt_pick_account", "rb_tenant_stmt_pick_tenant", "rb_tenant_stmt_pick_period",
     "rb_billing_stmt_pick_period", "rb_billing_stmt_custom_date",
-    "rb_expense_pick_account", "rb_expense_enter_details"
+    "rb_expense_pick_account", "rb_expense_enter_details",
+    // ── FIX: Browse & Shop + buyer order typed-input states ──────────────────
+    // These states have dedicated typed-text handlers BELOW this catch-all
+    // (supplier_search_product at the "Buyer: free-text product search" block,
+    // supplier_order_product / _address / _enter_price further down).
+    // Without them here, a buyer who taps Browse & Shop and types
+    // "find brakes overhauls harare" is hijacked into ⚡ Request Sellers and
+    // the search never runs. Same for typed order items, delivery addresses
+    // and price entry.
+    "supplier_search_product", "supplier_search_city",
+    "supplier_order_product", "supplier_order_address",
+    "supplier_order_enter_price", "supplier_order_confirm_price",
+    "supplier_order_picking"
   ]);
 
-  if (biz && _bizActiveStates.has(biz.sessionState)) {
+  // FIX: no-biz buyers mid-order store their state in UserSession.tempData
+  // (orderState = "supplier_order_address" etc). Their typed address/items are
+  // handled by dedicated blocks BELOW this catch-all, so they must fall
+  // through here too instead of being hijacked into Request Sellers.
+  let _noBizOrderActive = false;
+  if (!biz) {
+    try {
+      const _catchSess = await UserSession.findOne({ phone }).lean();
+      _noBizOrderActive = !!_catchSess?.tempData?.orderState;
+    } catch (_) {}
+  }
+
+  if ((biz && _bizActiveStates.has(biz.sessionState)) || _noBizOrderActive) {
     // Let the request fall through to continueTwilioFlow below
   } else {
     await UserSession.findOneAndUpdate(
