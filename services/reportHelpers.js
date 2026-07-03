@@ -605,6 +605,33 @@ export async function buildClerkStatement({ biz, clerkPhone, branchId, start, en
     payouts = await CashPayout.find({ ...bQ }).lean();
   } catch (_) {}
 
+  // ── Admin-entered income attributed to this clerk (CashIncome) ─────────────
+  // fetchClerkCumulativeBalance already counts CashIncome in the OPENING
+  // custody, but the period rows never showed it - so an admin-entered income
+  // yesterday moved today's opening while the transaction itself was
+  // invisible. Fetching it here closes that gap: every figure in the opening
+  // now has a visible row behind it.
+  let adminIncome = [];
+  try {
+    const CashIncome = (await import("../models/cashIncome.js")).default;
+    adminIncome = await CashIncome.find({ ...bQ, createdBy: cp }).lean();
+  } catch (_) {}
+
+  // ── Recurring billing recorded by this clerk (rent collections + unit
+  //    expenses) - the money they collect from tenants is cash in THEIR
+  //    custody and must appear on THEIR statement, with the tenant/account
+  //    name and that tenant's outstanding balance on the row. Wrapped so a
+  //    business that never uses recurring billing is completely unaffected.
+  let rbPaymentRows = [], rbExpenseRows = [];
+  try {
+    const { fetchClerkRecurringRows } = await import("./recurringLedger.js");
+    const rb = await fetchClerkRecurringRows({
+      businessId: biz._id, clerkPhone: cp, branchId: branchId || null, start, end
+    });
+    rbPaymentRows = rb.paymentRows;
+    rbExpenseRows = rb.expenseRows;
+  } catch (_) {}
+
   // ── Build transaction rows ──────────────────────────────────────────────────
   const txRows = [];
 
@@ -631,6 +658,23 @@ export async function buildClerkStatement({ biz, clerkPhone, branchId, start, en
     const isDrawing = RE.test(p.reason || "");
     txRows.push({ at: new Date(p.createdAt), typeLabel: isDrawing ? "Owner Drawing" : "Cash Payout", description: p.reason || (isDrawing ? "Drawing" : "Payout"), credit: 0, debit: p.amount || 0 });
   }
+
+  // Admin-entered income (reversed entries already carry amount 0 - shown
+  // with a marker so the audit trail stays visible without touching totals)
+  for (const inc of adminIncome) {
+    txRows.push({
+      at: new Date(inc.createdAt),
+      typeLabel: "Income",
+      description: `${inc.description || inc.category || "Income"}${inc.reversed ? " (REVERSED)" : ""}`,
+      credit: inc.amount || 0, debit: 0
+    });
+  }
+
+  // Recurring billing: rent/fee collections (credit) and unit expenses (debit)
+  // recorded by this clerk - rows arrive pre-shaped with tenant + account
+  // names and the tenant's outstanding balance in the description.
+  for (const row of rbPaymentRows) txRows.push(row);
+  for (const row of rbExpenseRows) txRows.push(row);
 
   txRows.sort((a, b) => a.at - b.at);
 

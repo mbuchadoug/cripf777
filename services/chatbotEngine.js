@@ -3793,6 +3793,7 @@ a.startsWith("sup_load_preset_") ||
       a === "rb_generate_invoices" ||
       a === "rb_account_stmt" ||
       a === "rb_tenant_stmt" ||
+      a === "rb_billing_stmt" ||
       a === "rb_reminders" ||
       a === "rb_add_expense" ||
       a.startsWith("rb_acct_") ||
@@ -10606,6 +10607,34 @@ Type *done* to save`,
     );
   }
 
+  // ── Business-wide RECURRING BILLING STATEMENT - period picker ───────────────
+  // One cumulative ledger for the WHOLE recurring billing operation: every
+  // charge raised, payment collected, and unit expense - chronological, with
+  // a running cash balance AND each tenant's/account's own running balance
+  // per row, plus who recorded each transaction. Branch-scoped for non-owner
+  // callers exactly like every other rb_ flow. Period pick + generation are
+  // handled in twilioStateBridge.js (states rb_billing_stmt_pick_period /
+  // rb_billing_stmt_custom_date).
+  if (a === "rb_billing_stmt") {
+    if (!biz) return sendMainMenu(from);
+    biz.sessionState = "rb_billing_stmt_pick_period";
+    biz.sessionData  = {};
+    await saveBizSafe(biz);
+
+    const now = new Date();
+    const months = [-2, -1, 0].map(offset => {
+      const d = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+      return { label: d.toLocaleDateString("en-GB", { month: "long", year: "numeric" }), month: d.getMonth(), year: d.getFullYear() };
+    });
+    await sendList(from, "📊 Billing Statement - select period:", [
+      ...months.map(m => ({ id: `rb_period_${m.year}_${m.month}`, title: m.label })),
+      { id: "rb_period_all",          title: "📊 All Time"       },
+      { id: "rb_period_custom",       title: "📅 Custom Range"   },
+      { id: "recurring_billing_menu", title: "⬅ Cancel"          }
+    ]);
+    return true;
+  }
+
   // ── Add unit expense - numbered picker over accounts ────────────────────────
   if (a === "rb_add_expense") {
     if (!biz) return sendMainMenu(from);
@@ -11688,7 +11717,9 @@ const shortcodeBlockedStates = [
   "rb_invoice_pick_account",
   "rb_invoice_review",
   "rb_acct_stmt_custom_date",
-  "rb_tenant_stmt_pick_period"
+  "rb_tenant_stmt_pick_period",
+  "rb_billing_stmt_pick_period",
+  "rb_billing_stmt_custom_date"
 ];
 
 if (
@@ -19339,6 +19370,7 @@ if (!isMetaAction && text && text.trim().length > 1) {
     "rb_invoice_pick_account", "rb_invoice_review",
     "rb_acct_stmt_pick_account", "rb_acct_stmt_pick_period", "rb_acct_stmt_custom_date",
     "rb_tenant_stmt_pick_account", "rb_tenant_stmt_pick_tenant", "rb_tenant_stmt_pick_period",
+    "rb_billing_stmt_pick_period", "rb_billing_stmt_custom_date",
     "rb_expense_pick_account", "rb_expense_enter_details"
   ]);
 

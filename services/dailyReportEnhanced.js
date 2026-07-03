@@ -712,8 +712,25 @@ export async function fetchClerkCumulativeBalance({ biz, clerkPhone, branchId, b
       ]).catch(() => [])
     ]);
 
-    const totalIn  = (pmts[0]?.t || 0) + (rcpts[0]?.t || 0) + (adminIncome[0]?.t || 0) + (handoversIn[0]?.t  || 0);
-    const totalOut = (exps[0]?.t  || 0) + (payouts[0]?.t || 0) + (handoversOut[0]?.t || 0);
+    // ── Recurring billing carry-forward (rent collections + unit expenses) ──
+    // These now appear as rows on the clerk statement (buildClerkStatement),
+    // so they MUST also roll into the cumulative opening - otherwise a rent
+    // collected yesterday would show in yesterday's rows but vanish from
+    // today's opening and the statement would never reconcile. Uses `date`
+    // (recurring models have no createdAt-based day bucket and no branchId -
+    // branch scoping is resolved via the parent account inside the helper).
+    // Fully wrapped: a business with no recurring billing is unaffected.
+    let rbIn = 0, rbOut = 0;
+    try {
+      const { fetchClerkRecurringTotals } = await import("./recurringLedger.js");
+      const rb = await fetchClerkRecurringTotals({
+        businessId: biz._id, clerkPhone, branchId: branchId || null, before
+      });
+      rbIn = rb.in; rbOut = rb.out;
+    } catch (_) {}
+
+    const totalIn  = (pmts[0]?.t || 0) + (rcpts[0]?.t || 0) + (adminIncome[0]?.t || 0) + (handoversIn[0]?.t  || 0) + rbIn;
+    const totalOut = (exps[0]?.t  || 0) + (payouts[0]?.t || 0) + (handoversOut[0]?.t || 0) + rbOut;
     return totalIn - totalOut;  // positive = clerk holds this much cash
   } catch (e) {
     console.error("[CLERK CUMULATIVE]", e.message);

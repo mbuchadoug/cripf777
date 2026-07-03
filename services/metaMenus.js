@@ -1111,6 +1111,7 @@ export async function sendRecurringBillingMenu(to) {
     { id: "rb_generate_invoices", title: "📄 Generate Invoices"  },
     { id: "rb_account_stmt",      title: "📋 Account Statement"  },
     { id: "rb_tenant_stmt",       title: "👤 Tenant Statement"   },
+    { id: "rb_billing_stmt",      title: "📊 Billing Statement"  },
     { id: "rb_reminders",         title: "📢 Send Reminders"     },
     { id: "rb_add_expense",       title: "🔧 Add Unit Expense"   },
     { id: ACTIONS.BACK,           title: "⬅ Back"                }

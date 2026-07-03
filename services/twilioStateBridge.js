@@ -382,6 +382,8 @@ const restrictedStateMap = {
     rb_tenant_stmt_pick_account: "reports",
     rb_tenant_stmt_pick_tenant:  "reports",
     rb_tenant_stmt_pick_period:  "reports",
+    rb_billing_stmt_pick_period: "reports",
+    rb_billing_stmt_custom_date: "reports",
     rb_expense_pick_account:     "payments",
     rb_expense_enter_details:    "payments",
     payment_amount: "payments",
@@ -3814,6 +3816,58 @@ ${stmt.rows.length} transactions
     return sendRecurringBillingMenu(from);
   }
 
+  // ── Billing statement: period picked → generate business-wide ledger ──────
+  // (business-wide RECURRING BILLING STATEMENT - cumulative, running cash
+  //  balance + per-row tenant/account balance. Branch-scoped for non-owners.)
+  if (state === "rb_billing_stmt_pick_period") {
+    let periodStart, periodEnd, pl;
+
+    if (a === "rb_period_custom") {
+      biz.sessionState = "rb_billing_stmt_custom_date";
+      await saveBizSafe(biz);
+      await sendButtons(from, {
+        text: "🗓 Enter date range:\n*01 Jun - 30 Jun*\n*01/06 - 30/06*",
+        buttons: [{ id: "recurring_billing_menu", title: "⬅ Cancel" }]
+      });
+      return true;
+    } else if (a === "rb_period_all") {
+      periodStart = new Date(2020, 0, 1, 0, 0, 0, 0);
+      // Extend to end of next month so current-month invoices always appear
+      const _now = new Date();
+      periodEnd   = new Date(_now.getFullYear(), _now.getMonth() + 2, 0, 23, 59, 59, 999);
+      pl = "All Time";
+    } else if (a?.startsWith("rb_period_")) {
+      const parts = a.replace("rb_period_", "").split("_");
+      const year  = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10);
+      periodStart = new Date(year, month, 1, 0, 0, 0, 0);
+      periodEnd   = new Date(year, month + 1, 0, 23, 59, 59, 999);
+      pl = periodStart.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+    } else {
+      await sendText(from, "❌ Please tap a period from the list.");
+      return true;
+    }
+
+    biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
+    await _generateAndSendBillingStatement({ biz, from, caller, periodStart, periodEnd, pl });
+    const { sendRecurringBillingMenu } = await import("./metaMenus.js");
+    return sendRecurringBillingMenu(from);
+  }
+
+  // ── Billing statement: custom date text typed ──────────────────────────────
+  if (state === "rb_billing_stmt_custom_date") {
+    const range = parseCustomDateRange(trimmed);
+    if (!range) {
+      await sendText(from, "❌ Invalid format. Try: *01 Jun - 30 Jun*");
+      return true;
+    }
+    const pl = `${range.start.toLocaleDateString("en-GB", { day: "numeric", month: "short" })} – ${range.end.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`;
+    biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
+    await _generateAndSendBillingStatement({ biz, from, caller, periodStart: range.start, periodEnd: range.end, pl });
+    const { sendRecurringBillingMenu } = await import("./metaMenus.js");
+    return sendRecurringBillingMenu(from);
+  }
+
   // ── Unit expense: account picked → enter details ──────────────────────────
   if (state === "rb_expense_pick_account") {
     const list = biz.sessionData?.rbPickList;
@@ -4201,6 +4255,53 @@ ${stmt.rows.length} transactions
   return false;
 
   return false;
+}
+
+// ── Recurring Billing: business-wide billing statement helper ────────────────
+// (used by rb_billing_stmt_pick_period and rb_billing_stmt_custom_date)
+async function _generateAndSendBillingStatement({ biz, from, caller, periodStart, periodEnd, pl }) {
+  const { sendDocument } = await import("./metaSender.js");
+  await sendText(from, `⏳ Building recurring billing statement for ${pl}...`);
+  try {
+    const { buildRecurringLedger, generateRecurringLedgerPDF } = await import("./recurringLedger.js");
+    // Owners see the whole business; everyone else is scoped to their branch,
+    // matching every other recurring billing flow.
+    const branchId = caller?.role !== "owner" ? caller?.branchId || null : null;
+    let branchName = "";
+    if (branchId) {
+      try {
+        const Branch = (await import("../models/branch.js")).default;
+        const b = await Branch.findById(branchId).lean();
+        branchName = b?.name || "";
+      } catch (_) {}
+    }
+
+    const stmt = await buildRecurringLedger({ biz, branchId, periodStart, periodEnd });
+    const cur  = stmt.cur;
+
+    await sendText(from,
+`📊 *RECURRING BILLING STATEMENT*
+${biz.name}${branchName ? ` · ${branchName}` : ""}
+${pl}
+━━━━━━━━━━━━━━━━━━━━
+Opening Cash:     ${stmt.openingCash.toFixed(2)} ${cur}
+Charges Raised:   ${stmt.totalCharged.toFixed(2)} ${cur}
+  + Collected:    ${stmt.totalCollected.toFixed(2)} ${cur}
+  − Expenses:     ${stmt.totalExpenses.toFixed(2)} ${cur}
+━━━━━━━━━━━━━━━━━━━━
+CLOSING CASH:     *${stmt.closingCash.toFixed(2)} ${cur}*
+Still Owed (all): *${stmt.outstandingReceivables.toFixed(2)} ${cur}*
+${stmt.rows.length} transactions (${stmt.counts.charges} charges · ${stmt.counts.payments} payments · ${stmt.counts.expenses} expenses)
+
+📄 Full cumulative ledger PDF attached below ↓`
+    );
+
+    const { filename, url } = await generateRecurringLedgerPDF({ biz, stmt, periodLabel: pl, branchName });
+    await sendDocument(from, { link: url, filename });
+  } catch (e) {
+    console.error("[RB BILLING STMT]", e.message);
+    await sendText(from, `❌ Failed to generate statement: ${e.message}`);
+  }
 }
 
 // ── Recurring Billing: account statement helper (used by two state handlers) ─
