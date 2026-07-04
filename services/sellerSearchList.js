@@ -47,6 +47,27 @@
 import { sendText, sendButtons } from "./metaSender.js";
 import { expandSearchTerms, scoreSupplierMatch } from "./supplierSearch.js";
 
+// tempData keys whose ACTIVE flows legitimately consume bare numbers.
+// Used with a snapshot strategy (see sendNumberedSellerResults): a key only
+// blocks a pick if it appeared/changed AFTER the numbered list was sent -
+// keys that were already lying in the session before the search are fossils
+// (this platform never cleans up flow state) and must never block.
+const NUMBER_CONSUMING_KEYS = [
+  "scState",                 // sc_ quote flow - numbered catalogue picks
+  "scSellerQuoteState",      // seller pricing a draft quote
+  "sellerRequestReplyState", // seller replying to a buyer request (prices)
+  "orderState",              // buyer mid-order (qty / address / price)
+  "schoolApplyState",        // application form - answers can be numbers
+  "schoolEnquiryState",      // typed enquiry message
+  "sfaqState",               // school FAQ chat
+  "supplierAccountState"     // supplier self-service text entry (prices)
+];
+// Subset that still blocks when comparing against a LEGACY pick saved before
+// snapshots existed - only the flows where a bare number is unambiguous input.
+const HARD_BLOCKING_KEYS = [
+  "scState", "scSellerQuoteState", "sellerRequestReplyState", "orderState"
+];
+
 const BATCH_SIZE       = 15;          // sellers per message
 const MAX_STORED       = 60;          // hard cap of ranked sellers kept in session
 const FRESH_WINDOW_MS  = 48 * 60 * 60 * 1000; // 48h - buyers often reply hours later
@@ -298,6 +319,20 @@ export async function sendNumberedSellerResults({
 
   try {
     const UserSession = (await import("../models/userSession.js")).default;
+
+    // ── Snapshot flow-state keys that ALREADY exist right now ───────────────
+    // Anything present at list-send time predates the search and is therefore
+    // stale (the user just searched - they are not "in" that flow). At pick
+    // time we only block on keys that are NEW or CHANGED relative to this
+    // snapshot, e.g. scState set by tapping "Get Quote" after opening a seller.
+    const _preSess = await UserSession.findOne({ phone }).lean();
+    const _preTd   = _preSess?.tempData || {};
+    pick.pre = {};
+    for (const k of NUMBER_CONSUMING_KEYS) {
+      if (_preTd[k]) pick.pre[k] = String(_preTd[k]);
+    }
+    if (_preSess?.supplierRegState) pick.pre.__supplierRegState = String(_preSess.supplierRegState);
+
     await UserSession.findOneAndUpdate(
       { phone },
       {
@@ -359,31 +394,32 @@ export async function tryHandleSellerPickText({ from, phone, text, biz, saveBiz 
     // Guard 2: freshness - a week-old "3" should not open a forgotten list
     if (!pick.ts || Date.now() - pick.ts > FRESH_WINDOW_MS) return false;
 
-    // Guard 4: block only flows whose typed input could legitimately be a
-    // bare number. FIX: the previous generic /state$/ scan was poisoned by
-    // stale keys (e.g. buyerRequestState left behind by the old Request
-    // Sellers hijack bug) and silently killed every pick. An explicit list
-    // is predictable, and each block is logged so PM2 shows exactly why.
-    const td = sess?.tempData || {};
-    const BLOCKING_STATE_KEYS = [
-      "scState",                 // sc_ quote flow - numbers pick catalogue items
-      "scSellerQuoteState",      // seller pricing a draft quote
-      "sellerRequestReplyState", // seller replying to a buyer request
-      "orderState",              // buyer mid-order (qty / address / price)
-      "schoolApplyState",        // application form - answers can be numbers
-      "schoolEnquiryState",      // typed enquiry message
-      "sfaqState",               // school FAQ chat
-      "supplierAccountState"     // supplier self-service text entry
-    ];
-    for (const key of BLOCKING_STATE_KEYS) {
-      if (!td[key]) continue;
-      if (key === "schoolApplyState" && td[key] === "awaiting_start") continue;
-      console.log(`[SELLER PICK] blocked: tempData.${key}="${td[key]}" active for ${phone}`);
+    // Guard 4 (snapshot strategy): a flow-state key only blocks the pick if it
+    // appeared or changed AFTER the numbered list was sent. States that were
+    // already sitting in the session when the list went out are fossils - this
+    // platform never cleans up flow keys (sfaqState="sfaq_menu" from a school
+    // FAQ weeks ago, buyerRequestState from an old hijack, etc). The search
+    // itself is proof the user left those flows. Genuinely NEW flows started
+    // after the list (e.g. tapping "Get Quote" sets scState → numbers must go
+    // to the catalogue picker) still block correctly.
+    const td  = sess?.tempData || {};
+    const pre = pick.pre || null;
+    const keysToCheck = pre ? NUMBER_CONSUMING_KEYS : HARD_BLOCKING_KEYS;
+    for (const key of keysToCheck) {
+      const cur = td[key];
+      if (!cur) continue;
+      if (key === "schoolApplyState" && cur === "awaiting_start") continue;
+      if (pre && pre[key] === String(cur)) {
+        // Same value as when the list was sent → stale fossil, ignore
+        continue;
+      }
+      console.log(`[SELLER PICK] blocked: tempData.${key}="${cur}" started after list was sent (${phone})`);
       return false;
     }
-    // Top-level supplier registration state (stored outside tempData)
-    if (sess?.supplierRegState) {
-      console.log(`[SELLER PICK] blocked: supplierRegState="${sess.supplierRegState}" active for ${phone}`);
+    const curReg = sess?.supplierRegState;
+    // Only enforceable with a snapshot; legacy picks skip it (fossil risk)
+    if (pre && curReg && pre.__supplierRegState !== String(curReg)) {
+      console.log(`[SELLER PICK] blocked: supplierRegState="${curReg}" started after list was sent (${phone})`);
       return false;
     }
 
