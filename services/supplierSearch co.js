@@ -347,78 +347,6 @@ const SEARCH_SYNONYMS = {
 
 // ── Expand a search term using the synonym map ───────────────────────────────
 // Returns original term + up to 6 synonyms to keep MongoDB $or manageable
-// ── Light word stemmer for flexible matching ─────────────────────────────────
-// "electricals" → [electricals, electrical, electric]
-// "plumber"     → [plumber, plumb]
-// "welding"     → [welding, weld]
-// "tyres"       → [tyres, tyre]
-// Deterministic suffix stripping - no dictionaries, no surprises. Used so a
-// search for "electricals" matches sellers named "Electric City", products
-// like "electrical fittings", and services like "electrician call-out".
-export function stemVariants(word = "") {
-  const w = String(word || "").toLowerCase().trim();
-  if (!w || w.length < 3) return w ? [w] : [];
-  const out = new Set([w]);
-  if (w.endsWith("es") && w.length > 4) out.add(w.slice(0, -2));
-  if (w.endsWith("s")  && w.length > 3) out.add(w.slice(0, -1));
-  for (const v of [...out]) {
-    if (v.endsWith("al")  && v.length > 6) out.add(v.slice(0, -2)); // electrical → electric
-    if (v.endsWith("ing") && v.length > 6) out.add(v.slice(0, -3)); // welding → weld
-    if (v.endsWith("ian") && v.length > 6) out.add(v.slice(0, -3)); // electrician → electric
-    if (v.endsWith("er")  && v.length > 5) out.add(v.slice(0, -2)); // plumber → plumb
-  }
-  return [...out].filter(v => v.length >= 3).slice(0, 6);
-}
-
-// True when two words share a stem or one starts with the other's stem (>=4 chars)
-function _stemsMatch(a = "", b = "") {
-  const A = stemVariants(a), B = stemVariants(b);
-  for (const x of A) for (const y of B) {
-    if (x === y) return true;
-    // Prefix rule needs >= 5 chars: "electr..." style stems still match, but
-    // accidental pairs like "pain" ↔ "paint" don't. True suffix families
-    // (brakes↔brake, tyres↔tyre) already matched by stem equality above.
-    if (x.length >= 5 && y.startsWith(x)) return true;
-    if (y.length >= 5 && x.startsWith(y)) return true;
-  }
-  return false;
-}
-
-// Bounded Damerau-Levenshtein: distance <= 1 for words >= 5 chars,
-// <= 2 for words >= 8 chars. Catches "cemnet"→"cement", "plumer"→"plumber".
-// Tight caps stop nonsense like "cement"→"moment" (distance 2 at 6 chars).
-function _typoClose(a = "", b = "") {
-  a = String(a).toLowerCase(); b = String(b).toLowerCase();
-  if (Math.abs(a.length - b.length) > 2) return false;
-  const minLen = Math.min(a.length, b.length);
-  const cap = minLen >= 8 ? 2 : (minLen >= 5 ? 1 : 0);
-  if (!cap) return false;
-  const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
-  for (let j = 0; j <= b.length; j++) d[0][j] = j;
-  for (let i = 1; i <= a.length; i++) {
-    for (let j = 1; j <= b.length; j++) {
-      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost);
-      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) {
-        d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1); // transposition
-      }
-    }
-  }
-  return d[a.length][b.length] <= cap;
-}
-
-// Bigram Dice similarity (0..1) - catches typos like "electircals"≈"electrical"
-function _bigramSim(a = "", b = "") {
-  const g = s => { const r = []; const w = String(s).toLowerCase(); for (let i = 0; i < w.length - 1; i++) r.push(w.slice(i, i + 2)); return r; };
-  const A = g(a), B = g(b);
-  if (A.length < 2 || B.length < 2) return a === b ? 1 : 0;
-  const Bm = new Map();
-  for (const x of B) Bm.set(x, (Bm.get(x) || 0) + 1);
-  let hits = 0;
-  for (const x of A) { const c = Bm.get(x) || 0; if (c > 0) { hits++; Bm.set(x, c - 1); } }
-  return (2 * hits) / (A.length + B.length);
-}
-
 export function expandSearchTerms(product) {
   const lower = (product || "").toLowerCase().trim();
   if (!lower) return [];
@@ -433,17 +361,6 @@ export function expandSearchTerms(product) {
       .filter(s => !isCategorySlug(s))  // drop "medical_health" etc
       .slice(0, 6);
     return [lower, ...synonyms];
-  }
-
-  // Stemmed match: "electricals" hits the "electrical" synonym entry,
-  // "tyres" hits "tyre", etc - plural/suffix forms get full synonym power
-  for (const v of stemVariants(lower)) {
-    if (v !== lower && SEARCH_SYNONYMS[v]) {
-      const synonyms = SEARCH_SYNONYMS[v]
-        .filter(s => !isCategorySlug(s))
-        .slice(0, 6);
-      return [lower, v, ...synonyms];
-    }
   }
 
   // Partial match: keys that start with OR contain the search term
@@ -524,13 +441,6 @@ export function scoreSupplierMatch(supplier, searchTerm) {
 
   function _norm(s) { return normalizeProductName(s || ""); }
 
-  const _termWords = term.split(" ").filter(w => w.length > 3);
-  const _stemHit = (textNorm) => {
-    if (!textNorm || !_termWords.length) return false;
-    const tw = textNorm.split(" ").filter(w => w.length > 3);
-    return _termWords.some(qw => tw.some(x => _stemsMatch(qw, x)));
-  };
-
   // ── rates.service (service suppliers) ───────────────────────────────────
   for (const rate of (supplier.rates || [])) {
     const svc = _norm(rate.service);
@@ -540,7 +450,6 @@ export function scoreSupplierMatch(supplier, searchTerm) {
     for (const t of allTerms) {
       if (t && (svc === t || svc.includes(t) || t.includes(svc))) return 28;
     }
-    if (_stemHit(svc)) return 24;            // stem: "electricals" ↔ "electrical repairs"
   }
 
   // ── listedProducts / products ────────────────────────────────────────────
@@ -556,7 +465,6 @@ export function scoreSupplierMatch(supplier, searchTerm) {
     for (const t of allTerms) {
       if (t && (pn.includes(t) || t.includes(pn))) return 22;
     }
-    if (_stemHit(pn)) return 20;             // stem: "tyres" ↔ "tyre fitting"
   }
 
   // ── businessName ─────────────────────────────────────────────────────────
@@ -565,7 +473,6 @@ export function scoreSupplierMatch(supplier, searchTerm) {
   for (const t of allTerms) {
     if (t && bname && bname.includes(t)) return 12;
   }
-  if (_stemHit(bname)) return 11;            // stem: "electricals" ↔ "Electric City"
 
   // ── category tag only (broad match) ──────────────────────────────────────
   const cats = (supplier.categories || []).map(c => (c || "").toLowerCase());
@@ -614,30 +521,12 @@ export async function runSupplierSearch({ city, category, product, profileType, 
     // Infer category slugs from the search term (e.g. "geyser installation" → "plumbing")
     const _inferredCats = _inferCategoriesFromSearch(product, searchTerms);
 
-    // Stem variants of every word: "electricals" also queries \belectrical
-    // and \belectric, so "Electric City" and "electrical fittings" match.
-    // Word-boundary anchored to keep noise down; deduped via Set.
-    const _stemRx = new Set();
-    for (const w of [product, ...individualWords]) {
-      for (const v of stemVariants(w)) {
-        if (v.length >= 4) _stemRx.add("\\b" + _safeRx(v));
-      }
-    }
-
     const productOr = [
       { listedProducts:  { $regex: _safeRx(product), $options: "i" } },
       { products:        { $regex: _safeRx(product), $options: "i" } },
       { "rates.service": { $regex: _safeRx(product), $options: "i" } },
       { categories:      { $regex: _safeRx(product), $options: "i" } },
       { businessName:    { $regex: _safeRx(product), $options: "i" } },
-
-      ...[..._stemRx].flatMap(rx => [
-        { listedProducts:  { $regex: rx, $options: "i" } },
-        { products:        { $regex: rx, $options: "i" } },
-        { "rates.service": { $regex: rx, $options: "i" } },
-        { categories:      { $regex: rx, $options: "i" } },
-        { businessName:    { $regex: rx, $options: "i" } }
-      ]),
 
       // Category-based match: "geyser installation" → categories: "plumbing"
       ..._inferredCats.map(cat => ({ categories: cat })),
@@ -691,54 +580,6 @@ let results = await SupplierProfile.find(query)
       .lean();
     // Keep only service-type suppliers from this fallback
     results = results.filter(s => s.profileType === "service");
-  }
-
-  // ── Fuzzy fallback (typos): only when every strict pass returned ZERO ─────
-  // "electircals" won't match any regex, so as a last resort we pull active
-  // suppliers (city first, then anywhere) and score their name/category/
-  // products/services word-by-word: stem match OR bigram similarity >= 0.62.
-  // Purely additive - it can never remove or reorder good strict results.
-  if (product && results.length === 0) {
-    try {
-      const _fuzzyBase = {
-        active: true,
-        $and: [
-          { $or: [{ suspended: false }, { suspended: { $exists: false } }] },
-          { $or: [{ subscriptionStatus: "active" }, { subscriptionStatus: "trial" }] }
-        ]
-      };
-      let _pool = [];
-      if (city) {
-        _pool = await SupplierProfile.find({ ..._fuzzyBase, "location.city": new RegExp(`^${city}$`, "i") })
-          .sort({ tierRank: -1, credibilityScore: -1 }).limit(300).lean();
-      }
-      if (_pool.length === 0) {
-        _pool = await SupplierProfile.find(_fuzzyBase)
-          .sort({ tierRank: -1, credibilityScore: -1 }).limit(300).lean();
-      }
-
-      const _qWords = String(product).toLowerCase().split(/\s+/).filter(w => w.length > 3);
-      const _wordHits = (qw, textWords) => textWords.some(tw =>
-        _stemsMatch(qw, tw) || _bigramSim(qw, tw) >= 0.62 || _typoClose(qw, tw)
-      );
-
-      results = _pool.filter(s => {
-        const textWords = [
-          s.businessName || "",
-          ...(s.categories || []),
-          ..._splitServiceBlobPublic(s.listedProducts),
-          ..._splitServiceBlobPublic(s.products),
-          ...((s.rates || []).map(r => r?.service || ""))
-        ].join(" ").toLowerCase().split(/[^a-z0-9]+/).filter(w => w.length > 3);
-        return _qWords.some(qw => _wordHits(qw, textWords));
-      }).slice(0, 30);
-
-      if (results.length) {
-        console.log(`[FUZZY FALLBACK] "${product}" strict=0 → fuzzy=${results.length} (${results.slice(0,5).map(s=>s.businessName).join(", ")})`);
-      }
-    } catch (fzErr) {
-      console.warn("[FUZZY FALLBACK]", fzErr.message);
-    }
   }
 
 // AFTER:
@@ -855,12 +696,7 @@ function scoreProductMatch(productName = "", searchTerm = "") {
       score += 40;
     }
 
-    // Stem-aware overlap: "electricals" counts as matching "electrical",
-    // "tyres" ↔ "tyre", "welder" ↔ "welding". Exact token equality still
-    // scores identically - stems only ADD matches, never remove them.
-    const overlap = termTokens.filter(t =>
-      productTokens.includes(t) || productTokens.some(pt => _stemsMatch(t, pt))
-    ).length;
+    const overlap = termTokens.filter(t => productTokens.includes(t)).length;
     if (overlap) {
       score += Math.round((overlap / Math.max(termTokens.length, productTokens.length)) * 50);
     }
