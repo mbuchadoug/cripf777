@@ -4093,7 +4093,7 @@ if (!isMetaAction && /^ZQ:S:[a-z0-9_-]{1,60}$/i.test(text.trim())) {
 // fresh seller list exists in the session AND the user is not inside any other
 // text-entry flow (invoices, registration, sc_ quote flows, school forms, etc),
 // so typed numbers in every other flow are untouched. "0"/"00" never match.
-if (!isMetaAction && /^(?:[1-9][0-9]{0,2}|more)$/i.test(text.trim())) {
+if (!isMetaAction && /^(?:[1-9][0-9]{0,2}|more|list|results)$/i.test(text.trim())) {
   try {
     const { tryHandleSellerPickText } = await import("./sellerSearchList.js");
     const _spkHandled = await tryHandleSellerPickText({
@@ -21931,5 +21931,3 @@ async function showAllBranchesCashBalance(from, biz) {
   const { sendCashBalanceMenu } = await import("./metaMenus.js");
   return sendCashBalanceMenu(from);
 }
-
-

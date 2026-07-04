@@ -415,7 +415,10 @@ export async function showSellerMenu(from, supplierId, biz, saveBiz, { source = 
       scIsService:     isService,
       scIsHospitality: isHospitality,
       scHasPrices:     hasPrices,
-      scSource:    source,
+      // Sticky source: internal navigation (sc_back → source "direct") must not
+      // erase the original entry channel - conversions stay attributed correctly
+      // and the "Back to results" row survives store navigation.
+      scSource:    (source === "direct" && biz?.sessionData?.scSource) ? biz.sessionData.scSource : source,
       scBuyerName: parentName,
       // ── Staff card attribution ────────────────────────────────────────────
       // Preserved across the full buyer flow so enquiries/quotes know to also
@@ -523,6 +526,12 @@ export async function showSellerMenu(from, supplierId, biz, saveBiz, { source = 
     ? [{ id: `sc_catalogue_${supplierId}`, title: `📋 View All ${isService ? "Services" : "Products"} (${catalogueTotal})` }]
     : [];
 
+  // ── Back to search results - only for buyers who arrived via search ───────
+  const _fromSearch = source === "search" || biz?.sessionData?.scSource === "search";
+  const backToResultsBtn = _fromSearch
+    ? [{ id: `sc_search_back_${supplierId}`, title: "⬅ Back to results" }]
+    : [];
+
   if (isHospitality) {
     return sendList(from, "What would you like to do?", [
       { id: `sc_quote_${supplierId}`,   title: hasPrices ? "💵 Get a quote / Book" : "💵 Request a quote" },
@@ -531,7 +540,8 @@ export async function showSellerMenu(from, supplierId, biz, saveBiz, { source = 
       { id: `sc_enquiry_${supplierId}`, title: "💬 Send an enquiry" },
       ...repeatBtn,
       { id: `sc_contact_${supplierId}`, title: "📞 Contact details" },
-      { id: `sc_review_${supplierId}`,  title: "⭐ Leave a review" }
+      { id: `sc_review_${supplierId}`,  title: "⭐ Leave a review" },
+      ...backToResultsBtn
     ]);
   } else if (isService) {
     return sendList(from, "What would you like to do?", [
@@ -541,7 +551,8 @@ export async function showSellerMenu(from, supplierId, biz, saveBiz, { source = 
       { id: `sc_enquiry_${supplierId}`, title: "💬 Send an enquiry" },
       ...repeatBtn,
       { id: `sc_contact_${supplierId}`, title: "📞 Contact details" },
-      { id: `sc_review_${supplierId}`,  title: "⭐ Leave a review" }
+      { id: `sc_review_${supplierId}`,  title: "⭐ Leave a review" },
+      ...backToResultsBtn
     ]);
   } else {
     return sendList(from, "What would you like to do?", [
@@ -551,7 +562,8 @@ export async function showSellerMenu(from, supplierId, biz, saveBiz, { source = 
       { id: `sc_enquiry_${supplierId}`, title: "💬 Send an enquiry" },
       ...repeatBtn,
       { id: `sc_contact_${supplierId}`, title: "📞 Contact details" },
-      { id: `sc_review_${supplierId}`,  title: "⭐ Leave a review" }
+      { id: `sc_review_${supplierId}`,  title: "⭐ Leave a review" },
+      ...backToResultsBtn
     ]);
   }
 }
@@ -625,6 +637,11 @@ export async function handleSellerChatAction({ from, action: a, biz, saveBiz }) 
     case "contact":         return _scContact(from, supplierId);
     case "review":          return _scReview(from, supplierId, biz, saveBiz);
     case "back":            return showSellerMenu(from, supplierId, biz, saveBiz);
+    // ── Back to the numbered search results the buyer came from ────────────
+    case "search_back": {
+      const { resendSellerList } = await import("./sellerSearchList.js");
+      return resendSellerList({ from, phone: _normPhone(from) });
+    }
     default:                return false;
   }
 }
@@ -1122,17 +1139,16 @@ async function _scQuote(from, supplierId, biz, saveBiz) {
 `📋 *${seller.businessName}*
 
 ${_quickRef}
-*Pick by number - then add scope or quantity:*
-_1_ → ${_exName1}${name2 ? `   _2_ → ${name2}` : ""}${allItems.length >= 3 ? `   _1, 2_ → both` : ""}
+*Just type what you need, in your own words.*
 
-For services - add scope after the number:
-_1: ${_exScope1}_ → ${_exName1}, ${_exScope1}
-${name1 && name2 ? `_1: ${_exScope1}, 2: ${_guessServiceScopeHint(name2 || "")[0] || "Harare CBD"}_ → both with scope` : ""}
-
-Or just type your request freely:
 _I need ${_exName1} for a ${_exScope1}_
+_${_exName1}, ${_exScope1}_
 
-Type *done* when ready  ·  *cancel* to go back`
+Or simply reply with the number from the list:
+_1_${name2 ? `  or  _1, 2_ for more than one` : ""}
+
+Type *done* when finished
+Type *cancel* to go back`
     );
 
   } else if (isService) {
@@ -1168,20 +1184,22 @@ Type *done* when ready  ·  *cancel* to go back`
 
     const _rfqEx1    = name1 || "service";
     const _rfqScope1 = scopeHints1[0] || "3-bed house, Borrowdale";
-    const _rfqScope2 = scopeHints2[0] || "office, Harare CBD";
     return sendText(from,
 `📋 *${seller.businessName}*
 
 ${_quickRef}
-*Pick by number + add scope:*
-_1_ → ${_rfqEx1}${name2 ? `   _2_ → ${name2}` : ""}
-_1: ${_rfqScope1}_ → ${_rfqEx1} with scope${name1 && name2 ? `
-_1: ${_rfqScope1}, 2: ${_rfqScope2}_ → both with scope` : ""}
+*Just type what you need, in your own words.*
 
-Or just describe what you need:
 _I need ${_rfqEx1} for a ${_rfqScope1}_
+_${_rfqEx1}, ${_rfqScope1}_
 
-Type *done* when ready  ·  *cancel* to go back`
+Or simply reply with the number from the list:
+_1_${name2 ? `  or  _1, 2_ for more than one` : ""}
+
+We will ask you for the job details before sending, so the seller can quote you properly.
+
+Type *done* when finished
+Type *cancel* to go back`
     );
 
   } else {
@@ -1190,22 +1208,21 @@ Type *done* when ready  ·  *cancel* to go back`
     const name2 = allItems[1] ? _ex(1, allItems[1]) : null;
 
     const _pEx1 = name1 || "item";
-    const _pEx2 = name2 || "item 2";
     return sendText(from,
 `📋 *${seller.businessName}*
 
 ${_quickRef}
-*Pick by number or describe what you need:*
-_1_ → ${_pEx1}${name2 ? `   _1, 2_ → both` : ""}${allItems.length >= 3 ? `   _1, 4, 6_ → pick any` : ""}
+*Just type what you need, in your own words.*
 
-For quantities - add ×N after the number:
-_1×5_ → 5× ${_pEx1}
+_I need 10 bags of cement and 5 roofing sheets_
+_${_pEx1} for a 3-bedroom house_
 
-Or just describe freely:
-_10 bags of cement x2, river sand 3m³_
-_roofing sheets for a 3-bedroom house_
+Or simply reply with the number from the list:
+_1_${name2 ? `  or  _1, 2_ for more than one` : ""}
+For quantity, add x and the amount: _1 x5_ means 5 of item 1
 
-Type *done* when ready  ·  *cancel* to go back`
+Type *done* when finished
+Type *cancel* to go back`
     );
   }
 }
@@ -1247,7 +1264,7 @@ async function _scProcessItemList(from, supplierId, raw, biz, saveBiz) {
           text:
             `✅ *Scope added to ${_existCart[_scopeIdx].name}:*\n_"${_scopeText}"_\n\n` +
             `🛒 *Your request:*\n${_scopeSummary}\n\n` +
-            `_Type *2: scope* to add scope for other services, or tap below to send._`,
+            `_Tap below to send, or type more details in your own words._`,
           buttons: [
             { id: `sc_quote_done_${supplierId}`,  title: _termDone2 },
             { id: `sc_quote_clear_${supplierId}`, title: "🗑 Start Over" },
@@ -1436,7 +1453,7 @@ async function _scProcessItemList(from, supplierId, raw, biz, saveBiz) {
   // For services: prompt scope. For products: prompt quantity/more items.
   const _hasScope = isService && allItems.some(it => it.scope);
   const editHint = isService && !isHospitality
-    ? `\n\n💡 _Type the *scope* for each service (e.g. _3-bed house, Borrowdale_, _office block 5 rooms_)._\n_Format: *1: 3-bed house* or just describe it freely._\n_Or tap *Get Quote* to send as is._`
+    ? `\n\n💡 _Tap *Get Service Quote* when ready - we will ask you one quick question about the job so the seller can price it properly._`
     : isHospitality
     ? `\n\n_Type more numbers to add, or tap the button when ready._`
     : `\n\n💡 _Type more item numbers to add (e.g. *2, 5, 8*), or tap *Get Quote*._`;
@@ -1523,14 +1540,12 @@ async function _scQuoteDone(from, supplierId, biz, saveBiz) {
 
     return sendButtons(from, {
       text:
-        `📋 *Almost done! One more detail needed:*\n\n` +
-        `*Your selected service${items.length > 1 ? "s" : ""}:*\n${selectedSummary}\n\n` +
-        `📐 *What is the scope of work?*\n\n` +
-        `Tell the seller what they'll be working on so they can give you an accurate quote.\n\n` +
-        `${hint1}\n${hint2}\n` +
-        (hasMultiple ? genericHints[2] + "\n" + genericHints[3] + "\n" : "") +
-        `\nYou can describe size, location, number of rooms/floors, condition, etc.\n\n` +
-        `Type *skip* to send your request without this detail _(seller may need to call you for more info)_.`,
+        `📋 *Almost done!*\n\n` +
+        `*You selected:*\n${selectedSummary}\n\n` +
+        `*What will the seller be working on?*\n` +
+        `Just type it in your own words - size, place, or what it is for.\n\n` +
+        `${hint1}\n${hint2}\n\n` +
+        `Type *skip* if you are not sure - the seller can call you for details.`,
       buttons: [
         { id: `sc_scope_skip_${supplierId}`, title: "⏩ Skip - send as is" },
       ]
@@ -1997,7 +2012,7 @@ async function _scHandleQuotePreview(from, refNum, biz, saveBiz) {
       date:      new Date(),
       billingTo: buyerName || _normPhone(buyerPhone),
       items: _noteItems.map(l => ({
-        item:  l.name,
+        item:  _cleanQuoteLineName(l.name, seller),
         qty:   Number(l.qty       || 1),
         unit:  Number(l.unitPrice || 0),
         total: Number(l.lineTotal || 0)
@@ -2025,7 +2040,7 @@ async function _scHandleQuotePreview(from, refNum, biz, saveBiz) {
   }
 
   const itemRows = lineItems.map((l, i) =>
-    `${i + 1}. ${l.name} × ${l.qty} @ $${Number(l.unitPrice || 0).toFixed(2)} = $${Number(l.lineTotal || 0).toFixed(2)}`
+    `${i + 1}. ${_cleanQuoteLineName(l.name, seller)} × ${l.qty} @ $${Number(l.unitPrice || 0).toFixed(2)} = $${Number(l.lineTotal || 0).toFixed(2)}`
   ).join("\n");
   const _noteDisplay = draft.sellerNote ? `\n📝 Note: _${draft.sellerNote}_` : "";
 
@@ -2124,7 +2139,7 @@ async function _scHandleQuoteConfirm(from, refNum, biz, saveBiz) {
       billingTo: buyerName || _normPhone(buyerPhone),
       items: (() => {
         const _baseItems = lineItems.map(l => ({
-          item:  l.name,
+          item:  _cleanQuoteLineName(l.name, seller),
           qty:   Number(l.qty       || 1),
           unit:  Number(l.unitPrice || 0),
           total: Number(l.lineTotal || 0)
@@ -2171,7 +2186,7 @@ async function _scHandleQuoteConfirm(from, refNum, biz, saveBiz) {
   await _clearSellerDraft(from, refNum);
 
   const itemRows = lineItems.map((l, i) =>
-    `${i + 1}. ${l.name} × ${l.qty} @ $${Number(l.unitPrice || 0).toFixed(2)} = $${Number(l.lineTotal || 0).toFixed(2)}`
+    `${i + 1}. ${_cleanQuoteLineName(l.name, seller)} × ${l.qty} @ $${Number(l.unitPrice || 0).toFixed(2)} = $${Number(l.lineTotal || 0).toFixed(2)}`
   ).join("\n");
 
   // Default expiry to 48 hours from now if not set
@@ -3806,8 +3821,13 @@ async function _scProcessSellerPriceReply(from, supplierId, raw, biz, saveBiz) {
   }
 
   const items     = pending.items || [];
+  // Clean buyer free text into professional line items for the quotation.
+  // The seller already saw the raw request in the notification - the document
+  // and buyer-facing summary use the cleaned, catalogue-canonical names.
+  const _cleanSeller = await SupplierProfile.findById(pending.supplierId || supplierId).lean().catch(() => null);
   const lineItems = items.map((item, i) => ({
-    name:      item.name,
+    name:      _cleanQuoteLineName(item.name, _cleanSeller),
+    rawName:   item.name,
     qty:       item.qty || 1,
     unitPrice: prices[i] || 0,
     lineTotal: (prices[i] || 0) * (item.qty || 1)
@@ -4084,8 +4104,85 @@ function _guessServiceScopeHint(serviceName = "") {
 //   service name, and prices it. This matches how real-world professional service
 //   requests work in Zimbabwe - clients describe what they need, not pick from menus.
 //
+// ─── Clean a buyer's free-text request into a professional quote line item ───
+// "I need brakes overhauls for a Toyota Hilux, service"
+//   → "Brakes Overhauls (Toyota Hilux, service)"
+// Used ONLY at quotation-output time (PDF + quote summaries). The buyer's raw
+// words stay untouched in the draft/notifications so the seller keeps full
+// context while pricing - only the document the buyer receives is cleaned.
+// If the cleaned name matches an item in the seller's own catalogue, the
+// catalogue's canonical name is used - the most professional text available.
+function _cleanQuoteLineName(rawName = "", seller = null) {
+  let s = String(rawName || "").trim();
+  if (!s) return s;
+
+  try {
+    // Strip conversational lead-ins, repeatedly ("Hi, please can you...")
+    const LEAD = /^(hi|hello|hey|good\s+(morning|afternoon|evening|day)|i\s+need|i\s+want|i\s+would\s+like|i'?d\s+like|we\s+need|we\s+want|we\s+would\s+like|please|can\s+you|could\s+you|kindly|need|want|requesting|request\s+for|quotation\s+for|quote\s+for|please\s+provide|kindly\s+provide|provide|looking\s+for|do\s+you\s+do|do\s+you\s+have)[\s,:-]+/i;
+    for (let guard = 0; guard < 6; guard++) {
+      const t = s.replace(LEAD, "");
+      if (t === s) break;
+      s = t;
+    }
+    // Strip trailing courtesy + punctuation
+    s = s.replace(/[\s,]*(please|thanks|thank\s+you)\s*[.!?]*$/i, "").replace(/[.!?]+$/, "").trim();
+    // Strip a leading article
+    s = s.replace(/^(a|an|the|my|our)\s+/i, "");
+    if (!s) return String(rawName).slice(0, 90);
+
+    // Already in "Name (scope)" form? Split so canonicalization can't eat the scope
+    let name = s, scope = "";
+    const paren = s.match(/^(.{3,}?)\s*\(([^)]{2,})\)\s*$/);
+    if (paren) {
+      name = paren[1].trim(); scope = paren[2].trim();
+    } else {
+      // Split "X for Y" → service X, scope Y ("brakes overhauls for a Toyota Hilux")
+      const m = s.match(/^(.{3,}?)\s+(?:for|on|at)\s+(?:a|an|the|my|our)?\s*(.{3,})$/i);
+      if (m) { name = m[1].trim(); scope = m[2].trim(); }
+    }
+
+    // Canonicalize against the seller's own catalogue (longest match wins)
+    if (seller) {
+      const catalogueNames = [
+        ...((seller.rates || []).map(r => r && r.service)),
+        ...(seller.listedProducts || []),
+        ...(seller.products || [])
+      ].filter(x => x && x !== "pending_upload").map(x => String(x).trim())
+       .sort((a, b) => b.length - a.length);
+      const ln = name.toLowerCase();
+      const hit = catalogueNames.find(c => {
+        const cl = c.toLowerCase();
+        return cl.length >= 4 && (ln === cl || ln.includes(cl) || cl.includes(ln));
+      });
+      if (hit) name = hit;
+    }
+
+    // Title Case the service/product name (connector words stay lowercase)
+    const _SMALL = new Set(["and","or","of","for","the","with","in","on","at","a","an","to","per","x"]);
+    name = name.replace(/\w\S*/g, (w, off) => {
+      if (/\d/.test(w[0])) return w;
+      if (off > 0 && _SMALL.has(w.toLowerCase())) return w.toLowerCase();
+      return w.length > 1 ? w[0].toUpperCase() + w.slice(1) : w.toUpperCase();
+    });
+    if (scope) {
+      scope = scope.replace(/[.!?\s]+$/, "").trim();
+      scope = scope.charAt(0).toUpperCase() + scope.slice(1);
+    }
+
+    const out = (scope ? `${name} (${scope})` : name).trim().slice(0, 90);
+    return out || String(rawName).slice(0, 90);
+  } catch (_) {
+    return String(rawName).slice(0, 90);
+  }
+}
+
 function _parseServiceRFQInput(raw, knownItems = []) {
   const results = [];
+
+  // "1 and 3" / "1 & 3" → "1, 3" (only when the whole input is a number list)
+  if (/^\d+(\s*(?:,|and|&|\+)\s*\d+)+$/i.test(String(raw || "").trim())) {
+    raw = String(raw).trim().replace(/\s*(?:and|&|\+)\s*/gi, ", ");
+  }
 
   // ── Step 1: Check if this is a PURE natural-language sentence ──────────────
   // Detect: starts with "I need", "Please", "Can you", or is a long sentence
@@ -4166,6 +4263,11 @@ function _parseServiceRFQInput(raw, knownItems = []) {
 function _parseHospitalityInput(raw, knownItems = []) {
   const results = [];
 
+  // "1 and 3" / "1 & 3" → "1, 3" (only when the whole input is a number list)
+  if (/^\d+(\s*(?:,|and|&|\+)\s*\d+)+$/i.test(String(raw || "").trim())) {
+    raw = String(raw).trim().replace(/\s*(?:and|&|\+)\s*/gi, ", ");
+  }
+
   // Split on commas - each segment is one item selection
   const parts = raw.split(/,\s*/).map(s => s.trim()).filter(Boolean);
 
@@ -4201,6 +4303,11 @@ function _parseHospitalityInput(raw, knownItems = []) {
 
 function _parseItemInput(raw, knownItems = [], isService = false) {
   const results = [];
+
+  // "1 and 3" / "1 & 3" → "1, 3" (only when the whole input is a number list)
+  if (/^\d+(\s*(?:,|and|&|\+)\s*\d+)+$/i.test(String(raw || "").trim())) {
+    raw = String(raw).trim().replace(/\s*(?:and|&|\+)\s*/gi, ", ");
+  }
   const _trimmed = raw.trim();
 
   // ── Natural-text detection: treat the whole input as ONE item ──────────────

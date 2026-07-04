@@ -47,27 +47,6 @@
 import { sendText, sendButtons } from "./metaSender.js";
 import { expandSearchTerms, scoreSupplierMatch } from "./supplierSearch.js";
 
-// tempData keys whose ACTIVE flows legitimately consume bare numbers.
-// Used with a snapshot strategy (see sendNumberedSellerResults): a key only
-// blocks a pick if it appeared/changed AFTER the numbered list was sent -
-// keys that were already lying in the session before the search are fossils
-// (this platform never cleans up flow state) and must never block.
-const NUMBER_CONSUMING_KEYS = [
-  "scState",                 // sc_ quote flow - numbered catalogue picks
-  "scSellerQuoteState",      // seller pricing a draft quote
-  "sellerRequestReplyState", // seller replying to a buyer request (prices)
-  "orderState",              // buyer mid-order (qty / address / price)
-  "schoolApplyState",        // application form - answers can be numbers
-  "schoolEnquiryState",      // typed enquiry message
-  "sfaqState",               // school FAQ chat
-  "supplierAccountState"     // supplier self-service text entry (prices)
-];
-// Subset that still blocks when comparing against a LEGACY pick saved before
-// snapshots existed - only the flows where a bare number is unambiguous input.
-const HARD_BLOCKING_KEYS = [
-  "scState", "scSellerQuoteState", "sellerRequestReplyState", "orderState"
-];
-
 const BATCH_SIZE       = 15;          // sellers per message
 const MAX_STORED       = 60;          // hard cap of ranked sellers kept in session
 const FRESH_WINDOW_MS  = 48 * 60 * 60 * 1000; // 48h - buyers often reply hours later
@@ -319,40 +298,9 @@ export async function sendNumberedSellerResults({
 
   try {
     const UserSession = (await import("../models/userSession.js")).default;
-
-    // ── Snapshot flow-state keys that ALREADY exist right now ───────────────
-    // Anything present at list-send time predates the search and is therefore
-    // stale (the user just searched - they are not "in" that flow). At pick
-    // time we only block on keys that are NEW or CHANGED relative to this
-    // snapshot, e.g. scState set by tapping "Get Quote" after opening a seller.
-    const _preSess = await UserSession.findOne({ phone }).lean();
-    const _preTd   = _preSess?.tempData || {};
-    pick.pre = {};
-    for (const k of NUMBER_CONSUMING_KEYS) {
-      if (_preTd[k]) pick.pre[k] = String(_preTd[k]);
-    }
-    if (_preSess?.supplierRegState) pick.pre.__supplierRegState = String(_preSess.supplierRegState);
-
     await UserSession.findOneAndUpdate(
       { phone },
-      {
-        $set: { "tempData.sellerPick": pick },
-        // FIX: a fresh search supersedes any stale BUYER-side flow state.
-        // The old Request Sellers hijack bug left buyerRequestState =
-        // "awaiting_items" sitting in sessions forever, which then blocked
-        // the number-pick guard and made typed numbers die silently.
-        // Clearing buyer-side keys here guarantees that the number a buyer
-        // types right after receiving this list ALWAYS opens a seller.
-        // Seller-side keys (sellerRequestReplyState, scSellerQuoteState) and
-        // school/sfaq flows are deliberately NOT touched.
-        $unset: {
-          "tempData.buyerRequestState":   "",
-          "tempData.buyerRequestMode":    "",
-          "tempData.pendingBuyerRequest": "",
-          "tempData.orderState":          "",
-          "tempData.pendingQuoteReply":   ""
-        }
-      },
+      { $set: { "tempData.sellerPick": pick } },
       { upsert: true }
     );
   } catch (err) {
@@ -360,6 +308,39 @@ export async function sendNumberedSellerResults({
   }
 
   return sendText(from, msg);
+}
+
+// ─── Public: resend the buyer's numbered results (Back-to-results button) ─────
+
+/**
+ * Resends the first batch of the buyer's last numbered seller list. Called by
+ * the "⬅ Back to results" row in the seller store menu (sc_search_back_*) and
+ * by the typed "list" keyword. Numbering is identical to the original message.
+ */
+export async function resendSellerList({ from, phone }) {
+  try {
+    const UserSession = (await import("../models/userSession.js")).default;
+    const sess = await UserSession.findOne({ phone }).lean();
+    let pick = sess?.tempData?.sellerPick;
+    if (typeof pick === "string") { try { pick = JSON.parse(pick); } catch (_) { pick = null; } }
+
+    if (!pick || !Array.isArray(pick.entries) || !pick.entries.length ||
+        !pick.ts || Date.now() - pick.ts > FRESH_WINDOW_MS) {
+      return sendButtons(from, {
+        text: "🔎 Your search results have expired.\n\nJust type a new search, e.g. *find cement mbare*",
+        buttons: [{ id: "find_supplier", title: "🔍 Browse & Shop" }]
+      });
+    }
+
+    const { msg } = _renderBatch(pick, 0);
+    return sendText(from, msg);
+  } catch (err) {
+    console.warn("[SELLER PICK RESEND]", err.message);
+    return sendButtons(from, {
+      text: "🔎 Could not load your results.\n\nJust type a new search, e.g. *find cement mbare*",
+      buttons: [{ id: "find_supplier", title: "🔍 Browse & Shop" }]
+    });
+  }
 }
 
 // ─── Public: handle typed number / "more" ─────────────────────────────────────
@@ -373,8 +354,9 @@ export async function tryHandleSellerPickText({ from, phone, text, biz, saveBiz 
   try {
     const raw = String(text || "").trim().toLowerCase();
     const isMore   = raw === "more";
+    const isList   = raw === "list" || raw === "results";
     const isNumber = /^[1-9][0-9]{0,2}$/.test(raw);
-    if (!isMore && !isNumber) return false;
+    if (!isMore && !isNumber && !isList) return false;
 
     // Guard 3: biz users must be idle (every text-entry flow sets its own state)
     const _allowedBizStates = ["ready", "supplier_search_city"];
@@ -394,33 +376,25 @@ export async function tryHandleSellerPickText({ from, phone, text, biz, saveBiz 
     // Guard 2: freshness - a week-old "3" should not open a forgotten list
     if (!pick.ts || Date.now() - pick.ts > FRESH_WINDOW_MS) return false;
 
-    // Guard 4 (snapshot strategy): a flow-state key only blocks the pick if it
-    // appeared or changed AFTER the numbered list was sent. States that were
-    // already sitting in the session when the list went out are fossils - this
-    // platform never cleans up flow keys (sfaqState="sfaq_menu" from a school
-    // FAQ weeks ago, buyerRequestState from an old hijack, etc). The search
-    // itself is proof the user left those flows. Genuinely NEW flows started
-    // after the list (e.g. tapping "Get Quote" sets scState → numbers must go
-    // to the catalogue picker) still block correctly.
-    const td  = sess?.tempData || {};
-    const pre = pick.pre || null;
-    const keysToCheck = pre ? NUMBER_CONSUMING_KEYS : HARD_BLOCKING_KEYS;
-    for (const key of keysToCheck) {
-      const cur = td[key];
-      if (!cur) continue;
-      if (key === "schoolApplyState" && cur === "awaiting_start") continue;
-      if (pre && pre[key] === String(cur)) {
-        // Same value as when the list was sent → stale fossil, ignore
-        continue;
+    // Guard 4: any active no-biz text flow blocks the pick. Every text-entry
+    // flow in the platform stores a "...State" key in tempData (scState,
+    // schoolApplyState, sellerRequestReplyState, buyerRequestState, sfaqState,
+    // scSellerQuoteState, schoolEnquiryState, ...). Scanning generically means
+    // new flows added later are automatically protected too.
+    const td = sess?.tempData || {};
+    for (const key of Object.keys(td)) {
+      if (/state$/i.test(key) && td[key]) {
+        // schoolApplyState "awaiting_start" is a dormant marker, not an active flow
+        if (key === "schoolApplyState" && td[key] === "awaiting_start") continue;
+        return false;
       }
-      console.log(`[SELLER PICK] blocked: tempData.${key}="${cur}" started after list was sent (${phone})`);
-      return false;
     }
-    const curReg = sess?.supplierRegState;
-    // Only enforceable with a snapshot; legacy picks skip it (fossil risk)
-    if (pre && curReg && pre.__supplierRegState !== String(curReg)) {
-      console.log(`[SELLER PICK] blocked: supplierRegState="${curReg}" started after list was sent (${phone})`);
-      return false;
+
+    // ── "list" / "results": resend the numbered list the buyer already has ──
+    if (isList) {
+      const { msg } = _renderBatch(pick, 0);
+      await sendText(from, msg);
+      return true;
     }
 
     // ── "more": extend the numbered list (numbering continues) ──────────────
@@ -467,8 +441,8 @@ export async function tryHandleSellerPickText({ from, phone, text, biz, saveBiz 
 
     // Gentle compare hint - keeps the list alive without nagging
     await sendText(from,
-      `↩️ To compare, reply with another number from your list` +
-      (pick.shown < pick.entries.length ? ` or type *more*.` : `.`)
+      `↩️ To compare sellers, reply with another number, or type *list* to see your results again` +
+      (pick.shown < pick.entries.length ? ` (*more* shows the rest).` : `.`)
     );
     return true;
   } catch (err) {
