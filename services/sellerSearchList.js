@@ -300,7 +300,24 @@ export async function sendNumberedSellerResults({
     const UserSession = (await import("../models/userSession.js")).default;
     await UserSession.findOneAndUpdate(
       { phone },
-      { $set: { "tempData.sellerPick": pick } },
+      {
+        $set: { "tempData.sellerPick": pick },
+        // FIX: a fresh search supersedes any stale BUYER-side flow state.
+        // The old Request Sellers hijack bug left buyerRequestState =
+        // "awaiting_items" sitting in sessions forever, which then blocked
+        // the number-pick guard and made typed numbers die silently.
+        // Clearing buyer-side keys here guarantees that the number a buyer
+        // types right after receiving this list ALWAYS opens a seller.
+        // Seller-side keys (sellerRequestReplyState, scSellerQuoteState) and
+        // school/sfaq flows are deliberately NOT touched.
+        $unset: {
+          "tempData.buyerRequestState":   "",
+          "tempData.buyerRequestMode":    "",
+          "tempData.pendingBuyerRequest": "",
+          "tempData.orderState":          "",
+          "tempData.pendingQuoteReply":   ""
+        }
+      },
       { upsert: true }
     );
   } catch (err) {
@@ -342,18 +359,32 @@ export async function tryHandleSellerPickText({ from, phone, text, biz, saveBiz 
     // Guard 2: freshness - a week-old "3" should not open a forgotten list
     if (!pick.ts || Date.now() - pick.ts > FRESH_WINDOW_MS) return false;
 
-    // Guard 4: any active no-biz text flow blocks the pick. Every text-entry
-    // flow in the platform stores a "...State" key in tempData (scState,
-    // schoolApplyState, sellerRequestReplyState, buyerRequestState, sfaqState,
-    // scSellerQuoteState, schoolEnquiryState, ...). Scanning generically means
-    // new flows added later are automatically protected too.
+    // Guard 4: block only flows whose typed input could legitimately be a
+    // bare number. FIX: the previous generic /state$/ scan was poisoned by
+    // stale keys (e.g. buyerRequestState left behind by the old Request
+    // Sellers hijack bug) and silently killed every pick. An explicit list
+    // is predictable, and each block is logged so PM2 shows exactly why.
     const td = sess?.tempData || {};
-    for (const key of Object.keys(td)) {
-      if (/state$/i.test(key) && td[key]) {
-        // schoolApplyState "awaiting_start" is a dormant marker, not an active flow
-        if (key === "schoolApplyState" && td[key] === "awaiting_start") continue;
-        return false;
-      }
+    const BLOCKING_STATE_KEYS = [
+      "scState",                 // sc_ quote flow - numbers pick catalogue items
+      "scSellerQuoteState",      // seller pricing a draft quote
+      "sellerRequestReplyState", // seller replying to a buyer request
+      "orderState",              // buyer mid-order (qty / address / price)
+      "schoolApplyState",        // application form - answers can be numbers
+      "schoolEnquiryState",      // typed enquiry message
+      "sfaqState",               // school FAQ chat
+      "supplierAccountState"     // supplier self-service text entry
+    ];
+    for (const key of BLOCKING_STATE_KEYS) {
+      if (!td[key]) continue;
+      if (key === "schoolApplyState" && td[key] === "awaiting_start") continue;
+      console.log(`[SELLER PICK] blocked: tempData.${key}="${td[key]}" active for ${phone}`);
+      return false;
+    }
+    // Top-level supplier registration state (stored outside tempData)
+    if (sess?.supplierRegState) {
+      console.log(`[SELLER PICK] blocked: supplierRegState="${sess.supplierRegState}" active for ${phone}`);
+      return false;
     }
 
     // ── "more": extend the numbered list (numbering continues) ──────────────

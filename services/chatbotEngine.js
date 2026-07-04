@@ -21931,3 +21931,5 @@ async function showAllBranchesCashBalance(from, biz) {
   const { sendCashBalanceMenu } = await import("./metaMenus.js");
   return sendCashBalanceMenu(from);
 }
+
+
