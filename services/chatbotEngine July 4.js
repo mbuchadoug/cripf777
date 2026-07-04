@@ -10466,56 +10466,6 @@ if (a.startsWith("vdoc_prev_") || a.startsWith("vdoc_next_")) {
     return;
   }
 
-  // ── Resume an unfinished document after a search interruption ─────────────
-  if (a === "inv_resume_flow") {
-    if (!biz) return sendMainMenu(from);
-    if (biz.sessionData?.pendingSearchText) {
-      delete biz.sessionData.pendingSearchText;
-      await saveBizSafe(biz);
-    }
-    return sendText(from, "▶ Continuing where you left off - carry on with your entry, or type *cancel* to discard the draft.");
-  }
-
-  // ── Abandon the unfinished document and run the stored search ─────────────
-  if (a === "inv_search_instead") {
-    if (!biz) return sendMainMenu(from);
-    const _pst = biz.sessionData?.pendingSearchText || "";
-    biz.sessionState = "ready";
-    biz.sessionData  = {};
-    await saveBizSafe(biz);
-
-    const shortcode = parseShortcodeSearch(_pst);
-    if (!shortcode?.product) return sendMainMenu(from);
-
-    const locationLabel = [shortcode.area, shortcode.city].filter(Boolean).join(", ") || "All Cities";
-    try {
-      const offerResults = await runSupplierOfferSearch({
-        city: shortcode.city, area: shortcode.area, product: shortcode.product
-      });
-      if (offerResults.length) {
-        return sendNumberedSellerResults({
-          from, phone, offers: offerResults,
-          searchTerm: shortcode.product, locationLabel
-        });
-      }
-      const results = await runSupplierSearch({
-        city: shortcode.city, area: shortcode.area, product: shortcode.product
-      });
-      if (results.length) {
-        return sendNumberedSellerResults({
-          from, phone, suppliers: results,
-          searchTerm: shortcode.product, locationLabel
-        });
-      }
-    } catch (e) {
-      console.warn("[SEARCH INSTEAD]", e.message);
-    }
-    return sendButtons(from, {
-      text: `😕 No sellers found for *${shortcode.product}*${shortcode.city ? ` in *${shortcode.city}*` : ""}.`,
-      buttons: [{ id: "find_supplier", title: "🔍 Search Again" }]
-    });
-  }
-
   if (a === ACTIONS.INV_ADD_ANOTHER_ITEM) {
     if (!biz) return sendMainMenu(from);
     biz.sessionState = "creating_invoice_add_items";
@@ -20188,33 +20138,7 @@ if (biz) {
 
 
 
-    // ── Explicit search typed while inside a document-building flow ───────────
-  // A buyer stuck in an abandoned invoice/quote/receipt draft (state
-  // "creating_*") who types "find plumbers harare" was previously fed into the
-  // invoice state machine, which replied with its current step ("➕ How would
-  // you like to add an item?") - a confusing hijack. "find X" is never valid
-  // invoice input, so instead we offer a clear choice: continue the draft, or
-  // drop it and search. Only fires on the explicit find-verb - item names,
-  // quantities and prices are untouched and flow to the machine as always.
-  if (!isMetaAction && biz &&
-      typeof biz.sessionState === "string" && biz.sessionState.startsWith("creating_") &&
-      /^find\s+\S/i.test(text.trim())) {
-    biz.sessionData = { ...(biz.sessionData || {}), pendingSearchText: text.trim().slice(0, 120) };
-    await saveBizSafe(biz);
-    const _docWord = (biz.sessionData?.docType === "quote") ? "quote"
-                   : (biz.sessionData?.docType === "receipt") ? "receipt" : "invoice";
-    return sendButtons(from, {
-      text:
-        `📄 *You have an unfinished ${_docWord}.*\n\n` +
-        `Do you want to continue it, or leave it and search for *${text.trim().replace(/^find\s+/i, "").slice(0, 40)}*?`,
-      buttons: [
-        { id: "inv_resume_flow",    title: "▶ Continue " + _docWord },
-        { id: "inv_search_instead", title: "🔍 Search instead" }
-      ]
-    });
-  }
-
-  // ── IMPORTANT: business-tools text states must be handled BEFORE marketplace free-text search
+    // ── IMPORTANT: business-tools text states must be handled BEFORE marketplace free-text search
   // This prevents expense/sales/product-entry text from being hijacked by supplier city search.
   if (!isMetaAction && biz && !biz.name?.startsWith("pending_supplier_")) {
     const handled = await continueTwilioFlow({ from, text });
