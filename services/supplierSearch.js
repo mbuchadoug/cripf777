@@ -915,8 +915,27 @@ function buildProductSearchOffersFromSupplier(supplier, searchTerm = "") {
         product: serviceName,
         pricePerUnit: typeof amount === "number" && !Number.isNaN(amount) ? amount : null,
         unit,
-        matchSource: "rates"
+        matchSource: "rates",
+        matchScore: scoreProductMatch(serviceName, searchTerm)
       });
+    }
+
+    // ── RELEVANCE FILTER FOR RATES ───────────────────────────────────────────
+    // Previously EVERY rate shipped as an offer, so a renovations company with
+    // 36 rates flooded a "plumber" search with "architraves installation" rows,
+    // starved the result cap, and buried real plumbers. Now only rates that
+    // relate to the search survive (score >= 20), best-first, max 8. If none
+    // relate, we fall through to products/listedProducts matching below; if
+    // that also finds nothing, ONE representative line keeps the seller
+    // visible (they matched the DB query via category/synonyms) ranked last -
+    // nobody is left out, but noise can't outrank relevance.
+    let _repRateOffer = null;
+    if (offers.length) {
+      const _byScore = offers.slice().sort((a, b) => (b.matchScore || 0) - (a.matchScore || 0));
+      _repRateOffer  = _byScore[0] || null;
+      const _matched = _byScore.filter(o => (o.matchScore || 0) >= 20);
+      offers.length = 0;
+      if (_matched.length) offers.push(..._matched.slice(0, 12));
     }
 
     // 2. No rates set yet - show all items from products[] and listedProducts[],
@@ -976,12 +995,19 @@ function buildProductSearchOffersFromSupplier(supplier, searchTerm = "") {
           product: serviceName,
           pricePerUnit: null,
           unit: "job",
-          matchSource: (supplier.listedProducts || []).length ? "listedProducts" : "products"
+          matchSource: (supplier.listedProducts || []).length ? "listedProducts" : "products",
+          matchScore: scoreProductMatch(serviceName, searchTerm)
         });
       }
     }
 
-    return offers;
+    // Best matches first (the buyer's hint line = this seller's first offer),
+    // capped per seller - the numbered list shows one line per seller anyway.
+    offers.sort((a, b) => (b.matchScore || 0) - (a.matchScore || 0));
+    if (offers.length === 0 && _repRateOffer) {
+      offers.push({ ..._repRateOffer, matchScore: 0 });
+    }
+    return offers.slice(0, 12);
   }
 
   // ── PRODUCT SUPPLIERS ──────────────────────────────────────────────────
@@ -1026,7 +1052,8 @@ function buildProductSearchOffersFromSupplier(supplier, searchTerm = "") {
       product: price?.product || "",
       pricePerUnit: typeof price?.amount === "number" ? Number(price.amount) : null,
       unit: price?.unit || "each",
-      matchSource: "prices"
+      matchSource: "prices",
+      matchScore: scoreProductMatch(price?.product || "", searchTerm)
     });
   }
 
@@ -1054,13 +1081,16 @@ function buildProductSearchOffersFromSupplier(supplier, searchTerm = "") {
       product,
       pricePerUnit: null,
       unit: "each",
-      matchSource: (supplier.listedProducts || []).length ? "listedProducts" : "products"
+      matchSource: (supplier.listedProducts || []).length ? "listedProducts" : "products",
+      matchScore: scoreProductMatch(product, searchTerm)
     });
   }
-  return offers;
+  // Best matches first, capped per seller (hint = first offer per seller)
+  offers.sort((a, b) => (b.matchScore || 0) - (a.matchScore || 0));
+  return offers.slice(0, 12);
 }
 
-export async function runSupplierOfferSearch({ city, category, product, profileType, area }) {
+export async function runSupplierOfferSearch({ city, category, product, profileType, area, _noWiderPass = false }) {
   const suppliers = await runSupplierSearch({ city, category, product, profileType, area });
 
   console.log(`[OFFER SEARCH] product="${product}" city="${city}" area="${area}" → ${suppliers.length} suppliers found`);
@@ -1068,7 +1098,7 @@ export async function runSupplierOfferSearch({ city, category, product, profileT
     console.log(`  supplier: ${s.businessName} | profileType: ${s.profileType} | rates: ${s.rates?.length || 0} | products: ${JSON.stringify(s.products || [])} | listedProducts: ${JSON.stringify(s.listedProducts || [])}`);
   });
 
-  const offers = suppliers.flatMap(supplier => {
+  let offers = suppliers.flatMap(supplier => {
     const built = buildProductSearchOffersFromSupplier(supplier, product || category || "");
     console.log(`  → built ${built.length} offers from ${supplier.businessName}`);
     return built.map((offer, idx) => ({
@@ -1079,7 +1109,56 @@ export async function runSupplierOfferSearch({ city, category, product, profileT
       }));
   });
 
+  // ── Nearby top-up: too few local sellers → add sellers from other cities ──
+  // "find plumber harare" with only 1-3 Harare sellers now also shows e.g.
+  // "noddah plumbers" from another city, ranked BELOW every local seller,
+  // with their own city visible on the line. Never triggers when local
+  // choice is healthy, never removes or reorders local results.
+  if (city && !_noWiderPass) {
+    const _localSup = new Set(offers.map(o => o.supplierId));
+    if (_localSup.size < 4) {
+      try {
+        const wider = await runSupplierOfferSearch({ category, product, profileType, _noWiderPass: true });
+        const _extraSup = new Set();
+        const keep = [];
+        for (const o of wider) {
+          if (_localSup.has(o.supplierId)) continue;
+          if (!_extraSup.has(o.supplierId)) {
+            if (_extraSup.size >= 6) continue;
+            _extraSup.add(o.supplierId);
+          }
+          keep.push({ ...o, _nonLocal: 1 });
+        }
+        if (keep.length) {
+          console.log(`[NEARBY TOPUP] "${product}" in ${city}: locals=${_localSup.size} → +${_extraSup.size} sellers from other cities`);
+          offers = [...offers, ...keep];
+        }
+      } catch (ntErr) {
+        console.warn("[NEARBY TOPUP]", ntErr.message);
+      }
+    }
+  }
+
+  // ── Relevance-aware ranking (Google-style: relevance first, then rank) ────
+  // A seller's relevance = their best-matching item. Bands: strong (>=45),
+  // related (>=20), category-only (0). Within a band the commercial order is
+  // unchanged: priced offers, then tier, credibility, rating. So a featured
+  // renovator with one geyser rate can no longer outrank a dedicated plumbing
+  // company, but featured sellers still lead among equally relevant peers.
+  const _relBySupplier = new Map();
+  for (const o of offers) {
+    const r = _relBySupplier.get(o.supplierId) || 0;
+    if ((o.matchScore || 0) > r) _relBySupplier.set(o.supplierId, o.matchScore || 0);
+  }
+  const _band = id => {
+    const r = _relBySupplier.get(id) || 0;
+    return r >= 45 ? 2 : r >= 20 ? 1 : 0;
+  };
+
   offers.sort((a, b) => {
+    if ((a._nonLocal || 0) !== (b._nonLocal || 0)) return (a._nonLocal || 0) - (b._nonLocal || 0);
+    const bandDiff = _band(b.supplierId) - _band(a.supplierId);
+    if (bandDiff) return bandDiff;
     const aHasPrice = a.pricePerUnit !== null ? 0 : 1;
     const bHasPrice = b.pricePerUnit !== null ? 0 : 1;
     if (aHasPrice !== bHasPrice) return aHasPrice - bHasPrice;
@@ -1087,11 +1166,24 @@ export async function runSupplierOfferSearch({ city, category, product, profileT
     if (b.sortTierRank !== a.sortTierRank) return b.sortTierRank - a.sortTierRank;
     if (b.sortCredibility !== a.sortCredibility) return b.sortCredibility - a.sortCredibility;
     if (b.supplierRating !== a.supplierRating) return b.supplierRating - a.supplierRating;
+    if ((b.matchScore || 0) !== (a.matchScore || 0)) return (b.matchScore || 0) - (a.matchScore || 0);
 
     return a.product.localeCompare(b.product);
   });
 
-  return offers.slice(0, 50);
+  // ── Fairness cap: every matching seller keeps a seat ──────────────────────
+  // The old flat slice(0,50) let two big-catalogue sellers consume the whole
+  // cap, silently dropping other matching sellers ("2 sellers found" when 4
+  // matched). Now the first (= best) offer of EVERY seller is guaranteed a
+  // place, in ranked order, before remaining offers fill the cap.
+  const _firstOfSupplier = [];
+  const _rest = [];
+  const _seenSup = new Set();
+  for (const o of offers) {
+    if (!_seenSup.has(o.supplierId)) { _seenSup.add(o.supplierId); _firstOfSupplier.push(o); }
+    else _rest.push(o);
+  }
+  return [..._firstOfSupplier, ..._rest].slice(0, Math.max(60, _firstOfSupplier.length));
 }
 
 export function formatSupplierOfferResults(offers = [], searchTerm = "") {
