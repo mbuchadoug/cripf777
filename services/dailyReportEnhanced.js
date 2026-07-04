@@ -511,7 +511,7 @@ async function _buildRunningLedger({ biz, data, branchId, start, end, openingBal
       ref: e._id, recordedBy: e.createdBy || e.recordedBy || null });
   }
 
-  // Payouts & drawings (money OUT — NOT expenses, but reduce cash held)
+  // Payouts & drawings (money OUT - NOT expenses, but reduce cash held)
   for (const po of payouts) {
     const isDrawing = /draw|owner|personal|private|director/i.test(po.reason || "");
     rows.push({ date: po.date || po.createdAt, type: isDrawing ? "drawing" : "payout",
@@ -520,7 +520,7 @@ async function _buildRunningLedger({ biz, data, branchId, start, end, openingBal
       ref: po._id, recordedBy: po.createdBy || null });
   }
 
-  // Cash handovers (custody transfer — counted as out for outgoing branch, in for incoming)
+  // Cash handovers (custody transfer - counted as out for outgoing branch, in for incoming)
   for (const h of handovers) {
     // If we are scoped to a branch, direction is clear; otherwise show both sides
     const isOutgoing = branchId ? String(h.branchId) === String(branchId) : true;

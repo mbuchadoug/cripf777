@@ -10799,7 +10799,7 @@ Type *done* to save`,
     biz.sessionData  = { filterFor: "detailed" };
     await saveBizSafe(biz);
     return sendButtons(from, {
-      text: '🗓 *Detailed Ledger — Custom Date Range*\n\nType a date range in any of these formats:\n\n*Same month:*\n  01 Jun - 27 Jun\n  01/06 - 27/06\n\n*Across months:*\n  01 Apr - 01 Jul\n  01/04 - 01/07\n  01/04/2026 - 01/07/2026\n\n*ISO format:*\n  2026-06-01 - 2026-07-01\n\n*Month names (Jan–Dec):*\n  Jan  Feb  Mar  Apr  May  Jun\n  Jul  Aug  Sep  Oct  Nov  Dec\n\nOr type *cancel* to go back.',
+      text: '🗓 *Detailed Ledger - Custom Date Range*\n\nType a date range in any of these formats:\n\n*Same month:*\n  01 Jun - 27 Jun\n  01/06 - 27/06\n\n*Across months:*\n  01 Apr - 01 Jul\n  01/04 - 01/07\n  01/04/2026 - 01/07/2026\n\n*ISO format:*\n  2026-06-01 - 2026-07-01\n\n*Month names (Jan–Dec):*\n  Jan  Feb  Mar  Apr  May  Jun\n  Jul  Aug  Sep  Oct  Nov  Dec\n\nOr type *cancel* to go back.',
       buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
     });
   }
@@ -10822,7 +10822,7 @@ Type *done* to save`,
       biz.sessionData  = { filterFor: "clerk" };
       await saveBizSafe(biz);
       return sendButtons(from, {
-        text: '🗓 *Clerk Statement — Custom Date Range*\n\nType a date range in any of these formats:\n\n*Same month:*\n  01 Jun - 27 Jun\n  01/06 - 27/06\n\n*Across months:*\n  01 Apr - 01 Jul\n  01/04/2026 - 01/07/2026\n\n*ISO format:*\n  2026-06-01 - 2026-07-01\n\n*Month names (Jan–Dec):*\n  Jan  Feb  Mar  Apr  May  Jun\n  Jul  Aug  Sep  Oct  Nov  Dec\n\nOr type *cancel* to go back.',
+        text: '🗓 *Clerk Statement - Custom Date Range*\n\nType a date range in any of these formats:\n\n*Same month:*\n  01 Jun - 27 Jun\n  01/06 - 27/06\n\n*Across months:*\n  01 Apr - 01 Jul\n  01/04/2026 - 01/07/2026\n\n*ISO format:*\n  2026-06-01 - 2026-07-01\n\n*Month names (Jan–Dec):*\n  Jan  Feb  Mar  Apr  May  Jun\n  Jul  Aug  Sep  Oct  Nov  Dec\n\nOr type *cancel* to go back.',
         buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
       });
     }
@@ -10850,7 +10850,7 @@ Type *done* to save`,
       biz.sessionData  = { filterFor: "clerk_self" };
       await saveBizSafe(biz);
       return sendButtons(from, {
-        text: '🗓 *My Statement — Custom Date Range*\n\nType a date range in any of these formats:\n\n*Same month:*\n  01 Jun - 27 Jun\n  01/06 - 27/06\n\n*Across months:*\n  01 Apr - 01 Jul\n  01/04/2026 - 01/07/2026\n\n*ISO format:*\n  2026-06-01 - 2026-07-01\n\n*Month names (Jan–Dec):*\n  Jan  Feb  Mar  Apr  May  Jun\n  Jul  Aug  Sep  Oct  Nov  Dec\n\nOr type *cancel* to go back.',
+        text: '🗓 *My Statement - Custom Date Range*\n\nType a date range in any of these formats:\n\n*Same month:*\n  01 Jun - 27 Jun\n  01/06 - 27/06\n\n*Across months:*\n  01 Apr - 01 Jul\n  01/04/2026 - 01/07/2026\n\n*ISO format:*\n  2026-06-01 - 2026-07-01\n\n*Month names (Jan–Dec):*\n  Jan  Feb  Mar  Apr  May  Jun\n  Jul  Aug  Sep  Oct  Nov  Dec\n\nOr type *cancel* to go back.',
         buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
       });
     }

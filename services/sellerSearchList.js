@@ -242,9 +242,9 @@ function _renderBatch(pick, startIdx) {
   const slice = pick.entries.slice(startIdx, startIdx + BATCH_SIZE);
 
   const header = startIdx === 0
-    ? `🔍 *${pick.term || "Sellers"}*${pick.loc ? ` — ${pick.loc}` : ""}\n` +
+    ? `🔍 *${pick.term || "Sellers"}*${pick.loc ? ` - ${pick.loc}` : ""}\n` +
       `${total} seller${total === 1 ? "" : "s"} found\n`
-    : `🔍 *${pick.term || "Sellers"}* — more sellers\n`;
+    : `🔍 *${pick.term || "Sellers"}* - more sellers\n`;
 
   const body = slice.map((e, i) => {
     const n = startIdx + i + 1;
@@ -256,7 +256,7 @@ function _renderBatch(pick, startIdx) {
 
   const footerLines = [
     "━━━━━━━━━━━━━━",
-    `💬 *Reply with a number* (e.g. *1*) to open that seller — see their full profile, prices & request a quote.`
+    `💬 *Reply with a number* (e.g. *1*) to open that seller - see their full profile, prices & request a quote.`
   ];
   if (remaining > 0) footerLines.push(`➕ Type *more* to see ${Math.min(remaining, BATCH_SIZE)} more sellers`);
   footerLines.push(`🔎 New search? Just type it, e.g. *find cement mbare*`);

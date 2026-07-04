@@ -567,7 +567,7 @@ router.get("/:phone", requireSupplierAdmin, async (req, res) => {
         ${r.editable ? `<a href="${editUrl}" class="btn btn-gray" style="padding:4px 9px;font-size:12px">✏️ Edit</a>` : ""}
         ${r.reversible ? `<form method="POST" action="${reverseUrl}" style="display:inline" onsubmit="return confirm('Reverse this ${esc(r.type)}? It stays visible for audit but no longer affects totals.')"><button class="btn btn-gray" style="padding:4px 9px;font-size:12px;color:#b45309">↩ Reverse</button></form>` : ""}
         ${deleteUrl ? `<form method="POST" action="${deleteUrl}" style="display:inline" onsubmit="return confirm('⚠️ Permanently delete this ${esc(r.type)}?\n\nThis will remove the record and recompute all affected balances.\n\nThis cannot be undone.')"><button class="btn btn-gray" style="padding:4px 9px;font-size:12px;color:var(--red)">🗑 Delete</button></form>` : ""}
-      ` : `<span style="font-size:11.5px;color:var(--muted)">—</span>`;
+      ` : `<span style="font-size:11.5px;color:var(--muted)">-</span>`;
 
       return `<tr>
         <td style="white-space:nowrap;font-size:12px;color:var(--muted)">${dt(r.date)}</td>
@@ -1199,7 +1199,7 @@ router.post("/:phone/handover/:recId/delete", requireSupplierAdmin, async (req, 
 
 
 // ═══════════════════════════════════════════════════════════════════════════
-// RECEIPT DELETE — admin only, with balance recompute
+// RECEIPT DELETE - admin only, with balance recompute
 // Cash sales (Invoice type=receipt) cannot be edited here because receipt
 // numbering is sequential. Admin deletes the wrong one and clerk re-records.
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1217,7 +1217,7 @@ router.post("/:phone/receipt/:recId/delete", requireSupplierAdmin, async (req, r
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-// RECURRING BILLING PAYMENT DELETE — admin only
+// RECURRING BILLING PAYMENT DELETE - admin only
 // Deletes the payment, then recomputes the linked recurring invoice
 // (amountPaid/balance/status from the remaining payments) and the cached
 // account + tenant balances - using the SAME service functions the chatbot
@@ -1249,7 +1249,7 @@ router.post("/:phone/rbpayment/:recId/delete", requireSupplierAdmin, async (req,
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-// RECURRING UNIT EXPENSE DELETE — admin only
+// RECURRING UNIT EXPENSE DELETE - admin only
 // ═══════════════════════════════════════════════════════════════════════════
 router.post("/:phone/rbexpense/:recId/delete", requireSupplierAdmin, async (req, res) => {
   const phone = req.params.phone;
@@ -1272,7 +1272,7 @@ router.post("/:phone/rbexpense/:recId/delete", requireSupplierAdmin, async (req,
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-// INVOICE PAYMENT DELETE — admin only, restores invoice balance + recomputes
+// INVOICE PAYMENT DELETE - admin only, restores invoice balance + recomputes
 // Deleting a payment reverses its effect on the linked invoice's balance and
 // recomputes the daily CashBalance snapshot.
 // ═══════════════════════════════════════════════════════════════════════════

@@ -13240,7 +13240,7 @@ router.post("/suppliers/:id/recurring/:acctId/expense/:expId/delete", requireSup
 
 
 // ═══════════════════════════════════════════════════════════════════════════
-// RECURRING BILLING — CLERK CASH STATEMENT
+// RECURRING BILLING - CLERK CASH STATEMENT
 // GET /suppliers/:id/recurring/clerk-statement
 // GET /suppliers/:id/recurring/clerk-statement/:phone
 //
@@ -13252,13 +13252,13 @@ router.post("/suppliers/:id/recurring/:acctId/expense/:expId/delete", requireSup
 //   CASH IN  : RecurringPayments recorded by this clerk (tenant rent payments
 //              they collected and logged on WhatsApp)
 //   CASH OUT : Expenses from the Expense model (clerk's own entries via
-//              WhatsApp Business Tools — e.g. lunch, transport, petty cash)
+//              WhatsApp Business Tools - e.g. lunch, transport, petty cash)
 //   CASH OUT : RecurringExpenses for units (maintenance charged to accounts
-//              — e.g. plumber, lightbulbs, cleaning) that were recorded during
+//              - e.g. plumber, lightbulbs, cleaning) that were recorded during
 //              this clerk's shift (we use createdAt date range rather than
 //              createdBy since RecurringExpense may not have a clerk link)
 //   CASH OUT : CashPayouts made by this clerk (formal payouts recorded in the
-//              cash management module — e.g. paying a supplier from the till)
+//              cash management module - e.g. paying a supplier from the till)
 //
 //   Running balance = totalIn - totalOut = cash the clerk should have in hand.
 //   A positive balance means they owe the business that amount.
@@ -13302,7 +13302,7 @@ router.get("/suppliers/:id/recurring/clerk-statement", requireSupplierAdmin, asy
       <a href="/zq-admin/suppliers/${supplier._id}/recurring" class="back-link">← Back to Recurring Billing</a>
       <div style="margin:14px 0 22px">
         <h2 style="font-size:20px;font-weight:700">👤 Clerk Cash Statement</h2>
-        <div style="color:var(--muted);font-size:13px">${esc(biz.name)} — Pick a clerk to view their cash statement</div>
+        <div style="color:var(--muted);font-size:13px">${esc(biz.name)} - Pick a clerk to view their cash statement</div>
       </div>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px">${cards}</div>
     `));
@@ -13393,7 +13393,7 @@ router.get("/suppliers/:id/recurring/clerk-statement/:phone", requireSupplierAdm
 
       // Maintenance/unit expenses for the business during this period
       // (these may not have a createdBy so we show ALL for the period,
-      //  filtered to this business — admin can see what was spent on units)
+      //  filtered to this business - admin can see what was spent on units)
       RecurringExpense.find({
         businessId: biz._id,
         date:       dateQ
@@ -13501,8 +13501,8 @@ router.get("/suppliers/:id/recurring/clerk-statement/:phone", requireSupplierAdm
         <td style="white-space:nowrap;font-size:12px;color:var(--muted)">${fmtDate(r.date)} ${fmtTime(r.date)}</td>
         <td style="white-space:nowrap">${r.icon} <span style="font-size:12px;font-weight:600;color:${r.color}">${esc(r.typeLabel)}</span></td>
         <td style="font-size:12.5px;color:var(--muted);max-width:250px">${esc(r.detail)}</td>
-        <td style="text-align:right;font-weight:600;color:var(--green)">${r.cashIn  > 0 ? fmt(r.cashIn)  : "—"}</td>
-        <td style="text-align:right;font-weight:600;color:var(--red)">${r.cashOut > 0 ? fmt(r.cashOut) : "—"}</td>
+        <td style="text-align:right;font-weight:600;color:var(--green)">${r.cashIn  > 0 ? fmt(r.cashIn)  : "-"}</td>
+        <td style="text-align:right;font-weight:600;color:var(--red)">${r.cashOut > 0 ? fmt(r.cashOut) : "-"}</td>
         <td style="text-align:right;font-weight:700;color:${r.balance >= 0 ? "var(--blue)" : "var(--red)"}">
           ${fmt(r.balance)}
         </td>
@@ -13524,7 +13524,7 @@ router.get("/suppliers/:id/recurring/clerk-statement/:phone", requireSupplierAdm
           ${esc((clerk.name || clerkPhone).trim().split(/\s+/).map(w => w[0]).slice(0,2).join("").toUpperCase())}
         </div>
         <div style="flex:1">
-          <div style="font-weight:700;font-size:16px">💼 Cash Statement — ${clerkName}</div>
+          <div style="font-weight:700;font-size:16px">💼 Cash Statement - ${clerkName}</div>
           <div style="font-size:12.5px;color:var(--muted)">${esc(clerk.role)} · ${esc(clerkPhone)} · ${esc(biz.name)}</div>
         </div>
         <div style="text-align:right">
@@ -13618,15 +13618,15 @@ router.get("/suppliers/:id/recurring/clerk-statement/:phone", requireSupplierAdm
 
 
 // ═══════════════════════════════════════════════════════════════════════════
-// RECURRING BILLING — FULL LEDGER
+// RECURRING BILLING - FULL LEDGER
 // GET /suppliers/:id/recurring/ledger
 //
 // Unified chronological ledger of ALL money movements across all recurring
 // accounts for this business:
-//   🧾 CHARGES     — RecurringInvoice (rent billed to tenants)
-//   💰 PAYMENTS    — RecurringPayment (rent collected from tenants)
-//   🔧 UNIT EXP    — RecurringExpense (per-account maintenance costs)
-//   💸 BIZ EXP     — Expense (WhatsApp business-tools clerk entries)
+//   🧾 CHARGES     - RecurringInvoice (rent billed to tenants)
+//   💰 PAYMENTS    - RecurringPayment (rent collected from tenants)
+//   🔧 UNIT EXP    - RecurringExpense (per-account maintenance costs)
+//   💸 BIZ EXP     - Expense (WhatsApp business-tools clerk entries)
 //
 // Date filter: preset buttons + HTML date pickers (no text entry required).
 // Account filter: dropdown to scope to a single property/unit.
@@ -13697,13 +13697,13 @@ router.get("/suppliers/:id/recurring/ledger", requireSupplierAdmin, async (req, 
 
     const rows = [];
     for (const inv of invoices) {
-      rows.push({ date: inv.periodStart, icon: "🧾", type: "Charge",      account: acctById[String(inv.accountId)] || "—", desc: `${inv.period || ""} · ${inv.number || ""}`.replace(/^\s*·\s*/, ""), debit: inv.amount || 0, credit: 0, color: "var(--red)" });
+      rows.push({ date: inv.periodStart, icon: "🧾", type: "Charge",      account: acctById[String(inv.accountId)] || "-", desc: `${inv.period || ""} · ${inv.number || ""}`.replace(/^\s*·\s*/, ""), debit: inv.amount || 0, credit: 0, color: "var(--red)" });
     }
     for (const pay of payments) {
-      rows.push({ date: pay.date, icon: "💰", type: "Payment",     account: acctById[String(pay.accountId)] || "—", desc: `${pay.method || "Cash"}${pay.reference ? " · " + pay.reference : ""}`, debit: 0, credit: pay.amount || 0, color: "var(--green)" });
+      rows.push({ date: pay.date, icon: "💰", type: "Payment",     account: acctById[String(pay.accountId)] || "-", desc: `${pay.method || "Cash"}${pay.reference ? " · " + pay.reference : ""}`, debit: 0, credit: pay.amount || 0, color: "var(--green)" });
     }
     for (const exp of acctExpenses) {
-      rows.push({ date: exp.date, icon: "🔧", type: "Unit Expense", account: acctById[String(exp.accountId)] || "—", desc: `${exp.category || ""} · ${exp.description || ""}`.replace(/^\s*·\s*|\s*·\s*$/, ""), debit: exp.amount || 0, credit: 0, color: "#b45309" });
+      rows.push({ date: exp.date, icon: "🔧", type: "Unit Expense", account: acctById[String(exp.accountId)] || "-", desc: `${exp.category || ""} · ${exp.description || ""}`.replace(/^\s*·\s*|\s*·\s*$/, ""), debit: exp.amount || 0, credit: 0, color: "#b45309" });
     }
     for (const exp of bizExpenses) {
       rows.push({ date: exp.createdAt, icon: "💸", type: "Biz Expense",  account: "Business", desc: `${exp.category || ""} · ${exp.description || ""}`.replace(/^\s*·\s*|\s*·\s*$/, ""), debit: exp.amount || 0, credit: 0, color: "#64748b" });
@@ -13732,8 +13732,8 @@ router.get("/suppliers/:id/recurring/ledger", requireSupplierAdmin, async (req, 
         <td>${r.icon} <span style="font-size:12px;font-weight:600;color:${r.color}">${esc(r.type)}</span></td>
         <td style="font-size:13px;font-weight:600">${esc(r.account)}</td>
         <td style="font-size:12.5px;color:var(--muted)">${esc(r.desc)}</td>
-        <td style="text-align:right;color:var(--red);font-weight:600">${r.debit  > 0 ? fmt(r.debit)  : "—"}</td>
-        <td style="text-align:right;color:var(--green);font-weight:600">${r.credit > 0 ? fmt(r.credit) : "—"}</td>
+        <td style="text-align:right;color:var(--red);font-weight:600">${r.debit  > 0 ? fmt(r.debit)  : "-"}</td>
+        <td style="text-align:right;color:var(--green);font-weight:600">${r.credit > 0 ? fmt(r.credit) : "-"}</td>
         <td style="text-align:right;font-weight:700;color:${r.balance < 0 ? "var(--green)" : r.balance > 0 ? "var(--red)" : "var(--muted)"}">${fmt(Math.abs(r.balance))} ${r.balance < 0 ? "CR" : r.balance > 0 ? "DR" : ""}</td>
       </tr>`).join("");
 
