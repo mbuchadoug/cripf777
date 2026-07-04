@@ -2804,17 +2804,54 @@ async function _scProcessSellerPriceEdit(from, text, biz, saveBiz) {
     };
   });
 
-  // 2. Add new items
+  // 2. Add new items - but first: REPLACE matching unpriced request lines.
+  // When a seller reads the buyer's free-text request and types their own
+  // professional wording + price ("Toyota Hilux brakes overhauls $500"),
+  // that is a REWRITE of the request, not a second product. Without this,
+  // the quote ships with both: the raw request at $0.00 AND the priced line.
+  // Rule: a new PRICED item replaces the unpriced original when their words
+  // overlap (token score >= 0.5). No overlap → genuinely new item → append.
+  const _replacedFrom = [];
   for (const ni of newItems) {
-    updatedLineItems.push({
-      name:      ni.name,
-      qty:       1,
-      unit:      ni.unit || "job",
-      unitPrice: ni.price || 0,
-      lineTotal: ni.price || 0,
-      _added:    true,
-      _noPrice:  ni._noPrice || false
-    });
+    let _replacedIdx = -1;
+    if ((ni.price || 0) > 0) {
+      let bestScore = 0, bestOverlap = 0;
+      updatedLineItems.forEach((l, i) => {
+        if ((l.unitPrice || 0) > 0) return;  // priced lines are never replaced
+        if (l._added) return;                // items the seller just added stay
+        const { score, overlap } = _itemTokenOverlap(ni.name, l.name);
+        if (score > bestScore) { bestScore = score; bestOverlap = overlap; _replacedIdx = i; }
+      });
+      // Replace only on a strong match: half the words shared AND at least
+      // two of them - so "Brake fluid $15" (1 shared word) is a NEW item,
+      // while "Toyota Hilux brakes overhauls $500" (4 shared) replaces.
+      if (bestScore < 0.5 || bestOverlap < 2) _replacedIdx = -1;
+    }
+
+    if (_replacedIdx >= 0) {
+      const _origName = updatedLineItems[_replacedIdx].name;
+      updatedLineItems[_replacedIdx] = {
+        ...updatedLineItems[_replacedIdx],
+        name:      ni.name,
+        unit:      ni.unit || "job",
+        unitPrice: ni.price || 0,
+        lineTotal: (ni.price || 0) * Number(updatedLineItems[_replacedIdx].qty || 1),
+        _edited:   true,
+        _noPrice:  false,
+        _replacedFromRequest: _origName
+      };
+      _replacedFrom.push({ from: _origName, to: ni.name });
+    } else {
+      updatedLineItems.push({
+        name:      ni.name,
+        qty:       1,
+        unit:      ni.unit || "job",
+        unitPrice: ni.price || 0,
+        lineTotal: ni.price || 0,
+        _added:    true,
+        _noPrice:  ni._noPrice || false
+      });
+    }
   }
 
   // 3. Apply inline note
@@ -2853,10 +2890,18 @@ async function _scProcessSellerPriceEdit(from, text, biz, saveBiz) {
   const _actions = [
     Object.keys(priceEdits).length   > 0 ? `${Object.keys(priceEdits).length} priced` : "",
     Object.keys(renameEdits).length  > 0 ? `${Object.keys(renameEdits).length} renamed` : "",
-    newItems.filter(n => !n._noPrice).length > 0 ? `${newItems.filter(n => !n._noPrice).length} added` : "",
+    _replacedFrom.length             > 0 ? `${_replacedFrom.length} request line${_replacedFrom.length > 1 ? "s" : ""} replaced ✏️` : "",
+    (newItems.filter(n => !n._noPrice).length - _replacedFrom.length) > 0 ? `${newItems.filter(n => !n._noPrice).length - _replacedFrom.length} added` : "",
     newItems.filter(n => n._noPrice).length  > 0 ? `${newItems.filter(n => n._noPrice).length} added (no price)` : "",
     inlineNote ? "note saved" : ""
   ].filter(Boolean).join(" · ");
+
+  // Tell the seller which request line their wording replaced
+  const _replacedNote = _replacedFrom.length
+    ? "\n" + _replacedFrom.map(r =>
+        `✏️ Replaced buyer's request _"${String(r.from).slice(0, 60)}${String(r.from).length > 60 ? "..." : ""}"_ with *${r.to}*`
+      ).join("\n") + "\n"
+    : "";
 
   // Show buyer description as reference in the review (reference only, not on PDF)
   const _reviewBuyerRef = draft.buyerDescription
@@ -2865,7 +2910,7 @@ async function _scProcessSellerPriceEdit(from, text, biz, saveBiz) {
 
   return sendButtons(from, {
     text:
-      `📋 *Quote ${draft.refNum}* - ${_actions || "updated"}${_reviewBuyerRef}\n` +
+      `📋 *Quote ${draft.refNum}* - ${_actions || "updated"}${_replacedNote}${_reviewBuyerRef}\n` +
       `${_quoteLines}\n${"─".repeat(24)}\n` +
       `*Total: $${newTotal.toFixed(2)} USD*${_warnText}${_noteDisplay}\n\n` +
       `_item $price · pick N · rename N: name · note: text · cat_`,
@@ -2875,6 +2920,26 @@ async function _scProcessSellerPriceEdit(from, text, biz, saveBiz) {
       { id: `sc_quote_edit_${draft.refNum}`,    title: "✏️ Edit" }
     ].slice(0, 3)
   });
+}
+
+// ── Token overlap between two item descriptions (0..1) ───────────────────────
+// Light stemming (trailing "s" stripped) + stop-words removed, so
+// "Toyota Hilux brakes overhauls" vs "i need brakes overhauls for toyota hilux"
+// scores 1.0, while "Call-out fee" vs the same request scores 0.
+function _itemTokenOverlap(a = "", b = "") {
+  const STOP = new Set(["the","and","for","need","want","please","with","from",
+    "this","that","kindly","service","services","quote","quotation","provide",
+    "you","can","could","would","like","hi","hello","need","our","your"]);
+  const tok = s => [...new Set(String(s).toLowerCase()
+    .replace(/[^\w\s]/g, " ")
+    .split(/\s+/)
+    .filter(w => w.length > 2 && !STOP.has(w))
+    .map(w => w.replace(/s$/, "")))];
+  const A = tok(a), B = tok(b);
+  if (!A.length || !B.length) return { score: 0, overlap: 0 };
+  const Bset = new Set(B);
+  const overlap = A.filter(w => Bset.has(w)).length;
+  return { score: overlap / Math.min(A.length, B.length), overlap };
 }
 
 // Helper: build a clean numbered line list for display
