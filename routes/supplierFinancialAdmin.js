@@ -328,7 +328,7 @@ router.get("/all", requireSupplierAdmin, async (req, res) => {
     });
     adminIncome.forEach(r => rows.push({ icon: "💵", label: r.category || "Income", date: r.createdAt, amount: r.amount || 0, sign: 1, desc: r.description || "", by: r.createdBy, reversed: r.reversed }));
     expenses.forEach(r => rows.push({ icon: "💸", label: "Expense", date: r.createdAt, amount: r.amount || 0, sign: -1, desc: r.description || r.category || "", by: r.createdBy, reversed: r.reversed }));
-    payouts.forEach(r => rows.push({ icon: DRAW_RE.test(r.reason || "") ? "👑" : "🏧", label: DRAW_RE.test(r.reason || "") ? "Drawing" : "Payout", date: r.date, amount: r.amount || 0, sign: -1, desc: r.reason || "", by: r.createdBy, reversed: r.reversed }));
+    payouts.forEach(r => rows.push({ icon: DRAW_RE.test(r.reason || "") ? "👑" : "🏧", label: DRAW_RE.test(r.reason || "") ? "Drawing" : "Payout", date: r.date, amount: r.amount || 0, sign: -1, desc: `${r.reason || ""}${r.paidToName ? " → " + r.paidToName : ""}`, by: r.createdBy || r.recordedBy, reversed: r.reversed }));
     handovers.forEach(r => rows.push({ icon: "🔄", label: "Handover", date: r.handoverAt, amount: r.amountCounted || 0, sign: 0, desc: `${r.outgoingName || r.outgoingPhone} → ${r.incomingName || r.incomingPhone || "Owner"}`, by: r.outgoingPhone, reversed: r.reversed }));
     rows.sort((a, b) => new Date(b.date) - new Date(a.date));
 
@@ -470,11 +470,16 @@ router.get("/:phone", requireSupplierAdmin, async (req, res) => {
     const baseQ = { businessId: biz._id, createdAt: { $gte: since } };
 
     // ── Fetch all data in parallel ───────────────────────────────────────────
-    const [incomeRows, recurringRows, expenses, payouts, handoversOut, handoversIn] = await Promise.all([
+    const [incomeRows, recurringRows, expenses, payouts, payoutsReceived, handoversOut, handoversIn] = await Promise.all([
       fetchClerkIncome(biz, phone, since),
       fetchClerkRecurring(biz, phone, since),
       Expense.find({ ...baseQ, createdBy: phone }).lean(),
-      CashPayout.find({ businessId: biz._id, date: { $gte: since }, createdBy: phone }).lean(),
+      // $or createdBy/recordedBy: the WhatsApp flow historically wrote
+      // recordedBy (discarded by the old schema → createdBy null), so this
+      // catches every payout however it was attributed
+      CashPayout.find({ businessId: biz._id, date: { $gte: since }, $or: [{ createdBy: phone }, { recordedBy: phone }] }).lean(),
+      // Directed payouts RECEIVED by this person - money into their custody
+      CashPayout.find({ businessId: biz._id, date: { $gte: since }, paidToPhone: phone }).lean(),
       CashHandover.find({ businessId: biz._id, handoverAt: { $gte: since }, outgoingPhone: phone }).lean(),
       CashHandover.find({ businessId: biz._id, handoverAt: { $gte: since }, incomingPhone: phone }).lean(),
     ]);
@@ -505,15 +510,32 @@ router.get("/:phone", requireSupplierAdmin, async (req, res) => {
       });
     }
 
-    // Payouts / drawings
+    // Payouts / drawings (made by this person - money OUT of their custody)
     for (const r of payouts) {
       const isDrawing = DRAW_RE.test(r.reason || "");
       rows.push({
         _id: r._id, type: "payout", icon: isDrawing ? "👑" : "🏧",
         label: isDrawing ? "Owner Drawing" : "Payout",
         date: r.date, amount: r.amount || 0, sign: -1,
-        desc: r.reason || "",
+        desc: `${r.reason || ""}${r.paidToName ? ` → ${r.paidToName}` : ""}`,
         rec: r, editable: true, reversible: !r.reversed,
+        reversed: r.reversed, originalAmount: r.originalAmount
+      });
+    }
+
+    // Payouts RECEIVED by this person (money INTO their custody). Read-only
+    // here - the record is owned by the PAYER's workspace, where edit/reverse/
+    // delete live; one document drives both sides so corrections there fix
+    // this side automatically.
+    for (const r of payoutsReceived) {
+      if (String(r.createdBy || r.recordedBy || "") === String(phone)) continue; // self-payout nets zero
+      const fromName = staff.find(s => s.phone === (r.createdBy || r.recordedBy))?.name || r.createdBy || r.recordedBy || "Staff";
+      rows.push({
+        _id: r._id, type: "payoutreceived", icon: "💰",
+        label: "Payout Received",
+        date: r.date, amount: r.amount || 0, sign: 1,
+        desc: `From ${fromName}${r.reason ? " · " + r.reason : ""}`,
+        rec: r, editable: false, deletable: false, reversible: false,
         reversed: r.reversed, originalAmount: r.originalAmount
       });
     }
@@ -676,6 +698,10 @@ router.get("/:phone", requireSupplierAdmin, async (req, res) => {
           <input type="hidden" name="kind" value="payout">
           ${field("Reason *", `<input name="reason" required placeholder="e.g. Paid delivery driver" style="${fs}">`)}
           ${field("Amount *", `<input name="amount" type="number" step="0.01" min="0" required style="${fs}">`)}
+          ${field("Paid to", `<select name="paidToPhone" style="${fs}">
+            <option value="">Outside person / supplier / personal (no staff statement)</option>
+            ${staff.filter(s => s.phone !== phone).map(s => `<option value="${esc(s.phone)}">${esc(s.name || s.phone)} - ${esc(s.role)} (credits their statement)</option>`).join("")}
+          </select>`)}
           ${field("Date", `<input name="date" type="date" value="${todayStr}" style="${fs}">`)}
           ${field("Branch", `<select name="branchId" style="${fs}">${branchOptions(branches, person.branchId)}</select>`)}
           <button class="btn btn-blue" style="width:100%">Save Payout</button>
@@ -688,6 +714,10 @@ router.get("/:phone", requireSupplierAdmin, async (req, res) => {
           <input type="hidden" name="kind" value="drawing">
           ${field("Note", `<input name="reason" placeholder="e.g. Personal withdrawal" style="${fs}">`)}
           ${field("Amount *", `<input name="amount" type="number" step="0.01" min="0" required style="${fs}">`)}
+          ${field("Paid to", `<select name="paidToPhone" style="${fs}">
+            <option value="">Personal / outside (no staff statement)</option>
+            ${staff.filter(s => s.phone !== phone).map(s => `<option value="${esc(s.phone)}">${esc(s.name || s.phone)} - ${esc(s.role)} (credits their statement)</option>`).join("")}
+          </select>`)}
           ${field("Date", `<input name="date" type="date" value="${todayStr}" style="${fs}">`)}
           ${field("Branch", `<select name="branchId" style="${fs}">${branchOptions(branches, person.branchId)}</select>`)}
           <button class="btn btn-blue" style="width:100%">Save Drawing</button>
@@ -975,18 +1005,28 @@ router.post("/:phone/payout/add", requireSupplierAdmin, async (req, res) => {
   try {
     const { supplier, biz } = await loadBizContext(req);
     const CashPayout = (await import("../models/cashPayout.js")).default;
-    const { kind, reason, amount, date, branchId } = req.body;
+    const { kind, reason, amount, date, branchId, paidToPhone } = req.body;
     const d = date ? new Date(date) : new Date();
     const finalReason = kind === "drawing" && !/draw/i.test(reason || "")
       ? `Owner drawing${reason ? ": " + reason.trim() : ""}` : (reason || "").trim();
+    // Directed payout: resolve the receiver's name once at save time so
+    // statements never need a lookup. Blank = external party (old behaviour).
+    let paidToName = null;
+    const cleanPaidTo = (paidToPhone || "").trim() || null;
+    if (cleanPaidTo) {
+      const receiver = await findStaffByPhone(biz._id, cleanPaidTo);
+      paidToName = receiver?.name || cleanPaidTo;
+    }
     await CashPayout.create({
       businessId: biz._id, branchId: branchId || null,
       amount: parseFloat(amount) || 0,
       reason: finalReason || (kind === "drawing" ? "Owner drawing" : "Cash payout"),
-      createdBy: phone, date: d
+      createdBy: phone, recordedBy: phone,
+      paidToPhone: cleanPaidTo, paidToName,
+      date: d
     });
     await recomputeDay(biz._id, branchId || null, d);
-    res.redirect(`${workspaceUrl(supplier._id, phone)}?success=${kind === "drawing" ? "Drawing" : "Payout"}+recorded`);
+    res.redirect(`${workspaceUrl(supplier._id, phone)}?success=${kind === "drawing" ? "Drawing" : "Payout"}+recorded${paidToName ? "+-+credited+to+" + encodeURIComponent(paidToName) : ""}`);
   } catch (e) {
     res.redirect(`${workspaceUrl(req.params.id, phone)}?error=${encodeURIComponent(e.message)}`);
   }
@@ -1000,6 +1040,7 @@ router.get("/:phone/payout/:recId/edit", requireSupplierAdmin, async (req, res) 
     const p = await CashPayout.findById(req.params.recId).lean();
     if (!p) return res.redirect(workspaceUrl(supplier._id, phone));
     const branches = await listBranches(biz._id);
+    const staff    = await listStaff(biz._id);
     const isDrawing = DRAW_RE.test(p.reason || "");
     res.send(layout("Edit Payout", `
       <a href="${workspaceUrl(supplier._id, phone)}" class="back-link">← Back</a>
@@ -1013,6 +1054,10 @@ router.get("/:phone/payout/:recId/edit", requireSupplierAdmin, async (req, res) 
           </select>`)}
           ${field("Reason", `<input name="reason" value="${esc(p.reason || "")}" style="${fs}">`)}
           ${field("Amount *", `<input name="amount" type="number" step="0.01" min="0" required value="${p.amount}" style="${fs}">`)}
+          ${field("Paid to", `<select name="paidToPhone" style="${fs}">
+            <option value="">Outside person / supplier / personal (no staff statement)</option>
+            ${staff.filter(s => s.phone !== phone).map(s => `<option value="${esc(s.phone)}" ${s.phone === p.paidToPhone ? "selected" : ""}>${esc(s.name || s.phone)} - ${esc(s.role)} (credits their statement)</option>`).join("")}
+          </select>`)}
           ${field("Date", `<input name="date" type="date" value="${new Date(p.date).toISOString().slice(0,10)}" style="${fs}">`)}
           ${field("Branch", `<select name="branchId" style="${fs}">${branchOptions(branches, p.branchId)}</select>`)}
           <div style="display:flex;gap:10px;margin-top:20px">
@@ -1033,13 +1078,20 @@ router.post("/:phone/payout/:recId/edit", requireSupplierAdmin, async (req, res)
     const CashPayout = (await import("../models/cashPayout.js")).default;
     const before = await CashPayout.findById(req.params.recId).lean();
     if (!before) return res.redirect(workspaceUrl(supplier._id, phone));
-    const { kind, reason, amount, date, branchId } = req.body;
+    const { kind, reason, amount, date, branchId, paidToPhone } = req.body;
     const d = date ? new Date(date) : before.date;
     const finalReason = kind === "drawing" && !/draw/i.test(reason || "")
       ? `Owner drawing${reason ? ": " + reason.trim() : ""}` : (reason || "").trim();
+    let paidToName = null;
+    const cleanPaidTo = (paidToPhone || "").trim() || null;
+    if (cleanPaidTo) {
+      const receiver = await findStaffByPhone(biz._id, cleanPaidTo);
+      paidToName = receiver?.name || cleanPaidTo;
+    }
     await CashPayout.findByIdAndUpdate(req.params.recId, {
       amount: parseFloat(amount) || 0,
       reason: finalReason || (kind === "drawing" ? "Owner drawing" : "Cash payout"),
+      paidToPhone: cleanPaidTo, paidToName,
       branchId: branchId || null, date: d
     });
     await recomputeDay(biz._id, before.branchId, before.date);

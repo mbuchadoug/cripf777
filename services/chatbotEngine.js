@@ -11666,6 +11666,7 @@ const shortcodeBlockedStates = [
   "cash_set_opening_balance",
   "cash_payout_amount",
   "cash_payout_reason",
+  "cash_payout_recipient",
   "sales_doc_search",
   "sales_doc_list",
   "sales_doc_filter",
@@ -19427,7 +19428,7 @@ if (!isMetaAction && text && text.trim().length > 1) {
     "expense_smart_entry", "expense_bulk_confirm", "bulk_expense_input",
     "expense_amount", "expense_category",
     // Cash balance
-    "cash_set_opening_balance", "cash_payout_amount", "cash_payout_reason",
+    "cash_set_opening_balance", "cash_payout_amount", "cash_payout_reason", "cash_payout_recipient",
     // Products
     "product_add_name", "product_add_price", "product_edit_name", "product_edit_price",
     "product_add_name_or_menu",

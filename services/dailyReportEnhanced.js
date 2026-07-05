@@ -478,6 +478,20 @@ async function _buildRunningLedger({ biz, data, branchId, start, end, openingBal
     CashIncome.find({ ...bQ, reversed: { $ne: true } }).lean().catch(() => [])
   ]);
 
+  // ── Staff phone → NAME map (one query - the ledger must show WHO recorded
+  //    each transaction by name, not a raw phone number or a blank) ──────────
+  let _staffNames = {};
+  try {
+    const UserRole = (await import("../models/userRole.js")).default;
+    const staff = await UserRole.find({ businessId: biz._id }).select("phone name").lean();
+    for (const s of staff) _staffNames[String(s.phone || "").replace(/\D/g, "")] = s.name || s.phone;
+  } catch (_) {}
+  const _who = p => {
+    if (!p) return "";
+    const key = String(p).replace(/\D/g, "");
+    return _staffNames[key] || p;
+  };
+
   // ── Flatten all transactions into a single array ──────────────────────────
   const rows = [];
 
@@ -485,7 +499,7 @@ async function _buildRunningLedger({ biz, data, branchId, start, end, openingBal
   for (const p of data.payments) {
     rows.push({ date: p.createdAt, type: "payment", credit: p.amount || 0, debit: 0,
       description: `Invoice payment · ${p.receiptNumber || p.invoiceId || ""}`,
-      ref: p._id, recordedBy: p.createdBy || p.recordedBy || null });
+      ref: p._id, recordedBy: _who(p.createdBy || p.recordedBy) || null });
   }
 
   // Cash sales / receipts (money IN)
@@ -493,14 +507,14 @@ async function _buildRunningLedger({ biz, data, branchId, start, end, openingBal
     const items = (r.items || []).slice(0, 2).map(i => i.item || i.name || "Item").join(", ");
     rows.push({ date: r.createdAt, type: "receipt", credit: r.total || 0, debit: 0,
       description: `Cash sale · ${r.number ? r.number + " · " : ""}${items || "Receipt"}`,
-      ref: r._id, recordedBy: r.createdBy || r.recordedBy || null });
+      ref: r._id, recordedBy: _who(r.createdBy || r.recordedBy) || null });
   }
 
   // Admin-entered income (money IN)
   for (const ic of adminIncome) {
     rows.push({ date: ic.createdAt, type: "income", credit: ic.amount || 0, debit: 0,
       description: `Income · ${ic.category || ""} · ${ic.description || ""}`.replace(/ · $/, ""),
-      ref: ic._id, recordedBy: ic.createdBy || null });
+      ref: ic._id, recordedBy: _who(ic.createdBy) || null });
   }
 
   // Expenses (money OUT)
@@ -508,7 +522,7 @@ async function _buildRunningLedger({ biz, data, branchId, start, end, openingBal
     if (e.reversed) continue;
     rows.push({ date: e.createdAt, type: "expense", credit: 0, debit: e.amount || 0,
       description: `Expense · ${e.category || ""} · ${e.description || ""}`.replace(/ · $/, ""),
-      ref: e._id, recordedBy: e.createdBy || e.recordedBy || null });
+      ref: e._id, recordedBy: _who(e.createdBy || e.recordedBy) || null });
   }
 
   // Payouts & drawings (money OUT - NOT expenses, but reduce cash held)
@@ -516,8 +530,8 @@ async function _buildRunningLedger({ biz, data, branchId, start, end, openingBal
     const isDrawing = /draw|owner|personal|private|director/i.test(po.reason || "");
     rows.push({ date: po.date || po.createdAt, type: isDrawing ? "drawing" : "payout",
       credit: 0, debit: po.amount || 0,
-      description: `${isDrawing ? "Owner Drawing" : "Cash Payout"} · ${po.reason || ""}`.replace(/ · $/, ""),
-      ref: po._id, recordedBy: po.createdBy || null });
+      description: `${isDrawing ? "Owner Drawing" : "Cash Payout"} · ${po.reason || ""}`.replace(/ · $/, "") + (po.paidToName ? ` → ${po.paidToName}` : ""),
+      ref: po._id, recordedBy: _who(po.createdBy || po.recordedBy) || null });
   }
 
   // Cash handovers (custody transfer - counted as out for outgoing branch, in for incoming)
@@ -528,7 +542,7 @@ async function _buildRunningLedger({ biz, data, branchId, start, end, openingBal
       credit: isOutgoing ? 0 : (h.amountCounted || 0),
       debit:  isOutgoing ? (h.amountCounted || 0) : 0,
       description: `Handover · ${h.outgoingName || h.outgoingPhone || ""} → ${h.incomingName || h.incomingPhone || "Owner"}`,
-      ref: h._id, recordedBy: h.outgoingPhone || null });
+      ref: h._id, recordedBy: h.outgoingName || _who(h.outgoingPhone) || null });
   }
 
   // ── Sort chronologically, then compute running balance ────────────────────
@@ -674,7 +688,7 @@ export async function fetchClerkCumulativeBalance({ biz, clerkPhone, branchId, b
     // Use $or to match createdBy OR recordedBy so we never miss a transaction.
     const clerkFilter = { $or: [{ createdBy: clerkPhone }, { recordedBy: clerkPhone }] };
 
-    const [pmts, rcpts, adminIncome, exps, payouts, handoversOut, handoversIn] = await Promise.all([
+    const [pmts, rcpts, adminIncome, exps, payouts, payoutsReceived, handoversOut, handoversIn] = await Promise.all([
       // Money the clerk collected (invoice payments created by them)
       InvoicePayment.aggregate([
         { $match: { ...bQ, ...clerkFilter } },
@@ -698,6 +712,15 @@ export async function fetchClerkCumulativeBalance({ biz, clerkPhone, branchId, b
       // Payouts the clerk made (non-reversed only)
       CashPayout.aggregate([
         { $match: { ...bQ, ...clerkFilter, reversed: { $ne: true } } },
+        { $group: { _id: null, t: { $sum: "$amount" } } }
+      ]).catch(() => []),
+      // Payouts RECEIVED by the clerk (directed payouts, paidToPhone = them) -
+      // money into their custody, must roll into the opening exactly like the
+      // credit rows on the statement, or closing would never equal the next
+      // period's opening. Self-payouts excluded (net zero, mirrors statement).
+      CashPayout.aggregate([
+        { $match: { ...bQ, paidToPhone: clerkPhone, reversed: { $ne: true },
+                    $nor: [{ createdBy: clerkPhone }, { recordedBy: clerkPhone }] } },
         { $group: { _id: null, t: { $sum: "$amount" } } }
       ]).catch(() => []),
       // Handovers OUT (clerk gave cash to someone else)
@@ -729,7 +752,7 @@ export async function fetchClerkCumulativeBalance({ biz, clerkPhone, branchId, b
       rbIn = rb.in; rbOut = rb.out;
     } catch (_) {}
 
-    const totalIn  = (pmts[0]?.t || 0) + (rcpts[0]?.t || 0) + (adminIncome[0]?.t || 0) + (handoversIn[0]?.t  || 0) + rbIn;
+    const totalIn  = (pmts[0]?.t || 0) + (rcpts[0]?.t || 0) + (adminIncome[0]?.t || 0) + (handoversIn[0]?.t  || 0) + (payoutsReceived[0]?.t || 0) + rbIn;
     const totalOut = (exps[0]?.t  || 0) + (payouts[0]?.t || 0) + (handoversOut[0]?.t || 0) + rbOut;
     return totalIn - totalOut;  // positive = clerk holds this much cash
   } catch (e) {
@@ -748,8 +771,11 @@ export async function runClerkSelfServeStatement({ biz, from, period = "month", 
   // Resolve their branch from their UserRole
   const UserRole = (await import("../models/userRole.js")).default;
   const caller = await UserRole.findOne({ phone: clerkPhone, pending: false });
-  if (!caller || !["clerk", "manager"].includes(caller.role)) {
-    await sendText(from, "❌ Your account doesn't have clerk or manager access.");
+  // Owner/admin included: with directed payouts the OWNER now has a real
+  // statement too - every payout directed to them appears as money received
+  // and increases their running balance, exactly like any clerk.
+  if (!caller || !["clerk", "manager", "owner", "admin"].includes(caller.role)) {
+    await sendText(from, "❌ Your account doesn't have staff access.");
     await sendMainMenu(from);
     return true;
   }

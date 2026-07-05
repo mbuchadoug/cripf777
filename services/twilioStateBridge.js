@@ -393,6 +393,7 @@ const restrictedStateMap = {
     cash_set_opening_balance: "payments",
     cash_payout_amount:   "payments",
     cash_payout_reason:   "payments",
+    cash_payout_recipient: "payments",
     cash_handover_amount:   "payments",
     cash_handover_incoming: "payments",
     cash_handover_note:     "payments",
@@ -3065,6 +3066,7 @@ console.log("INVOICE BRANCH DEBUG", {
 
   /* ===========================
      CASH BALANCE: PAYOUT REASON
+     → then ask WHO receives the money (directed payouts)
   =========================== */
   if (state === "cash_payout_reason") {
     if (trimmed.toLowerCase() === "cancel") {
@@ -3075,7 +3077,6 @@ console.log("INVOICE BRANCH DEBUG", {
 
     const reason = trimmed || "No reason given";
     const amount = biz.sessionData?.payoutAmount;
-    const targetBranchId = biz.sessionData?.targetBranchId || caller?.branchId || null;
 
     if (!amount || amount <= 0) {
       biz.sessionState = "ready"; biz.sessionData = {};
@@ -3085,18 +3086,93 @@ console.log("INVOICE BRANCH DEBUG", {
       return sendCashBalanceMenu(from);
     }
 
-    // Save payout record
+    // ── NEW STEP: who is receiving this money? ─────────────────────────────
+    // 0/External  = outside party (driver, supplier, wages taken home) -
+    //               no staff statement is credited, exactly the old behaviour.
+    // Staff pick  = the receiver's OWN statement gets a matching credit that
+    //               increases their running custody balance (owner included),
+    //               while the payer's statement shows the debit "→ name".
+    biz.sessionData.payoutReason = reason;
+    biz.sessionState = "cash_payout_recipient";
+
+    const UserRoleModel = (await import("../models/userRole.js")).default;
+    const staff = await UserRoleModel.find({ businessId: biz._id, pending: false }).sort({ role: 1, name: 1 }).lean();
+    const others = staff.filter(s => String(s.phone).replace(/\D/g, "") !== phone);
+
+    if (!others.length) {
+      // Solo business - nobody to direct it to; save as external immediately
+      biz.sessionData.payoutRecipient = null;
+      await saveBizSafe(biz);
+      return continueTwilioFlow({ from, text: "0" });
+    }
+
+    biz.sessionData.payoutStaffList = others.map(s => ({
+      phone: String(s.phone).replace(/\D/g, ""),
+      name:  s.name || s.phone,
+      role:  s.role || "clerk"
+    }));
+    await saveBizSafe(biz);
+
+    let msg = `💸 *Who is receiving this money?*\n${"─".repeat(22)}\n`;
+    biz.sessionData.payoutStaffList.forEach((s, i) => {
+      msg += `\n*${i + 1}.* ${s.name} (${s.role})`;
+    });
+    msg += `\n${"─".repeat(22)}`;
+    msg += `\n\n✏️ Reply with the *number* - their statement will show this money received`;
+    msg += `\n0️⃣ Reply *0* for an *outside person / supplier / personal* (no staff statement)`;
+    await sendText(from, msg);
+    return true;
+  }
+
+  /* ===========================
+     CASH BALANCE: PAYOUT RECIPIENT → save
+  =========================== */
+  if (state === "cash_payout_recipient") {
+    if (trimmed.toLowerCase() === "cancel") {
+      biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
+      const { sendCashBalanceMenu } = await import("./metaMenus.js");
+      return sendCashBalanceMenu(from);
+    }
+
+    const list   = biz.sessionData?.payoutStaffList || [];
+    const amount = biz.sessionData?.payoutAmount;
+    const reason = biz.sessionData?.payoutReason || "No reason given";
+    const targetBranchId = biz.sessionData?.targetBranchId || caller?.branchId || null;
+
+    if (!amount || amount <= 0) {
+      biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
+      await sendText(from, "❌ Payout amount missing. Please start again.");
+      const { sendCashBalanceMenu } = await import("./metaMenus.js");
+      return sendCashBalanceMenu(from);
+    }
+
+    let recipient = null;   // null = external / personal
+    if (trimmed !== "0") {
+      const n = parseInt(trimmed, 10);
+      if (isNaN(n) || n < 1 || n > list.length) {
+        await sendText(from, `❌ Reply with a number from the list (1-${list.length}), or *0* for an outside person.`);
+        return true;
+      }
+      recipient = list[n - 1];
+    }
+
+    // Save payout record - createdBy AND recordedBy both written.
+    // (recordedBy alone was silently discarded by the old schema, which is
+    //  exactly why WhatsApp payouts never showed on clerk statements.)
     let payoutDoc = null;
     try {
       const CashPayout = (await import("../models/cashPayout.js")).default;
       const today = new Date(); today.setHours(0, 0, 0, 0);
       payoutDoc = await CashPayout.create({
-        businessId: biz._id,
-        branchId:   targetBranchId,
+        businessId:  biz._id,
+        branchId:    targetBranchId,
         amount,
         reason,
-        recordedBy: phone,
-        date:       today
+        createdBy:   phone,
+        recordedBy:  phone,
+        paidToPhone: recipient ? recipient.phone : null,
+        paidToName:  recipient ? recipient.name  : null,
+        date:        today
       });
     } catch (dbErr) {
       console.error("[PAYOUT SAVE]", dbErr.message);
@@ -3114,18 +3190,34 @@ console.log("INVOICE BRANCH DEBUG", {
 `✅ *Payout Recorded*
 
   💵 Amount: *${amount} ${cur}*
-  📝 Reason: ${reason}${branch ? `
+  📝 Reason: ${reason}
+  👤 Paid to: ${recipient ? `*${recipient.name}* (${recipient.role}) - credited to their statement` : "Outside person / personal"}${branch ? `
   🏬 Branch: ${branch.name}` : ""}
 
 _Cash balance updated._`
     );
+
+    // ── Notify the staff receiver so both sides have a WhatsApp record ──────
+    if (recipient?.phone) {
+      try {
+        const { name: payerName } = { name: caller?.name || phone };
+        await sendText(recipient.phone,
+`💵 *You received a payout - ${biz.name}*
+
+  💵 Amount: *${amount} ${cur}*
+  📝 Reason: ${reason}
+  👤 From: ${payerName}
+
+_This now shows as money received on your statement and increases your running balance - you are accountable for it until you pay it out or hand it over._`);
+      } catch (_) {}
+    }
 
     // ── Notify owners/managers/clerk ─────────────────────────────────────────
     try {
       const { notifyPayoutRecorded } = await import("./bizNotifications.js");
       await notifyPayoutRecorded({
         biz,
-        payout: { amount, reason },
+        payout: { amount, reason: recipient ? `${reason} → ${recipient.name}` : reason },
         clerkPhone: phone,
         branchName: branch?.name || null,
         branchId:   targetBranchId

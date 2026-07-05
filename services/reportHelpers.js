@@ -597,12 +597,33 @@ export async function buildClerkStatement({ biz, clerkPhone, branchId, start, en
     Expense.find(bQ).lean()
   ]);
 
-  // ── Payouts recorded by this clerk ─────────────────────────────────────────
+  // ── Payouts recorded by this clerk (money OUT of their custody) ────────────
+  // Matches createdBy OR recordedBy: the WhatsApp payout flow historically
+  // wrote `recordedBy` which the old CashPayout schema silently discarded
+  // (createdBy stayed null) - THE reason payouts never showed on clerk
+  // statements. The schema now persists both fields and the flow writes both,
+  // so the $or catches every record however it was attributed.
+  //
+  // ── Payouts RECEIVED by this clerk (money INTO their custody) ──────────────
+  // Directed payouts (paidToPhone = this clerk) appear as credits on the
+  // receiver's statement and increase their running balance - this is how a
+  // clerk (or the OWNER) is held accountable for money handed to them via a
+  // payout, symmetrical to how the payer's side shows the debit.
   let CashPayout;
   let payouts = [];
+  let payoutsReceived = [];
   try {
     CashPayout = (await import("../models/cashPayout.js")).default;
-    payouts = await CashPayout.find({ ...bQ }).lean();
+    const noWhoQ = { businessId: biz._id, createdAt: { $gte: start, $lte: end }, ...(branchId ? { branchId } : {}) };
+    [payouts, payoutsReceived] = await Promise.all([
+      CashPayout.find({ ...noWhoQ, $or: [{ createdBy: cp }, { recordedBy: cp }] }).lean(),
+      CashPayout.find({ ...noWhoQ, paidToPhone: cp }).lean()
+    ]);
+    // A payout can never be from-and-to the same person twice over: if someone
+    // somehow recorded a payout to themselves, drop the received side (net 0)
+    payoutsReceived = payoutsReceived.filter(p =>
+      String(p.createdBy || p.recordedBy || "") !== cp
+    );
   } catch (_) {}
 
   // ── Admin-entered income attributed to this clerk (CashIncome) ─────────────
@@ -656,7 +677,66 @@ export async function buildClerkStatement({ biz, clerkPhone, branchId, start, en
   const RE = /draw|owner|personal|private|director/i;
   for (const p of payouts) {
     const isDrawing = RE.test(p.reason || "");
-    txRows.push({ at: new Date(p.createdAt), typeLabel: isDrawing ? "Owner Drawing" : "Cash Payout", description: p.reason || (isDrawing ? "Drawing" : "Payout"), credit: 0, debit: p.amount || 0 });
+    const toWhom = p.paidToName ? ` → ${p.paidToName}` : "";
+    txRows.push({
+      at: new Date(p.createdAt),
+      typeLabel: isDrawing ? "Owner Drawing" : "Cash Payout",
+      description: `${p.reason || (isDrawing ? "Drawing" : "Payout")}${toWhom}${p.reversed ? " (REVERSED)" : ""}`,
+      credit: 0, debit: p.amount || 0
+    });
+  }
+
+  // Payouts received from another staff member (or recorded on their behalf
+  // by admin) - money INTO this clerk's custody, so a credit. Reversed
+  // payouts already carry amount 0, so both sides self-correct together.
+  for (const p of payoutsReceived) {
+    let fromName = "Staff";
+    try { const r = await resolveStaff(p.createdBy || p.recordedBy || null); fromName = r.name || "Staff"; } catch (_) {}
+    txRows.push({
+      at: new Date(p.createdAt),
+      typeLabel: "Payout Received",
+      description: `From ${fromName}${p.reason ? " · " + p.reason : ""}${p.reversed ? " (REVERSED)" : ""}`,
+      credit: p.amount || 0, debit: 0
+    });
+  }
+
+  // ── Shift handovers as REAL rows in the running balance ────────────────────
+  // Previously handovers were only listed in side tables: a mid-period
+  // handover-out never reduced the running balance, yet the NEXT period's
+  // cumulative opening DID subtract it - so closing ≠ next opening whenever a
+  // handover happened mid-period. Making handovers first-class rows restores
+  // the invariant: cash received (handover-in) credits the balance, cash
+  // handed away (handover-out) debits it, and the closing figure is genuinely
+  // "cash still in this person's hands".
+  //
+  // Guard 1: when the opening custody FELL BACK to the first handover-in
+  // (no cumulative override supplied), that same handover must not also be a
+  // credit row - it IS the opening. Skipped by _id.
+  // Guard 2: reversed handovers are excluded from the maths (matching
+  // fetchClerkCumulativeBalance) but stay visible in the handover tables.
+  const openingHandoverId = (openingCustodyOverride === null && handoversIn.length > 0)
+    ? String(handoversIn[0]._id) : null;
+
+  for (const h of handoversIn) {
+    if (h.reversed) continue;
+    if (openingHandoverId && String(h._id) === openingHandoverId) continue;
+    txRows.push({
+      at: new Date(h.handoverAt),
+      typeLabel: "Cash Received",
+      description: `Handover from ${h.outgoingName || h.outgoingPhone || "Owner"}${h.notes ? " · " + h.notes : ""}`,
+      credit: h.amountCounted || 0, debit: 0
+    });
+  }
+
+  for (const h of handoversOut) {
+    if (h.reversed) continue;
+    txRows.push({
+      at: new Date(h.handoverAt),
+      typeLabel: "Cash Handed Over",
+      description: `Handover to ${h.incomingName || h.incomingPhone || "Owner"}${h.notes ? " · " + h.notes : ""}`,
+      credit: 0, debit: h.amountCounted || 0,
+      _handoverOutId: String(h._id)
+    });
   }
 
   // Admin-entered income (reversed entries already carry amount 0 - shown
@@ -679,16 +759,47 @@ export async function buildClerkStatement({ biz, clerkPhone, branchId, start, en
   txRows.sort((a, b) => a.at - b.at);
 
   // ── Running balance ─────────────────────────────────────────────────────────
+  // For every handover-out row we snapshot the balance the clerk SHOULD have
+  // been holding just before the handover - that is the number the counted
+  // amount is checked against (per-row surplus/short flags for the PDF).
   let balance = openingCustody;
+  const handoverOutMeta = {};   // handoverId → { expectedBefore, diff }
   for (const row of txRows) {
+    if (row._handoverOutId) {
+      const expectedBefore = balance;
+      const diff = (row.debit || 0) - expectedBefore;
+      handoverOutMeta[row._handoverOutId] = { expectedBefore, diff };
+    }
     balance += (row.credit || 0) - (row.debit || 0);
     row.balance = balance;
   }
 
+  // Attach per-handover expectations to the handover docs (consumed by
+  // buildClerkStatementHTML so each handover-out line can show
+  // "held X, handed Y" instead of a single end-of-period comparison)
+  for (const h of handoversOut) {
+    const m = handoverOutMeta[String(h._id)];
+    if (m) { h._expectedBefore = m.expectedBefore; h._diff = m.diff; }
+  }
+
   // ── Closing reconciliation ──────────────────────────────────────────────────
+  // expectedClosing        = cash still in the clerk's hands NOW (handovers
+  //                          already deducted - after a full end-of-shift
+  //                          handover this reads 0, which is the honest truth)
+  // handedOver             = amount counted at the LAST handover-out
+  // expectedAtLastHandover = what they should have been holding at that moment
+  // discrepancy            = handedOver − expectedAtLastHandover
+  //                          (same meaning as before - "did they hand over as
+  //                          much as they should have held" - but now correct
+  //                          even with several handovers in one period,
+  //                          because earlier ones are already deducted)
   const expectedClosing = balance;
-  const handedOver      = handoversOut.length > 0 ? handoversOut[handoversOut.length - 1].amountCounted : null;
-  const discrepancy     = handedOver !== null ? handedOver - expectedClosing : null;
+  const liveHandoversOut = handoversOut.filter(h => !h.reversed);
+  const lastOut = liveHandoversOut.length > 0 ? liveHandoversOut[liveHandoversOut.length - 1] : null;
+  const handedOver             = lastOut ? (lastOut.amountCounted || 0) : null;
+  const expectedAtLastHandover = lastOut ? (lastOut._expectedBefore ?? null) : null;
+  const discrepancy            = (handedOver !== null && expectedAtLastHandover !== null)
+    ? handedOver - expectedAtLastHandover : null;
 
   return {
     clerkName, clerkPhone: cp, clerkRole,
@@ -696,6 +807,7 @@ export async function buildClerkStatement({ biz, clerkPhone, branchId, start, en
     txRows,
     handoversIn, handoversOut,
     expectedClosing,
+    expectedAtLastHandover,
     handedOver,
     discrepancy,
     totalIn:   txRows.reduce((s, r) => s + (r.credit || 0), 0),

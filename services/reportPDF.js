@@ -669,8 +669,17 @@ function buildClerkStatementHTML({ biz, periodLabel, branchName, clerkData, logo
   const {
     clerkName, clerkRole, openingCustody, openingSource,
     txRows, handoversIn, handoversOut,
-    expectedClosing, handedOver, discrepancy, totalIn, totalOut
+    expectedClosing, expectedAtLastHandover, handedOver, discrepancy, totalIn, totalOut
   } = clerkData;
+
+  // Handovers are now first-class rows in txRows, so `expectedClosing` is the
+  // cash genuinely still in the clerk's hands (0 after a full end-of-shift
+  // handover). The verdict compares the LAST handover's counted amount to
+  // what they should have been holding AT THAT MOMENT (expectedAtLastHandover),
+  // which stays correct even with several handovers in one period. Falls back
+  // to expectedClosing for any caller still passing the old shape.
+  const expectedAtHandover = (expectedAtLastHandover !== undefined && expectedAtLastHandover !== null)
+    ? expectedAtLastHandover : expectedClosing;
 
   // ── Group txRows by day ─────────────────────────────────────────────────────
   const dayMap = new Map();
@@ -759,13 +768,13 @@ function buildClerkStatementHTML({ biz, periodLabel, branchName, clerkData, logo
   let reconcileHTML;
   if (handedOver !== null) {
     if (Math.abs(discrepancy) < 0.01) {
-      reconcileHTML = `<div class="verdict profit">&#x2705; BALANCED &mdash; Expected ${money(expectedClosing, cur)}, Counted ${money(handedOver, cur)}</div>`;
+      reconcileHTML = `<div class="verdict profit">&#x2705; BALANCED &mdash; Expected ${money(expectedAtHandover, cur)}, Counted ${money(handedOver, cur)}</div>`;
     } else if (discrepancy > 0) {
       reconcileHTML = `<div class="verdict" style="background:#fffbeb;color:#b45309;border-left:4px solid #d97706">
-        &#x26A0;&#xFE0F; SURPLUS +${money(discrepancy, cur)} &mdash; Counted ${money(handedOver, cur)}, Expected ${money(expectedClosing, cur)}
+        &#x26A0;&#xFE0F; SURPLUS +${money(discrepancy, cur)} &mdash; Counted ${money(handedOver, cur)}, Expected ${money(expectedAtHandover, cur)}
       </div>`;
     } else {
-      reconcileHTML = `<div class="verdict loss">&#x274C; SHORT ${money(Math.abs(discrepancy), cur)} &mdash; Counted ${money(handedOver, cur)}, Expected ${money(expectedClosing, cur)}</div>`;
+      reconcileHTML = `<div class="verdict loss">&#x274C; SHORT ${money(Math.abs(discrepancy), cur)} &mdash; Counted ${money(handedOver, cur)}, Expected ${money(expectedAtHandover, cur)}</div>`;
     }
   } else {
     reconcileHTML = `<div class="verdict even">&#x23F3; Shift still open &mdash; Cash at hand should be ${money(expectedClosing, cur)}. No handover recorded yet.</div>`;
@@ -785,7 +794,10 @@ function buildClerkStatementHTML({ biz, periodLabel, branchName, clerkData, logo
 
   const handOutRows = handoversOut.length
     ? handoversOut.map(h => {
-        const diff = h.amountCounted - expectedClosing;
+        // Per-handover flag: counted vs what they held at THAT moment
+        // (attached by buildClerkStatement); legacy fallback kept just in case
+        const diff = (h._diff !== undefined && h._diff !== null)
+          ? h._diff : (h.amountCounted - expectedClosing);
         const ok   = Math.abs(diff) < 0.01;
         const cls  = ok ? "flag-ok" : diff > 0 ? "flag-surplus" : "flag-short";
         const flag = ok ? "&#x2705; Balanced" : diff > 0 ? `&#x26A0;&#xFE0F; Surplus +${money(diff, cur)}` : `&#x274C; Short ${money(Math.abs(diff), cur)}`;
@@ -832,7 +844,7 @@ function buildClerkStatementHTML({ biz, periodLabel, branchName, clerkData, logo
     <div class="kpi">
       <div class="kpi-label">Cash at Hand</div>
       <div class="kpi-val">${money(expectedClosing, cur)}</div>
-      <div class="kpi-sub">${handedOver !== null ? "Shift closed" : "Shift open"}</div>
+      <div class="kpi-sub">${handedOver !== null ? "After handover(s)" : "Shift open"}</div>
     </div>
   </div>
 
