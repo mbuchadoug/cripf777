@@ -784,6 +784,129 @@ router.get("/:phone", requireSupplierAdmin, async (req, res) => {
 
 
 // ═══════════════════════════════════════════════════════════════════════════
+// ORPHAN PAYOUT FIX - clickable GET links (admin only)
+// ─────────────────────────────────────────────────────────────────────────────
+// "Orphan" = a payout/drawing with NO attribution at all: createdBy, recordedBy
+// AND fromPhone all null/absent. These are pre-fix WhatsApp drawings that show
+// on the ledger (which ignores clerk) but on nobody's clerk statement, so the
+// clerk's cash-at-hand is inflated. Both routes are scoped to the given
+// person's BRANCH so the assignment is unambiguous, and only ever touch true
+// orphans (safe to run repeatedly, never clobbers attributed records).
+//
+// LINKS (replace <SUPPLIER_ID> with the id already in your admin URL, and the
+// phone with the staff member's number):
+//   Preview :  /zq-admin/suppliers/<SUPPLIER_ID>/finance/<PHONE>/fix-payouts
+//   Apply   :  /zq-admin/suppliers/<SUPPLIER_ID>/finance/<PHONE>/fix-payouts?apply=1
+//
+// e.g. for Stella (263781603826):
+//   .../finance/263781603826/fix-payouts        → shows what WILL change
+//   .../finance/263781603826/fix-payouts?apply=1 → performs the update
+// ═══════════════════════════════════════════════════════════════════════════
+router.get("/:phone/fix-payouts", requireSupplierAdmin, async (req, res) => {
+  const phone = req.params.phone;
+  try {
+    const { supplier, biz } = await loadBizContext(req);
+    if (!biz) return res.redirect(`/zq-admin/suppliers/${req.params.id}/finance`);
+    const person = await findStaffByPhone(biz._id, phone);
+    if (!person) return res.redirect(`/zq-admin/suppliers/${supplier._id}/finance?error=Staff+not+found`);
+
+    const CashPayout = (await import("../models/cashPayout.js")).default;
+
+    const orphanMatch = {
+      businessId: biz._id,
+      $and: [
+        { $or: [{ createdBy: null }, { createdBy: { $exists: false } }] },
+        { $or: [{ recordedBy: null }, { recordedBy: { $exists: false } }] },
+        { $or: [{ fromPhone: null }, { fromPhone: { $exists: false } }] }
+      ],
+      ...(person.branchId ? { branchId: person.branchId } : {})
+    };
+
+    const orphans = await CashPayout.find(orphanMatch).sort({ date: 1 }).lean();
+    const total   = orphans.reduce((s, o) => s + (o.amount || 0), 0);
+    const apply   = req.query.apply === "1";
+    const cur     = biz.currency || "USD";
+
+    // ── Preview table ────────────────────────────────────────────────────────
+    const rowsHtml = orphans.length
+      ? orphans.map(o => `
+          <tr>
+            <td>${new Date(o.date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}</td>
+            <td>${esc(o.reason || "(no reason)")}</td>
+            <td style="text-align:right">${money(o.amount, cur)}</td>
+            <td style="font-size:11px;color:var(--muted)">${o._id}</td>
+          </tr>`).join("")
+      : `<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:18px">
+           🎉 No unattributed payouts at ${esc(person.name || phone)}'s branch - nothing to fix.
+         </td></tr>`;
+
+    if (!apply || orphans.length === 0) {
+      // Just show the preview + an Apply button
+      return res.send(layout("Fix Unattributed Payouts", `
+        <a href="${workspaceUrl(supplier._id, phone)}" class="back-link">← Back to ${esc(person.name || phone)}'s workspace</a>
+        <h2 style="font-size:20px;font-weight:700;margin:12px 0 6px">🔧 Fix Unattributed Payouts</h2>
+        <p style="color:var(--muted);font-size:13px;margin-bottom:18px">
+          These payouts/drawings were recorded on WhatsApp before the accountability update and carry
+          no record of who made them. Assigning them to <b>${esc(person.name || phone)}</b> (the clerk
+          holding this branch's till) makes them show on the statement and reduces cash-at-hand.
+        </p>
+        <div class="card" style="max-width:640px">
+          <div style="font-weight:700;margin-bottom:10px">
+            ${orphans.length} unattributed payout${orphans.length === 1 ? "" : "s"} · ${money(total, cur)}
+          </div>
+          <table class="data-table">
+            <thead><tr><th>Date</th><th>Reason</th><th style="text-align:right">Amount</th><th>Record ID</th></tr></thead>
+            <tbody>${rowsHtml}</tbody>
+          </table>
+          ${orphans.length ? `
+          <a class="btn btn-blue" style="margin-top:16px;display:inline-block"
+             href="${workspaceUrl(supplier._id, phone, "/fix-payouts?apply=1")}"
+             onclick="return confirm('Assign ${orphans.length} payout(s) totalling ${money(total, cur)} to ${esc(person.name || phone)}?')">
+            ✅ Assign all ${orphans.length} to ${esc(person.name || phone)}
+          </a>` : ""}
+        </div>
+      `));
+    }
+
+    // ── Apply ─────────────────────────────────────────────────────────────────
+    const result = await CashPayout.updateMany(orphanMatch, {
+      $set: {
+        createdBy:  phone,
+        recordedBy: phone,
+        fromPhone:  phone,
+        fromName:   person.name || phone
+      }
+    });
+    const n = result.modifiedCount ?? result.nModified ?? 0;
+
+    // Recompute affected days (attribution doesn't change business totals, but
+    // keeps any stored daily snapshots consistent).
+    try {
+      const days = [...new Set(orphans.map(o => new Date(o.date).toISOString().slice(0, 10)))];
+      for (const dstr of days) await recomputeDay(biz._id, person.branchId || null, new Date(dstr));
+    } catch (e) { console.error("[fix-payouts recompute]", e.message); }
+
+    return res.send(layout("Payouts Fixed", `
+      <a href="${workspaceUrl(supplier._id, phone)}" class="back-link">← Back to ${esc(person.name || phone)}'s workspace</a>
+      <div class="card" style="max-width:640px;margin-top:14px">
+        <h2 style="font-size:20px;font-weight:700;color:#16a34a;margin-bottom:8px">✅ Done</h2>
+        <p style="font-size:14px;margin-bottom:6px">
+          Assigned <b>${n}</b> payout${n === 1 ? "" : "s"} (${money(total, cur)}) to
+          <b>${esc(person.name || phone)}</b>.
+        </p>
+        <p style="color:var(--muted);font-size:13px;margin-bottom:16px">
+          They now appear on ${esc(person.name || phone)}'s statement as money out and reduce
+          their cash-at-hand. Re-generate the clerk statement on WhatsApp to see it.
+        </p>
+        <a class="btn btn-blue" href="${workspaceUrl(supplier._id, phone)}">Back to workspace</a>
+      </div>
+    `));
+  } catch (e) {
+    res.send(layout("Error", `<div class="alert red">${esc(e.message)}<pre style="font-size:11px;margin-top:8px">${esc(e.stack || "")}</pre></div>`));
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
 // 4. INCOME (CashIncome) - add / edit / reverse / delete
 // Only admin-entered income is editable. WhatsApp receipts and invoice
 // payments are read-only here (shown but not touched).

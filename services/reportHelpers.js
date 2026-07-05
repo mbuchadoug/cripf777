@@ -590,7 +590,7 @@ export async function payoutDebitMatch({ biz, clerkPhone, branchId = null }) {
       const clerks = await UserRole.find({
         businessId: biz._id, branchId: clerkBranchId,
         pending: false, suspended: { $ne: true },
-        role: { $in: ["clerk", "manager"] }
+        role: "clerk"
       }).select("phone").lean();
       const sole = clerks.length === 1 && _normPhone(clerks[0].phone) === cp;
       if (sole) {
