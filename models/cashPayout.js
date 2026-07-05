@@ -59,6 +59,35 @@ const CashPayoutSchema = new mongoose.Schema({
     default: null
   },
 
+  // ── Cash SOURCE: whose till this money physically left ─────────────────────
+  // THE FIX for "owner drawings inflate the clerk's balance". A payout depletes
+  // the till of whoever is HOLDING the cash, which is not always the person who
+  // typed it in. Example: the owner records a $167 drawing, but the notes come
+  // out of the clerk's drawer - so the CLERK's custody must drop, not the
+  // owner's.
+  //
+  // Semantics:
+  //   • fromPhone set  → THAT person's statement is debited (their balance
+  //                      drops), regardless of who recorded the payout.
+  //   • fromPhone null → falls back to the recorder (createdBy/recordedBy),
+  //                      which is the EXACT original behaviour - so every
+  //                      existing payout keeps working unchanged until/unless
+  //                      an admin assigns a till to it.
+  //
+  // In the admin "act as <person>" workspace this defaults to that person, so
+  // a drawing entered while acting as the clerk correctly leaves the clerk's
+  // till. On WhatsApp a clerk's own payout defaults to their own till; an
+  // owner/manager is asked whose till the cash came from.
+  fromPhone: {
+    type: String,
+    default: null,
+    index: true
+  },
+  fromName: {
+    type: String,
+    default: null
+  },
+
   // ── Reversal trail ──────────────────────────────────────────────────────────
   // The admin panel has always SET these on reverse, but they were never in
   // the schema, so Mongoose discarded them: the amount went to 0 (that part

@@ -393,6 +393,7 @@ const restrictedStateMap = {
     cash_set_opening_balance: "payments",
     cash_payout_amount:   "payments",
     cash_payout_reason:   "payments",
+    cash_payout_source:   "payments",
     cash_payout_recipient: "payments",
     cash_handover_amount:   "payments",
     cash_handover_incoming: "payments",
@@ -3086,18 +3087,53 @@ console.log("INVOICE BRANCH DEBUG", {
       return sendCashBalanceMenu(from);
     }
 
-    // ── NEW STEP: who is receiving this money? ─────────────────────────────
+    biz.sessionData.payoutReason = reason;
+
+    // ── Determine the CASH SOURCE (whose till the money leaves) ─────────────
+    // A clerk's payout obviously comes from their OWN till - no need to ask,
+    // keeps their flow fast and unchanged. An owner/manager/admin, however,
+    // is often recording a DRAWING or payout that comes out of a clerk's
+    // drawer (the exact case that was inflating clerk balances), so they get
+    // asked whose till it left. The chosen till-holder's statement is debited.
+    const callerRole  = caller?.role || "clerk";
+    const isPrivileged = ["owner", "admin", "manager"].includes(callerRole);
+
+    const UserRoleModel = (await import("../models/userRole.js")).default;
+    const staffAll = await UserRoleModel.find({ businessId: biz._id, pending: false }).sort({ role: 1, name: 1 }).lean();
+
+    if (isPrivileged && staffAll.length > 1) {
+      // Ask whose till first; recipient is asked afterwards.
+      biz.sessionData.payoutSourceList = staffAll.map(s => ({
+        phone: String(s.phone).replace(/\D/g, ""),
+        name:  s.name || s.phone,
+        role:  s.role || "clerk"
+      }));
+      biz.sessionState = "cash_payout_source";
+      await saveBizSafe(biz);
+
+      let msg = `🏦 *Whose till is this cash coming OUT of?*\n${"─".repeat(24)}\n`;
+      biz.sessionData.payoutSourceList.forEach((s, i) => {
+        const meTag = s.phone === phone ? " (you)" : "";
+        msg += `\n*${i + 1}.* ${s.name} (${s.role})${meTag}`;
+      });
+      msg += `\n${"─".repeat(24)}`;
+      msg += `\n\n✏️ Reply with the *number* - that person's statement will be debited (their cash goes down).`;
+      await sendText(from, msg);
+      return true;
+    }
+
+    // Clerk (or solo business): the payout leaves the clerk's own till.
+    biz.sessionData.payoutFromPhone = phone;
+    biz.sessionData.payoutFromName  = caller?.name || null;
+    biz.sessionState = "cash_payout_recipient";
+
+    // ── who is receiving this money? ───────────────────────────────────────
     // 0/External  = outside party (driver, supplier, wages taken home) -
     //               no staff statement is credited, exactly the old behaviour.
     // Staff pick  = the receiver's OWN statement gets a matching credit that
     //               increases their running custody balance (owner included),
     //               while the payer's statement shows the debit "→ name".
-    biz.sessionData.payoutReason = reason;
-    biz.sessionState = "cash_payout_recipient";
-
-    const UserRoleModel = (await import("../models/userRole.js")).default;
-    const staff = await UserRoleModel.find({ businessId: biz._id, pending: false }).sort({ role: 1, name: 1 }).lean();
-    const others = staff.filter(s => String(s.phone).replace(/\D/g, "") !== phone);
+    const others = staffAll.filter(s => String(s.phone).replace(/\D/g, "") !== phone);
 
     if (!others.length) {
       // Solo business - nobody to direct it to; save as external immediately
@@ -3125,6 +3161,49 @@ console.log("INVOICE BRANCH DEBUG", {
   }
 
   /* ===========================
+     CASH BALANCE: PAYOUT SOURCE (owner/manager only) → then recipient
+  =========================== */
+  if (state === "cash_payout_source") {
+    if (trimmed.toLowerCase() === "cancel") {
+      biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
+      const { sendCashBalanceMenu } = await import("./metaMenus.js");
+      return sendCashBalanceMenu(from);
+    }
+
+    const srcList = biz.sessionData?.payoutSourceList || [];
+    const n = parseInt(trimmed, 10);
+    if (isNaN(n) || n < 1 || n > srcList.length) {
+      await sendText(from, `❌ Reply with a number from the list (1-${srcList.length}) for whose till this cash left.`);
+      return true;
+    }
+    const source = srcList[n - 1];
+    biz.sessionData.payoutFromPhone = source.phone;
+    biz.sessionData.payoutFromName  = source.name;
+
+    // Now ask who RECEIVES it (exclude the source so a till can't pay itself)
+    biz.sessionState = "cash_payout_recipient";
+    const others = srcList.filter(s => s.phone !== source.phone);
+
+    if (!others.length) {
+      biz.sessionData.payoutRecipient = null;
+      await saveBizSafe(biz);
+      return continueTwilioFlow({ from, text: "0" });
+    }
+
+    biz.sessionData.payoutStaffList = others;
+    await saveBizSafe(biz);
+
+    let msg = `💸 *Who is RECEIVING this money?*\n${"─".repeat(22)}\n`;
+    msg += `\n_(Cash is leaving ${source.name}'s till)_\n`;
+    others.forEach((s, i) => { msg += `\n*${i + 1}.* ${s.name} (${s.role})`; });
+    msg += `\n${"─".repeat(22)}`;
+    msg += `\n\n✏️ Reply with the *number* to credit their statement`;
+    msg += `\n0️⃣ Reply *0* for an *outside person / drawing / supplier* (money leaves the business)`;
+    await sendText(from, msg);
+    return true;
+  }
+
+  /* ===========================
      CASH BALANCE: PAYOUT RECIPIENT → save
   =========================== */
   if (state === "cash_payout_recipient") {
@@ -3138,6 +3217,10 @@ console.log("INVOICE BRANCH DEBUG", {
     const amount = biz.sessionData?.payoutAmount;
     const reason = biz.sessionData?.payoutReason || "No reason given";
     const targetBranchId = biz.sessionData?.targetBranchId || caller?.branchId || null;
+    // Cash source (whose till). Set by the source step for owners, or self for
+    // clerks. Falls back to the recorder if somehow missing.
+    const fromPhone = biz.sessionData?.payoutFromPhone || phone;
+    const fromName  = biz.sessionData?.payoutFromName  || caller?.name || null;
 
     if (!amount || amount <= 0) {
       biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
@@ -3156,9 +3239,10 @@ console.log("INVOICE BRANCH DEBUG", {
       recipient = list[n - 1];
     }
 
-    // Save payout record - createdBy AND recordedBy both written.
-    // (recordedBy alone was silently discarded by the old schema, which is
-    //  exactly why WhatsApp payouts never showed on clerk statements.)
+    // Save payout record - createdBy AND recordedBy both written (recorder),
+    // plus fromPhone/fromName (whose till is debited) and paidTo (who is
+    // credited). The till-holder's statement shows the debit even when someone
+    // else recorded it.
     let payoutDoc = null;
     try {
       const CashPayout = (await import("../models/cashPayout.js")).default;
@@ -3170,6 +3254,8 @@ console.log("INVOICE BRANCH DEBUG", {
         reason,
         createdBy:   phone,
         recordedBy:  phone,
+        fromPhone,
+        fromName,
         paidToPhone: recipient ? recipient.phone : null,
         paidToName:  recipient ? recipient.name  : null,
         date:        today
@@ -3186,16 +3272,33 @@ console.log("INVOICE BRANCH DEBUG", {
     const branch = targetBranchId ? await Branch.findById(targetBranchId).lean() : null;
     const cur    = biz.currency;
 
+    const fromLine = (fromPhone && fromPhone !== phone)
+      ? `\n  🏦 From till of: *${fromName || fromPhone}* (their balance reduced)` : "";
+
     await sendText(from,
 `✅ *Payout Recorded*
 
   💵 Amount: *${amount} ${cur}*
-  📝 Reason: ${reason}
+  📝 Reason: ${reason}${fromLine}
   👤 Paid to: ${recipient ? `*${recipient.name}* (${recipient.role}) - credited to their statement` : "Outside person / personal"}${branch ? `
   🏬 Branch: ${branch.name}` : ""}
 
 _Cash balance updated._`
     );
+
+    // ── Notify the till-holder if it wasn't the recorder ────────────────────
+    if (fromPhone && fromPhone !== phone) {
+      try {
+        await sendText(fromPhone,
+`🏦 *A payout was recorded against your till - ${biz.name}*
+
+  💵 Amount: *${amount} ${cur}*
+  📝 Reason: ${reason}
+  👤 Recorded by: ${caller?.name || phone}
+
+_This reduces your cash-at-hand on your statement. If this is wrong, tell the owner/admin._`);
+      } catch (_) {}
+    }
 
     // ── Notify the staff receiver so both sides have a WhatsApp record ──────
     if (recipient?.phone) {

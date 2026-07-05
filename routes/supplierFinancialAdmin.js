@@ -698,6 +698,10 @@ router.get("/:phone", requireSupplierAdmin, async (req, res) => {
           <input type="hidden" name="kind" value="payout">
           ${field("Reason *", `<input name="reason" required placeholder="e.g. Paid delivery driver" style="${fs}">`)}
           ${field("Amount *", `<input name="amount" type="number" step="0.01" min="0" required style="${fs}">`)}
+          ${field("Cash from (whose till)", `<select name="fromPhone" style="${fs}">
+            ${staff.map(s => `<option value="${esc(s.phone)}" ${s.phone === phone ? "selected" : ""}>${esc(s.name || s.phone)} - ${esc(s.role)}${s.phone === phone ? " (this workspace)" : ""}</option>`).join("")}
+            <option value="__none__">Not from a staff till (owner's own pocket / float)</option>
+          </select>`)}
           ${field("Paid to", `<select name="paidToPhone" style="${fs}">
             <option value="">Outside person / supplier / personal (no staff statement)</option>
             ${staff.filter(s => s.phone !== phone).map(s => `<option value="${esc(s.phone)}">${esc(s.name || s.phone)} - ${esc(s.role)} (credits their statement)</option>`).join("")}
@@ -714,6 +718,10 @@ router.get("/:phone", requireSupplierAdmin, async (req, res) => {
           <input type="hidden" name="kind" value="drawing">
           ${field("Note", `<input name="reason" placeholder="e.g. Personal withdrawal" style="${fs}">`)}
           ${field("Amount *", `<input name="amount" type="number" step="0.01" min="0" required style="${fs}">`)}
+          ${field("Cash from (whose till)", `<select name="fromPhone" style="${fs}">
+            ${staff.map(s => `<option value="${esc(s.phone)}" ${s.phone === phone ? "selected" : ""}>${esc(s.name || s.phone)} - ${esc(s.role)}${s.phone === phone ? " (this workspace)" : ""}</option>`).join("")}
+            <option value="__none__">Not from a staff till (owner's own pocket / float)</option>
+          </select>`)}
           ${field("Paid to", `<select name="paidToPhone" style="${fs}">
             <option value="">Personal / outside (no staff statement)</option>
             ${staff.filter(s => s.phone !== phone).map(s => `<option value="${esc(s.phone)}">${esc(s.name || s.phone)} - ${esc(s.role)} (credits their statement)</option>`).join("")}
@@ -1005,7 +1013,7 @@ router.post("/:phone/payout/add", requireSupplierAdmin, async (req, res) => {
   try {
     const { supplier, biz } = await loadBizContext(req);
     const CashPayout = (await import("../models/cashPayout.js")).default;
-    const { kind, reason, amount, date, branchId, paidToPhone } = req.body;
+    const { kind, reason, amount, date, branchId, paidToPhone, fromPhone } = req.body;
     const d = date ? new Date(date) : new Date();
     const finalReason = kind === "drawing" && !/draw/i.test(reason || "")
       ? `Owner drawing${reason ? ": " + reason.trim() : ""}` : (reason || "").trim();
@@ -1017,11 +1025,24 @@ router.post("/:phone/payout/add", requireSupplierAdmin, async (req, res) => {
       const receiver = await findStaffByPhone(biz._id, cleanPaidTo);
       paidToName = receiver?.name || cleanPaidTo;
     }
+    // Cash source (whose till is debited). Defaults to the workspace person so
+    // a payout entered while acting as a clerk leaves that clerk's till. The
+    // sentinel "__none__" means owner's-own-pocket → store null so it debits
+    // nobody's custody (falls back to recorder, which is the admin, harmless).
+    let fromName = null;
+    let cleanFrom = (fromPhone || "").trim();
+    if (cleanFrom === "__none__") { cleanFrom = null; }
+    else if (!cleanFrom) { cleanFrom = phone; }   // default = this workspace person
+    if (cleanFrom) {
+      const src = await findStaffByPhone(biz._id, cleanFrom);
+      fromName = src?.name || cleanFrom;
+    }
     await CashPayout.create({
       businessId: biz._id, branchId: branchId || null,
       amount: parseFloat(amount) || 0,
       reason: finalReason || (kind === "drawing" ? "Owner drawing" : "Cash payout"),
       createdBy: phone, recordedBy: phone,
+      fromPhone: cleanFrom, fromName,
       paidToPhone: cleanPaidTo, paidToName,
       date: d
     });
@@ -1054,6 +1075,10 @@ router.get("/:phone/payout/:recId/edit", requireSupplierAdmin, async (req, res) 
           </select>`)}
           ${field("Reason", `<input name="reason" value="${esc(p.reason || "")}" style="${fs}">`)}
           ${field("Amount *", `<input name="amount" type="number" step="0.01" min="0" required value="${p.amount}" style="${fs}">`)}
+          ${field("Cash from (whose till)", `<select name="fromPhone" style="${fs}">
+            ${staff.map(s => `<option value="${esc(s.phone)}" ${s.phone === (p.fromPhone || "") ? "selected" : ""}>${esc(s.name || s.phone)} - ${esc(s.role)}</option>`).join("")}
+            <option value="__none__" ${!p.fromPhone ? "selected" : ""}>Not from a staff till (owner's own pocket / float)</option>
+          </select>`)}
           ${field("Paid to", `<select name="paidToPhone" style="${fs}">
             <option value="">Outside person / supplier / personal (no staff statement)</option>
             ${staff.filter(s => s.phone !== phone).map(s => `<option value="${esc(s.phone)}" ${s.phone === p.paidToPhone ? "selected" : ""}>${esc(s.name || s.phone)} - ${esc(s.role)} (credits their statement)</option>`).join("")}
@@ -1078,7 +1103,7 @@ router.post("/:phone/payout/:recId/edit", requireSupplierAdmin, async (req, res)
     const CashPayout = (await import("../models/cashPayout.js")).default;
     const before = await CashPayout.findById(req.params.recId).lean();
     if (!before) return res.redirect(workspaceUrl(supplier._id, phone));
-    const { kind, reason, amount, date, branchId, paidToPhone } = req.body;
+    const { kind, reason, amount, date, branchId, paidToPhone, fromPhone } = req.body;
     const d = date ? new Date(date) : before.date;
     const finalReason = kind === "drawing" && !/draw/i.test(reason || "")
       ? `Owner drawing${reason ? ": " + reason.trim() : ""}` : (reason || "").trim();
@@ -1088,9 +1113,18 @@ router.post("/:phone/payout/:recId/edit", requireSupplierAdmin, async (req, res)
       const receiver = await findStaffByPhone(biz._id, cleanPaidTo);
       paidToName = receiver?.name || cleanPaidTo;
     }
+    // Cash source (whose till). "__none__" or blank → null (no till debited).
+    let fromName = null;
+    let cleanFrom = (fromPhone || "").trim();
+    if (cleanFrom === "__none__" || !cleanFrom) { cleanFrom = null; }
+    if (cleanFrom) {
+      const src = await findStaffByPhone(biz._id, cleanFrom);
+      fromName = src?.name || cleanFrom;
+    }
     await CashPayout.findByIdAndUpdate(req.params.recId, {
       amount: parseFloat(amount) || 0,
       reason: finalReason || (kind === "drawing" ? "Owner drawing" : "Cash payout"),
+      fromPhone: cleanFrom, fromName,
       paidToPhone: cleanPaidTo, paidToName,
       branchId: branchId || null, date: d
     });

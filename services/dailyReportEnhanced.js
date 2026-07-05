@@ -30,6 +30,7 @@ import {
   buildIncomeStatement,
   buildLedger,
   buildClerkStatement,
+  payoutDebitMatch,
   generateInsights,
   generateActionItems,
   formatInsightsList,
@@ -688,6 +689,10 @@ export async function fetchClerkCumulativeBalance({ biz, clerkPhone, branchId, b
     // Use $or to match createdBy OR recordedBy so we never miss a transaction.
     const clerkFilter = { $or: [{ createdBy: clerkPhone }, { recordedBy: clerkPhone }] };
 
+    // Same debit matcher the statement rows use (explicit till, recorder
+    // fallback, and orphan rescue) so opening custody and the row list agree.
+    const debitMatch = await payoutDebitMatch({ biz, clerkPhone, branchId });
+
     const [pmts, rcpts, adminIncome, exps, payouts, payoutsReceived, handoversOut, handoversIn] = await Promise.all([
       // Money the clerk collected (invoice payments created by them)
       InvoicePayment.aggregate([
@@ -709,18 +714,21 @@ export async function fetchClerkCumulativeBalance({ biz, clerkPhone, branchId, b
         { $match: { ...bQ, ...clerkFilter, reversed: { $ne: true } } },
         { $group: { _id: null, t: { $sum: "$amount" } } }
       ]),
-      // Payouts the clerk made (non-reversed only)
+      // Payouts that DEBIT this clerk's till (explicit fromPhone, recorder
+      // fallback, or orphan rescue) - identical matcher to the statement rows,
+      // so this carry-forward and the running rows can never disagree.
       CashPayout.aggregate([
-        { $match: { ...bQ, ...clerkFilter, reversed: { $ne: true } } },
+        { $match: { ...bQ, reversed: { $ne: true }, ...debitMatch } },
         { $group: { _id: null, t: { $sum: "$amount" } } }
       ]).catch(() => []),
       // Payouts RECEIVED by the clerk (directed payouts, paidToPhone = them) -
       // money into their custody, must roll into the opening exactly like the
       // credit rows on the statement, or closing would never equal the next
-      // period's opening. Self-payouts excluded (net zero, mirrors statement).
+      // period's opening. Excludes any where the clerk is also the source
+      // (self-payout nets to zero).
       CashPayout.aggregate([
         { $match: { ...bQ, paidToPhone: clerkPhone, reversed: { $ne: true },
-                    $nor: [{ createdBy: clerkPhone }, { recordedBy: clerkPhone }] } },
+                    $nor: [{ createdBy: clerkPhone }, { recordedBy: clerkPhone }, { fromPhone: clerkPhone }] } },
         { $group: { _id: null, t: { $sum: "$amount" } } }
       ]).catch(() => []),
       // Handovers OUT (clerk gave cash to someone else)

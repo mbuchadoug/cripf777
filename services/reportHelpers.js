@@ -544,6 +544,64 @@ export async function buildLedger({ biz, data, branchId, start, end, openingBala
  *  - Drawings they processed
  *  - Balance reconciliation
  */
+// ─────────────────────────────────────────────────────────────────────────────
+// Shared payout DEBIT matcher - which payouts reduce THIS clerk's till.
+// Returns a Mongo match fragment so buildClerkStatement (rows) and
+// fetchClerkCumulativeBalance (opening) always agree.
+//
+//   1. fromPhone === clerk                  → explicit cash source (this round)
+//   2. no fromPhone, recorder === clerk     → legacy attribution / fallback
+//   3. ORPHAN RESCUE: no fromPhone, no createdBy, no recordedBy, AND the
+//      payout is at a branch where this clerk is the SOLE clerk → attribute
+//      to them. This rescues pre-fix WhatsApp drawings that carry NO
+//      attribution at all (createdBy null, recordedBy field absent) - exactly
+//      the "$167 owner drawing" case. Guarded to sole-clerk branches so a
+//      multi-clerk till never double-counts an orphan.
+// ─────────────────────────────────────────────────────────────────────────────
+const _normPhone = p => {
+  let x = String(p || "").replace(/\D/g, "");
+  if (x.startsWith("0")) x = "263" + x.slice(1);
+  return x;
+};
+
+export async function payoutDebitMatch({ biz, clerkPhone, branchId = null }) {
+  const cp = _normPhone(clerkPhone);
+
+  const noTill = { $or: [{ fromPhone: null }, { fromPhone: { $exists: false } }] };
+  const noRecorder = { $and: [
+    { $or: [{ createdBy: null }, { createdBy: { $exists: false } }] },
+    { $or: [{ recordedBy: null }, { recordedBy: { $exists: false } }] }
+  ] };
+
+  const clauses = [
+    { fromPhone: cp },                                              // explicit till
+    { $and: [ noTill, { $or: [{ createdBy: cp }, { recordedBy: cp }] } ] }  // recorder fallback
+  ];
+
+  // Orphan rescue - resolve the clerk's OWN branch (independent of who is
+  // viewing) and only rescue when they are the sole clerk at that branch.
+  try {
+    const UserRole = (await import("../models/userRole.js")).default;
+    let clerkBranchId = branchId;
+    const me = await UserRole.findOne({ businessId: biz._id, phone: cp }).lean();
+    if (me && me.branchId) clerkBranchId = me.branchId;
+
+    if (clerkBranchId) {
+      const clerks = await UserRole.find({
+        businessId: biz._id, branchId: clerkBranchId,
+        pending: false, suspended: { $ne: true },
+        role: { $in: ["clerk", "manager"] }
+      }).select("phone").lean();
+      const sole = clerks.length === 1 && _normPhone(clerks[0].phone) === cp;
+      if (sole) {
+        clauses.push({ $and: [ noTill, noRecorder, { branchId: clerkBranchId } ] });
+      }
+    }
+  } catch (_) {}
+
+  return { $or: clauses };
+}
+
 export async function buildClerkStatement({ biz, clerkPhone, branchId, start, end, openingCustody: openingCustodyOverride = null }) {
   const cur = biz.currency || "USD";
 
@@ -615,15 +673,22 @@ export async function buildClerkStatement({ biz, clerkPhone, branchId, start, en
   try {
     CashPayout = (await import("../models/cashPayout.js")).default;
     const noWhoQ = { businessId: biz._id, createdAt: { $gte: start, $lte: end }, ...(branchId ? { branchId } : {}) };
+    // ── Payouts that DEBIT this clerk's till ────────────────────────────────
+    // Explicit cash source (fromPhone), legacy recorder fallback, OR an
+    // orphan rescue for pre-fix drawings with no attribution at all - see
+    // payoutDebitMatch. This is what finally reduces the clerk's balance for
+    // the "$167 owner drawing" (createdBy null, recordedBy absent).
+    const debitsThisClerk = await payoutDebitMatch({ biz, clerkPhone: cp, branchId });
     [payouts, payoutsReceived] = await Promise.all([
-      CashPayout.find({ ...noWhoQ, $or: [{ createdBy: cp }, { recordedBy: cp }] }).lean(),
+      CashPayout.find({ ...noWhoQ, ...debitsThisClerk }).lean(),
       CashPayout.find({ ...noWhoQ, paidToPhone: cp }).lean()
     ]);
-    // A payout can never be from-and-to the same person twice over: if someone
-    // somehow recorded a payout to themselves, drop the received side (net 0)
-    payoutsReceived = payoutsReceived.filter(p =>
-      String(p.createdBy || p.recordedBy || "") !== cp
-    );
+    // A payout can never be from-and-to the same person: if the money both
+    // left and returned to this clerk's own till, drop the received side.
+    payoutsReceived = payoutsReceived.filter(p => {
+      const source = p.fromPhone || p.createdBy || p.recordedBy || "";
+      return String(source) !== cp;
+    });
   } catch (_) {}
 
   // ── Admin-entered income attributed to this clerk (CashIncome) ─────────────
@@ -678,10 +743,20 @@ export async function buildClerkStatement({ biz, clerkPhone, branchId, start, en
   for (const p of payouts) {
     const isDrawing = RE.test(p.reason || "");
     const toWhom = p.paidToName ? ` → ${p.paidToName}` : "";
+    // When this row is on the statement because the payout's till (fromPhone)
+    // is this clerk, but SOMEONE ELSE recorded it (e.g. the owner entered a
+    // drawing from the clerk's drawer), name the recorder for accountability.
+    let byWhom = "";
+    if (p.fromPhone && String(p.fromPhone) === cp) {
+      const recorder = String(p.createdBy || p.recordedBy || "");
+      if (recorder && recorder !== cp) {
+        try { const r = await resolveStaff(recorder); byWhom = ` (recorded by ${r.name || recorder})`; } catch (_) {}
+      }
+    }
     txRows.push({
       at: new Date(p.createdAt),
       typeLabel: isDrawing ? "Owner Drawing" : "Cash Payout",
-      description: `${p.reason || (isDrawing ? "Drawing" : "Payout")}${toWhom}${p.reversed ? " (REVERSED)" : ""}`,
+      description: `${p.reason || (isDrawing ? "Drawing" : "Payout")}${toWhom}${byWhom}${p.reversed ? " (REVERSED)" : ""}`,
       credit: 0, debit: p.amount || 0
     });
   }
@@ -691,7 +766,7 @@ export async function buildClerkStatement({ biz, clerkPhone, branchId, start, en
   // payouts already carry amount 0, so both sides self-correct together.
   for (const p of payoutsReceived) {
     let fromName = "Staff";
-    try { const r = await resolveStaff(p.createdBy || p.recordedBy || null); fromName = r.name || "Staff"; } catch (_) {}
+    try { const r = await resolveStaff(p.fromPhone || p.createdBy || p.recordedBy || null); fromName = r.name || "Staff"; } catch (_) {}
     txRows.push({
       at: new Date(p.createdAt),
       typeLabel: "Payout Received",
