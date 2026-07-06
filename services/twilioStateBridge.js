@@ -386,6 +386,13 @@ const restrictedStateMap = {
     rb_billing_stmt_custom_date: "reports",
     rb_expense_pick_account:     "payments",
     rb_expense_enter_details:    "payments",
+    // Stock Control report states use the known-valid "reports" section; the
+    // add/stock-in/adjust states are intentionally NOT mapped here - they're
+    // only reachable via the already role-gated Stock Control menu, and an
+    // unmapped state simply skips the section check (avoids depending on a
+    // section name we can't verify in roleGuard.js).
+    stock_report_period:      "reports",
+    stock_report_custom_date: "reports",
     payment_amount: "payments",
     payment_method: "payments",
     expense_amount: "payments",
@@ -4063,6 +4070,218 @@ ${stmt.rows.length} transactions
     return sendRecurringBillingMenu(from);
   }
 
+  // ═══════════════════════════════════════════════════════════════════════
+  // STOCK CONTROL - multi-step flows
+  // ═══════════════════════════════════════════════════════════════════════
+
+  // ── Add a tracked product: name → unit → opening qty → cost → sell →
+  //    reorder → aliases → save ─────────────────────────────────────────────
+  if (state === "stock_add_name") {
+    if (trimmed.toLowerCase() === "cancel" || a === "stock_menu") {
+      biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
+      const { sendStockMenu } = await import("./metaMenus.js");
+      return sendStockMenu(from, biz);
+    }
+    biz.sessionData = { stockDraft: { name: trimmed } };
+    biz.sessionState = "stock_add_unit";
+    await saveBizSafe(biz);
+    await sendText(from, `Unit for *${trimmed}*? (e.g. each, box, kg, crate, litre)\n\nReply *each* if unsure.`);
+    return true;
+  }
+
+  if (state === "stock_add_unit") {
+    const d = biz.sessionData.stockDraft || {};
+    d.unit = trimmed || "each";
+    biz.sessionData.stockDraft = d;
+    biz.sessionState = "stock_add_opening";
+    await saveBizSafe(biz);
+    await sendText(from, `How many *${d.name}* do you have in stock right now? (opening quantity)\n\nReply a number, or *0* if none.`);
+    return true;
+  }
+
+  if (state === "stock_add_opening") {
+    const d = biz.sessionData.stockDraft || {};
+    const n = parseFloat(String(trimmed).replace(/[^0-9.]/g, ""));
+    if (isNaN(n)) { await sendText(from, "❌ Please reply with a number (e.g. 24)."); return true; }
+    d.openingQty = n;
+    biz.sessionData.stockDraft = d;
+    biz.sessionState = "stock_add_cost";
+    await saveBizSafe(biz);
+    await sendText(from, `What does ONE *${d.unit}* of *${d.name}* cost you to buy? (${biz.currency})\n\nReply a number, or *0* to skip.`);
+    return true;
+  }
+
+  if (state === "stock_add_cost") {
+    const d = biz.sessionData.stockDraft || {};
+    d.costPrice = parseFloat(String(trimmed).replace(/[^0-9.]/g, "")) || 0;
+    biz.sessionData.stockDraft = d;
+    biz.sessionState = "stock_add_sell";
+    await saveBizSafe(biz);
+    await sendText(from, `Selling price per *${d.unit}*? (${biz.currency})\n\nReply a number, or *0* to skip.`);
+    return true;
+  }
+
+  if (state === "stock_add_sell") {
+    const d = biz.sessionData.stockDraft || {};
+    d.sellPrice = parseFloat(String(trimmed).replace(/[^0-9.]/g, "")) || 0;
+    biz.sessionData.stockDraft = d;
+    biz.sessionState = "stock_add_reorder";
+    await saveBizSafe(biz);
+    await sendText(from, `Low-stock alert level? You'll be warned when stock drops to this many *${d.unit}*.\n\nReply a number, or *0* for no alert.`);
+    return true;
+  }
+
+  if (state === "stock_add_reorder") {
+    const d = biz.sessionData.stockDraft || {};
+    d.reorderLevel = parseFloat(String(trimmed).replace(/[^0-9.]/g, "")) || 0;
+    biz.sessionData.stockDraft = d;
+    biz.sessionState = "stock_add_aliases";
+    await saveBizSafe(biz);
+    await sendText(from, `Any other names this product is written as on your sales? This helps match sales to stock automatically.\n\ne.g. for *Coca-Cola 500ml* you might add: *coke, coca cola*\n\nReply with names separated by commas, or *skip*.`);
+    return true;
+  }
+
+  if (state === "stock_add_aliases") {
+    const d = biz.sessionData.stockDraft || {};
+    const aliases = /^skip$/i.test(trimmed) ? [] : trimmed.split(",").map(s => s.trim()).filter(Boolean);
+    const branchId = getEffectiveBranchId(caller, biz.sessionData);
+    try {
+      const { createStockItem } = await import("./stockService.js");
+      await createStockItem({
+        businessId: biz._id, branchId,
+        name: d.name, unit: d.unit || "each",
+        costPrice: d.costPrice || 0, sellPrice: d.sellPrice || 0,
+        openingQty: d.openingQty || 0, reorderLevel: d.reorderLevel || 0,
+        aliases, currency: biz.currency, createdBy: phone
+      });
+      biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
+      await sendText(from,
+`✅ *Now tracking ${d.name}*
+  📦 On hand: ${d.openingQty || 0} ${d.unit}
+  💵 Cost/Sell: ${(d.costPrice||0).toFixed(2)} / ${(d.sellPrice||0).toFixed(2)} ${biz.currency}${d.reorderLevel ? `
+  🔔 Alert at: ${d.reorderLevel} ${d.unit}` : ""}${aliases.length ? `
+  🔤 Also matches: ${aliases.join(", ")}` : ""}
+
+Sales of this product will now reduce its stock automatically.`);
+    } catch (e) {
+      console.error("[STOCK add]", e.message);
+      biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
+      await sendText(from, "❌ Couldn't save the product. Please try again.");
+    }
+    const { sendStockMenu } = await import("./metaMenus.js");
+    return sendStockMenu(from, biz);
+  }
+
+  // ── Stock In: pick item → qty ───────────────────────────────────────────
+  if (state === "stock_in_pick" || state === "stock_adjust_pick") {
+    const list = biz.sessionData?.stockItemList || [];
+    const n = parseInt(trimmed, 10);
+    if (isNaN(n) || n < 1 || n > list.length) {
+      await sendText(from, `❌ Reply with a number from the list (1-${list.length}).`);
+      return true;
+    }
+    const picked = list[n - 1];
+    biz.sessionData.stockPick = picked;
+    const isIn = state === "stock_in_pick";
+    biz.sessionState = isIn ? "stock_in_qty" : "stock_adjust_qty";
+    await saveBizSafe(biz);
+    if (isIn) {
+      await sendText(from, `📥 How many *${picked.unit}* of *${picked.name}* did you receive?\n\nReply a number (currently ${picked.qty} on hand).`);
+    } else {
+      await sendText(from, `🔧 *${picked.name}* — current: ${picked.qty} ${picked.unit}.\n\nReply with the *change*:\n• *-3* for 3 lost/wasted/broken\n• *+5* to add a correction\n• or type the *correct count* like *=20*`);
+    }
+    return true;
+  }
+
+  if (state === "stock_in_qty") {
+    const picked = biz.sessionData?.stockPick;
+    const n = parseFloat(String(trimmed).replace(/[^0-9.]/g, ""));
+    if (!picked || isNaN(n) || n <= 0) { await sendText(from, "❌ Please reply with a positive number."); return true; }
+    try {
+      const { recordMovement } = await import("./stockService.js");
+      const item = await recordMovement({
+        businessId: biz._id, stockItemId: picked.id, branchId: getEffectiveBranchId(caller, biz.sessionData),
+        type: "purchase", qty: n, reason: "Stock in", createdBy: phone, currency: biz.currency
+      });
+      biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
+      await sendText(from, `✅ Added *${n} ${picked.unit}* of *${picked.name}*.\n📦 Now on hand: *${item ? item.currentQty : "?"} ${picked.unit}*`);
+    } catch (e) {
+      console.error("[STOCK in]", e.message);
+      biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
+      await sendText(from, "❌ Couldn't record stock in. Try again.");
+    }
+    const { sendStockMenu } = await import("./metaMenus.js");
+    return sendStockMenu(from, biz);
+  }
+
+  if (state === "stock_adjust_qty") {
+    const picked = biz.sessionData?.stockPick;
+    if (!picked) { biz.sessionState = "ready"; await saveBizSafe(biz); return true; }
+    const raw = trimmed.replace(/\s/g, "");
+    let type = "adjustment", qty = null, reason = "Adjustment";
+    if (raw.startsWith("=")) {
+      // Set to exact count → delta from current
+      const target = parseFloat(raw.slice(1).replace(/[^0-9.]/g, ""));
+      if (isNaN(target)) { await sendText(from, "❌ Try *=20* to set the count to 20."); return true; }
+      qty = target - (picked.qty || 0);
+      reason = "Count correction";
+    } else {
+      const v = parseFloat(raw.replace(/[^0-9.\-]/g, ""));
+      if (isNaN(v) || v === 0) { await sendText(from, "❌ Reply like *-3*, *+5* or *=20*."); return true; }
+      qty = v;
+      if (v < 0) { type = "wastage"; reason = "Wastage / loss"; }
+    }
+    try {
+      const { recordMovement } = await import("./stockService.js");
+      const item = await recordMovement({
+        businessId: biz._id, stockItemId: picked.id, branchId: getEffectiveBranchId(caller, biz.sessionData),
+        type, qty, reason, createdBy: phone, currency: biz.currency
+      });
+      biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
+      await sendText(from, `✅ Adjusted *${picked.name}* by *${qty > 0 ? "+" : ""}${qty} ${picked.unit}*.\n📦 Now on hand: *${item ? item.currentQty : "?"} ${picked.unit}*`);
+    } catch (e) {
+      console.error("[STOCK adjust]", e.message);
+      biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
+      await sendText(from, "❌ Couldn't adjust stock. Try again.");
+    }
+    const { sendStockMenu } = await import("./metaMenus.js");
+    return sendStockMenu(from, biz);
+  }
+
+  // ── Stock & Sales report: period → PDF ──────────────────────────────────
+  if (state === "stock_report_period") {
+    let periodStart, periodEnd, pl;
+    if (a === "stock_period_custom") {
+      biz.sessionState = "stock_report_custom_date"; await saveBizSafe(biz);
+      await sendButtons(from, { text: "🗓 Enter date range:\n*01 Jun - 30 Jun*", buttons: [{ id: "stock_menu", title: "⬅ Cancel" }] });
+      return true;
+    } else if (a === "stock_period_all") {
+      periodStart = new Date(2020, 0, 1); periodEnd = new Date(); periodEnd.setHours(23,59,59,999);
+      pl = "All Time";
+    } else if (a?.startsWith("stock_period_")) {
+      const [y, m] = a.replace("stock_period_", "").split("_").map(x => parseInt(x, 10));
+      periodStart = new Date(y, m, 1, 0, 0, 0, 0);
+      periodEnd   = new Date(y, m + 1, 0, 23, 59, 59, 999);
+      pl = periodStart.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+    } else {
+      await sendText(from, "❌ Please tap a period from the list."); return true;
+    }
+    biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
+    await _generateAndSendStockReport({ biz, from, caller, periodStart, periodEnd, pl });
+    const { sendStockMenu } = await import("./metaMenus.js");
+    return sendStockMenu(from, biz);
+  }
+
+  if (state === "stock_report_custom_date") {
+    const range = parseCustomDateRange(trimmed);
+    if (!range) { await sendText(from, "❌ Invalid format. Try: *01 Jun - 30 Jun*"); return true; }
+    const pl = `${range.start.toLocaleDateString("en-GB", { day: "numeric", month: "short" })} – ${range.end.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`;
+    biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
+    await _generateAndSendStockReport({ biz, from, caller, periodStart: range.start, periodEnd: range.end, pl });
+    const { sendStockMenu } = await import("./metaMenus.js");
+    return sendStockMenu(from, biz);
+  }
+
   // ── Unit expense: account picked → enter details ──────────────────────────
   if (state === "rb_expense_pick_account") {
     const list = biz.sessionData?.rbPickList;
@@ -4450,6 +4669,64 @@ ${stmt.rows.length} transactions
   return false;
 
   return false;
+}
+
+// ── Stock & Sales report helper (branch-scoped for staff, roll-up for owner) ─
+async function _generateAndSendStockReport({ biz, from, caller, periodStart, periodEnd, pl }) {
+  const { sendDocument } = await import("./metaSender.js");
+  await sendText(from, `⏳ Building Stock & Sales report for ${pl}...`);
+  try {
+    const { buildStockReport, generateStockReportPDF } = await import("./stockService.js");
+
+    // Owners see the whole business (with a per-branch roll-up); staff are
+    // scoped to their own branch, matching every other report.
+    const isOwner = caller?.role === "owner";
+    const branchId = isOwner ? null : (caller?.branchId || null);
+
+    let branchName = "";
+    if (branchId) {
+      try { const Branch = (await import("../models/branch.js")).default; const b = await Branch.findById(branchId).lean(); branchName = b?.name || ""; } catch (_) {}
+    }
+
+    const report = await buildStockReport({ biz, branchId, start: periodStart, end: periodEnd });
+
+    // Business-wide roll-up: one row per branch (owner only)
+    let branchBreakdown = null;
+    if (isOwner) {
+      try {
+        const Branch = (await import("../models/branch.js")).default;
+        const branches = await Branch.find({ businessId: biz._id }).lean();
+        if (branches.length > 1) {
+          branchBreakdown = [];
+          for (const b of branches) {
+            const br = await buildStockReport({ biz, branchId: b._id, start: periodStart, end: periodEnd });
+            if (br.itemCount) branchBreakdown.push({ branchName: b.name, itemCount: br.itemCount, totals: br.totals });
+          }
+        }
+      } catch (_) {}
+    }
+
+    const t = report.totals;
+    const cur = report.cur;
+    await sendText(from,
+`📊 *STOCK & SALES REPORT*
+${biz.name}${branchName ? ` · ${branchName}` : " · All branches"}
+${pl}
+━━━━━━━━━━━━━━━━━━━━
+Units sold:       ${t.soldQty}
+Money received:   ${t.receivedValue.toFixed(2)} ${cur}
+Yet to receive:   ${t.receivableValue.toFixed(2)} ${cur}
+Stock on hand:    ${t.stockValueCost.toFixed(2)} ${cur} (cost)
+Low-stock items:  ${t.lowStockCount}
+
+📄 Full report PDF attached below ↓`);
+
+    const { filename, url } = await generateStockReportPDF({ biz, report, periodLabel: pl, branchName, branchBreakdown });
+    await sendDocument(from, { link: url, filename });
+  } catch (e) {
+    console.error("[STOCK REPORT]", e.message);
+    await sendText(from, `❌ Failed to generate report: ${e.message}`);
+  }
 }
 
 // ── Recurring Billing: business-wide billing statement helper ────────────────

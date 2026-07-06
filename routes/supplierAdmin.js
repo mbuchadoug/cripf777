@@ -8,6 +8,7 @@ import SupplierSubscriptionPayment from "../models/supplierSubscriptionPayment.j
 import PhoneContact from "../models/phoneContact.js";   // ← ADD THIS LINE
 import SupplierLinkVisitor from "../models/supplierLinkVisitor.js";
 import financialAdminRoutes from "./supplierFinancialAdmin.js";
+import stockAdminRoutes from "./supplierStockAdmin.js";
 import SearchCommandLog from "../models/searchCommandLog.js";
 import { sendBuyerSearchHelpTemplate } from "../services/buyerSearchFollowUp.js";
 import BuyerRequest from "../models/buyerRequest2.js";
@@ -1618,6 +1619,10 @@ const successMsg = req.query.success
 
   <a href="/zq-admin/suppliers/${supplier._id}/finance" class="btn" style="background:#b45309;color:white">
     💰 Financial Records (act as clerk)
+  </a>
+
+  <a href="/zq-admin/suppliers/${supplier._id}/stock" class="btn" style="background:#0d9488;color:white">
+    📦 Stock Control
   </a>
 
   <form method="POST" action="/zq-admin/suppliers/${supplier._id}/delete" style="display:inline"
@@ -7335,6 +7340,7 @@ router.get("/vip-sellers", requireSupplierAdmin, async (req, res) => {
 
 router.use("/suppliers/:id/smart-link", smartLinkRoutes);
 router.use("/suppliers/:id/finance", financialAdminRoutes);
+router.use("/suppliers/:id/stock", stockAdminRoutes);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SUPPLIER SMART LINK CONTACTS VIEWER

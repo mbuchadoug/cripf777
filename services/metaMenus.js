@@ -518,8 +518,41 @@ export async function sendProductsMenu(to) {
     { id: ACTIONS.VIEW_PRODUCTS,      title: "📋 View Products & Services"},
     { id: "prod_update_prices",       title: "💰 Update Product Prices"  },
     { id: "prod_update_rates",        title: "💰 Update Service Rates"   },
+    { id: "stock_menu",               title: "📊 Stock Control"          },
     { id: ACTIONS.BULK_UPLOAD_MENU,   title: "📋 Bulk Paste List"        },
     { id: ACTIONS.BACK,               title: "⬅ Back"                   }
+  ]);
+}
+
+/* =============================================================================
+   STOCK CONTROL MENU  (optional feature - Products & Services → Stock Control)
+   Shows an Enable prompt until the business opts in; the full toolset after.
+============================================================================= */
+export async function sendStockMenu(to, biz) {
+  let enabled = false;
+  try {
+    const { isStockEnabled } = await import("./stockService.js");
+    enabled = await isStockEnabled(biz._id);
+  } catch (_) {}
+
+  if (!enabled) {
+    return sendList(to,
+      "📊 *Stock Control*\n\nTrack stock levels for the products you choose. Sales automatically reduce stock, and you get a Stock & Sales report showing movement, money received and money still owed.\n\nThis is optional - turn it on only if you want it.",
+      [
+        { id: "stock_enable",  title: "✅ Enable Stock Tracking" },
+        { id: "products_menu", title: "⬅ Back"                  }
+      ]
+    );
+  }
+
+  return sendList(to, "📊 *Stock Control*", [
+    { id: "stock_add_item",  title: "➕ Track a Product"       },
+    { id: "stock_in",        title: "📥 Record Stock In"       },
+    { id: "stock_adjust",    title: "🔧 Adjust / Wastage"      },
+    { id: "stock_view",      title: "📋 View Stock Levels"     },
+    { id: "stock_report",    title: "📈 Stock & Sales Report"  },
+    { id: "stock_settings",  title: "⚙ Stock Settings"        },
+    { id: "products_menu",   title: "⬅ Back"                  }
   ]);
 }
 

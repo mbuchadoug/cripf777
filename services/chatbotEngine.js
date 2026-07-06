@@ -51,6 +51,7 @@ import {
   sendUsersMenu,
   sendBranchesMenu,
   sendProductsMenu,
+  sendStockMenu,
   sendSubscriptionMenu,
   sendBranchSelectorInvoices,
   sendBranchSelectorQuotes,
@@ -3802,7 +3803,20 @@ a.startsWith("sup_load_preset_") ||
       a.startsWith("rb_period_") ||
       a.startsWith("rb_pay_method_") ||
       a === "rb_period_all" ||
-      a === "rb_period_custom"
+      a === "rb_period_custom" ||
+      // ── Stock Control ─────────────────────────────────────────────────────
+      a === "stock_menu" ||
+      a === "products_menu" ||
+      a === "stock_enable" ||
+      a === "stock_add_item" ||
+      a === "stock_in" ||
+      a === "stock_adjust" ||
+      a === "stock_view" ||
+      a === "stock_report" ||
+      a === "stock_settings" ||
+      a === "stock_disable" ||
+      a.startsWith("stock_item_") ||
+      a.startsWith("stock_period_")
     
     );
   // ── Parse skip / edit commands ────────────────────────────────────────────
@@ -10578,6 +10592,126 @@ Type *done* to save`,
     });
   }
 
+  // ── Stock Control ─────────────────────────────────────────────────────────
+  // Entry point from Products & Services → "📊 Stock Control".
+  // Optional feature; multi-step flows use twilioStateBridge states.
+  // ─────────────────────────────────────────────────────────────────────────
+  if (a === "stock_menu") {
+    if (!biz) return sendMainMenu(from);
+    return sendStockMenu(from, biz);
+  }
+
+  if (a === "products_menu") {
+    if (!biz) return sendMainMenu(from);
+    return sendProductsMenu(from);
+  }
+
+  if (a === "stock_enable") {
+    if (!biz) return sendMainMenu(from);
+    try {
+      const { enableStock } = await import("./stockService.js");
+      await enableStock(biz._id, from);
+      await sendText(from, "✅ *Stock tracking is now ON.*\n\nNext: tap *Track a Product* to choose the products you want to keep stock for. Only the products you add here are ever counted - everything else is ignored.");
+    } catch (e) {
+      console.error("[STOCK enable]", e.message);
+      await sendText(from, "❌ Couldn't enable stock tracking. Please try again.");
+    }
+    return sendStockMenu(from, biz);
+  }
+
+  if (a === "stock_disable") {
+    if (!biz) return sendMainMenu(from);
+    try {
+      const { disableStock } = await import("./stockService.js");
+      await disableStock(biz._id);
+      await sendText(from, "Stock tracking is now OFF. Your tracked products and history are kept - turn it back on any time and everything is still here.");
+    } catch (_) {}
+    return sendProductsMenu(from);
+  }
+
+  if (a === "stock_settings") {
+    if (!biz) return sendMainMenu(from);
+    return sendList(from, "⚙ *Stock Settings*", [
+      { id: "stock_disable", title: "🚫 Turn Stock Tracking OFF" },
+      { id: "stock_menu",    title: "⬅ Back" }
+    ]);
+  }
+
+  // Add a tracked product → ask for the name (multi-step in the bridge)
+  if (a === "stock_add_item") {
+    if (!biz) return sendMainMenu(from);
+    biz.sessionState = "stock_add_name";
+    biz.sessionData  = {};
+    await saveBizSafe(biz);
+    await sendButtons(from, {
+      text: "➕ *Track a Product*\n\nType the product *name* exactly as it appears on your sales (e.g. *Coca-Cola 500ml*).",
+      buttons: [{ id: "stock_menu", title: "⬅ Cancel" }]
+    });
+    return true;
+  }
+
+  // Record stock in / adjust / view / report → numbered pickers over items
+  if (a === "stock_in" || a === "stock_adjust") {
+    if (!biz) return sendMainMenu(from);
+    const { listStockItems } = await import("./stockService.js");
+    const branchId = getEffectiveBranchId(caller, biz.sessionData);
+    const items = await listStockItems(biz._id, branchId);
+    if (!items.length) {
+      await sendText(from, "You have no tracked products yet. Tap *Track a Product* first.");
+      return sendStockMenu(from, biz);
+    }
+    biz.sessionState = a === "stock_in" ? "stock_in_pick" : "stock_adjust_pick";
+    biz.sessionData  = { stockItemList: items.map(i => ({ id: String(i._id), name: i.name, unit: i.unit, qty: i.currentQty })) };
+    await saveBizSafe(biz);
+    let msg = (a === "stock_in" ? "📥 *Record Stock In*" : "🔧 *Adjust / Wastage*") + "\nWhich product?\n";
+    items.forEach((it, i) => { msg += `\n*${i + 1}.* ${it.name} — ${it.currentQty} ${it.unit} on hand`; });
+    msg += "\n\nReply with the number.";
+    await sendText(from, msg);
+    return true;
+  }
+
+  if (a === "stock_view") {
+    if (!biz) return sendMainMenu(from);
+    const { listStockItems } = await import("./stockService.js");
+    const branchId = getEffectiveBranchId(caller, biz.sessionData);
+    const items = await listStockItems(biz._id, branchId);
+    if (!items.length) {
+      await sendText(from, "No tracked products yet. Tap *Track a Product* to start.");
+      return sendStockMenu(from, biz);
+    }
+    // Recompute cached qty so the view is live
+    const { recomputeItemQty } = await import("./stockService.js");
+    let msg = "📋 *Stock Levels*\n";
+    for (const it of items) {
+      let q = it.currentQty;
+      try { const r = await recomputeItemQty(it._id); q = r ? r.currentQty : q; } catch (_) {}
+      const low = it.reorderLevel > 0 && q <= it.reorderLevel ? " ⚠️ LOW" : "";
+      msg += `\n• *${it.name}*: ${q} ${it.unit}${low}`;
+    }
+    msg += "\n\n_Tap Stock & Sales Report for movement and money._";
+    await sendText(from, msg);
+    return sendStockMenu(from, biz);
+  }
+
+  if (a === "stock_report") {
+    if (!biz) return sendMainMenu(from);
+    biz.sessionState = "stock_report_period";
+    biz.sessionData  = {};
+    await saveBizSafe(biz);
+    const now = new Date();
+    const months = [-1, 0].map(off => {
+      const d = new Date(now.getFullYear(), now.getMonth() + off, 1);
+      return { label: d.toLocaleDateString("en-GB", { month: "long", year: "numeric" }), month: d.getMonth(), year: d.getFullYear() };
+    });
+    await sendList(from, "📈 Stock & Sales Report - period:", [
+      ...months.map(m => ({ id: `stock_period_${m.year}_${m.month}`, title: m.label })),
+      { id: "stock_period_all",    title: "📊 All Time"     },
+      { id: "stock_period_custom", title: "📅 Custom Range" },
+      { id: "stock_menu",          title: "⬅ Cancel"       }
+    ]);
+    return true;
+  }
+
   // ── Recurring Billing ────────────────────────────────────────────────────
   // Entry point from Business Tools menu → "🏠 Recurring Billing"
   // All rb_* actions are routed here. Multi-step flows use twilioStateBridge states.
@@ -11796,7 +11930,21 @@ const shortcodeBlockedStates = [
   "rb_acct_stmt_custom_date",
   "rb_tenant_stmt_pick_period",
   "rb_billing_stmt_pick_period",
-  "rb_billing_stmt_custom_date"
+  "rb_billing_stmt_custom_date",
+  // ── Stock Control text-entry states ──
+  "stock_add_name",
+  "stock_add_unit",
+  "stock_add_opening",
+  "stock_add_cost",
+  "stock_add_sell",
+  "stock_add_reorder",
+  "stock_add_aliases",
+  "stock_in_pick",
+  "stock_in_qty",
+  "stock_adjust_pick",
+  "stock_adjust_qty",
+  "stock_report_period",
+  "stock_report_custom_date"
 ];
 
 if (
@@ -19466,7 +19614,12 @@ if (!isMetaAction && text && text.trim().length > 1) {
     "supplier_search_product", "supplier_search_city",
     "supplier_order_product", "supplier_order_address",
     "supplier_order_enter_price", "supplier_order_confirm_price",
-    "supplier_order_picking"
+    "supplier_order_picking",
+    // Stock Control multi-step states
+    "stock_add_name", "stock_add_unit", "stock_add_opening", "stock_add_cost",
+    "stock_add_sell", "stock_add_reorder", "stock_add_aliases",
+    "stock_in_pick", "stock_in_qty", "stock_adjust_pick", "stock_adjust_qty",
+    "stock_report_period", "stock_report_custom_date"
   ]);
 
   // FIX: no-biz buyers mid-order store their state in UserSession.tempData
