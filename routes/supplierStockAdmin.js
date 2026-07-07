@@ -216,41 +216,59 @@ router.get("/item/new", requireSupplierAdmin, async (req, res) => {
   try {
     const { supplier, biz } = await loadBizContext(req);
     const branches = await listBranches(biz._id);
-    // Existing catalogue products not yet tracked - the owner PICKS one instead
-    // of typing, so the tracked name matches invoices exactly (reliable matching).
+    const cur = biz.currency || "USD";
+    // Catalogue products not yet tracked. Tick several, set on-hand counts, and
+    // the sell price is pre-filled from the catalogue - track many in one go.
     const svc = await import("../services/stockService.js");
     let catalogue = [];
     try { catalogue = await svc.getTrackableCatalogue({ businessId: biz._id }); } catch (_) {}
-    const catOptions = [`<option value="">- pick a product from your catalogue -</option>`]
-      .concat(catalogue.map(name => `<option value="${esc(name)}">${esc(name)}</option>`))
-      .concat([`<option value="__other__">+ Other (type a new name below)</option>`])
-      .join("");
-    res.send(layout("Track a Product", `
+
+    const inp = `${fs};width:96px`;
+    const rowsHtml = catalogue.map((it, i) => `
+      <tr>
+        <td style="text-align:center"><input type="checkbox" name="pick" value="${i}"></td>
+        <td>${esc(it.name)}<input type="hidden" name="name_${i}" value="${esc(it.name)}"></td>
+        <td><input name="open_${i}" type="number" step="0.01" value="0" style="${inp}"></td>
+        <td><input name="sell_${i}" type="number" step="0.01" value="${it.sellPrice || 0}" style="${inp}"></td>
+        <td><input name="cost_${i}" type="number" step="0.01" value="0" style="${inp}"></td>
+        <td><input name="reorder_${i}" type="number" step="0.01" value="0" style="${inp}"></td>
+      </tr>`).join("");
+
+    const catalogueBlock = catalogue.length ? `
+      <p style="color:var(--muted);font-size:13px;margin:6px 0 10px">Tick the products you want to track, set how many you have on hand now, and adjust prices if needed. <b>Sell price is pre-filled from your catalogue.</b></p>
+      <div class="card" style="overflow-x:auto;padding:0">
+        <table class="data-table" style="min-width:640px">
+          <thead><tr>
+            <th style="width:52px;text-align:center">Track</th><th>Product</th>
+            <th>On hand</th><th>Sell (${esc(cur)})</th><th>Cost (${esc(cur)})</th><th>Reorder</th>
+          </tr></thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
+      </div>` : `<div class="card"><p style="color:var(--muted)">No catalogue products left to track. Add one below, or add products under <b>Products &amp; Services</b> first.</p></div>`;
+
+    res.send(layout("Track Products", `
       <a href="${stockUrl(supplier._id)}" class="back-link">← Back to stock</a>
-      <h2 style="margin:12px 0 16px">➕ Track a Product</h2>
+      <h2 style="margin:12px 0 6px">➕ Track Products</h2>
       ${alertBlock(req)}
-      <div class="card" style="max-width:560px">
-        <form method="POST" action="${stockUrl(supplier._id, "/item/add")}">
-          ${field("Pick a product *", `<select name="pickName" style="${fs}">${catOptions}</select>`)}
-          ${field("...or type a new product name", `<input name="customName" placeholder="only used if you picked \u201cOther\u201d above" style="${fs}">`)}
-          ${field("Branch", `<select name="branchId" style="${fs}">${branchOptions(branches, "")}</select>`)}
-          <div style="display:flex;gap:12px">
-            <div style="flex:1">${field("Unit", `<input name="unit" value="each" style="${fs}">`)}</div>
-            <div style="flex:1">${field("SKU (optional)", `<input name="sku" style="${fs}">`)}</div>
+      <form method="POST" action="${stockUrl(supplier._id, "/item/add-batch")}">
+        ${field("Branch (applies to all ticked below)", `<select name="branchId" style="${fs};max-width:360px">${branchOptions(branches, "")}</select>`)}
+        ${catalogueBlock}
+        <details class="card" style="margin-top:14px">
+          <summary style="font-weight:600;cursor:pointer">➕ Add a product not in the catalogue</summary>
+          <div style="margin-top:12px;max-width:520px">
+            ${field("Product name", `<input name="custom_name" placeholder="e.g. Coca-Cola 500ml" style="${fs}">`)}
+            <div style="display:flex;gap:12px">
+              <div style="flex:1">${field("On hand", `<input name="custom_open" type="number" step="0.01" value="0" style="${fs}">`)}</div>
+              <div style="flex:1">${field(`Sell price (${esc(cur)})`, `<input name="custom_sell" type="number" step="0.01" value="0" style="${fs}">`)}</div>
+            </div>
+            <div style="display:flex;gap:12px">
+              <div style="flex:1">${field(`Cost price (${esc(cur)})`, `<input name="custom_cost" type="number" step="0.01" value="0" style="${fs}">`)}</div>
+              <div style="flex:1">${field("Reorder level", `<input name="custom_reorder" type="number" step="0.01" value="0" style="${fs}">`)}</div>
+            </div>
           </div>
-          <div style="display:flex;gap:12px">
-            <div style="flex:1">${field("Opening qty", `<input name="openingQty" type="number" step="0.01" value="0" style="${fs}">`)}</div>
-            <div style="flex:1">${field("Reorder level", `<input name="reorderLevel" type="number" step="0.01" value="0" style="${fs}">`)}</div>
-          </div>
-          <div style="display:flex;gap:12px">
-            <div style="flex:1">${field("Cost price", `<input name="costPrice" type="number" step="0.01" value="0" style="${fs}">`)}</div>
-            <div style="flex:1">${field("Sell price", `<input name="sellPrice" type="number" step="0.01" value="0" style="${fs}">`)}</div>
-          </div>
-          ${field("Also matches (aliases, comma-separated)", `<input name="aliases" placeholder="coke, coca cola" style="${fs}">`)}
-          <p style="font-size:12px;color:var(--muted);margin:-6px 0 14px">Aliases help sales lines like “2x coke” reduce this product automatically.</p>
-          <button class="btn btn-blue" style="width:100%">Save Product</button>
-        </form>
-      </div>`));
+        </details>
+        <button class="btn btn-blue" style="width:100%;margin-top:14px">✅ Track selected products</button>
+      </form>`));
   } catch (e) { res.send(layout("Error", `<div class="alert red">${esc(e.message)}</div>`)); }
 });
 
@@ -272,6 +290,50 @@ router.post("/item/add", requireSupplierAdmin, async (req, res) => {
       currency: biz.currency, createdBy: "admin"
     });
     res.redirect(stockUrl(supplier._id, "?success=Product+added"));
+  } catch (e) { res.redirect(stockUrl(req.params.id, `/item/new?error=${encodeURIComponent(e.message)}`)); }
+});
+
+// Track several catalogue products at once (+ an optional custom one).
+router.post("/item/add-batch", requireSupplierAdmin, async (req, res) => {
+  try {
+    const { supplier, biz } = await loadBizContext(req);
+    const svc = await import("../services/stockService.js");
+    const b = req.body;
+    const branchId = b.branchId || null;
+    const picks = [].concat(b.pick || []).map(x => String(x));
+    let count = 0;
+
+    for (const idx of picks) {
+      const name = String(b[`name_${idx}`] || "").trim();
+      if (!name) continue;
+      await svc.createStockItem({
+        businessId: biz._id, branchId,
+        name, unit: "each",
+        openingQty:   parseFloat(b[`open_${idx}`])    || 0,
+        sellPrice:    parseFloat(b[`sell_${idx}`])    || 0,
+        costPrice:    parseFloat(b[`cost_${idx}`])    || 0,
+        reorderLevel: parseFloat(b[`reorder_${idx}`]) || 0,
+        aliases: [], currency: biz.currency, createdBy: "admin"
+      });
+      count++;
+    }
+
+    const cname = String(b.custom_name || "").trim();
+    if (cname) {
+      await svc.createStockItem({
+        businessId: biz._id, branchId,
+        name: cname, unit: "each",
+        openingQty:   parseFloat(b.custom_open)    || 0,
+        sellPrice:    parseFloat(b.custom_sell)    || 0,
+        costPrice:    parseFloat(b.custom_cost)    || 0,
+        reorderLevel: parseFloat(b.custom_reorder) || 0,
+        aliases: [], currency: biz.currency, createdBy: "admin"
+      });
+      count++;
+    }
+
+    if (!count) return res.redirect(stockUrl(supplier._id, "/item/new?error=Tick+at+least+one+product+or+add+a+custom+one"));
+    return res.redirect(stockUrl(supplier._id, `?success=Now+tracking+${count}+product${count === 1 ? "" : "s"}`));
   } catch (e) { res.redirect(stockUrl(req.params.id, `/item/new?error=${encodeURIComponent(e.message)}`)); }
 });
 

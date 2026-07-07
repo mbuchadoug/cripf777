@@ -10676,11 +10676,11 @@ Type *done* to save`,
     return sendStockMenu(from, biz);
   }
 
-  // Add a tracked product → PICK from the business's existing catalogue.
-  // No typing: the owner replies with a number. Picking guarantees the tracked
-  // name is IDENTICAL to the catalogue/invoice name, so sale auto-matching works.
-  // Reply 0 falls back to typing (for a product not in the catalogue yet); the
-  // chosen name is then fed into the SAME add-flow the bridge already runs.
+  // Track products → PICK from the catalogue. Multi-select supported: reply
+  // several numbers (e.g. 1,3,5) or "all" to track many at once. Picking keeps
+  // the tracked name identical to the catalogue/invoice name (reliable matching)
+  // and carries the sell price across automatically. "0" types a custom product
+  // (full detailed flow in the bridge); "00" cancels.
   if (a === "stock_add_item") {
     if (!biz) return sendMainMenu(from);
     const { getTrackableCatalogue } = await import("./stockService.js");
@@ -10689,7 +10689,7 @@ Type *done* to save`,
     try { catalogue = await getTrackableCatalogue({ businessId: biz._id, branchId }); } catch (_) {}
 
     const MAX = 30;                       // keep the WhatsApp message readable
-    const shown = catalogue.slice(0, MAX);
+    const shown = catalogue.slice(0, MAX);   // [{ name, sellPrice }]
 
     if (!shown.length) {
       // Nothing in the catalogue yet → go straight to typing (existing add-flow).
@@ -10704,13 +10704,17 @@ Type *done* to save`,
     }
 
     biz.sessionState = "stock_add_pick";
-    biz.sessionData  = { ...(biz.sessionData || {}), stockAddPickList: shown };
+    biz.sessionData  = { ...(biz.sessionData || {}), stockAddPickList: shown, stockAddBranchId: branchId || null };
     await saveBizSafe(biz);
 
-    let msg = "➕ *Track a Product*\n" + "─".repeat(22) + "\nPick the product you want to keep stock for:\n";
-    shown.forEach((name, i) => { msg += `\n*${i + 1}.* ${name}`; });
+    let msg = "➕ *Track Products*\n" + "─".repeat(22) + "\nPick the products you want to keep stock for:\n";
+    shown.forEach((it, i) => {
+      const price = it.sellPrice ? ` — sell ${formatMoney(it.sellPrice, biz.currency)}` : "";
+      msg += `\n*${i + 1}.* ${it.name}${price}`;
+    });
     msg += "\n" + "─".repeat(22);
-    msg += "\n\n✏️ Reply with the *number*.";
+    msg += "\n\n✏️ Reply *one* number, or *several* to track many at once (e.g. *1,3,5*).";
+    msg += "\n🌟 Reply *all* to track everything listed.";
     msg += "\n➕ Reply *0* to type a product that isn't listed.";
     msg += "\n↩️ Reply *00* to cancel.";
     await sendText(from, msg);
@@ -12007,6 +12011,7 @@ const shortcodeBlockedStates = [
   "stock_add_reorder",
   "stock_add_aliases",
   "stock_add_pick",
+  "stock_add_qty",
   "stock_in_pick",
   "stock_in_qty",
   "stock_adjust_pick",
@@ -19685,7 +19690,7 @@ if (!isMetaAction && text && text.trim().length > 1) {
     "supplier_order_picking",
     // Stock Control multi-step states
     "stock_add_name", "stock_add_unit", "stock_add_opening", "stock_add_cost",
-    "stock_add_sell", "stock_add_reorder", "stock_add_aliases", "stock_add_pick",
+    "stock_add_sell", "stock_add_reorder", "stock_add_aliases", "stock_add_pick", "stock_add_qty",
     "stock_in_pick", "stock_in_qty", "stock_adjust_pick", "stock_adjust_qty",
     "stock_report_period", "stock_report_custom_date"
   ]);
@@ -20450,8 +20455,10 @@ if (biz) {
   // the reply here. On a valid pick we drop the chosen name into the EXISTING
   // bridge add-flow (stock_add_name) with continueTwilioFlow; that flow is unchanged.
   if (biz?.sessionState === "stock_add_pick" && !isMetaAction) {
-    const raw  = String(text || "").trim();
-    const list = Array.isArray(biz.sessionData?.stockAddPickList) ? biz.sessionData.stockAddPickList : [];
+    const raw   = String(text || "").trim();
+    const lower = raw.toLowerCase();
+    const list  = Array.isArray(biz.sessionData?.stockAddPickList) ? biz.sessionData.stockAddPickList : [];
+    const branchId = biz.sessionData?.stockAddBranchId || null;
 
     if (raw === "00") {
       biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
@@ -20459,7 +20466,7 @@ if (biz) {
     }
 
     if (raw === "0") {
-      // Type a product that isn't in the catalogue → existing typed add-flow.
+      // Type a product that isn't in the catalogue → full detailed add-flow (bridge).
       biz.sessionState = "stock_add_name"; biz.sessionData = {}; await saveBizSafe(biz);
       return sendButtons(from, {
         text: "➕ *Track a Product*\n\nType the product *name* exactly as it appears on your sales (e.g. *Coca-Cola 500ml*).",
@@ -20467,17 +20474,90 @@ if (biz) {
       });
     }
 
-    const n = parseInt(raw, 10);
-    if (!Number.isInteger(n) || n < 1 || n > list.length) {
-      await sendText(from, `❌ Please reply with a number between *1* and *${list.length}*, or *0* to type a new product, or *00* to cancel.`);
-      return true;
+    // Resolve picked indices - supports "all", "1,3,5", "1 3 5".
+    let indices;
+    if (lower === "all") {
+      indices = list.map((_, i) => i);
+    } else {
+      const nums = raw.split(/[\s,]+/).filter(Boolean).map(x => parseInt(x, 10));
+      const bad  = nums.length === 0 || nums.some(x => !Number.isInteger(x) || x < 1 || x > list.length);
+      if (bad) {
+        await sendText(from, `❌ Reply with number(s) between *1* and *${list.length}* (e.g. *2* or *1,3,5*), *all*, *0* to type a new product, or *00* to cancel.`);
+        return true;
+      }
+      indices = [...new Set(nums)].map(x => x - 1);
     }
 
-    const chosenName = list[n - 1];
-    // Enter the existing add-flow at its name step and inject the picked name.
-    biz.sessionState = "stock_add_name"; biz.sessionData = {}; await saveBizSafe(biz);
-    await continueTwilioFlow({ from, text: chosenName });
-    return;
+    const chosen = indices.map(i => list[i]).filter(Boolean);   // [{ name, sellPrice }]
+    biz.sessionState = "stock_add_qty";
+    biz.sessionData  = { stockAddChosen: chosen, stockAddBranchId: branchId };
+    await saveBizSafe(biz);
+
+    let msg = "📦 *How many of each do you have on hand right now?*\n";
+    msg += "Reply the counts in the *same order*, separated by commas:\n";
+    chosen.forEach((it, i) => { msg += `\n*${i + 1}.* ${it.name}`; });
+    msg += `\n\n👉 e.g. *${chosen.map(() => "0").join(", ")}*`;
+    msg += "\n⏭️ Reply *skip* to set them all to 0 (you can update later).";
+    await sendText(from, msg);
+    return true;
+  }
+
+  // ── Stock: batch opening quantities → create every picked product ──────────
+  // Auto-prices from the catalogue; costs / reorder default to 0 and can be set
+  // later (web panel, or Record Stock In / Set count here). Fast path: one line.
+  if (biz?.sessionState === "stock_add_qty" && !isMetaAction) {
+    const raw      = String(text || "").trim();
+    const chosen   = Array.isArray(biz.sessionData?.stockAddChosen) ? biz.sessionData.stockAddChosen : [];
+    const branchId = biz.sessionData?.stockAddBranchId || null;
+
+    if (!chosen.length || raw === "00" || /^cancel$/i.test(raw)) {
+      biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
+      return sendStockMenu(from, biz);
+    }
+
+    let qtys;
+    if (/^skip$/i.test(raw)) {
+      qtys = chosen.map(() => 0);
+    } else {
+      const parts = raw.split(/[\s,]+/).filter(Boolean).map(p => parseFloat(String(p).replace(/[^0-9.\-]/g, "")));
+      if (parts.length !== chosen.length || parts.some(nn => isNaN(nn))) {
+        await sendText(from, `❌ Please reply *${chosen.length}* number(s) in order (e.g. *${chosen.map(() => "0").join(", ")}*), or *skip* to set them all to 0.`);
+        return true;
+      }
+      qtys = parts;
+    }
+
+    biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
+
+    const created = [];
+    try {
+      const { createStockItem } = await import("./stockService.js");
+      for (let i = 0; i < chosen.length; i++) {
+        const it = chosen[i];
+        await createStockItem({
+          businessId: biz._id, branchId,
+          name: it.name, unit: "each",
+          sellPrice: Number(it.sellPrice) || 0, costPrice: 0,
+          openingQty: Number(qtys[i]) || 0, reorderLevel: 0,
+          aliases: [], currency: biz.currency, createdBy: from
+        });
+        created.push({ name: it.name, qty: Number(qtys[i]) || 0, sellPrice: Number(it.sellPrice) || 0 });
+      }
+    } catch (e) {
+      console.error("[STOCK batch add]", e.message);
+      await sendText(from, "❌ Something went wrong saving one or more products. Check *View Stock Levels* and re-add any that are missing.");
+      return sendStockMenu(from, biz);
+    }
+
+    let msg = `✅ *Now tracking ${created.length} product${created.length === 1 ? "" : "s"}:*\n`;
+    created.forEach(c => {
+      const price = c.sellPrice ? ` · sell ${formatMoney(c.sellPrice, biz.currency)}` : "";
+      msg += `\n• *${c.name}* — ${c.qty} on hand${price}`;
+    });
+    msg += "\n\nSales of these will reduce stock automatically (when *Sales Auto-Deduct* is ON).";
+    msg += "\n💡 Add cost price or a low-stock alert anytime in the web panel, or use *📥 Record Stock In* / *🎯 Set count* here.";
+    await sendText(from, msg);
+    return sendStockMenu(from, biz);
   }
 
   // ── Recurring billing: interactive buttons that arrive as isMetaAction but
