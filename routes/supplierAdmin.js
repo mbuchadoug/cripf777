@@ -10193,6 +10193,11 @@ router.get("/suppliers/:id/staff", requireSupplierAdmin, async (req, res) => {
                   ${u.suspended ? "▶ Unsuspend" : "⏸ Suspend"}
                 </button>
               </form>
+              <!-- Generate / reset the web-portal login -->
+              <form method="POST" action="/zq-admin/suppliers/${supplier._id}/users/${u._id}/portal-login" style="display:inline"
+                onsubmit="return confirm('Issue a web portal login for ${esc(u.phone)}? You will get a username and temporary password to share.')">
+                <button style="background:#ede9fe;color:#6d28d9;border:none;padding:4px 10px;border-radius:6px;font-size:12px;cursor:pointer">🔑 ${u.username ? "Reset login" : "Create login"}</button>
+              </form>
               <!-- Remove (only if not owner or multiple owners exist) -->
               <form method="POST" action="/zq-admin/suppliers/${supplier._id}/users/${u._id}/remove" style="display:inline"
                 onsubmit="return confirm('Remove ${esc(u.phone)} (${u.role}) from this business?')">
@@ -10588,6 +10593,44 @@ router.post("/suppliers/:id/users/:uid/suspend", requireSupplierAdmin, async (re
     await UserRole.findByIdAndUpdate(req.params.uid, { $set: { suspended: !user.suspended } });
     const msg = user.suspended ? "User unsuspended" : "User suspended";
     res.redirect(`/zq-admin/suppliers/${req.params.id}/staff?success=${encodeURIComponent(msg)}`);
+  } catch (err) {
+    res.redirect(`/zq-admin/suppliers/${req.params.id}/staff?error=${encodeURIComponent(err.message)}`);
+  }
+});
+
+// ── POST /suppliers/:id/users/:uid/portal-login ───────────────────────────────
+// Generate (or reset) the /office web-portal login for ANY staff member OR the
+// business owner. Produces a username + one-time temporary password to hand over.
+router.post("/suppliers/:id/users/:uid/portal-login", requireSupplierAdmin, async (req, res) => {
+  try {
+    const UserRole = (await import("../models/userRole.js")).default;
+    const user = await UserRole.findById(req.params.uid);
+    if (!user) return res.redirect(`/zq-admin/suppliers/${req.params.id}/staff?error=User not found`);
+
+    if (!user.username) user.username = await UserRole.makeUsername(user.name, "user");
+    const tempPw = "zq" + Math.random().toString(36).slice(2, 7);
+    await user.setPassword(tempPw);
+    user.mustSetPassword = true;
+    if (user.pending) user.pending = false;
+    await user.save();
+
+    const roleLabel = { owner: "Owner", admin: "Administrator", manager: "Manager", clerk: "Clerk" }[user.role] || user.role;
+    const base = process.env.SITE_URL || "";
+    const portalUrl = (base.endsWith("/") ? base.slice(0, -1) : base) + "/office/login";
+    return res.send(layout("Portal Login", `
+      <a href="/zq-admin/suppliers/${req.params.id}/staff" style="color:#6d28d9;font-weight:600;text-decoration:none">← Back to staff</a>
+      <div style="max-width:520px;margin:18px auto;background:#fff;border:1px solid var(--border);border-radius:14px;overflow:hidden">
+        <div style="padding:16px 20px;border-bottom:1px solid var(--border);font-weight:800;font-size:16px">🔑 Portal login ready</div>
+        <div style="padding:20px">
+          <p style="color:var(--muted);font-size:13.5px;margin:0 0 14px">Share these with <strong>${esc(user.name || user.phone)}</strong> (${esc(roleLabel)}). They sign in at the portal address below and set their own password on first login.</p>
+          <div style="background:#f8fafc;border:1px solid var(--border);border-radius:12px;padding:18px">
+            <div style="margin-bottom:14px"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700">Portal address</div><div style="font-size:15px;font-weight:700;margin-top:3px">${esc(portalUrl)}</div></div>
+            <div style="margin-bottom:14px"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700">Username</div><div style="font-family:monospace;background:#0f172a;color:#a5f3fc;display:inline-block;padding:4px 12px;border-radius:8px;font-size:15px;font-weight:700;margin-top:4px">${esc(user.username)}</div></div>
+            <div><div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700">Temporary password</div><div style="font-family:monospace;background:#0f172a;color:#a5f3fc;display:inline-block;padding:4px 12px;border-radius:8px;font-size:15px;font-weight:700;margin-top:4px">${esc(tempPw)}</div></div>
+          </div>
+          <p style="font-size:12.5px;color:#b45309;margin-top:14px">⚠️ Copy the password now — it is shown only once. Use "Reset login" on the staff page to issue a new one.</p>
+        </div>
+      </div>`));
   } catch (err) {
     res.redirect(`/zq-admin/suppliers/${req.params.id}/staff?error=${encodeURIComponent(err.message)}`);
   }
