@@ -290,6 +290,7 @@ export async function sendBusinessToolsMenu(to, biz) {
     { id: ACTIONS.PAYMENTS_MENU, title: "💰 Payments" },
     { id: ACTIONS.CLIENTS_MENU,  title: "👥 Clients" },
     { id: ACTIONS.PRODUCTS_MENU, title: "📦 Products & Services" },
+    { id: "stock_menu",          title: "📊 Stock Control" },
     { id: ACTIONS.REPORTS_MENU,  title: "📈 Reports" },
     // Branches & Users - only show for silver+ (multi-branch packages)
     ...(isPaid && ["silver", "gold", "enterprise"].includes(pkg)
@@ -303,7 +304,22 @@ export async function sendBusinessToolsMenu(to, biz) {
     { id: ACTIONS.BACK,             title: "⬅ Back"              }
   ];
 
-  const filtered = await filterMenuByRole({ from: to, biz, items });
+  let filtered = await filterMenuByRole({ from: to, biz, items });
+
+  // WhatsApp interactive lists are capped at 10 rows. Adding Stock Control can
+  // push multi-branch packages (which also show Branches + Users) to 11 rows,
+  // and Meta rejects an 11-row list. When that happens, fold Branches + Users
+  // into a single "Branches & Users" row that opens a small submenu - nothing
+  // is lost and the list fits.
+  if (filtered.length > 10) {
+    const bIdx = filtered.findIndex(i => i.id === ACTIONS.BRANCHES_MENU);
+    const hasUsers = filtered.some(i => i.id === ACTIONS.USERS_MENU);
+    if (bIdx !== -1 && hasUsers) {
+      filtered = filtered.filter(i => i.id !== ACTIONS.BRANCHES_MENU && i.id !== ACTIONS.USERS_MENU);
+      filtered.splice(bIdx, 0, { id: "branches_users_menu", title: "🏬 Branches & Users" });
+    }
+  }
+
   return sendList(to, "📊 *Business Tools*", filtered);
 }
 /* =============================================================================
@@ -506,6 +522,20 @@ export async function sendBranchesMenu(to) {
     { id: ACTIONS.ASSIGN_BRANCH_USERS, title: "👥 Assign Users" },
     { id: ACTIONS.BACK, title: "⬅ Back" }
   ]);
+}
+
+/* =============================================================================
+   BRANCHES & USERS (combined) - shown only when Business Tools would exceed
+   WhatsApp's 10-row list cap. Keeps both destinations reachable in one tap.
+============================================================================= */
+export async function sendBranchesUsersMenu(to, biz) {
+  const items = [
+    { id: ACTIONS.BRANCHES_MENU, title: "🏬 Branches", section: "branches" },
+    { id: ACTIONS.USERS_MENU,    title: "👥 Users",    section: "users" },
+    { id: "biz_tools_menu",      title: "⬅ Back" }
+  ];
+  const filtered = await filterMenuByRole({ from: to, biz, items });
+  return sendList(to, "🏬 *Branches & Users*", filtered);
 }
 
 /* =============================================================================

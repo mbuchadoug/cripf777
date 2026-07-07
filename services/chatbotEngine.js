@@ -3815,6 +3815,8 @@ a.startsWith("sup_load_preset_") ||
       a === "stock_report" ||
       a === "stock_settings" ||
       a === "stock_disable" ||
+      a === "stock_automatch_toggle" ||
+      a === "branches_users_menu" ||
       a.startsWith("stock_item_") ||
       a.startsWith("stock_period_")
     
@@ -10606,6 +10608,14 @@ Type *done* to save`,
     return sendProductsMenu(from);
   }
 
+  // Combined Branches & Users submenu (used when Business Tools would exceed the
+  // 10-row WhatsApp list cap after adding Stock Control).
+  if (a === "branches_users_menu") {
+    if (!biz) return sendMainMenu(from);
+    const { sendBranchesUsersMenu } = await import("./metaMenus.js");
+    return sendBranchesUsersMenu(from, biz);
+  }
+
   if (a === "stock_enable") {
     if (!biz) return sendMainMenu(from);
     try {
@@ -10631,22 +10641,79 @@ Type *done* to save`,
 
   if (a === "stock_settings") {
     if (!biz) return sendMainMenu(from);
-    return sendList(from, "⚙ *Stock Settings*", [
-      { id: "stock_disable", title: "🚫 Turn Stock Tracking OFF" },
-      { id: "stock_menu",    title: "⬅ Back" }
-    ]);
+    let autoOn = true;
+    try {
+      const { getStockSettings } = await import("./stockService.js");
+      const st = await getStockSettings(biz._id);
+      autoOn = st.autoMatchSales !== false;
+    } catch (_) {}
+    return sendList(from,
+      `⚙ *Stock Settings*\n\n🔗 Sales auto-deduct is currently *${autoOn ? "ON" : "OFF"}*.\n${autoOn
+        ? "When you record a sale or receipt, matching products are reduced from stock automatically."
+        : "Stock only changes when you record stock in / adjustments yourself - your sales do NOT reduce stock."}`,
+      [
+        { id: "stock_automatch_toggle", title: autoOn ? "🔗 Turn Sales Auto-Deduct OFF" : "🔗 Turn Sales Auto-Deduct ON" },
+        { id: "stock_disable",          title: "🚫 Turn Stock Tracking OFF" },
+        { id: "stock_menu",             title: "⬅ Back" }
+      ]);
   }
 
-  // Add a tracked product → ask for the name (multi-step in the bridge)
+  // Flip the "sales reduce stock automatically" switch on/off.
+  if (a === "stock_automatch_toggle") {
+    if (!biz) return sendMainMenu(from);
+    try {
+      const { getStockSettings, setAutoMatchSales } = await import("./stockService.js");
+      const st = await getStockSettings(biz._id);
+      const next = !(st.autoMatchSales !== false);   // flip current effective value
+      await setAutoMatchSales(biz._id, next);
+      await sendText(from, next
+        ? "✅ *Sales auto-deduct is ON.*\nRecording a sale or receipt now reduces the matching product's stock automatically."
+        : "✅ *Sales auto-deduct is OFF.*\nStock will only change when you record stock in or adjustments. Your sales are untouched.");
+    } catch (e) {
+      console.error("[STOCK automatch]", e.message);
+      await sendText(from, "❌ Couldn't change that setting. Please try again.");
+    }
+    return sendStockMenu(from, biz);
+  }
+
+  // Add a tracked product → PICK from the business's existing catalogue.
+  // No typing: the owner replies with a number. Picking guarantees the tracked
+  // name is IDENTICAL to the catalogue/invoice name, so sale auto-matching works.
+  // Reply 0 falls back to typing (for a product not in the catalogue yet); the
+  // chosen name is then fed into the SAME add-flow the bridge already runs.
   if (a === "stock_add_item") {
     if (!biz) return sendMainMenu(from);
-    biz.sessionState = "stock_add_name";
-    biz.sessionData  = {};
+    const { getTrackableCatalogue } = await import("./stockService.js");
+    const branchId = getEffectiveBranchId(caller, biz.sessionData);
+    let catalogue = [];
+    try { catalogue = await getTrackableCatalogue({ businessId: biz._id, branchId }); } catch (_) {}
+
+    const MAX = 30;                       // keep the WhatsApp message readable
+    const shown = catalogue.slice(0, MAX);
+
+    if (!shown.length) {
+      // Nothing in the catalogue yet → go straight to typing (existing add-flow).
+      biz.sessionState = "stock_add_name";
+      biz.sessionData  = {};
+      await saveBizSafe(biz);
+      await sendButtons(from, {
+        text: "➕ *Track a Product*\n\nYou have no catalogue products yet, so type the product *name* exactly as it appears on your sales (e.g. *Coca-Cola 500ml*).",
+        buttons: [{ id: "stock_menu", title: "⬅ Cancel" }]
+      });
+      return true;
+    }
+
+    biz.sessionState = "stock_add_pick";
+    biz.sessionData  = { ...(biz.sessionData || {}), stockAddPickList: shown };
     await saveBizSafe(biz);
-    await sendButtons(from, {
-      text: "➕ *Track a Product*\n\nType the product *name* exactly as it appears on your sales (e.g. *Coca-Cola 500ml*).",
-      buttons: [{ id: "stock_menu", title: "⬅ Cancel" }]
-    });
+
+    let msg = "➕ *Track a Product*\n" + "─".repeat(22) + "\nPick the product you want to keep stock for:\n";
+    shown.forEach((name, i) => { msg += `\n*${i + 1}.* ${name}`; });
+    msg += "\n" + "─".repeat(22);
+    msg += "\n\n✏️ Reply with the *number*.";
+    msg += "\n➕ Reply *0* to type a product that isn't listed.";
+    msg += "\n↩️ Reply *00* to cancel.";
+    await sendText(from, msg);
     return true;
   }
 
@@ -11939,6 +12006,7 @@ const shortcodeBlockedStates = [
   "stock_add_sell",
   "stock_add_reorder",
   "stock_add_aliases",
+  "stock_add_pick",
   "stock_in_pick",
   "stock_in_qty",
   "stock_adjust_pick",
@@ -19617,7 +19685,7 @@ if (!isMetaAction && text && text.trim().length > 1) {
     "supplier_order_picking",
     // Stock Control multi-step states
     "stock_add_name", "stock_add_unit", "stock_add_opening", "stock_add_cost",
-    "stock_add_sell", "stock_add_reorder", "stock_add_aliases",
+    "stock_add_sell", "stock_add_reorder", "stock_add_aliases", "stock_add_pick",
     "stock_in_pick", "stock_in_qty", "stock_adjust_pick", "stock_adjust_qty",
     "stock_report_period", "stock_report_custom_date"
   ]);
@@ -20374,6 +20442,42 @@ if (biz) {
   if (!isMetaAction && biz && !biz.name?.startsWith("pending_supplier_")) {
     const handled = await continueTwilioFlow({ from, text });
     if (handled) return;
+  }
+
+  // ── Stock: numbered "pick a product to track" → feed into the add-flow ──
+  // The catalogue picker (stock_add_item) sets state to stock_add_pick, which the
+  // bridge does not own - so continueTwilioFlow above returns false and we handle
+  // the reply here. On a valid pick we drop the chosen name into the EXISTING
+  // bridge add-flow (stock_add_name) with continueTwilioFlow; that flow is unchanged.
+  if (biz?.sessionState === "stock_add_pick" && !isMetaAction) {
+    const raw  = String(text || "").trim();
+    const list = Array.isArray(biz.sessionData?.stockAddPickList) ? biz.sessionData.stockAddPickList : [];
+
+    if (raw === "00") {
+      biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
+      return sendStockMenu(from, biz);
+    }
+
+    if (raw === "0") {
+      // Type a product that isn't in the catalogue → existing typed add-flow.
+      biz.sessionState = "stock_add_name"; biz.sessionData = {}; await saveBizSafe(biz);
+      return sendButtons(from, {
+        text: "➕ *Track a Product*\n\nType the product *name* exactly as it appears on your sales (e.g. *Coca-Cola 500ml*).",
+        buttons: [{ id: "stock_menu", title: "⬅ Cancel" }]
+      });
+    }
+
+    const n = parseInt(raw, 10);
+    if (!Number.isInteger(n) || n < 1 || n > list.length) {
+      await sendText(from, `❌ Please reply with a number between *1* and *${list.length}*, or *0* to type a new product, or *00* to cancel.`);
+      return true;
+    }
+
+    const chosenName = list[n - 1];
+    // Enter the existing add-flow at its name step and inject the picked name.
+    biz.sessionState = "stock_add_name"; biz.sessionData = {}; await saveBizSafe(biz);
+    await continueTwilioFlow({ from, text: chosenName });
+    return;
   }
 
   // ── Recurring billing: interactive buttons that arrive as isMetaAction but

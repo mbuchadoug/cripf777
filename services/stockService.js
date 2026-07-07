@@ -92,6 +92,52 @@ export async function disableStock(businessId) {
   );
 }
 
+// Turn the "sales reduce stock automatically" behaviour on/off.
+export async function setAutoMatchSales(businessId, on) {
+  const { StockSettings } = await getModels();
+  return StockSettings.findOneAndUpdate(
+    { businessId }, { $set: { autoMatchSales: !!on } }, { upsert: true, new: true }
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CATALOGUE (for the "pick a product to track" picker - no typing)
+// ═══════════════════════════════════════════════════════════════════════════
+// Returns the business's existing catalogue product names (price list, listed
+// products, uploaded products) that are NOT already tracked, de-duplicated and
+// in their original display casing. The chatbot/admin show these as a numbered
+// list so the owner picks instead of typing - which keeps the tracked name
+// IDENTICAL to what appears on invoices, so sale auto-matching actually works.
+export async function getTrackableCatalogue({ businessId, branchId = null }) {
+  const { StockItem } = await getModels();
+  const SupplierProfile = (await import("../models/supplierProfile.js")).default;
+
+  const supplier = await SupplierProfile.findOne({ businessId }).lean();
+  const rawNames = [];
+  if (supplier) {
+    (supplier.prices || []).forEach(p => { if (p && p.product) rawNames.push(String(p.product)); });
+    (supplier.listedProducts || []).forEach(p => { if (p) rawNames.push(String(p)); });
+    (supplier.products || []).forEach(p => { if (p && p !== "pending_upload") rawNames.push(String(p)); });
+  }
+
+  // Exclude products already tracked (compared on the normalised name)
+  const q = { businessId, isActive: true };
+  if (branchId) q.branchId = branchId;
+  const tracked = await StockItem.find(q).select("name").lean();
+  const trackedNorm = new Set(tracked.map(t => norm(t.name)));
+
+  const seen = new Set();
+  const out = [];
+  for (const raw of rawNames) {
+    const name = String(raw).trim();
+    const key  = norm(name);
+    if (!key || seen.has(key) || trackedNorm.has(key)) continue;
+    seen.add(key);
+    out.push(name);
+  }
+  return out;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // ITEMS
 // ═══════════════════════════════════════════════════════════════════════════
@@ -160,7 +206,22 @@ function bestMatch(lineName, items) {
 // window and attribute each matching line's qty and value to an item.
 // Returns Map(stockItemId → { soldQty, receivedValue, receivableValue, lines[] }).
 async function computeSales({ businessId, branchId, items, start, end }) {
-  const { Invoice } = await getModels();
+  const { Invoice, StockSettings } = await getModels();
+
+  // ── "Connect to sales" switch ──────────────────────────────────────────────
+  // When the owner has turned Sales Auto-Deduct OFF, sales must NOT reduce stock.
+  // We short-circuit here so every downstream consumer (recompute, report,
+  // ledger) sees zero sold and stock only moves on manual entries.
+  try {
+    const _st = await StockSettings.findOne({ businessId }).select("autoMatchSales").lean();
+    if (_st && _st.autoMatchSales === false) {
+      const zero = new Map();
+      for (const it of items) zero.set(String(it._id), {
+        item: it, soldQty: 0, receivedValue: 0, receivableValue: 0, lines: []
+      });
+      return zero;
+    }
+  } catch (_) {}
 
   const q = {
     businessId,

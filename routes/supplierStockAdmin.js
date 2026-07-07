@@ -216,13 +216,23 @@ router.get("/item/new", requireSupplierAdmin, async (req, res) => {
   try {
     const { supplier, biz } = await loadBizContext(req);
     const branches = await listBranches(biz._id);
+    // Existing catalogue products not yet tracked - the owner PICKS one instead
+    // of typing, so the tracked name matches invoices exactly (reliable matching).
+    const svc = await import("../services/stockService.js");
+    let catalogue = [];
+    try { catalogue = await svc.getTrackableCatalogue({ businessId: biz._id }); } catch (_) {}
+    const catOptions = [`<option value="">- pick a product from your catalogue -</option>`]
+      .concat(catalogue.map(name => `<option value="${esc(name)}">${esc(name)}</option>`))
+      .concat([`<option value="__other__">+ Other (type a new name below)</option>`])
+      .join("");
     res.send(layout("Track a Product", `
       <a href="${stockUrl(supplier._id)}" class="back-link">← Back to stock</a>
       <h2 style="margin:12px 0 16px">➕ Track a Product</h2>
       ${alertBlock(req)}
       <div class="card" style="max-width:560px">
         <form method="POST" action="${stockUrl(supplier._id, "/item/add")}">
-          ${field("Product name *", `<input name="name" required placeholder="e.g. Coca-Cola 500ml" style="${fs}">`)}
+          ${field("Pick a product *", `<select name="pickName" style="${fs}">${catOptions}</select>`)}
+          ${field("...or type a new product name", `<input name="customName" placeholder="only used if you picked \u201cOther\u201d above" style="${fs}">`)}
           ${field("Branch", `<select name="branchId" style="${fs}">${branchOptions(branches, "")}</select>`)}
           <div style="display:flex;gap:12px">
             <div style="flex:1">${field("Unit", `<input name="unit" value="each" style="${fs}">`)}</div>
@@ -249,7 +259,10 @@ router.post("/item/add", requireSupplierAdmin, async (req, res) => {
     const { supplier, biz } = await loadBizContext(req);
     const svc = await import("../services/stockService.js");
     const b = req.body;
-    if (!b.name || !b.name.trim()) return res.redirect(stockUrl(supplier._id, "/item/new?error=Name+is+required"));
+    // Name comes from the catalogue picker; "Other" (or a blank pick) uses the typed name.
+    const pickedName = (b.pickName && b.pickName !== "__other__") ? b.pickName : (b.customName || b.name || "");
+    b.name = String(pickedName).trim();
+    if (!b.name) return res.redirect(stockUrl(supplier._id, "/item/new?error=Pick+a+product+or+type+a+name"));
     await svc.createStockItem({
       businessId: biz._id, branchId: b.branchId || null,
       name: b.name.trim(), unit: b.unit || "each", sku: b.sku || "",
