@@ -461,9 +461,9 @@ export async function generateStockReportPDF({ biz, report, periodLabel, branchN
     <tr class="${r.lowStock ? "low" : ""}">
       <td>${esc(r.name)}${r.sku ? ` <span style="color:#94a3b8">(${esc(r.sku)})</span>` : ""}</td>
       <td class="r">${fmtQty(r.openingAtStart)}</td>
-      <td class="r green">${r.purchasedIn ? "+" + fmtQty(r.purchasedIn) : "—"}</td>
-      <td class="r red">${r.soldIn ? "−" + fmtQty(r.soldIn) : "—"}</td>
-      <td class="r">${r.adjustmentsIn ? (r.adjustmentsIn > 0 ? "+" : "") + fmtQty(r.adjustmentsIn) : "—"}</td>
+      <td class="r green">${r.purchasedIn ? "+" + fmtQty(r.purchasedIn) : "-"}</td>
+      <td class="r red">${r.soldIn ? "−" + fmtQty(r.soldIn) : "-"}</td>
+      <td class="r">${r.adjustmentsIn ? (r.adjustmentsIn > 0 ? "+" : "") + fmtQty(r.adjustmentsIn) : "-"}</td>
       <td class="r" style="font-weight:700">${fmtQty(r.closing)} <span style="color:#94a3b8;font-weight:400">${esc(r.unit)}</span></td>
       <td class="r green">${fmtMoney(r.receivedValue, cur)}</td>
       <td class="r amber">${fmtMoney(r.receivableValue, cur)}</td>
@@ -538,7 +538,7 @@ export async function generateStockReportPDF({ biz, report, periodLabel, branchN
     </div>
 
     <div class="foot">
-      <span>${esc(biz.name)} — Stock &amp; Sales Report</span>
+      <span>${esc(biz.name)} - Stock &amp; Sales Report</span>
       <span>ZimQuote · ${fmtDate(new Date())}</span>
     </div>
   </body></html>`;

@@ -10731,7 +10731,7 @@ Type *done* to save`,
     biz.sessionData  = { stockItemList: items.map(i => ({ id: String(i._id), name: i.name, unit: i.unit, qty: i.currentQty })) };
     await saveBizSafe(biz);
     let msg = (a === "stock_in" ? "📥 *Record Stock In*" : "🔧 *Adjust / Wastage*") + "\nWhich product?\n";
-    items.forEach((it, i) => { msg += `\n*${i + 1}.* ${it.name} — ${it.currentQty} ${it.unit} on hand`; });
+    items.forEach((it, i) => { msg += `\n*${i + 1}.* ${it.name} - ${it.currentQty} ${it.unit} on hand`; });
     msg += "\n\nReply with the number.";
     await sendText(from, msg);
     return true;

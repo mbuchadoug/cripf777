@@ -48,7 +48,7 @@ async function listBranches(businessId) {
 function branchName(branches, id) {
   if (!id) return "Whole business";
   const b = branches.find(x => String(x._id) === String(id));
-  return b ? b.name : "—";
+  return b ? b.name : "-";
 }
 function branchOptions(branches, selectedId) {
   return [`<option value="">- Whole business (no specific branch) -</option>`]
@@ -122,7 +122,7 @@ router.get("/", requireSupplierAdmin, async (req, res) => {
     if (!enabled) {
       return res.send(layout("Stock Control", `
         <a href="/zq-admin/suppliers/${supplier._id}" class="back-link">← Back to profile</a>
-        <h2 style="margin:12px 0 6px">📦 Stock Control — ${esc(supplier.businessName)}</h2>
+        <h2 style="margin:12px 0 6px">📦 Stock Control - ${esc(supplier.businessName)}</h2>
         ${alertBlock(req)}
         <div class="card" style="max-width:560px">
           <p style="color:var(--muted);font-size:14px;margin-bottom:16px">
@@ -162,7 +162,7 @@ router.get("/", requireSupplierAdmin, async (req, res) => {
 
     res.send(layout("Stock Control", `
       <a href="/zq-admin/suppliers/${supplier._id}" class="back-link">← Back to profile</a>
-      <h2 style="margin:12px 0 6px">📦 Stock Control — ${esc(supplier.businessName)}</h2>
+      <h2 style="margin:12px 0 6px">📦 Stock Control - ${esc(supplier.businessName)}</h2>
       ${alertBlock(req)}
 
       <div style="display:flex;gap:12px;flex-wrap:wrap;margin:14px 0">
@@ -183,7 +183,7 @@ router.get("/", requireSupplierAdmin, async (req, res) => {
       <div class="card">
         <table class="data-table">
           <thead><tr><th>Product</th><th>Branch</th><th style="text-align:right">On hand</th><th style="text-align:right">Cost</th><th style="text-align:right">Sell</th><th style="text-align:right">Value</th><th></th></tr></thead>
-          <tbody>${rows || `<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">No tracked products yet — tap “Track a Product”.</td></tr>`}</tbody>
+          <tbody>${rows || `<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">No tracked products yet - tap “Track a Product”.</td></tr>`}</tbody>
         </table>
       </div>`));
   } catch (e) {
@@ -296,10 +296,10 @@ router.get("/item/:itemId", requireSupplierAdmin, async (req, res) => {
     let ledgerHtml = "";
     if (ledger && ledger.days.length) {
       for (const day of ledger.days) {
-        ledgerHtml += `<tr style="background:#1e3a5f;color:#e0f2fe"><td colspan="6" style="font-weight:600">📅 ${esc(day.dayKey)} — opened ${qtyFmt(day.opening)} ${esc(item.unit)}</td></tr>`;
+        ledgerHtml += `<tr style="background:#1e3a5f;color:#e0f2fe"><td colspan="6" style="font-weight:600">📅 ${esc(day.dayKey)} - opened ${qtyFmt(day.opening)} ${esc(item.unit)}</td></tr>`;
         for (const r of day.rows) {
           const sign = r.qty > 0 ? "green" : "red";
-          const label = r.type === "sale" ? `Sale — ${esc(r.note)}` :
+          const label = r.type === "sale" ? `Sale - ${esc(r.note)}` :
                         r.type === "purchase" ? "Stock in" :
                         r.type === "wastage" ? "Wastage/loss" :
                         r.type === "return" ? "Return in" : "Adjustment";
@@ -312,7 +312,7 @@ router.get("/item/:itemId", requireSupplierAdmin, async (req, res) => {
             <td>${r.type === "sale" ? (r.received ? '<span style="color:#16a34a">received</span>' : '<span style="color:#b45309">owed</span>') : ""}</td>
           </tr>`;
         }
-        ledgerHtml += `<tr style="background:#dbeafe;color:#1e40af"><td colspan="3" style="font-weight:600">End of ${esc(day.dayKey.split(",")[0])} — sold ${qtyFmt(day.soldQty)}, in ${qtyFmt(day.inQty)}</td><td style="text-align:right;font-weight:700">${qtyFmt(day.closing)}</td><td style="text-align:right">${money(day.salesValue, cur)}</td><td></td></tr>`;
+        ledgerHtml += `<tr style="background:#dbeafe;color:#1e40af"><td colspan="3" style="font-weight:600">End of ${esc(day.dayKey.split(",")[0])} - sold ${qtyFmt(day.soldQty)}, in ${qtyFmt(day.inQty)}</td><td style="text-align:right;font-weight:700">${qtyFmt(day.closing)}</td><td style="text-align:right">${money(day.salesValue, cur)}</td><td></td></tr>`;
       }
     } else {
       ledgerHtml = `<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:18px">No movement in ${esc(p.label)}</td></tr>`;
@@ -330,7 +330,7 @@ router.get("/item/:itemId", requireSupplierAdmin, async (req, res) => {
 
     const low = item.reorderLevel > 0 && onHand <= item.reorderLevel;
 
-    res.send(layout(`Stock — ${esc(item.name)}`, `
+    res.send(layout(`Stock - ${esc(item.name)}`, `
       <a href="${stockUrl(supplier._id)}" class="back-link">← Back to stock</a>
       <h2 style="margin:12px 0 4px">${esc(item.name)} ${low ? '<span style="color:#dc2626;font-size:14px">⚠ LOW</span>' : ""}</h2>
       <p style="color:var(--muted);margin-bottom:14px">${esc(branchName(await listBranches(biz._id), item.branchId))} · on hand <b>${qtyFmt(onHand)} ${esc(item.unit)}</b> · cost ${money(item.costPrice, cur)} · sell ${money(item.sellPrice, cur)}${item.aliases?.length ? ` · matches: ${esc(item.aliases.join(", "))}` : ""}</p>
@@ -515,9 +515,9 @@ router.get("/report", requireSupplierAdmin, async (req, res) => {
       <tr style="${r.lowStock ? "background:#fef2f2" : ""}">
         <td>${esc(r.name)}</td>
         <td style="text-align:right">${qtyFmt(r.openingAtStart)}</td>
-        <td style="text-align:right" class="green">${r.purchasedIn ? "+" + qtyFmt(r.purchasedIn) : "—"}</td>
-        <td style="text-align:right" class="red">${r.soldIn ? "−" + qtyFmt(r.soldIn) : "—"}</td>
-        <td style="text-align:right">${r.adjustmentsIn ? qtyFmt(r.adjustmentsIn) : "—"}</td>
+        <td style="text-align:right" class="green">${r.purchasedIn ? "+" + qtyFmt(r.purchasedIn) : "-"}</td>
+        <td style="text-align:right" class="red">${r.soldIn ? "−" + qtyFmt(r.soldIn) : "-"}</td>
+        <td style="text-align:right">${r.adjustmentsIn ? qtyFmt(r.adjustmentsIn) : "-"}</td>
         <td style="text-align:right;font-weight:700">${qtyFmt(r.closing)}</td>
         <td style="text-align:right;color:#16a34a">${money(r.receivedValue, cur)}</td>
         <td style="text-align:right;color:#b45309">${money(r.receivableValue, cur)}</td>
@@ -565,7 +565,7 @@ router.get("/report", requireSupplierAdmin, async (req, res) => {
       </div>
       <p style="font-size:12px;color:var(--muted);margin-top:10px">
         <b>Reading it:</b> Close = Open + In − Sold ± Adj. “Received” is cash from receipts, “Receivable” is money still owed on unpaid invoices.
-        COGS = units sold × cost. Gross profit = sales value − COGS. Red rows are at/below reorder level — time to restock.
+        COGS = units sold × cost. Gross profit = sales value − COGS. Red rows are at/below reorder level - time to restock.
       </p>`));
   } catch (e) {
     res.send(layout("Error", `<div class="alert red">${esc(e.message)}<pre style="font-size:11px">${esc(e.stack || "")}</pre></div>`));

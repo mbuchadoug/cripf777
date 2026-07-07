@@ -4188,7 +4188,7 @@ Sales of this product will now reduce its stock automatically.`);
     if (isIn) {
       await sendText(from, `📥 How many *${picked.unit}* of *${picked.name}* did you receive?\n\nReply a number (currently ${picked.qty} on hand).`);
     } else {
-      await sendText(from, `🔧 *${picked.name}* — current: ${picked.qty} ${picked.unit}.\n\nReply with the *change*:\n• *-3* for 3 lost/wasted/broken\n• *+5* to add a correction\n• or type the *correct count* like *=20*`);
+      await sendText(from, `🔧 *${picked.name}* - current: ${picked.qty} ${picked.unit}.\n\nReply with the *change*:\n• *-3* for 3 lost/wasted/broken\n• *+5* to add a correction\n• or type the *correct count* like *=20*`);
     }
     return true;
   }
