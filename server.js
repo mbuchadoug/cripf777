@@ -569,7 +569,7 @@ app.use("/web", webSettings); // ← ADD THIS
 app.use("/web", webTeam);                            // ← ADD THIS
 
 // ========================================
-// 🏢 BUSINESS BACK-OFFICE PORTAL (NEW, self-contained) — owners/managers/clerks
+// 🏢 BUSINESS BACK-OFFICE PORTAL (NEW, self-contained) - owners/managers/clerks
 // ========================================
 app.use("/office", officeRoutes);
 // Add this route registration

@@ -10628,7 +10628,7 @@ router.post("/suppliers/:id/users/:uid/portal-login", requireSupplierAdmin, asyn
             <div style="margin-bottom:14px"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700">Username</div><div style="font-family:monospace;background:#0f172a;color:#a5f3fc;display:inline-block;padding:4px 12px;border-radius:8px;font-size:15px;font-weight:700;margin-top:4px">${esc(user.username)}</div></div>
             <div><div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700">Temporary password</div><div style="font-family:monospace;background:#0f172a;color:#a5f3fc;display:inline-block;padding:4px 12px;border-radius:8px;font-size:15px;font-weight:700;margin-top:4px">${esc(tempPw)}</div></div>
           </div>
-          <p style="font-size:12.5px;color:#b45309;margin-top:14px">⚠️ Copy the password now — it is shown only once. Use "Reset login" on the staff page to issue a new one.</p>
+          <p style="font-size:12.5px;color:#b45309;margin-top:14px">⚠️ Copy the password now - it is shown only once. Use "Reset login" on the staff page to issue a new one.</p>
         </div>
       </div>`));
   } catch (err) {

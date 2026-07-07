@@ -19,7 +19,7 @@ export async function listProducts({ businessId, branchId = null, includeInactiv
   return Product.find(q).sort({ isService: 1, name: 1 }).lean();
 }
 
-// Create or update a product by (businessId, name) — same upsert key the bot uses.
+// Create or update a product by (businessId, name) - same upsert key the bot uses.
 export async function createProduct({ businessId, branchId = null, name, unitPrice = 0, isService = false }) {
   const { Product } = await models();
   name = String(name || "").trim();

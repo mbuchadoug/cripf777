@@ -3,13 +3,13 @@
 //  Shared "record a sale / expense" service used by the /office web portal.
 //
 //  It reproduces EXACTLY what the WhatsApp bot (twilioStateBridge.js) does when
-//  it creates a cash-sale receipt or an expense — same client upsert, same
+//  it creates a cash-sale receipt or an expense - same client upsert, same
 //  receipt numbering (prefix + 6-digit counter), same Invoice/Expense records,
 //  same owner/clerk notification + cash-at-hand line. That way a sale recorded
 //  on the web is indistinguishable from one recorded on WhatsApp, and reports,
 //  clerk custody and notifications all stay consistent.
 //
-//  The bot itself is NOT modified — this is a standalone, additive service.
+//  The bot itself is NOT modified - this is a standalone, additive service.
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function liveBusiness(biz) {
@@ -28,7 +28,7 @@ async function branchName(branchId) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Record a CASH SALE (a paid receipt) — mirrors the bot's receipt path.
+//  Record a CASH SALE (a paid receipt) - mirrors the bot's receipt path.
 //  items: [{ item, qty, unit }]
 // ─────────────────────────────────────────────────────────────────────────────
 export async function createCashSale({
@@ -53,7 +53,7 @@ export async function createCashSale({
       const { PACKAGES } = await import("./packages.js");
       const limit = PACKAGES?.trial?.monthlyDocs;
       if (limit && (bizDoc.documentCountMonth || 0) >= limit) {
-        const err = new Error(`Trial limit reached — ${limit} documents this month. Upgrade to record more.`);
+        const err = new Error(`Trial limit reached - ${limit} documents this month. Upgrade to record more.`);
         err.code = "TRIAL_LIMIT";
         throw err;
       }
@@ -117,7 +117,7 @@ export async function createCashSale({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Record an EXPENSE — mirrors the bot's expense path.
+//  Record an EXPENSE - mirrors the bot's expense path.
 // ─────────────────────────────────────────────────────────────────────────────
 export async function recordExpense({
   biz, branchId = null, clerkPhone = null,

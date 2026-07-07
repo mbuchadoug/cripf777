@@ -10709,7 +10709,7 @@ Type *done* to save`,
 
     let msg = "➕ *Track Products*\n" + "─".repeat(22) + "\nPick the products you want to keep stock for:\n";
     shown.forEach((it, i) => {
-      const price = it.sellPrice ? ` — sell ${formatMoney(it.sellPrice, biz.currency)}` : "";
+      const price = it.sellPrice ? ` - sell ${formatMoney(it.sellPrice, biz.currency)}` : "";
       msg += `\n*${i + 1}.* ${it.name}${price}`;
     });
     msg += "\n" + "─".repeat(22);
@@ -20552,7 +20552,7 @@ if (biz) {
     let msg = `✅ *Now tracking ${created.length} product${created.length === 1 ? "" : "s"}:*\n`;
     created.forEach(c => {
       const price = c.sellPrice ? ` · sell ${formatMoney(c.sellPrice, biz.currency)}` : "";
-      msg += `\n• *${c.name}* — ${c.qty} on hand${price}`;
+      msg += `\n• *${c.name}* - ${c.qty} on hand${price}`;
     });
     msg += "\n\nSales of these will reduce stock automatically (when *Sales Auto-Deduct* is ON).";
     msg += "\n💡 Add cost price or a low-stock alert anytime in the web panel, or use *📥 Record Stock In* / *🎯 Set count* here.";

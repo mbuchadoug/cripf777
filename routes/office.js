@@ -424,9 +424,9 @@ router.get("/", async (req, res) => {
     const body = `
       ${office.isOwner ? branchFilter(await branchesFor(office.biz._id), branchId, "/office") : ""}
       <div class="grid kpis">
-        ${kpi("Money in — today", money(today.moneyIn, cur), `Cash ${money(today.cashSales, cur)} · Paid ${money(today.invoicePayments, cur)}`, "green", true)}
-        ${kpi("Profit — today", money(today.profit, cur), `Out ${money(today.moneyOut, cur)}`, today.profit >= 0 ? "green" : "red")}
-        ${kpi("Money in — this month", money(month.moneyIn, cur), `Profit ${money(month.profit, cur)}`)}
+        ${kpi("Money in - today", money(today.moneyIn, cur), `Cash ${money(today.cashSales, cur)} · Paid ${money(today.invoicePayments, cur)}`, "green", true)}
+        ${kpi("Profit - today", money(today.profit, cur), `Out ${money(today.moneyOut, cur)}`, today.profit >= 0 ? "green" : "red")}
+        ${kpi("Money in - this month", money(month.moneyIn, cur), `Profit ${money(month.profit, cur)}`)}
         ${kpi("Outstanding (unpaid)", money(month.outstanding, cur), `Invoiced ${money(month.totalInvoiced, cur)}`, month.outstanding > 0 ? "amber" : "")}
         ${stockCards}
       </div>
@@ -442,7 +442,7 @@ router.get("/", async (req, res) => {
       <div class="card" style="margin-top:24px">
         <div class="ch"><h3>Record on the go</h3></div>
         <div class="cb">
-          <p class="muted small" style="margin:0 0 12px">Record sales and expenses right here — they use the same numbering and owner notifications as WhatsApp, so everything stays in sync.</p>
+          <p class="muted small" style="margin:0 0 12px">Record sales and expenses right here - they use the same numbering and owner notifications as WhatsApp, so everything stays in sync.</p>
           <div class="row">
             <a class="btn btn-primary btn-sm" href="/office/sales#newsale">🧾 Record a sale</a>
             <a class="btn btn-ghost btn-sm" href="/office/expenses#newexp">💸 Record an expense</a>
@@ -469,7 +469,7 @@ function branchFilter(branches, current, base) {
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-//  SALES  (read — receipts + invoices)
+//  SALES  (read - receipts + invoices)
 // ═════════════════════════════════════════════════════════════════════════════
 router.get("/sales", async (req, res) => {
   const { office } = req; const cur = office.cur;
@@ -486,7 +486,7 @@ router.get("/sales", async (req, res) => {
       listProducts({ businessId: office.biz._id, branchId }).catch(() => []),
     ]);
     const clientOpts = clients.map(c => `<option value="${esc(c._id)}">${esc(c.name || c.phone)}${c.phone ? " · " + esc(c.phone) : ""}</option>`).join("");
-    const productOptsHtml = products.map(p => `<option value="${esc(p.name)}" data-price="${p.unitPrice || 0}">${esc(p.name)}${p.unitPrice ? " — " + money(p.unitPrice, cur) : ""}</option>`).join("");
+    const productOptsHtml = products.map(p => `<option value="${esc(p.name)}" data-price="${p.unitPrice || 0}">${esc(p.name)}${p.unitPrice ? " - " + money(p.unitPrice, cur) : ""}</option>`).join("");
     const productSelectHtml = '<option value="">- pick a product -</option>' + productOptsHtml + '<option value="__custom__">Other (type below)</option>';
 
     const rows = docs.map(d => {
@@ -497,7 +497,7 @@ router.get("/sales", async (req, res) => {
         <td><span class="badge ${isReceipt ? "b-green" : "b-indigo"}">${isReceipt ? "Receipt" : "Invoice"}</span></td>
         <td>${esc(d.clientName || d.customerName || "Walk-in")}</td>
         <td class="r">${money(d.total, cur)}</td>
-        <td class="r">${isReceipt ? "—" : money(d.balance, cur)}</td>
+        <td class="r">${isReceipt ? "-" : money(d.balance, cur)}</td>
         <td class="c"><span class="badge ${paid ? "b-green" : "b-amber"}">${paid ? "Paid" : "Owing"}</span></td>
         <td class="small muted">${new Date(d.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</td>
       </tr>`;
@@ -553,7 +553,7 @@ router.get("/sales", async (req, res) => {
         ${docs.length ? `<div class="tbl-wrap"><table>
           <thead><tr><th>No.</th><th>Type</th><th>Customer</th><th class="r">Total</th><th class="r">Balance</th><th class="c">Status</th><th>Date</th></tr></thead>
           <tbody>${rows}</tbody></table></div>`
-        : `<div class="empty"><div class="e-ic">🧾</div>No sales yet. Record your first sale on WhatsApp — it'll appear here instantly.</div>`}
+        : `<div class="empty"><div class="e-ic">🧾</div>No sales yet. Record your first sale on WhatsApp - it'll appear here instantly.</div>`}
       </div>`;
     res.send(shell(office, "sales", "Sales", body));
   } catch (e) {
@@ -644,7 +644,7 @@ router.post("/sales/new", async (req, res) => {
       biz: office.biz, branchId, clerkPhone: office.role.phone || "web",
       clientId, customerName, customerPhone: req.body.customerPhone, items,
     });
-    res.redirect(back + sep + "ok=" + encodeURIComponent(`Sale recorded — ${r.number} (${money(r.total, office.cur)})`));
+    res.redirect(back + sep + "ok=" + encodeURIComponent(`Sale recorded - ${r.number} (${money(r.total, office.cur)})`));
   } catch (e) {
     console.error("[office sale new]", e);
     res.redirect(back + sep + "err=" + encodeURIComponent(e.message));
@@ -665,7 +665,7 @@ router.post("/expenses/new", async (req, res) => {
       biz: office.biz, branchId, clerkPhone: office.role.phone || "web",
       amount, description: req.body.description, category: req.body.category, method: req.body.method,
     });
-    res.redirect(back + sep + "ok=" + encodeURIComponent(`Expense recorded — ${money(amount, office.cur)}`));
+    res.redirect(back + sep + "ok=" + encodeURIComponent(`Expense recorded - ${money(amount, office.cur)}`));
   } catch (e) {
     console.error("[office expense new]", e);
     res.redirect(back + sep + "err=" + encodeURIComponent(e.message));
@@ -673,7 +673,7 @@ router.post("/expenses/new", async (req, res) => {
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
-//  STOCK  (read + record stock-in / adjust — via stockService, safe)
+//  STOCK  (read + record stock-in / adjust - via stockService, safe)
 // ═════════════════════════════════════════════════════════════════════════════
 router.get("/stock", async (req, res) => {
   const { office } = req; const cur = office.cur;
@@ -701,7 +701,7 @@ router.get("/stock", async (req, res) => {
       <td class="r">${num(r.soldIn)}</td>
       <td class="r">${money(r.sellPrice, cur)}</td>
       <td class="r">${money(r.stockValueCost, cur)}</td>
-      <td class="r">${r.marginPct == null ? "—" : r.marginPct + "%"}</td>
+      <td class="r">${r.marginPct == null ? "-" : r.marginPct + "%"}</td>
     </tr>`).join("");
 
     const opts = items.map(i => `<option value="${esc(i._id)}">${esc(i.name)} (${num(i.currentQty)} on hand)</option>`).join("");
@@ -751,8 +751,8 @@ router.get("/stock", async (req, res) => {
               <div class="field"><label>Product</label><select class="input" name="stockItemId" required>${opts}</select></div>
               <div class="field"><label>Type</label><select class="input" name="kind">
                 <option value="wastage">Wastage / loss / breakage (removes stock)</option>
-                <option value="adjustment_down">Correction — reduce count</option>
-                <option value="adjustment_up">Correction — increase count</option>
+                <option value="adjustment_down">Correction - reduce count</option>
+                <option value="adjustment_up">Correction - increase count</option>
               </select></div>
               <div class="field"><label>Quantity</label><input class="input" name="qty" type="number" step="0.01" min="0.01" placeholder="e.g. 3" required></div>
               <div class="field"><label>Reason</label><input class="input" name="reason" placeholder="e.g. expired / miscount" required></div>
@@ -851,7 +851,7 @@ router.get("/products", async (req, res) => {
     const body = `${ok}${err}${addForm}
       <div class="card"><div class="ch"><h3>Catalogue</h3><span class="pill">${num(products.length)} items</span></div>
         ${products.length ? `<div class="tbl-wrap"><table><thead><tr><th>Product / Service</th><th class="r">Price</th><th class="c">Visible</th></tr></thead><tbody>${rows}</tbody></table></div>`
-        : `<div class="empty"><div class="e-ic">🏷</div>No products yet. Add one above — they become pickable (with price) when recording a sale.</div>`}
+        : `<div class="empty"><div class="e-ic">🏷</div>No products yet. Add one above - they become pickable (with price) when recording a sale.</div>`}
       </div>`;
     res.send(shell(office, "products", "Products", body));
   } catch (e) { console.error("[office products]", e); res.send(shell(office, "products", "Products", `<div class="alert err">${esc(e.message)}</div>`)); }
@@ -882,7 +882,7 @@ router.post("/products/update", async (req, res) => {
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
-//  REPORTS  — summary · detailed ledger · clerk statement · stock (+ PDF)
+//  REPORTS  - summary · detailed ledger · clerk statement · stock (+ PDF)
 //  Reuses the SAME builders the WhatsApp reports use, so figures match exactly.
 // ═════════════════════════════════════════════════════════════════════════════
 async function staffForBusiness(bizId, branchId) {
@@ -953,7 +953,7 @@ router.get("/reports", async (req, res) => {
           <div class="card kpi"><div class="kl">Profit</div><div class="kv ${t.profit >= 0 ? "green" : "red"}">${money(t.profit, cur)}</div><div class="ks">${esc(label)}</div></div>
           <div class="card kpi"><div class="kl">Outstanding</div><div class="kv ${t.outstanding > 0 ? "amber" : ""}">${money(t.outstanding, cur)}</div><div class="ks">Invoiced ${money(t.totalInvoiced, cur)}</div></div>
         </div>
-        <div class="card"><div class="ch"><h3>Sales & cash — ${esc(label)}</h3>${pdfBtn("summary")}</div>
+        <div class="card"><div class="ch"><h3>Sales & cash - ${esc(label)}</h3>${pdfBtn("summary")}</div>
           <div class="cb"><table>
             <tr><td>Cash sales (receipts)</td><td class="r green">${money(t.cashSales, cur)}</td></tr>
             <tr><td>Invoice payments received</td><td class="r green">${money(t.invoicePayments, cur)}</td></tr>
@@ -978,10 +978,10 @@ router.get("/reports", async (req, res) => {
           <div class="card kpi"><div class="kl">Money out</div><div class="kv red">${money(ledger.totalDebits, cur)}</div></div>
           <div class="card kpi accent"><div class="kl">Closing balance</div><div class="kv">${money(ledger.closingBalance, cur)}</div></div>
         </div>
-        <div class="card"><div class="ch"><h3>Detailed ledger — ${esc(label)}</h3>${pdfBtn("ledger")}</div>
+        <div class="card"><div class="ch"><h3>Detailed ledger - ${esc(label)}</h3>${pdfBtn("ledger")}</div>
           <div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Detail</th><th class="r">In</th><th class="r">Out</th><th class="r">Balance</th></tr></thead><tbody>${rows}</tbody></table></div>
         </div>
-        <p class="hint" style="margin-top:10px">Up to 250 rows shown — the PDF has the full running-balance statement.</p>`;
+        <p class="hint" style="margin-top:10px">Up to 250 rows shown - the PDF has the full running-balance statement.</p>`;
     } else if (type === "clerk") {
       if (!selectedClerk) {
         content = `<div class="card"><div class="cb empty"><div class="e-ic">👤</div>No staff to report on yet.</div></div>`;
@@ -1004,7 +1004,7 @@ router.get("/reports", async (req, res) => {
             <div class="card kpi"><div class="kl">In / Out</div><div class="kv green" style="font-size:17px">${money(stmt.totalIn, cur)}</div><div class="ks red">− ${money(stmt.totalOut, cur)}</div></div>
             <div class="card kpi accent"><div class="kl">Cash at hand</div><div class="kv">${money(stmt.expectedClosing, cur)}</div><div class="ks">${esc(rec)}</div></div>
           </div>
-          <div class="card"><div class="ch"><h3>${office.isClerk ? "My" : "Clerk"} statement — ${esc(label)}</h3>${pdfBtn("clerk")}</div>
+          <div class="card"><div class="ch"><h3>${office.isClerk ? "My" : "Clerk"} statement - ${esc(label)}</h3>${pdfBtn("clerk")}</div>
             <div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Detail</th><th class="r">In</th><th class="r">Out</th></tr></thead><tbody>${rows}</tbody></table></div>
           </div>`;
       }
@@ -1021,7 +1021,7 @@ router.get("/reports", async (req, res) => {
             <div class="card kpi"><div class="kl">Stock value</div><div class="kv">${money(report.totals.stockValueCost, cur)}</div></div>
             <div class="card kpi"><div class="kl">Low-stock</div><div class="kv ${report.totals.lowStockCount ? "red" : "green"}">${num(report.totals.lowStockCount)}</div></div>
           </div>
-          <div class="card"><div class="ch"><h3>Stock & sales — ${esc(label)}</h3><a class="btn btn-primary btn-sm" href="/office/reports/stock.pdf?period=${period}${branchId ? "&branch=" + branchId : ""}${req.query.from ? "&from=" + req.query.from + "&to=" + req.query.to : ""}">⬇ Download PDF</a></div>
+          <div class="card"><div class="ch"><h3>Stock & sales - ${esc(label)}</h3><a class="btn btn-primary btn-sm" href="/office/reports/stock.pdf?period=${period}${branchId ? "&branch=" + branchId : ""}${req.query.from ? "&from=" + req.query.from + "&to=" + req.query.to : ""}">⬇ Download PDF</a></div>
             ${report.rows.length ? `<div class="tbl-wrap"><table><thead><tr><th>Product</th><th class="r">Open</th><th class="r">In</th><th class="r">Sold</th><th class="r">Close</th><th class="r">Sales</th><th class="r">Profit</th></tr></thead><tbody>${rows}</tbody></table></div>` : `<div class="empty">No stock activity.</div>`}
           </div>`;
       }
@@ -1121,9 +1121,9 @@ router.get("/team", requireOwner, async (req, res) => {
     const rows = staff.map(s => {
       const isSelf = String(s._id) === String(office.role._id);
       return `<tr>
-        <td><b>${esc(s.name || "—")}</b>${isSelf ? ` <span class="badge b-green">You</span>` : ""}<div class="small muted">${esc(s.phone || "")}</div></td>
+        <td><b>${esc(s.name || "-")}</b>${isSelf ? ` <span class="badge b-green">You</span>` : ""}<div class="small muted">${esc(s.phone || "")}</div></td>
         <td><span class="badge ${roleBadge(s.role)}">${esc(s.role)}</span></td>
-        <td>${esc(s.role === "owner" ? "All branches" : (branchName[String(s.branchId)] || "—"))}</td>
+        <td>${esc(s.role === "owner" ? "All branches" : (branchName[String(s.branchId)] || "-"))}</td>
         <td>${s.username ? `<span class="cred">${esc(s.username)}</span>` : `<span class="muted small">no web login</span>`}</td>
         <td class="c">${s.suspended ? `<span class="badge b-red">Suspended</span>` : `<span class="badge b-green">Active</span>`}</td>
         <td class="r">${isSelf ? "" : `
@@ -1140,7 +1140,7 @@ router.get("/team", requireOwner, async (req, res) => {
       <div class="card" style="margin-bottom:18px">
         <div class="ch"><h3>➕ Add a staff member</h3></div>
         <div class="cb">
-          <p class="muted small" style="margin:0 0 14px">Create a login for a manager or clerk. They can use the web portal <b>and</b> WhatsApp (same phone number). You'll get a username + temporary password to share — they set their own password on first sign-in.</p>
+          <p class="muted small" style="margin:0 0 14px">Create a login for a manager or clerk. They can use the web portal <b>and</b> WhatsApp (same phone number). You'll get a username + temporary password to share - they set their own password on first sign-in.</p>
           <form method="POST" action="/office/team/add">
             <div class="row">
               <div class="field"><label>Full name</label><input class="input" name="name" placeholder="e.g. Tino Moyo" required></div>
@@ -1148,7 +1148,7 @@ router.get("/team", requireOwner, async (req, res) => {
             </div>
             <div class="row">
               <div class="field"><label>Role</label><select class="input" name="role"><option value="clerk">Clerk (records sales/stock)</option><option value="manager">Manager (branch oversight)</option><option value="admin">Administrator (full access)</option></select></div>
-              <div class="field"><label>Branch</label><select class="input" name="branchId"><option value="">— select branch —</option>${branchOptions}</select><div class="hint">Admins can be left without a branch (all branches).</div></div>
+              <div class="field"><label>Branch</label><select class="input" name="branchId"><option value="">- select branch -</option>${branchOptions}</select><div class="hint">Admins can be left without a branch (all branches).</div></div>
             </div>
             <button class="btn btn-primary">Create staff login</button>
           </form>
@@ -1179,7 +1179,7 @@ function credCard(office, title, name, username, tempPw, note) {
           <div style="margin-bottom:12px"><div class="small muted" style="font-weight:700;text-transform:uppercase;letter-spacing:.05em">Username</div><div class="cred" style="display:inline-block;margin-top:4px">${esc(username)}</div></div>
           <div><div class="small muted" style="font-weight:700;text-transform:uppercase;letter-spacing:.05em">Temporary password</div><div class="cred" style="display:inline-block;margin-top:4px">${esc(tempPw)}</div></div>
         </div>
-        <p class="hint">⚠ Copy these now — the password is shown only once. They'll be asked to set their own password when they first sign in at <b>/office/login</b>.</p>
+        <p class="hint">⚠ Copy these now - the password is shown only once. They'll be asked to set their own password when they first sign in at <b>/office/login</b>.</p>
         <a class="btn btn-primary" href="/office/team" style="margin-top:8px">Back to team</a>
       </div>
     </div>`);
@@ -1214,7 +1214,7 @@ router.post("/team/add", requireOwner, async (req, res) => {
       `Share these with ${name}. They sign in at /office/login and will set their own password.`));
   } catch (e) {
     console.error("[office team add]", e);
-    res.redirect("/office/team?err=" + encodeURIComponent(e.code === 11000 ? "Username clash — please try again" : e.message));
+    res.redirect("/office/team?err=" + encodeURIComponent(e.code === 11000 ? "Username clash - please try again" : e.message));
   }
 });
 
