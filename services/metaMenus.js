@@ -327,12 +327,13 @@ export async function sendBusinessToolsMenu(to, biz) {
 ============================================================================= */
 export async function sendSalesMenu(to) {
   return sendList(to, "🧾 Sales", [
+    // Cash-first: most Zimbabwean businesses sell for cash, so New Receipt leads.
+    { id: ACTIONS.NEW_RECEIPT, title: "🧾 New Receipt" },
     { id: ACTIONS.NEW_INVOICE, title: "📄 New Invoice" },
     { id: ACTIONS.NEW_QUOTE, title: "📋 New Quotation" },
-    { id: ACTIONS.NEW_RECEIPT, title: "🧾 New Receipt" },
+    { id: ACTIONS.VIEW_RECEIPTS, title: "📄 View Receipts" },
     { id: ACTIONS.VIEW_INVOICES, title: "📄 View Invoices" },
     { id: ACTIONS.VIEW_QUOTES, title: "📄 View Quotations" },
-    { id: ACTIONS.VIEW_RECEIPTS, title: "📄 View Receipts" },
     { id: ACTIONS.BACK, title: "⬅ Back" }
   ]);
 }
