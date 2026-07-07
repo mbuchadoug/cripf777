@@ -32,7 +32,7 @@ async function branchName(branchId) {
 //  items: [{ item, qty, unit }]
 // ─────────────────────────────────────────────────────────────────────────────
 export async function createCashSale({
-  biz, branchId = null, clerkPhone = null,
+  biz, branchId = null, clerkPhone = null, clientId = null,
   customerName = "Walk-in Customer", customerPhone = null,
   items = [], discountPercent = 0,
 }) {
@@ -60,14 +60,20 @@ export async function createCashSale({
     }
   } catch (e) { if (e.code === "TRIAL_LIMIT") throw e; }
 
-  // Resolve / create the client exactly like the bot (by phone if given, else by name)
-  const phoneVal = customerPhone ? (String(customerPhone).replace(/\D+/g, "") || null) : null;
-  const name = String(customerName || "").trim() || "Walk-in Customer";
-  const client = await Client.findOneAndUpdate(
-    { businessId: bizDoc._id, ...(phoneVal ? { phone: phoneVal } : { name, phone: null }) },
-    { $set: { name, phone: phoneVal, ...(branchId ? { branchId } : {}) } },
-    { upsert: true, new: true, setDefaultsOnInsert: true }
-  );
+  // Use a chosen existing client if provided; otherwise resolve/create like the bot.
+  let client = null;
+  if (clientId) {
+    client = await Client.findOne({ _id: clientId, businessId: bizDoc._id });
+  }
+  if (!client) {
+    const phoneVal = customerPhone ? (String(customerPhone).replace(/\D+/g, "") || null) : null;
+    const name = String(customerName || "").trim() || "Walk-in Customer";
+    client = await Client.findOneAndUpdate(
+      { businessId: bizDoc._id, ...(phoneVal ? { phone: phoneVal } : { name, phone: null }) },
+      { $set: { name, phone: phoneVal, ...(branchId ? { branchId } : {}) } },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+  }
 
   // Receipt number: prefix + zero-padded counter (same format as the bot)
   const prefix = bizDoc.receiptPrefix || "RCPT";

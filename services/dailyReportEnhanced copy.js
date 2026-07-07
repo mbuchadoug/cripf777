@@ -108,7 +108,7 @@ export async function resolveCallerAndBranch(biz, from) {
 // receipt, expense, payout and handover recorded before midnight of `date`
 // for this business/branch. Result is always accurate regardless of whether
 // anyone remembered to set an opening balance that morning.
-export async function fetchOpeningBalance(biz, branchId, date) {
+async function fetchOpeningBalance(biz, branchId, date) {
   try {
     const Invoice        = (await import("../models/invoice.js")).default;
     const InvoicePayment = (await import("../models/invoicePayment.js")).default;
@@ -464,7 +464,7 @@ ${txCount} transactions recorded
 // ─── Build running-balance ledger rows ────────────────────────────────────────
 // Returns rows suitable for PDF rendering, each with a `balance` field showing
 // the running total after that transaction - exactly like a bank statement.
-export async function _buildRunningLedger({ biz, data, branchId, start, end, openingBalance }) {
+async function _buildRunningLedger({ biz, data, branchId, start, end, openingBalance }) {
   const CashPayout   = (await import("../models/cashPayout.js")).default;
   const CashHandover = (await import("../models/cashHandover.js")).default;
   const CashIncome   = (await import("../models/cashIncome.js")).default;

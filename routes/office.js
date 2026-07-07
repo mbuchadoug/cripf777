@@ -100,6 +100,7 @@ const NAV = [
   { key: "sales",     href: "/office/sales",    icon: "🧾", label: "Sales",     roles: ["owner", "admin", "manager", "clerk"] },
   { key: "expenses",  href: "/office/expenses", icon: "💸", label: "Expenses",  roles: ["owner", "admin", "manager", "clerk"] },
   { key: "stock",     href: "/office/stock",    icon: "📦", label: "Stock",     roles: ["owner", "admin", "manager", "clerk"] },
+  { key: "products",  href: "/office/products", icon: "🏷", label: "Products",  roles: ["owner", "admin", "manager"] },
   { key: "reports",   href: "/office/reports",  icon: "📈", label: "Reports",   roles: ["owner", "admin", "manager", "clerk"] },
   { key: "team",      href: "/office/team",     icon: "👥", label: "Team",      roles: ["owner", "admin"] },
 ];
@@ -479,6 +480,15 @@ router.get("/sales", async (req, res) => {
     if (branchId) q.branchId = branchId;
     const docs = await Invoice.find(q).sort({ createdAt: -1 }).limit(80).lean();
 
+    const { listClients, listProducts } = await import("../services/officeData.js");
+    const [clients, products] = await Promise.all([
+      listClients({ businessId: office.biz._id }).catch(() => []),
+      listProducts({ businessId: office.biz._id, branchId }).catch(() => []),
+    ]);
+    const clientOpts = clients.map(c => `<option value="${esc(c._id)}">${esc(c.name || c.phone)}${c.phone ? " · " + esc(c.phone) : ""}</option>`).join("");
+    const productOptsHtml = products.map(p => `<option value="${esc(p.name)}" data-price="${p.unitPrice || 0}">${esc(p.name)}${p.unitPrice ? " — " + money(p.unitPrice, cur) : ""}</option>`).join("");
+    const productSelectHtml = '<option value="">- pick a product -</option>' + productOptsHtml + '<option value="__custom__">Other (type below)</option>';
+
     const rows = docs.map(d => {
       const isReceipt = d.type === "receipt";
       const paid = isReceipt || (Number(d.balance) || 0) <= 0;
@@ -503,8 +513,15 @@ router.get("/sales", async (req, res) => {
         <div class="cb">
           <form method="POST" action="/office/sales/new">
             <input type="hidden" name="branch" value="${esc(branchId || "")}">
-            <div class="row">
-              <div class="field"><label>Customer</label><input class="input" name="customerName" placeholder="Walk-in Customer"></div>
+            <div class="field"><label>Customer</label>
+              <select class="input" name="clientId" id="clientSel" onchange="onClientChange()">
+                <option value="walkin">🚶 Walk-in Customer</option>
+                ${clientOpts}
+                <option value="new">➕ New customer…</option>
+              </select>
+            </div>
+            <div id="newClient" class="row" style="display:none">
+              <div class="field"><label>New customer name</label><input class="input" name="customerName" placeholder="e.g. John Moyo"></div>
               <div class="field"><label>Phone (optional)</label><input class="input" name="customerPhone" placeholder="e.g. 0771234567"></div>
             </div>
             <label style="font-size:12.5px;font-weight:700;color:var(--ink);margin:4px 0 6px;display:block">Items</label>
@@ -515,12 +532,18 @@ router.get("/sales", async (req, res) => {
         </div>
       </details>
       <script>
-      function addSaleRow(){var w=document.getElementById('saleItems');var d=document.createElement('div');d.className='row';d.style.marginBottom='8px';
-      d.innerHTML='<div class="field" style="margin:0;flex:2"><input class="input" name="item_name[]" placeholder="Item"></div>'+
-      '<div class="field" style="margin:0"><input class="input" type="number" step="0.01" min="0" name="qty[]" placeholder="Qty"></div>'+
-      '<div class="field" style="margin:0"><input class="input" type="number" step="0.01" min="0" name="unit[]" placeholder="Unit price"></div>'+
-      '<button type="button" class="btn btn-danger btn-sm" style="flex:0 0 auto" onclick="this.parentNode.remove()">✕</button>';
+      var PRODUCT_OPTS = ${JSON.stringify(productSelectHtml)};
+      function onClientChange(){var v=document.getElementById('clientSel').value;document.getElementById('newClient').style.display=(v==='new')?'flex':'none';}
+      function addSaleRow(){var w=document.getElementById('saleItems');var d=document.createElement('div');d.className='row';d.style.marginBottom='8px';d.style.alignItems='flex-start';
+      d.innerHTML='<div class="field" style="margin:0;flex:2"><select class="input" name="pick[]" onchange="pickProduct(this)">'+PRODUCT_OPTS+'</select>'+
+      '<input class="input" name="item_name[]" placeholder="Item name" style="margin-top:6px;display:none"></div>'+
+      '<div class="field" style="margin:0;max-width:90px"><input class="input" type="number" step="0.01" min="0" name="qty[]" placeholder="Qty" value="1"></div>'+
+      '<div class="field" style="margin:0;max-width:120px"><input class="input" type="number" step="0.01" min="0" name="unit[]" placeholder="Price"></div>'+
+      '<button type="button" class="btn btn-danger btn-sm" style="flex:0 0 auto" onclick="this.parentNode.remove()">&times;</button>';
       w.appendChild(d);}
+      function pickProduct(sel){var opt=sel.options[sel.selectedIndex];var row=sel.parentNode.parentNode;var nameInput=row.querySelector('input[name="item_name[]"]');var unit=row.querySelector('input[name="unit[]"]');
+      if(sel.value==='__custom__'){nameInput.style.display='block';nameInput.value='';unit.value='';nameInput.focus();}
+      else{nameInput.style.display='none';nameInput.value=sel.value;var pr=opt.getAttribute('data-price');if(pr&&Number(pr)>0)unit.value=pr;}}
       addSaleRow();
       </script>
       <div class="card">
@@ -613,10 +636,13 @@ router.post("/sales/new", async (req, res) => {
     const items = names.map((n, i) => ({ item: n, qty: qtys[i], unit: units[i] }))
       .filter(x => String(x.item || "").trim() && Number(x.qty) > 0);
     if (!items.length) return res.redirect(back + sep + "err=" + encodeURIComponent("Add at least one item with a quantity"));
+    const clientSel = req.body.clientId || "walkin";
+    const clientId = (clientSel && clientSel !== "walkin" && clientSel !== "new") ? clientSel : null;
+    const customerName = clientSel === "new" ? req.body.customerName : "Walk-in Customer";
     const { createCashSale } = await import("../services/salesEntry.js");
     const r = await createCashSale({
       biz: office.biz, branchId, clerkPhone: office.role.phone || "web",
-      customerName: req.body.customerName, customerPhone: req.body.customerPhone, items,
+      clientId, customerName, customerPhone: req.body.customerPhone, items,
     });
     res.redirect(back + sep + "ok=" + encodeURIComponent(`Sale recorded — ${r.number} (${money(r.total, office.cur)})`));
   } catch (e) {
@@ -790,27 +816,123 @@ router.post("/stock/adjust", async (req, res) => {
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
-//  REPORTS  (real numbers on-screen + Stock PDF download)
+//  PRODUCTS & PRICES  (catalogue used by sales pickers + the WhatsApp bot)
 // ═════════════════════════════════════════════════════════════════════════════
+router.get("/products", async (req, res) => {
+  const { office } = req; const cur = office.cur;
+  const canEdit = office.isOwner || office.isManager;
+  try {
+    const { listProducts } = await import("../services/officeData.js");
+    const products = await listProducts({ businessId: office.biz._id, includeInactive: true });
+    const ok = req.query.ok ? `<div class="alert ok">${esc(req.query.ok)}</div>` : "";
+    const err = req.query.err ? `<div class="alert err">${esc(req.query.err)}</div>` : "";
+
+    const rows = products.map(p => `<tr style="${p.isActive === false ? "opacity:.55" : ""}">
+      <td><b>${esc(p.name)}</b> ${p.isService ? `<span class="badge b-indigo">Service</span>` : ""}${p.isActive === false ? ` <span class="badge b-red">Hidden</span>` : ""}</td>
+      <td class="r">${canEdit ? `
+        <form method="POST" action="/office/products/update" style="display:flex;gap:6px;justify-content:flex-end;align-items:center">
+          <input type="hidden" name="id" value="${p._id}">
+          <input class="input" name="unitPrice" type="number" step="0.01" min="0" value="${p.unitPrice || 0}" style="width:120px">
+          <button class="btn btn-ghost btn-sm">Save</button>
+        </form>` : money(p.unitPrice, cur)}</td>
+      <td class="c">${canEdit ? `
+        <form method="POST" action="/office/products/update"><input type="hidden" name="id" value="${p._id}"><input type="hidden" name="isActive" value="${p.isActive === false ? "1" : "0"}"><button class="btn ${p.isActive === false ? "btn-ghost" : "btn-danger"} btn-sm">${p.isActive === false ? "Show" : "Hide"}</button></form>` : ""}</td>
+    </tr>`).join("");
+
+    const addForm = canEdit ? `
+      <div class="card" style="margin-bottom:18px"><div class="ch"><h3>➕ Add product / service</h3></div>
+        <div class="cb"><form method="POST" action="/office/products/add"><div class="row">
+          <div class="field"><label>Name</label><input class="input" name="name" placeholder="e.g. Starlink Mini Kit" required></div>
+          <div class="field"><label>Price (${esc(cur)})</label><input class="input" type="number" step="0.01" min="0" name="unitPrice" value="0"></div>
+          <div class="field"><label>Type</label><select class="input" name="isService"><option value="">Product</option><option value="1">Service</option></select></div>
+        </div><button class="btn btn-primary">Add to catalogue</button></form></div>
+      </div>` : "";
+
+    const body = `${ok}${err}${addForm}
+      <div class="card"><div class="ch"><h3>Catalogue</h3><span class="pill">${num(products.length)} items</span></div>
+        ${products.length ? `<div class="tbl-wrap"><table><thead><tr><th>Product / Service</th><th class="r">Price</th><th class="c">Visible</th></tr></thead><tbody>${rows}</tbody></table></div>`
+        : `<div class="empty"><div class="e-ic">🏷</div>No products yet. Add one above — they become pickable (with price) when recording a sale.</div>`}
+      </div>`;
+    res.send(shell(office, "products", "Products", body));
+  } catch (e) { console.error("[office products]", e); res.send(shell(office, "products", "Products", `<div class="alert err">${esc(e.message)}</div>`)); }
+});
+
+router.post("/products/add", async (req, res) => {
+  const { office } = req;
+  if (!(office.isOwner || office.isManager)) return res.redirect("/office/products?err=Not+allowed");
+  try {
+    const { createProduct } = await import("../services/officeData.js");
+    await createProduct({ businessId: office.biz._id, branchId: office.scopeBranchId || null, name: req.body.name, unitPrice: req.body.unitPrice, isService: !!req.body.isService });
+    res.redirect("/office/products?ok=" + encodeURIComponent("Product saved"));
+  } catch (e) { res.redirect("/office/products?err=" + encodeURIComponent(e.message)); }
+});
+
+router.post("/products/update", async (req, res) => {
+  const { office } = req;
+  if (!(office.isOwner || office.isManager)) return res.redirect("/office/products?err=Not+allowed");
+  try {
+    const { updateProduct } = await import("../services/officeData.js");
+    const patch = { businessId: office.biz._id, id: req.body.id };
+    if (req.body.unitPrice != null && req.body.unitPrice !== "") patch.unitPrice = req.body.unitPrice;
+    if (req.body.isActive != null) patch.isActive = req.body.isActive === "1";
+    if (req.body.name) patch.name = req.body.name;
+    await updateProduct(patch);
+    res.redirect("/office/products?ok=" + encodeURIComponent("Updated"));
+  } catch (e) { res.redirect("/office/products?err=" + encodeURIComponent(e.message)); }
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  REPORTS  — summary · detailed ledger · clerk statement · stock (+ PDF)
+//  Reuses the SAME builders the WhatsApp reports use, so figures match exactly.
+// ═════════════════════════════════════════════════════════════════════════════
+async function staffForBusiness(bizId, branchId) {
+  const UserRole = await M.UserRole();
+  const rows = await UserRole.find({ businessId: bizId, suspended: { $ne: true } })
+    .select("name phone role branchId").sort({ role: 1, name: 1 }).lean();
+  return rows.filter(r => r.phone && (!branchId || r.role === "owner" || r.role === "admin" || String(r.branchId) === String(branchId)));
+}
+
 router.get("/reports", async (req, res) => {
   const { office } = req; const cur = office.cur;
-  const branchId = effectiveBranch(office, req);
+  const forcedClerk = office.isClerk ? (office.role.phone || null) : null;
+  const branchId = office.isClerk ? office.scopeBranchId : effectiveBranch(office, req);
+  const type = ["summary", "ledger", "clerk", "stock"].includes(req.query.type) ? req.query.type : (office.isClerk ? "clerk" : "summary");
   const period = req.query.period || "month";
-  const tab = req.query.tab === "stock" ? "stock" : "sales";
   const { start, end, label } = periodRange(period, req.query);
+  const err = req.query.err ? `<div class="alert err">${esc(req.query.err)}</div>` : "";
   try {
     const branches = office.isOwner ? await branchesFor(office.biz._id) : [];
+    const staff = (type === "clerk" && !office.isClerk) ? await staffForBusiness(office.biz._id, branchId) : [];
+    const selectedClerk = forcedClerk || req.query.clerk || (staff[0]?.phone || "");
+
+    const pdfQuery = (t) => {
+      const p = new URLSearchParams();
+      p.set("type", t); p.set("period", period);
+      if (branchId) p.set("branch", branchId);
+      if (req.query.from) { p.set("from", req.query.from); p.set("to", req.query.to || ""); }
+      if (selectedClerk) p.set("clerk", selectedClerk);
+      return p.toString();
+    };
+    const pdfBtn = (t) => `<a class="btn btn-primary btn-sm" href="/office/reports/pdf?${pdfQuery(t)}">⬇ Download PDF</a>`;
+
     const controls = `
       <form method="GET" action="/office/reports" class="card" style="padding:14px;margin-bottom:18px">
         <div class="row">
           <div class="field" style="margin:0"><label>Report</label>
-            <select class="input" name="tab"><option value="sales" ${tab === "sales" ? "selected" : ""}>Sales & cash</option><option value="stock" ${tab === "stock" ? "selected" : ""}>Stock & sales</option></select></div>
+            <select class="input" name="type">
+              ${!office.isClerk ? `<option value="summary" ${type === "summary" ? "selected" : ""}>Sales & cash summary</option>
+              <option value="ledger" ${type === "ledger" ? "selected" : ""}>Detailed ledger</option>` : ""}
+              <option value="clerk" ${type === "clerk" ? "selected" : ""}>${office.isClerk ? "My statement" : "Clerk statement"}</option>
+              ${!office.isClerk ? `<option value="stock" ${type === "stock" ? "selected" : ""}>Stock & sales</option>` : ""}
+            </select></div>
           <div class="field" style="margin:0"><label>Period</label>
             <select class="input" name="period">
-              ${["today", "week", "month", "custom"].map(p => `<option value="${p}" ${period === p ? "selected" : ""}>${({ today: "Today", week: "This week", month: "This month", custom: "Custom range" })[p]}</option>`).join("")}
+              ${["today", "week", "month", "year", "alltime", "custom"].map(p => `<option value="${p}" ${period === p ? "selected" : ""}>${({ today: "Today", week: "Last 7 days", month: "This month", year: "This year", alltime: "All time", custom: "Custom range" })[p]}</option>`).join("")}
             </select></div>
           ${office.isOwner && branches.length ? `<div class="field" style="margin:0"><label>Branch</label>
             <select class="input" name="branch"><option value="all">All branches</option>${branches.map(b => `<option value="${b._id}" ${String(branchId) === String(b._id) ? "selected" : ""}>${esc(b.name)}</option>`).join("")}</select></div>` : ""}
+          ${type === "clerk" && !office.isClerk ? `<div class="field" style="margin:0"><label>Clerk</label>
+            <select class="input" name="clerk">${staff.map(x => `<option value="${esc(x.phone)}" ${selectedClerk === x.phone ? "selected" : ""}>${esc(x.name || x.phone)} (${esc(x.role)})</option>`).join("")}</select></div>` : ""}
         </div>
         <div class="row" style="margin-top:12px">
           <div class="field" style="margin:0"><label>From (custom)</label><input class="input" type="date" name="from" value="${esc(req.query.from || "")}"></div>
@@ -820,65 +942,138 @@ router.get("/reports", async (req, res) => {
       </form>`;
 
     let content = "";
-    if (tab === "sales") {
+    if (type === "summary") {
       const { fetchReportData, calcTotals } = await svcReports();
       const data = await fetchReportData({ biz: office.biz, start, end, branchId });
       const t = calcTotals(data);
-      const topExpenses = data.expenses.slice().sort((a, b) => (b.amount || 0) - (a.amount || 0)).slice(0, 8);
       content = `
         <div class="grid kpis" style="margin-bottom:18px">
           <div class="card kpi accent"><div class="kl">Money in</div><div class="kv">${money(t.moneyIn, cur)}</div><div class="ks">Cash ${money(t.cashSales, cur)} · Paid ${money(t.invoicePayments, cur)}</div></div>
           <div class="card kpi"><div class="kl">Money out</div><div class="kv red">${money(t.moneyOut, cur)}</div><div class="ks">${num(data.expenses.length)} expenses</div></div>
-          <div class="card kpi"><div class="kl">Profit</div><div class="kv ${t.profit >= 0 ? "green" : "red"}">${money(t.profit, cur)}</div><div class="ks">${label}</div></div>
+          <div class="card kpi"><div class="kl">Profit</div><div class="kv ${t.profit >= 0 ? "green" : "red"}">${money(t.profit, cur)}</div><div class="ks">${esc(label)}</div></div>
           <div class="card kpi"><div class="kl">Outstanding</div><div class="kv ${t.outstanding > 0 ? "amber" : ""}">${money(t.outstanding, cur)}</div><div class="ks">Invoiced ${money(t.totalInvoiced, cur)}</div></div>
         </div>
-        <div class="row" style="align-items:flex-start">
-          <div class="card" style="flex:1;min-width:260px">
-            <div class="ch"><h3>Cash summary — ${esc(label)}</h3></div>
-            <div class="cb"><table>
-              <tr><td>Cash sales (receipts)</td><td class="r green">${money(t.cashSales, cur)}</td></tr>
-              <tr><td>Invoice payments received</td><td class="r green">${money(t.invoicePayments, cur)}</td></tr>
-              <tr><td>Total money in</td><td class="r"><b>${money(t.moneyIn, cur)}</b></td></tr>
-              <tr><td>Expenses paid out</td><td class="r red">${money(t.moneyOut, cur)}</td></tr>
-              <tr><td><b>Net profit</b></td><td class="r"><b class="${t.profit >= 0 ? "green" : "red"}">${money(t.profit, cur)}</b></td></tr>
-            </table></div>
-          </div>
-          <div class="card" style="flex:1;min-width:260px">
-            <div class="ch"><h3>Top expenses</h3></div>
-            ${topExpenses.length ? `<div class="tbl-wrap"><table><tbody>${topExpenses.map(e => `<tr><td>${esc(e.category || e.description || "Expense")}</td><td class="r red">${money(e.amount, cur)}</td></tr>`).join("")}</tbody></table></div>` : `<div class="empty small">No expenses in this period.</div>`}
-          </div>
+        <div class="card"><div class="ch"><h3>Sales & cash — ${esc(label)}</h3>${pdfBtn("summary")}</div>
+          <div class="cb"><table>
+            <tr><td>Cash sales (receipts)</td><td class="r green">${money(t.cashSales, cur)}</td></tr>
+            <tr><td>Invoice payments received</td><td class="r green">${money(t.invoicePayments, cur)}</td></tr>
+            <tr><td>Total money in</td><td class="r"><b>${money(t.moneyIn, cur)}</b></td></tr>
+            <tr><td>Expenses paid out</td><td class="r red">${money(t.moneyOut, cur)}</td></tr>
+            <tr><td><b>Net profit</b></td><td class="r"><b class="${t.profit >= 0 ? "green" : "red"}">${money(t.profit, cur)}</b></td></tr>
+          </table></div>
+        </div>`;
+    } else if (type === "ledger") {
+      const { fetchReportData, fetchOpeningBalance, _buildRunningLedger } = await svcReports();
+      const opening = period === "alltime" ? 0 : await fetchOpeningBalance(office.biz, branchId, start);
+      const data = await fetchReportData({ biz: office.biz, start, end, branchId });
+      const ledger = await _buildRunningLedger({ biz: office.biz, data, branchId, start, end, openingBalance: opening });
+      const rows = (ledger.rows || []).slice(0, 250).map(r => {
+        const cin = r.credit || r.in || 0, cout = r.debit || r.out || 0;
+        return `<tr><td class="small">${r.date ? new Date(r.date).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : ""}</td><td>${esc(r.description || r.label || r.type || "")}</td><td class="r ${cin ? "green" : ""}">${cin ? money(cin, cur) : ""}</td><td class="r ${cout ? "red" : ""}">${cout ? money(cout, cur) : ""}</td><td class="r"><b>${money(r.balance || 0, cur)}</b></td></tr>`;
+      }).join("");
+      content = `
+        <div class="grid kpis" style="margin-bottom:18px">
+          <div class="card kpi"><div class="kl">Opening balance</div><div class="kv">${money(opening, cur)}</div></div>
+          <div class="card kpi"><div class="kl">Money in</div><div class="kv green">${money(ledger.totalCredits, cur)}</div></div>
+          <div class="card kpi"><div class="kl">Money out</div><div class="kv red">${money(ledger.totalDebits, cur)}</div></div>
+          <div class="card kpi accent"><div class="kl">Closing balance</div><div class="kv">${money(ledger.closingBalance, cur)}</div></div>
         </div>
-        <p class="hint" style="margin-top:14px">💡 For a full itemised ledger PDF and clerk statements, use <b>Business Tools → Reports</b> on WhatsApp.</p>`;
-    } else {
-      const { isStockEnabled, buildStockReport } = await svcStock();
-      if (!(await isStockEnabled(office.biz._id))) {
-        content = `<div class="card"><div class="cb empty"><div class="e-ic">📦</div>Stock tracking is off.</div></div>`;
+        <div class="card"><div class="ch"><h3>Detailed ledger — ${esc(label)}</h3>${pdfBtn("ledger")}</div>
+          <div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Detail</th><th class="r">In</th><th class="r">Out</th><th class="r">Balance</th></tr></thead><tbody>${rows}</tbody></table></div>
+        </div>
+        <p class="hint" style="margin-top:10px">Up to 250 rows shown — the PDF has the full running-balance statement.</p>`;
+    } else if (type === "clerk") {
+      if (!selectedClerk) {
+        content = `<div class="card"><div class="cb empty"><div class="e-ic">👤</div>No staff to report on yet.</div></div>`;
       } else {
-        const report = await buildStockReport({ biz: office.biz, branchId, start, end });
-        const rows = report.rows.map(r => `<tr class="${r.lowStock ? "low" : ""}">
-          <td>${esc(r.name)}</td><td class="r">${num(r.openingAtStart)}</td><td class="r">${num(r.purchasedIn)}</td>
-          <td class="r">${num(r.soldIn)}</td><td class="r"><b>${num(r.closing)}</b></td>
-          <td class="r">${money(r.salesValue, cur)}</td><td class="r">${money(r.grossProfit, cur)}</td></tr>`).join("");
+        const { fetchClerkCumulativeBalance } = await svcReports();
+        const { buildClerkStatement } = await import("../services/reportHelpers.js");
+        const opening = period === "alltime" ? 0 : await fetchClerkCumulativeBalance({ biz: office.biz, clerkPhone: selectedClerk, branchId, before: start });
+        const stmt = await buildClerkStatement({ biz: office.biz, clerkPhone: selectedClerk, branchId, start, end, openingCustody: opening });
+        const rec = stmt.handedOver !== null && stmt.handedOver !== undefined
+          ? (Math.abs(stmt.discrepancy) < 0.01 ? "✅ Balanced" : (stmt.discrepancy > 0 ? `⚠ Surplus +${money(stmt.discrepancy, cur)}` : `❌ Short ${money(Math.abs(stmt.discrepancy), cur)}`))
+          : "⏳ Shift open";
+        const rows = (stmt.txRows || []).slice(0, 250).map(r => {
+          const cin = r.in || r.credit || 0, cout = r.out || r.debit || 0;
+          return `<tr><td class="small">${r.date ? new Date(r.date).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : ""}</td><td>${esc(r.label || r.description || r.type || "")}</td><td class="r ${cin ? "green" : ""}">${cin ? money(cin, cur) : ""}</td><td class="r ${cout ? "red" : ""}">${cout ? money(cout, cur) : ""}</td></tr>`;
+        }).join("");
         content = `
           <div class="grid kpis" style="margin-bottom:18px">
-            <div class="card kpi"><div class="kl">Units sold</div><div class="kv">${num(report.totals.soldQty)}</div><div class="ks">${esc(label)}</div></div>
-            <div class="card kpi"><div class="kl">Gross profit</div><div class="kv green">${money(report.totals.grossProfit, cur)}</div><div class="ks">COGS ${money(report.totals.cogs, cur)}</div></div>
-            <div class="card kpi"><div class="kl">Stock value</div><div class="kv">${money(report.totals.stockValueCost, cur)}</div><div class="ks">at cost</div></div>
-            <div class="card kpi"><div class="kl">Low-stock</div><div class="kv ${report.totals.lowStockCount ? "red" : "green"}">${num(report.totals.lowStockCount)}</div><div class="ks">items</div></div>
+            <div class="card kpi"><div class="kl">${office.isClerk ? "Me" : "Clerk"}</div><div class="kv" style="font-size:17px">${esc(stmt.clerkName || selectedClerk)}</div><div class="ks">${esc(stmt.clerkRole || "")}</div></div>
+            <div class="card kpi"><div class="kl">Opening</div><div class="kv">${money(stmt.openingCustody, cur)}</div></div>
+            <div class="card kpi"><div class="kl">In / Out</div><div class="kv green" style="font-size:17px">${money(stmt.totalIn, cur)}</div><div class="ks red">− ${money(stmt.totalOut, cur)}</div></div>
+            <div class="card kpi accent"><div class="kl">Cash at hand</div><div class="kv">${money(stmt.expectedClosing, cur)}</div><div class="ks">${esc(rec)}</div></div>
           </div>
-          <div class="card">
-            <div class="ch"><h3>Stock movement — ${esc(label)}</h3>
-              <a class="btn btn-primary btn-sm" href="/office/reports/stock.pdf?period=${period}${branchId ? "&branch=" + branchId : ""}${req.query.from ? "&from=" + req.query.from + "&to=" + req.query.to : ""}">⬇ Download PDF</a></div>
-            ${report.rows.length ? `<div class="tbl-wrap"><table>
-              <thead><tr><th>Product</th><th class="r">Open</th><th class="r">In</th><th class="r">Sold</th><th class="r">Close</th><th class="r">Sales</th><th class="r">Profit</th></tr></thead>
-              <tbody>${rows}</tbody></table></div>` : `<div class="empty">No stock activity.</div>`}
+          <div class="card"><div class="ch"><h3>${office.isClerk ? "My" : "Clerk"} statement — ${esc(label)}</h3>${pdfBtn("clerk")}</div>
+            <div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Detail</th><th class="r">In</th><th class="r">Out</th></tr></thead><tbody>${rows}</tbody></table></div>
+          </div>`;
+      }
+    } else { // stock
+      const { isStockEnabled, buildStockReport } = await svcStock();
+      if (!(await isStockEnabled(office.biz._id))) content = `<div class="card"><div class="cb empty"><div class="e-ic">📦</div>Stock tracking is off.</div></div>`;
+      else {
+        const report = await buildStockReport({ biz: office.biz, branchId, start, end });
+        const rows = report.rows.map(r => `<tr class="${r.lowStock ? "low" : ""}"><td>${esc(r.name)}</td><td class="r">${num(r.openingAtStart)}</td><td class="r">${num(r.purchasedIn)}</td><td class="r">${num(r.soldIn)}</td><td class="r"><b>${num(r.closing)}</b></td><td class="r">${money(r.salesValue, cur)}</td><td class="r">${money(r.grossProfit, cur)}</td></tr>`).join("");
+        content = `
+          <div class="grid kpis" style="margin-bottom:18px">
+            <div class="card kpi"><div class="kl">Units sold</div><div class="kv">${num(report.totals.soldQty)}</div></div>
+            <div class="card kpi"><div class="kl">Gross profit</div><div class="kv green">${money(report.totals.grossProfit, cur)}</div></div>
+            <div class="card kpi"><div class="kl">Stock value</div><div class="kv">${money(report.totals.stockValueCost, cur)}</div></div>
+            <div class="card kpi"><div class="kl">Low-stock</div><div class="kv ${report.totals.lowStockCount ? "red" : "green"}">${num(report.totals.lowStockCount)}</div></div>
+          </div>
+          <div class="card"><div class="ch"><h3>Stock & sales — ${esc(label)}</h3><a class="btn btn-primary btn-sm" href="/office/reports/stock.pdf?period=${period}${branchId ? "&branch=" + branchId : ""}${req.query.from ? "&from=" + req.query.from + "&to=" + req.query.to : ""}">⬇ Download PDF</a></div>
+            ${report.rows.length ? `<div class="tbl-wrap"><table><thead><tr><th>Product</th><th class="r">Open</th><th class="r">In</th><th class="r">Sold</th><th class="r">Close</th><th class="r">Sales</th><th class="r">Profit</th></tr></thead><tbody>${rows}</tbody></table></div>` : `<div class="empty">No stock activity.</div>`}
           </div>`;
       }
     }
-    res.send(shell(office, "reports", "Reports", controls + content));
+    res.send(shell(office, "reports", "Reports", err + controls + content));
   } catch (e) {
     console.error("[office reports]", e);
     res.send(shell(office, "reports", "Reports", `<div class="alert err">Couldn't build the report: ${esc(e.message)}</div>`));
+  }
+});
+
+// PDF: summary / detailed ledger / clerk statement
+router.get("/reports/pdf", async (req, res) => {
+  const { office } = req;
+  const forcedClerk = office.isClerk ? (office.role.phone || null) : null;
+  const branchId = office.isClerk ? office.scopeBranchId : effectiveBranch(office, req);
+  const type = req.query.type;
+  const period = req.query.period || "month";
+  const { start, end, label } = periodRange(period, req.query);
+  try {
+    const { generateReportPDF } = await import("../services/reportPDF.js");
+    let branchName = office.branch?.name || (branchId ? "" : "All branches");
+    if (branchId && office.isOwner) { try { const Branch = await M.Branch(); const b = await Branch.findById(branchId).lean(); branchName = b?.name || branchName; } catch {} }
+
+    let out;
+    if (type === "summary") {
+      const { fetchReportData, calcTotals } = await svcReports();
+      const data = await fetchReportData({ biz: office.biz, start, end, branchId });
+      out = await generateReportPDF({ biz: office.biz, reportType: "Monthly Report", periodLabel: label, branchName, data, totals: calcTotals(data) });
+    } else if (type === "ledger") {
+      const { fetchReportData, fetchOpeningBalance, _buildRunningLedger } = await svcReports();
+      const opening = period === "alltime" ? 0 : await fetchOpeningBalance(office.biz, branchId, start);
+      const data = await fetchReportData({ biz: office.biz, start, end, branchId });
+      const ledger = await _buildRunningLedger({ biz: office.biz, data, branchId, start, end, openingBalance: opening });
+      out = await generateReportPDF({ biz: office.biz, reportType: "Ledger Statement", periodLabel: label, branchName, ledgerRows: ledger.rows, openingBalance: opening, closingBalance: ledger.closingBalance });
+    } else if (type === "clerk") {
+      const clerkPhone = forcedClerk || req.query.clerk;
+      if (!clerkPhone) throw new Error("No clerk selected");
+      const { fetchClerkCumulativeBalance } = await svcReports();
+      const { buildClerkStatement } = await import("../services/reportHelpers.js");
+      const opening = period === "alltime" ? 0 : await fetchClerkCumulativeBalance({ biz: office.biz, clerkPhone, branchId, before: start });
+      const stmt = await buildClerkStatement({ biz: office.biz, clerkPhone, branchId, start, end, openingCustody: opening });
+      out = await generateReportPDF({ biz: office.biz, reportType: office.isClerk ? "My Statement" : "Clerk Statement", periodLabel: `${stmt.clerkName || clerkPhone} · ${label}`, branchName, clerkData: { ...stmt, openingCustody: opening } });
+    } else {
+      return res.redirect("/office/reports");
+    }
+    const abs = typeof out === "string" ? out : (out?.filepath || out?.path);
+    if (!abs) throw new Error("PDF generation returned no file");
+    return res.download(abs);
+  } catch (e) {
+    console.error("[office report pdf]", e);
+    res.redirect("/office/reports?err=" + encodeURIComponent("Couldn't generate PDF: " + e.message));
   }
 });
 
@@ -888,7 +1083,7 @@ router.get("/reports/stock.pdf", async (req, res) => {
   const { start, end, label } = periodRange(req.query.period || "month", req.query);
   try {
     const { isStockEnabled, buildStockReport, generateStockReportPDF } = await svcStock();
-    if (!(await isStockEnabled(office.biz._id))) return res.redirect("/office/reports?tab=stock");
+    if (!(await isStockEnabled(office.biz._id))) return res.redirect("/office/reports?type=stock");
     const report = await buildStockReport({ biz: office.biz, branchId, start, end });
     const out = await generateStockReportPDF({
       biz: office.biz, report, periodLabel: label,
@@ -896,10 +1091,10 @@ router.get("/reports/stock.pdf", async (req, res) => {
     });
     const abs = typeof out === "string" ? out : (out?.filepath || out?.path || out?.file);
     if (!abs) throw new Error("PDF generation returned no file");
-    return res.download(abs, `stock-report.pdf`);
+    return res.download(abs, "stock-report.pdf");
   } catch (e) {
     console.error("[office stock pdf]", e);
-    res.redirect("/office/reports?tab=stock&err=" + encodeURIComponent("Couldn't generate PDF: " + e.message));
+    res.redirect("/office/reports?type=stock&err=" + encodeURIComponent("Couldn't generate PDF: " + e.message));
   }
 });
 
@@ -984,7 +1179,7 @@ function credCard(office, title, name, username, tempPw, note) {
           <div style="margin-bottom:12px"><div class="small muted" style="font-weight:700;text-transform:uppercase;letter-spacing:.05em">Username</div><div class="cred" style="display:inline-block;margin-top:4px">${esc(username)}</div></div>
           <div><div class="small muted" style="font-weight:700;text-transform:uppercase;letter-spacing:.05em">Temporary password</div><div class="cred" style="display:inline-block;margin-top:4px">${esc(tempPw)}</div></div>
         </div>
-        <p class="hint">⚠️ Copy these now — the password is shown only once. They'll be asked to set their own password when they first sign in at <b>/office/login</b>.</p>
+        <p class="hint">⚠ Copy these now — the password is shown only once. They'll be asked to set their own password when they first sign in at <b>/office/login</b>.</p>
         <a class="btn btn-primary" href="/office/team" style="margin-top:8px">Back to team</a>
       </div>
     </div>`);
