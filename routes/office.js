@@ -23,6 +23,8 @@
 //     app.use("/office", officeRoutes);
 // ─────────────────────────────────────────────────────────────────────────────
 import { Router } from "express";
+import fs from "fs";
+import path from "path";
 
 const router = Router();
 
@@ -476,7 +478,7 @@ router.get("/sales", async (req, res) => {
   const branchId = effectiveBranch(office, req);
   try {
     const Invoice = await M.Invoice();
-    const q = { businessId: office.biz._id, type: { $in: ["receipt", "invoice"] } };
+    const q = { businessId: office.biz._id, type: { $in: ["receipt", "invoice", "quote"] } };
     if (branchId) q.branchId = branchId;
     const docs = await Invoice.find(q).sort({ createdAt: -1 }).limit(80).lean();
 
@@ -491,15 +493,19 @@ router.get("/sales", async (req, res) => {
 
     const rows = docs.map(d => {
       const isReceipt = d.type === "receipt";
+      const isQuote = d.type === "quote";
       const paid = isReceipt || (Number(d.balance) || 0) <= 0;
+      const typeLabel = isReceipt ? "Receipt" : isQuote ? "Quote" : "Invoice";
+      const typeCls = isReceipt ? "b-green" : isQuote ? "b-slate" : "b-indigo";
       return `<tr>
-        <td><b>${esc(d.invoiceNumber || d.receiptNumber || d.number || String(d._id).slice(-6))}</b></td>
-        <td><span class="badge ${isReceipt ? "b-green" : "b-indigo"}">${isReceipt ? "Receipt" : "Invoice"}</span></td>
+        <td><b>${esc(d.number || String(d._id).slice(-6))}</b></td>
+        <td><span class="badge ${typeCls}">${typeLabel}</span></td>
         <td>${esc(d.clientName || d.customerName || "Walk-in")}</td>
         <td class="r">${money(d.total, cur)}</td>
-        <td class="r">${isReceipt ? "-" : money(d.balance, cur)}</td>
-        <td class="c"><span class="badge ${paid ? "b-green" : "b-amber"}">${paid ? "Paid" : "Owing"}</span></td>
+        <td class="r">${isReceipt || isQuote ? "-" : money(d.balance, cur)}</td>
+        <td class="c">${isQuote ? `<span class="badge b-slate">Quote</span>` : `<span class="badge ${paid ? "b-green" : "b-amber"}">${paid ? "Paid" : "Owing"}</span>`}</td>
         <td class="small muted">${new Date(d.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</td>
+        <td class="c"><a class="btn btn-ghost btn-sm" href="/office/doc/${d._id}/pdf" target="_blank">📄 PDF</a></td>
       </tr>`;
     }).join("");
 
@@ -509,10 +515,21 @@ router.get("/sales", async (req, res) => {
       ${ok}${err}
       ${office.isOwner ? branchFilter(await branchesFor(office.biz._id), branchId, "/office/sales") : ""}
       <details id="newsale" class="card" style="margin-bottom:18px" ${req.query.err ? "open" : ""}>
-        <summary class="ch" style="cursor:pointer"><h3>➕ New cash sale (receipt)</h3><span class="pill">tap to open</span></summary>
+        <summary class="ch" style="cursor:pointer"><h3>➕ New sale · invoice · quote</h3><span class="pill">tap to open</span></summary>
         <div class="cb">
           <form method="POST" action="/office/sales/new">
             <input type="hidden" name="branch" value="${esc(branchId || "")}">
+            <div class="field"><label>Document type</label>
+              <select class="input" name="docType" id="docType" onchange="onDocType()">
+                <option value="receipt">Receipt (cash sale - paid now)</option>
+                <option value="invoice">Invoice (customer pays later)</option>
+                <option value="quote">Quotation (price quote)</option>
+              </select>
+            </div>
+            <div id="docExtra" class="row" style="display:none">
+              <div class="field"><label>Discount %</label><input class="input" type="number" step="0.01" min="0" max="100" name="discountPercent" value="0"></div>
+              <div class="field"><label>VAT %</label><input class="input" type="number" step="0.01" min="0" name="vatPercent" value="0"></div>
+            </div>
             <div class="field"><label>Customer</label>
               <select class="input" name="clientId" id="clientSel" onchange="onClientChange()">
                 <option value="walkin">🚶 Walk-in Customer</option>
@@ -534,6 +551,7 @@ router.get("/sales", async (req, res) => {
       <script>
       var PRODUCT_OPTS = ${JSON.stringify(productSelectHtml)};
       function onClientChange(){var v=document.getElementById('clientSel').value;document.getElementById('newClient').style.display=(v==='new')?'flex':'none';}
+      function onDocType(){var v=document.getElementById('docType').value;document.getElementById('docExtra').style.display=(v==='receipt')?'none':'flex';}
       function addSaleRow(){var w=document.getElementById('saleItems');var d=document.createElement('div');d.className='row';d.style.marginBottom='8px';d.style.alignItems='flex-start';
       d.innerHTML='<div class="field" style="margin:0;flex:2"><select class="input" name="pick[]" onchange="pickProduct(this)">'+PRODUCT_OPTS+'</select>'+
       '<input class="input" name="item_name[]" placeholder="Item name" style="margin-top:6px;display:none"></div>'+
@@ -551,7 +569,7 @@ router.get("/sales", async (req, res) => {
           <a class="btn btn-ghost btn-sm" href="#newsale" onclick="var e=document.getElementById('newsale');e.open=true;e.scrollIntoView();return false;">＋ New sale</a>
         </div>
         ${docs.length ? `<div class="tbl-wrap"><table>
-          <thead><tr><th>No.</th><th>Type</th><th>Customer</th><th class="r">Total</th><th class="r">Balance</th><th class="c">Status</th><th>Date</th></tr></thead>
+          <thead><tr><th>No.</th><th>Type</th><th>Customer</th><th class="r">Total</th><th class="r">Balance</th><th class="c">Status</th><th>Date</th><th class="c">PDF</th></tr></thead>
           <tbody>${rows}</tbody></table></div>`
         : `<div class="empty"><div class="e-ic">🧾</div>No sales yet. Record your first sale on WhatsApp - it'll appear here instantly.</div>`}
       </div>`;
@@ -574,12 +592,18 @@ router.get("/expenses", async (req, res) => {
     if (branchId) q.branchId = branchId;
     const docs = await Expense.find(q).sort({ createdAt: -1 }).limit(80).lean();
     const total = docs.reduce((s, e) => s + (Number(e.amount) || 0), 0);
+    const canEdit = office.isOwner || office.isManager;
+    let payouts = [];
+    try { const CashPayout = (await import("../models/cashPayout.js")).default; const pq = { businessId: office.biz._id }; if (branchId) pq.branchId = branchId; payouts = await CashPayout.find(pq).sort({ createdAt: -1 }).limit(40).lean(); } catch (_) {}
+    const payoutTotal = payouts.reduce((s, p) => s + (Number(p.amount) || 0), 0);
+    const payoutRows = payouts.map(p => `<tr style="${p.reversed ? "opacity:.5" : ""}"><td>${esc(p.reason || "Payout")}${p.reversed ? ` <span class="badge b-red">Reversed</span>` : ""}</td><td class="small muted">${esc(p.paidToName || p.paidToPhone || "")}</td><td class="r"><b class="red">${money(p.reversed ? (p.originalAmount || 0) : p.amount, cur)}</b></td><td class="small muted">${new Date(p.date || p.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</td></tr>`).join("");
 
-    const rows = docs.map(d => `<tr>
-      <td>${esc(d.category || d.description || d.title || "Expense")}</td>
-      <td class="small muted">${esc(d.note || d.description || "")}</td>
-      <td class="r"><b class="red">${money(d.amount, cur)}</b></td>
+    const rows = docs.map(d => `<tr style="${d.reversed ? "opacity:.5" : ""}">
+      <td>${esc(d.category || d.description || "Expense")}${d.reversed ? ` <span class="badge b-red">Reversed</span>` : ""}</td>
+      <td class="small muted">${esc(d.description || "")}</td>
+      <td class="r"><b class="red">${money(d.reversed ? (d.originalAmount || 0) : d.amount, cur)}</b></td>
       <td class="small muted">${new Date(d.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</td>
+      <td class="c">${(canEdit && !d.reversed) ? `<form method="POST" action="/office/expenses/${d._id}/reverse" onsubmit="return confirm('Reverse this expense? It will stop counting toward money-out.')"><button class="btn btn-danger btn-sm">Reverse</button></form>` : ""}</td>
     </tr>`).join("");
 
     const ok = req.query.ok ? `<div class="alert ok">${esc(req.query.ok)}</div>` : "";
@@ -604,18 +628,38 @@ router.get("/expenses", async (req, res) => {
           </form>
         </div>
       </details>
+      <details id="newpay" class="card" style="margin-bottom:18px" ${req.query.perr ? "open" : ""}>
+        <summary class="ch" style="cursor:pointer"><h3>➕ Record payout / drawing</h3><span class="pill">tap to open</span></summary>
+        <div class="cb"><form method="POST" action="/office/payouts/new">
+          <input type="hidden" name="branch" value="${esc(branchId || "")}">
+          <div class="row">
+            <div class="field"><label>Amount (${esc(cur)})</label><input class="input" type="number" step="0.01" min="0.01" name="amount" required></div>
+            <div class="field"><label>Reason</label><input class="input" name="reason" placeholder="e.g. Owner drawing, Petty cash"></div>
+          </div>
+          <div class="row">
+            <div class="field"><label>Paid to (optional)</label><input class="input" name="recipientName" placeholder="Name"></div>
+            <div class="field"><label>Recipient phone (optional)</label><input class="input" name="recipientPhone" placeholder="e.g. 0771234567"></div>
+          </div>
+          <div style="display:flex;justify-content:flex-end"><button class="btn btn-primary">Record payout</button></div>
+        </form></div>
+      </details>
       <div class="grid kpis" style="margin-bottom:16px">
         <div class="card kpi"><div class="kl">Expenses shown</div><div class="kv red">${money(total, cur)}</div><div class="ks">${num(docs.length)} entries</div></div>
+        <div class="card kpi"><div class="kl">Payouts / drawings</div><div class="kv red">${money(payoutTotal, cur)}</div><div class="ks">${num(payouts.length)} entries</div></div>
       </div>
       <div class="card">
         <div class="ch"><h3>Recent expenses</h3>
           <a class="btn btn-ghost btn-sm" href="#newexp" onclick="var e=document.getElementById('newexp');e.open=true;e.scrollIntoView();return false;">＋ New expense</a>
         </div>
         ${docs.length ? `<div class="tbl-wrap"><table>
-          <thead><tr><th>Category</th><th>Note</th><th class="r">Amount</th><th>Date</th></tr></thead>
+          <thead><tr><th>Category</th><th>Note</th><th class="r">Amount</th><th>Date</th><th class="c">Action</th></tr></thead>
           <tbody>${rows}</tbody></table></div>`
         : `<div class="empty"><div class="e-ic">💸</div>No expenses recorded yet.</div>`}
-      </div>`;
+      </div>
+      ${payouts.length ? `<div class="card" style="margin-top:18px">
+        <div class="ch"><h3>Payouts & drawings</h3><a class="btn btn-ghost btn-sm" href="#newpay" onclick="var e=document.getElementById('newpay');e.open=true;e.scrollIntoView();return false;">＋ New payout</a></div>
+        <div class="tbl-wrap"><table><thead><tr><th>Reason</th><th>Paid to</th><th class="r">Amount</th><th>Date</th></tr></thead><tbody>${payoutRows}</tbody></table></div>
+      </div>` : ""}`;
     res.send(shell(office, "expenses", "Expenses", body));
   } catch (e) {
     console.error("[office expenses]", e);
@@ -639,12 +683,25 @@ router.post("/sales/new", async (req, res) => {
     const clientSel = req.body.clientId || "walkin";
     const clientId = (clientSel && clientSel !== "walkin" && clientSel !== "new") ? clientSel : null;
     const customerName = clientSel === "new" ? req.body.customerName : "Walk-in Customer";
-    const { createCashSale } = await import("../services/salesEntry.js");
-    const r = await createCashSale({
+    const docType = ["receipt", "invoice", "quote"].includes(req.body.docType) ? req.body.docType : "receipt";
+    const { createDocument } = await import("../services/salesEntry.js");
+    const r = await createDocument({
       biz: office.biz, branchId, clerkPhone: office.role.phone || "web",
-      clientId, customerName, customerPhone: req.body.customerPhone, items,
+      clientId, customerName, customerPhone: req.body.customerPhone, items, docType,
+      discountPercent: req.body.discountPercent, vatPercent: req.body.vatPercent,
     });
-    res.redirect(back + sep + "ok=" + encodeURIComponent(`Sale recorded - ${r.number} (${money(r.total, office.cur)})`));
+    const label = { receipt: "Receipt", invoice: "Invoice", quote: "Quotation" }[r.docType] || "Document";
+    const note = r.docType === "receipt" ? "Paid" : r.docType === "invoice" ? "Unpaid - adds to what's owed" : "Quotation";
+    return res.send(shell(office, "sales", label + " created", `
+      <div class="card" style="max-width:560px;margin:24px auto"><div class="ch"><h3>✅ ${esc(label)} ${esc(r.number)} created</h3></div>
+        <div class="cb">
+          <p class="muted">Total <b>${money(r.total, office.cur)}</b> · ${esc(r.clientName || "Walk-in")} · ${esc(note)}</p>
+          <div class="row" style="margin-top:12px">
+            <a class="btn btn-primary" href="/office/doc/${r.invoiceId}/pdf" target="_blank">⬇ Download / preview PDF</a>
+            <a class="btn btn-ghost" href="/office/sales#newsale">＋ New document</a>
+            <a class="btn btn-ghost" href="/office/sales">Back to sales</a>
+          </div>
+        </div></div>`));
   } catch (e) {
     console.error("[office sale new]", e);
     res.redirect(back + sep + "err=" + encodeURIComponent(e.message));
@@ -670,6 +727,50 @@ router.post("/expenses/new", async (req, res) => {
     console.error("[office expense new]", e);
     res.redirect(back + sep + "err=" + encodeURIComponent(e.message));
   }
+});
+
+// Preview / download the PDF for any receipt, invoice or quotation
+router.get("/doc/:id/pdf", async (req, res) => {
+  const { office } = req;
+  try {
+    const { documentPdf } = await import("../services/salesEntry.js");
+    const { filename, folder } = await documentPdf({ biz: office.biz, invoiceId: req.params.id });
+    const abs = path.resolve(process.cwd(), "public", "docs", "generated", folder, filename);
+    if (fs.existsSync(abs)) return res.download(abs, filename);
+    return res.redirect(`/docs/generated/${folder}/${filename}`);
+  } catch (e) {
+    console.error("[office doc pdf]", e);
+    res.redirect("/office/sales?err=" + encodeURIComponent("Couldn't generate PDF: " + e.message));
+  }
+});
+
+// Record a payout / owner drawing (same record + notification as the bot)
+router.post("/payouts/new", async (req, res) => {
+  const { office } = req;
+  const branchId = effectiveBranch(office, req) || null;
+  const back = "/office/expenses" + (branchId ? "?branch=" + branchId : "");
+  const sep = branchId ? "&" : "?";
+  try {
+    const amount = parseFloat(req.body.amount);
+    if (!(amount > 0)) return res.redirect(back + sep + "err=" + encodeURIComponent("Enter a valid amount"));
+    const { recordPayout } = await import("../services/salesEntry.js");
+    await recordPayout({
+      biz: office.biz, branchId, clerkPhone: office.role.phone || "web",
+      amount, reason: req.body.reason, recipientName: req.body.recipientName, recipientPhone: req.body.recipientPhone,
+    });
+    res.redirect(back + sep + "ok=" + encodeURIComponent(`Payout recorded - ${money(amount, office.cur)}`));
+  } catch (e) { console.error("[office payout]", e); res.redirect(back + sep + "err=" + encodeURIComponent(e.message)); }
+});
+
+// Reverse an expense (owner/manager) - soft reverse, keeps audit history
+router.post("/expenses/:id/reverse", async (req, res) => {
+  const { office } = req;
+  if (!(office.isOwner || office.isManager)) return res.redirect("/office/expenses?err=" + encodeURIComponent("Not allowed"));
+  try {
+    const { reverseExpense } = await import("../services/salesEntry.js");
+    await reverseExpense({ biz: office.biz, id: req.params.id, byPhone: office.role.phone || "web" });
+    res.redirect("/office/expenses?ok=" + encodeURIComponent("Expense reversed"));
+  } catch (e) { res.redirect("/office/expenses?err=" + encodeURIComponent(e.message)); }
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
