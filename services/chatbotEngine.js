@@ -20502,6 +20502,19 @@ if (biz) {
     if (handled) return;
   }
 
+  // ── Stock report: the period list ("This month" / "All Time" / "Custom") ──
+  // arrives as an interactive list_reply (isMetaAction=true), so it never hits
+  // the !isMetaAction bridge handoff above. Route it in explicitly, same as the
+  // rb_ block, or the report picker does nothing and the reply looks empty.
+  if (
+    isMetaAction && biz &&
+    biz.sessionState === "stock_report_period" &&
+    a?.startsWith("stock_period_")
+  ) {
+    const handled = await continueTwilioFlow({ from, text: a });
+    if (handled) return;
+  }
+
   // ── Buyer: free-text product search ──────────────────────────────────────
 if (biz?.sessionState === "supplier_search_product" && !isMetaAction) {
   const rawQuery = text.trim();

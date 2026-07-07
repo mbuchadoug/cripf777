@@ -408,7 +408,7 @@ async function _balanceLine(biz, branchId, clerkPhone = null) {
     if (clerkPhone) {
       // Clerk-specific: sum all their credits minus debits up to now
       const { fetchClerkCumulativeBalance } = await import("./dailyReportEnhanced.js");
-      const custody = await fetchClerkCumulativeBalance({ biz, clerkPhone, branchId, before: new Date() });
+      const custody = await fetchClerkCumulativeBalance({ biz, clerkPhone, branchId, before: new Date(), inclusive: true });
       return `\n💰 *Cash at hand: ${fmt(custody, biz.currency)}*  (your current custody)`;
     }
     const b = await getDailyRunningBalance(biz._id, branchId, biz.currency);

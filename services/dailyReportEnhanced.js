@@ -670,7 +670,7 @@ ${recLine}
 // handovers attributed to this clerk to compute their true running balance.
 // This is the carry-forward opening for any clerk statement period.
 // ─── Exported so bizNotifications.js can use same logic for notification balance lines ─
-export async function fetchClerkCumulativeBalance({ biz, clerkPhone, branchId, before }) {
+export async function fetchClerkCumulativeBalance({ biz, clerkPhone, branchId, before, inclusive = false }) {
   try {
     const Invoice        = (await import("../models/invoice.js")).default;
     const InvoicePayment = (await import("../models/invoicePayment.js")).default;
@@ -679,10 +679,16 @@ export async function fetchClerkCumulativeBalance({ biz, clerkPhone, branchId, b
     const CashHandover   = (await import("../models/cashHandover.js")).default;
     const CashIncome     = (await import("../models/cashIncome.js")).default;
 
-    const beforeDate = new Date(before); beforeDate.setHours(0, 0, 0, 0);
+    // Opening custody (statements) floors to midnight and counts everything
+    // STRICTLY BEFORE that day. Live "cash at hand" (inclusive=true) instead
+    // counts everything up to and INCLUDING `before` (i.e. today's sales too),
+    // otherwise a receipt raised today would not show in the notification.
+    const dateCond = inclusive
+      ? { $lte: new Date(before) }
+      : (() => { const d = new Date(before); d.setHours(0, 0, 0, 0); return { $lt: d }; })();
     const bQ = {
       businessId: biz._id,
-      createdAt:  { $lt: beforeDate },
+      createdAt:  dateCond,
       ...(branchId ? { branchId } : {})
     };
 
