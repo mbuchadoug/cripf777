@@ -43,7 +43,6 @@ import battleRoutes from "./routes/battles.js";
 import webExpenses from "./routes/web_expenses.js";
 import webSettings from "./routes/web_settings.js"; // ← ADD THIS
 import webTeam from "./routes/web_team.js";          // ← ADD THIS
-import officeRoutes from "./routes/office.js";   // ← NEW back-office portal (/office)
 //-------------------------------------------------------
 
 import {
@@ -567,11 +566,6 @@ app.use("/web", webPayments);
 app.use("/web", webSubscription); // ← ADD
 app.use("/web", webSettings); // ← ADD THIS
 app.use("/web", webTeam);                            // ← ADD THIS
-
-// ========================================
-// 🏢 BUSINESS BACK-OFFICE PORTAL (NEW, self-contained) — owners/managers/clerks
-// ========================================
-app.use("/office", officeRoutes);
 // Add this route registration
 app.use(adminScoiReports);
 app.use(adminQuizRules);
