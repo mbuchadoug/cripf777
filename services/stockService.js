@@ -110,15 +110,32 @@ export async function setAutoMatchSales(businessId, on) {
 // IDENTICAL to what appears on invoices, so sale auto-matching actually works.
 export async function getTrackableCatalogue({ businessId, branchId = null }) {
   const { StockItem } = await getModels();
-  const SupplierProfile = (await import("../models/supplierProfile.js")).default;
-
-  const supplier = await SupplierProfile.findOne({ businessId }).lean();
   const rawNames = [];
-  if (supplier) {
-    (supplier.prices || []).forEach(p => { if (p && p.product) rawNames.push(String(p.product)); });
-    (supplier.listedProducts || []).forEach(p => { if (p) rawNames.push(String(p)); });
-    (supplier.products || []).forEach(p => { if (p && p !== "pending_upload") rawNames.push(String(p)); });
-  }
+
+  // ── Source 1 (primary): the Product catalogue used by Business Tools ────────
+  // This is what "View Products & Services" shows. Services are excluded - you
+  // keep stock of physical goods, not services. Branch-scoped like View Products
+  // (a branch also sees products with no branch set).
+  try {
+    const Product = (await import("../models/product.js")).default;
+    const pq = { businessId, isActive: true, isService: { $ne: true } };
+    if (branchId) pq.$or = [{ branchId }, { branchId: null }, { branchId: { $exists: false } }];
+    const products = await Product.find(pq).select("name").sort({ name: 1 }).lean();
+    products.forEach(p => { if (p && p.name) rawNames.push(String(p.name)); });
+  } catch (_) {}
+
+  // ── Source 2 (fallback): the marketplace SupplierProfile catalogue ─────────
+  // Some businesses list products on their SupplierProfile instead. Union both
+  // so the picker works regardless of which subsystem a business uses.
+  try {
+    const SupplierProfile = (await import("../models/supplierProfile.js")).default;
+    const supplier = await SupplierProfile.findOne({ businessId }).lean();
+    if (supplier) {
+      (supplier.prices || []).forEach(p => { if (p && p.product) rawNames.push(String(p.product)); });
+      (supplier.listedProducts || []).forEach(p => { if (p) rawNames.push(String(p)); });
+      (supplier.products || []).forEach(p => { if (p && p !== "pending_upload") rawNames.push(String(p)); });
+    }
+  } catch (_) {}
 
   // Exclude products already tracked (compared on the normalised name)
   const q = { businessId, isActive: true };
@@ -126,6 +143,7 @@ export async function getTrackableCatalogue({ businessId, branchId = null }) {
   const tracked = await StockItem.find(q).select("name").lean();
   const trackedNorm = new Set(tracked.map(t => norm(t.name)));
 
+  // De-dupe by normalised name, keep first display casing, drop already-tracked.
   const seen = new Set();
   const out = [];
   for (const raw of rawNames) {
