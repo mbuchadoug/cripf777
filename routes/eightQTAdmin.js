@@ -18,7 +18,9 @@ import fs from "fs";
 import crypto from "crypto";
 import { ensureAuth } from "../middleware/authGuard.js";
 import EightQTConfig from "../models/eightQTConfig.js";
+import EightQTQuiz from "../models/eightQTQuiz.js";
 import EightQTQuestion from "../models/eightQTQuestion.js";
+import mongoose from "mongoose";
 import EightQTArchetype from "../models/eightQTArchetype.js";
 import EightQTCertTemplate from "../models/eightQTCertTemplate.js";
 import EightQTAttempt from "../models/eightQTAttempt.js";
@@ -84,9 +86,12 @@ router.get("/", async (req, res) => {
 
     const certRequested = await EightQTAttempt.countDocuments({ certificateStatus: { $ne: "none" } });
 
+    const quizzes = await EightQTQuiz.find().sort({ isDefault: -1, updatedAt: -1 }).lean();
+
     res.render("8qt/admin/panel", {
       configs,
       template,
+      quizzes,
       stats: {
         totalAttempts,
         finished,
@@ -882,6 +887,133 @@ router.get("/export/csv", async (req, res) => {
     res.setHeader("Content-Type", "text/csv");
     res.setHeader("Content-Disposition", `attachment; filename="8qt-attempts-${Date.now()}.csv"`);
     res.send(csv);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════
+// QUIZZES  (dynamic size + fixed titled quizzes)
+// ══════════════════════════════════════════════════════════════
+
+// List quizzes (+ bank size per quotient, for the builder UI)
+// GET /admin/8qt/quizzes
+router.get("/quizzes", async (req, res) => {
+  try {
+    const quizzes = await EightQTQuiz.find().sort({ isDefault: -1, updatedAt: -1 }).lean();
+    // enrich fixed quizzes with a live count of still-active questions
+    for (const q of quizzes) {
+      if (q.mode === "fixed") {
+        q.liveCount = await EightQTQuestion.countDocuments({ _id: { $in: q.questionIds || [] }, active: true });
+      }
+    }
+    const bankByQuotient = await EightQTQuestion.aggregate([
+      { $match: { active: true } },
+      { $group: { _id: "$quotient", count: { $sum: 1 } } }
+    ]);
+    res.json({ ok: true, quizzes, bankByQuotient });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Single quiz (for editing)
+// GET /admin/8qt/quizzes/:id
+router.get("/quizzes/:id", async (req, res) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ error: "bad id" });
+    const quiz = await EightQTQuiz.findById(req.params.id)
+      .populate("questionIds", "text quotient active")
+      .lean();
+    if (!quiz) return res.status(404).json({ error: "Quiz not found" });
+    res.json({ ok: true, quiz });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Create
+// POST /admin/8qt/quizzes  { title, mode, size, drawStrategy, quotients[], questionIds[], shuffleQuestions, shuffleOptions, active, isDefault }
+router.post("/quizzes", writeOnly, async (req, res) => {
+  try {
+    const body = req.body || {};
+    if (!body.title || !String(body.title).trim()) {
+      return res.status(400).json({ error: "title is required" });
+    }
+    const doc = {
+      title: String(body.title).trim(),
+      description: body.description || "",
+      mode: body.mode === "fixed" ? "fixed" : "dynamic",
+      size: Math.max(1, Number(body.size) || 8),
+      drawStrategy: body.drawStrategy === "random" ? "random" : "even",
+      quotients: Array.isArray(body.quotients) ? body.quotients : [],
+      questionIds: Array.isArray(body.questionIds) ? body.questionIds : [],
+      shuffleQuestions: body.shuffleQuestions !== false && body.shuffleQuestions !== "false",
+      shuffleOptions:   body.shuffleOptions   !== false && body.shuffleOptions   !== "false",
+      active: body.active !== false && body.active !== "false",
+      isDefault: !!body.isDefault && body.isDefault !== "false",
+      createdBy: req.user._id
+    };
+    if (body.slug) doc.slug = String(body.slug).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+    const quiz = await EightQTQuiz.create(doc);
+    // Only one default at a time
+    if (quiz.isDefault) {
+      await EightQTQuiz.updateMany({ _id: { $ne: quiz._id } }, { $set: { isDefault: false } });
+    }
+    res.json({ ok: true, quiz });
+  } catch (err) {
+    if (err.code === 11000) return res.status(409).json({ error: "A quiz with that slug already exists" });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Update
+// PATCH /admin/8qt/quizzes/:id
+router.patch("/quizzes/:id", writeOnly, async (req, res) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ error: "bad id" });
+    const allowed = ["title", "description", "mode", "size", "drawStrategy",
+      "quotients", "questionIds", "shuffleQuestions", "shuffleOptions", "active", "isDefault", "slug"];
+    const update = {};
+    for (const k of allowed) if (req.body[k] !== undefined) update[k] = req.body[k];
+    if (update.size !== undefined) update.size = Math.max(1, Number(update.size) || 8);
+    if (update.slug) update.slug = String(update.slug).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+
+    const quiz = await EightQTQuiz.findByIdAndUpdate(req.params.id, { $set: update }, { new: true });
+    if (!quiz) return res.status(404).json({ error: "Quiz not found" });
+    if (update.isDefault === true || update.isDefault === "true") {
+      await EightQTQuiz.updateMany({ _id: { $ne: quiz._id } }, { $set: { isDefault: false } });
+    }
+    res.json({ ok: true, quiz });
+  } catch (err) {
+    if (err.code === 11000) return res.status(409).json({ error: "A quiz with that slug already exists" });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Set default (unset the rest)
+// POST /admin/8qt/quizzes/:id/default
+router.post("/quizzes/:id/default", writeOnly, async (req, res) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ error: "bad id" });
+    const quiz = await EightQTQuiz.findByIdAndUpdate(
+      req.params.id, { $set: { isDefault: true, active: true } }, { new: true }
+    );
+    if (!quiz) return res.status(404).json({ error: "Quiz not found" });
+    await EightQTQuiz.updateMany({ _id: { $ne: quiz._id } }, { $set: { isDefault: false } });
+    res.json({ ok: true, quiz });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Delete
+// DELETE /admin/8qt/quizzes/:id
+router.delete("/quizzes/:id", writeOnly, async (req, res) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ error: "bad id" });
+    await EightQTQuiz.findByIdAndDelete(req.params.id);
+    res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

@@ -11,9 +11,11 @@
 //   Step 9: Verification public URL
 
 import { Router } from "express";
+import mongoose from "mongoose";
 import crypto from "crypto";
 import Stripe from "stripe";
 import EightQTConfig from "../models/eightQTConfig.js";
+import EightQTQuiz from "../models/eightQTQuiz.js";
 import EightQTQuestion from "../models/eightQTQuestion.js";
 import EightQTAttempt from "../models/eightQTAttempt.js";
 import EightQTArchetype from "../models/eightQTArchetype.js";
@@ -30,7 +32,11 @@ function getBand(score) {
   return "Emerging";
 }
 
-function computeQuotientScores(answers, configs) {
+// quotientMax (optional): { CsQ: 24, RQ: 6, ... } = max achievable per quotient
+// for THIS attempt's served questions. When present it is the correct denominator
+// regardless of quiz size/mode. When absent (legacy attempts) we fall back to the
+// old questionCount*3 assumption so historical scoring is unchanged.
+function computeQuotientScores(answers, configs, quotientMax = null) {
   const rawMap = {};
   for (const cfg of configs) {
     rawMap[cfg.code] = { earned: 0, name: cfg.name, questionCount: cfg.questionCount };
@@ -44,11 +50,33 @@ function computeQuotientScores(answers, configs) {
   }
   return configs.map(cfg => {
     const data = rawMap[cfg.code] || { earned: 0, name: cfg.name, questionCount: cfg.questionCount };
-    const maxPossible = (data.questionCount || cfg.questionCount || 8) * 3;
+    const storedMax = quotientMax && Number.isFinite(Number(quotientMax[cfg.code]))
+      ? Number(quotientMax[cfg.code])
+      : null;
+    const maxPossible = storedMax != null
+      ? storedMax
+      : (data.questionCount || cfg.questionCount || 8) * 3;
     const pct = maxPossible > 0 ? Math.round((data.earned / maxPossible) * 100) : 0;
     const clamped = Math.min(100, Math.max(0, pct));
     return { code: cfg.code, name: cfg.name, raw: data.earned, max: maxPossible, score: clamped, band: getBand(clamped) };
   });
+}
+
+// Max points each quotient can earn from a given set of questions (per-question
+// best option toward that code, summed). Handles blended questions and any size.
+function computeQuotientMax(questions) {
+  const max = {};
+  for (const q of questions || []) {
+    const perCode = {};
+    for (const opt of (q.options || [])) {
+      for (const [code, pts] of Object.entries(opt.scores || {})) {
+        const p = Number(pts) || 0;
+        if (p > (perCode[code] || 0)) perCode[code] = p;
+      }
+    }
+    for (const [code, p] of Object.entries(perCode)) max[code] = (max[code] || 0) + p;
+  }
+  return max;
 }
 
 async function matchArchetype(quotientScores) {
@@ -125,6 +153,80 @@ async function buildQuestionSet(configs) {
   return shuffle(allQuestions);
 }
 
+/** Spread `total` across `buckets` as evenly as possible, e.g. (8,8)->all 1s */
+function distribute(total, buckets) {
+  if (buckets <= 0) return [];
+  const base = Math.floor(total / buckets);
+  let rem = total - base * buckets;
+  return Array.from({ length: buckets }, () => base + (rem-- > 0 ? 1 : 0));
+}
+
+/**
+ * Resolve which quiz to use.
+ *  - explicit id/slug (from ?quiz=, /q/:slug, or session) wins
+ *  - else the quiz flagged isDefault
+ *  - else null  -> caller falls back to legacy per-quotient behaviour
+ */
+async function resolveActiveQuiz(ref) {
+  if (ref) {
+    if (mongoose.isValidObjectId(ref)) {
+      const byId = await EightQTQuiz.findOne({ _id: ref, active: true }).lean();
+      if (byId) return byId;
+    }
+    const bySlug = await EightQTQuiz.findOne({ slug: String(ref).toLowerCase(), active: true }).lean();
+    if (bySlug) return bySlug;
+  }
+  return await EightQTQuiz.findOne({ isDefault: true, active: true }).lean();
+}
+
+/**
+ * Assemble the served questions for one attempt from a quiz.
+ * Reshuffles every call, so each attempt is fresh.
+ * Returns the ordered questions array (full docs).
+ */
+async function buildQuizQuestionSet(quiz, configs) {
+  // No quiz configured anywhere -> original behaviour, untouched.
+  if (!quiz) return await buildQuestionSet(configs);
+
+  let selected = [];
+
+  if (quiz.mode === "fixed") {
+    const ids = (quiz.questionIds || []).map(String);
+    if (ids.length) {
+      const docs = await EightQTQuestion.find({ _id: { $in: ids }, active: true }).lean();
+      const byId = {};
+      for (const d of docs) byId[String(d._id)] = d;
+      selected = ids.map(id => byId[id]).filter(Boolean); // preserve admin order
+    }
+    if (quiz.shuffleQuestions !== false) selected = shuffle([...selected]);
+    return selected;
+  }
+
+  // dynamic
+  const size = Math.max(1, Number(quiz.size) || 8);
+  const activeCodes = (quiz.quotients && quiz.quotients.length)
+    ? quiz.quotients
+    : configs.filter(c => c.active).map(c => c.code);
+
+  if (quiz.drawStrategy === "random") {
+    const pool = await EightQTQuestion.find({ quotient: { $in: activeCodes }, active: true }).lean();
+    selected = shuffle(pool).slice(0, size);
+  } else {
+    // "even": spread size across quotients; shuffle which quotients get the extras
+    const codesShuffled = shuffle([...activeCodes]);
+    const counts = distribute(size, codesShuffled.length);
+    const buckets = await Promise.all(codesShuffled.map(async (code, i) => {
+      if (counts[i] <= 0) return [];
+      const pool = await EightQTQuestion.find({ quotient: code, active: true }).lean();
+      return shuffle(pool).slice(0, counts[i]);
+    }));
+    selected = buckets.flat();
+  }
+
+  if (quiz.shuffleQuestions !== false) selected = shuffle(selected);
+  return selected;
+}
+
 // ══════════════════════════════════════════════════════════════
 // STEP 1 - LANDING PAGE
 // GET /8qt
@@ -133,7 +235,24 @@ router.get("/", async (req, res) => {
   try {
     const configs = await EightQTConfig.find({ active: true })
       .sort({ displayOrder: 1 }).lean();
-    const totalQuestions = configs.reduce((sum, c) => sum + c.questionCount, 0);
+
+    // If a quiz was linked via ?quiz=, remember it for this session
+    if (req.query.quiz && req.session) {
+      req.session.eightQTQuizId = String(req.query.quiz);
+      await req.session.save();
+    }
+
+    // Reflect the quiz that will actually be served (default or session pick).
+    // Falls back to the legacy per-quotient total when no quiz exists.
+    const quiz = await resolveActiveQuiz(req.session?.eightQTQuizId || null);
+    let totalQuestions;
+    if (quiz && quiz.mode === "fixed") {
+      totalQuestions = (quiz.questionIds || []).length;
+    } else if (quiz) {
+      totalQuestions = Math.max(1, Number(quiz.size) || 8);
+    } else {
+      totalQuestions = configs.reduce((sum, c) => sum + c.questionCount, 0);
+    }
     const estimatedMinutes = Math.ceil(totalQuestions * 0.75); // ~45s per question
 
     // If already logged in and has an in-progress attempt, offer to resume
@@ -151,11 +270,36 @@ router.get("/", async (req, res) => {
       totalQuestions,
       estimatedMinutes,
       resumeCode,
+      quiz: quiz || null,
       user: req.user || null
     });
   } catch (err) {
     console.error("[8qt landing]", err);
     res.status(500).send("Error loading page");
+  }
+});
+
+// ══════════════════════════════════════════════════════════════
+// ENTRY: Select a titled quiz, then go through the normal flow.
+// GET /8qt/q/:slug  (shareable link for fixed / named quizzes)
+// ══════════════════════════════════════════════════════════════
+router.get("/q/:slug", async (req, res) => {
+  try {
+    const quiz = await EightQTQuiz.findOne({
+      slug: String(req.params.slug || "").toLowerCase(),
+      active: true
+    }).lean();
+    if (!quiz) return res.status(404).render("8qt/error", { message: "Quiz not found." });
+
+    // Remember the choice for POST /profile
+    if (req.session) {
+      req.session.eightQTQuizId = String(quiz._id);
+      await req.session.save();
+    }
+    return res.redirect("/8qt");
+  } catch (err) {
+    console.error("[8qt quiz entry]", err);
+    return res.status(500).render("8qt/error", { message: "Error opening quiz." });
   }
 });
 
@@ -238,14 +382,23 @@ router.post("/profile", async (req, res) => {
       return res.status(400).json({ error: "Test not yet configured. Please check back soon." });
     }
 
-    const questions = await buildQuestionSet(configs);
+    // Resolve which quiz to serve: explicit pick -> session -> default -> legacy
+    const quizRef = req.body.quiz || req.query.quiz || req.session?.eightQTQuizId || null;
+    const quiz = await resolveActiveQuiz(quizRef);
+
+    const questions = await buildQuizQuestionSet(quiz, configs);
     if (!questions.length) {
       return res.status(400).json({ error: "No questions available yet. Please check back soon." });
     }
 
-    // Build options order (randomise per question)
+    // Per-quotient max for THIS served set (correct denominator for any size/mode)
+    const quotientMax = computeQuotientMax(questions);
+
+    // Build options order. Honour the quiz's shuffleOptions (default: shuffle).
     const optionsOrder = questions.map(q =>
-      shuffle([...Array(q.options.length).keys()])
+      (quiz && quiz.shuffleOptions === false)
+        ? [...Array(q.options.length).keys()]
+        : shuffle([...Array(q.options.length).keys()])
     );
 
     // Generate participant code if anonymous
@@ -278,6 +431,9 @@ router.post("/profile", async (req, res) => {
       },
       questionIds: questions.map(q => q._id),
       optionsOrder,
+      quizId: quiz?._id || null,
+      quizTitle: quiz?.title || null,
+      quotientMax,
       status: "in_progress",
       startedAt: new Date(),
       attemptIp: req.ip,
@@ -432,8 +588,8 @@ router.get("/submit/:attemptId", async (req, res) => {
     const configs = await EightQTConfig.find({ active: true })
       .sort({ displayOrder: 1 }).lean();
 
-    // Compute scores
-    const quotientScores = computeQuotientScores(attempt.answers, configs);
+    // Compute scores (uses this attempt's stored per-quotient max when present)
+    const quotientScores = computeQuotientScores(attempt.answers, configs, attempt.quotientMax);
 
     // Match archetype
     const archetype = await matchArchetype(quotientScores);

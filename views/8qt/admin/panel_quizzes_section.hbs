@@ -1,0 +1,206 @@
+{{!--
+  8QT QUIZZES SECTION
+  Paste this block into 8qt/admin/panel.hbs wherever you want the Quizzes card.
+  It uses the routes added to eightQTAdmin.js:
+    GET/POST/PATCH/DELETE /admin/8qt/quizzes[...]
+    POST /admin/8qt/quizzes/:id/default
+    GET  /admin/8qt/questions?quotient=&active=true&page=  (existing)
+  The server already passes `quizzes` into this template.
+--}}
+<section id="qzSection" style="margin:24px 0;padding:20px;border:1px solid #e5e7eb;border-radius:12px;background:#fff;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+    <h2 style="margin:0;font-size:18px;color:#0b3a2a;">Quizzes</h2>
+    <button onclick="QZ.newQuiz()" style="background:#0b3a2a;color:#fff;border:0;border-radius:8px;padding:8px 14px;cursor:pointer;">+ New quiz</button>
+  </div>
+
+  <table style="width:100%;border-collapse:collapse;font-size:14px;">
+    <thead>
+      <tr style="text-align:left;color:#6b7280;border-bottom:1px solid #eee;">
+        <th style="padding:8px 6px;">Title</th><th>Mode</th><th>Size / Questions</th>
+        <th>Link</th><th>Status</th><th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {{#each quizzes}}
+      <tr data-id="{{this._id}}" style="border-bottom:1px solid #f3f4f6;">
+        <td style="padding:8px 6px;font-weight:600;color:#111;">
+          {{this.title}} {{#if this.isDefault}}<span style="background:#c9a765;color:#3a2c07;font-size:10px;padding:2px 6px;border-radius:10px;margin-left:6px;">DEFAULT</span>{{/if}}
+        </td>
+        <td style="text-transform:capitalize;">{{this.mode}}</td>
+        <td>{{#if (eq this.mode "fixed")}}{{this.questionIds.length}} curated{{else}}{{this.size}} drawn ({{this.drawStrategy}}){{/if}}</td>
+        <td><code style="font-size:12px;">/8qt/q/{{this.slug}}</code></td>
+        <td>{{#if this.active}}<span style="color:#059669;">Active</span>{{else}}<span style="color:#9ca3af;">Off</span>{{/if}}</td>
+        <td style="text-align:right;white-space:nowrap;">
+          <button onclick="QZ.edit('{{this._id}}')" style="border:0;background:none;color:#0b3a2a;cursor:pointer;">Edit</button>
+          {{#unless this.isDefault}}<button onclick="QZ.makeDefault('{{this._id}}')" style="border:0;background:none;color:#a6853f;cursor:pointer;">Set default</button>{{/unless}}
+          <button onclick="QZ.remove('{{this._id}}')" style="border:0;background:none;color:#dc2626;cursor:pointer;">Delete</button>
+        </td>
+      </tr>
+      {{/each}}
+    </tbody>
+  </table>
+
+  <!-- Editor -->
+  <div id="qzEditor" style="display:none;margin-top:18px;padding:16px;border:1px dashed #cbd5e1;border-radius:10px;background:#fafafa;">
+    <input type="hidden" id="qzId">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <label>Title<input id="qzTitle" style="width:100%;padding:8px;" placeholder="e.g. Leadership Readiness — Cohort A"></label>
+      <label>Mode
+        <select id="qzMode" onchange="QZ.toggleMode()" style="width:100%;padding:8px;">
+          <option value="dynamic">Dynamic (draw from bank)</option>
+          <option value="fixed">Fixed (curated set)</option>
+        </select>
+      </label>
+    </div>
+
+    <div id="qzDynamic" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:12px;">
+      <label>Size (questions per attempt)<input id="qzSize" type="number" min="1" value="8" style="width:100%;padding:8px;"></label>
+      <label>Draw strategy
+        <select id="qzStrategy" style="width:100%;padding:8px;">
+          <option value="even">Even across quotients</option>
+          <option value="random">Random from bank</option>
+        </select>
+      </label>
+      <div></div>
+    </div>
+
+    <div id="qzFixed" style="display:none;margin-top:12px;">
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+        <select id="qzPickQuotient" style="padding:8px;">
+          <option value="">All quotients</option>
+          <option value="CsQ">CsQ</option><option value="RQ">RQ</option><option value="IQ">IQ</option><option value="PQ">PQ</option>
+          <option value="FQ">FQ</option><option value="CvQ">CvQ</option><option value="NQ">NQ</option><option value="TQ">TQ</option>
+        </select>
+        <button onclick="QZ.loadQuestions(1)" style="padding:8px 12px;">Load questions</button>
+        <span id="qzSelCount" style="color:#6b7280;font-size:13px;">0 selected</span>
+      </div>
+      <div id="qzQuestionList" style="max-height:240px;overflow:auto;border:1px solid #eee;border-radius:8px;padding:8px;background:#fff;font-size:13px;"></div>
+      <div id="qzPager" style="margin-top:6px;font-size:13px;"></div>
+    </div>
+
+    <div style="display:flex;gap:16px;margin-top:12px;flex-wrap:wrap;align-items:center;">
+      <label><input type="checkbox" id="qzShuffleQ" checked> Reshuffle questions each attempt</label>
+      <label><input type="checkbox" id="qzShuffleO" checked> Shuffle option order</label>
+      <label><input type="checkbox" id="qzActive" checked> Active</label>
+      <label><input type="checkbox" id="qzDefault"> Set as default (served at /8qt)</label>
+    </div>
+
+    <div style="margin-top:14px;display:flex;gap:10px;">
+      <button onclick="QZ.save()" style="background:#0b3a2a;color:#fff;border:0;border-radius:8px;padding:9px 18px;cursor:pointer;">Save quiz</button>
+      <button onclick="QZ.cancel()" style="background:#e5e7eb;border:0;border-radius:8px;padding:9px 18px;cursor:pointer;">Cancel</button>
+    </div>
+  </div>
+</section>
+
+<script>
+const QZ = {
+  selected: new Map(), // id -> {text, quotient}
+  base: "/admin/8qt",
+
+  newQuiz() {
+    document.getElementById("qzId").value = "";
+    document.getElementById("qzTitle").value = "";
+    document.getElementById("qzMode").value = "dynamic";
+    document.getElementById("qzSize").value = 8;
+    document.getElementById("qzStrategy").value = "even";
+    document.getElementById("qzShuffleQ").checked = true;
+    document.getElementById("qzShuffleO").checked = true;
+    document.getElementById("qzActive").checked = true;
+    document.getElementById("qzDefault").checked = false;
+    this.selected.clear(); this.renderSelCount();
+    this.toggleMode();
+    document.getElementById("qzEditor").style.display = "block";
+  },
+
+  async edit(id) {
+    const r = await fetch(`${this.base}/quizzes/${id}`).then(x => x.json());
+    if (!r.ok) return alert(r.error || "load failed");
+    const q = r.quiz;
+    document.getElementById("qzId").value = q._id;
+    document.getElementById("qzTitle").value = q.title || "";
+    document.getElementById("qzMode").value = q.mode || "dynamic";
+    document.getElementById("qzSize").value = q.size || 8;
+    document.getElementById("qzStrategy").value = q.drawStrategy || "even";
+    document.getElementById("qzShuffleQ").checked = q.shuffleQuestions !== false;
+    document.getElementById("qzShuffleO").checked = q.shuffleOptions !== false;
+    document.getElementById("qzActive").checked = q.active !== false;
+    document.getElementById("qzDefault").checked = !!q.isDefault;
+    this.selected.clear();
+    for (const qq of (q.questionIds || [])) {
+      if (qq && qq._id) this.selected.set(String(qq._id), { text: qq.text, quotient: qq.quotient });
+    }
+    this.renderSelCount();
+    this.toggleMode();
+    document.getElementById("qzEditor").style.display = "block";
+    window.scrollTo(0, document.getElementById("qzEditor").offsetTop - 40);
+  },
+
+  toggleMode() {
+    const m = document.getElementById("qzMode").value;
+    document.getElementById("qzDynamic").style.display = m === "dynamic" ? "grid" : "none";
+    document.getElementById("qzFixed").style.display = m === "fixed" ? "block" : "none";
+  },
+
+  async loadQuestions(page) {
+    const quotient = document.getElementById("qzPickQuotient").value;
+    const qs = new URLSearchParams({ active: "true", page: page || 1 });
+    if (quotient) qs.set("quotient", quotient);
+    const r = await fetch(`${this.base}/questions?${qs}`).then(x => x.json());
+    const box = document.getElementById("qzQuestionList");
+    box.innerHTML = (r.questions || []).map(q => {
+      const on = this.selected.has(String(q._id)) ? "checked" : "";
+      const t = (q.text || "").replace(/</g, "&lt;");
+      return `<label style="display:block;padding:4px 2px;border-bottom:1px solid #f5f5f5;">
+        <input type="checkbox" ${on} onchange="QZ.toggle('${q._id}', this.checked, ${JSON.stringify(t)}, '${q.quotient}')">
+        <span style="color:#a6853f;font-weight:600;">[${q.quotient}]</span> ${t}</label>`;
+    }).join("") || "<em>No questions.</em>";
+    document.getElementById("qzPager").innerHTML =
+      `Page ${r.page || 1} / ${r.pages || 1} ` +
+      (r.page > 1 ? `<button onclick="QZ.loadQuestions(${r.page - 1})">Prev</button>` : "") +
+      (r.page < r.pages ? `<button onclick="QZ.loadQuestions(${r.page + 1})">Next</button>` : "");
+  },
+
+  toggle(id, on, text, quotient) {
+    if (on) this.selected.set(String(id), { text, quotient });
+    else this.selected.delete(String(id));
+    this.renderSelCount();
+  },
+  renderSelCount() {
+    document.getElementById("qzSelCount").textContent = `${this.selected.size} selected`;
+  },
+
+  async save() {
+    const id = document.getElementById("qzId").value;
+    const mode = document.getElementById("qzMode").value;
+    const body = {
+      title: document.getElementById("qzTitle").value.trim(),
+      mode,
+      size: Number(document.getElementById("qzSize").value) || 8,
+      drawStrategy: document.getElementById("qzStrategy").value,
+      questionIds: mode === "fixed" ? Array.from(this.selected.keys()) : [],
+      shuffleQuestions: document.getElementById("qzShuffleQ").checked,
+      shuffleOptions: document.getElementById("qzShuffleO").checked,
+      active: document.getElementById("qzActive").checked,
+      isDefault: document.getElementById("qzDefault").checked
+    };
+    if (!body.title) return alert("Title is required");
+    if (mode === "fixed" && body.questionIds.length === 0) return alert("Pick at least one question for a fixed quiz");
+    const url = id ? `${this.base}/quizzes/${id}` : `${this.base}/quizzes`;
+    const method = id ? "PATCH" : "POST";
+    const r = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then(x => x.json());
+    if (!r.ok) return alert(r.error || "save failed");
+    location.reload();
+  },
+
+  async makeDefault(id) {
+    const r = await fetch(`${this.base}/quizzes/${id}/default`, { method: "POST" }).then(x => x.json());
+    if (!r.ok) return alert(r.error || "failed"); location.reload();
+  },
+  async remove(id) {
+    if (!confirm("Delete this quiz? Attempts already taken are unaffected.")) return;
+    const r = await fetch(`${this.base}/quizzes/${id}`, { method: "DELETE" }).then(x => x.json());
+    if (!r.ok) return alert(r.error || "failed"); location.reload();
+  },
+  cancel() { document.getElementById("qzEditor").style.display = "none"; }
+};
+</script>

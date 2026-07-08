@@ -46,10 +46,19 @@ const EightQTAttemptSchema = new mongoose.Schema({
     index:   true
   },
 
+  // Which quiz produced this attempt (null = legacy default behaviour)
+  quizId:    { type: mongoose.Schema.Types.ObjectId, ref: "EightQTQuiz", default: null, index: true },
+  quizTitle: { type: String, default: null },
+
   // Which questions were served (ordered)
   questionIds: [{ type: mongoose.Schema.Types.ObjectId, ref: "EightQTQuestion" }],
   // Randomised option order per question
   optionsOrder: [[{ type: Number }]],
+
+  // Per-quotient max achievable points for THIS attempt's served questions.
+  // Used as the scoring denominator so quiz size can vary without skewing %.
+  // Shape: { CsQ: 24, RQ: 6, ... }. Null on legacy attempts (falls back).
+  quotientMax: { type: mongoose.Schema.Types.Mixed, default: null },
 
   answers: [AnswerSchema],
 
