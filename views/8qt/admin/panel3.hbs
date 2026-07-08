@@ -356,10 +356,7 @@
     <div class="section">
       <div class="section-head">
         <span class="section-title">Archetype Templates</span>
-        <span>
-          <button class="btn btn-outline btn-sm" onclick="seedArchetypes()" id="seedArchBtn">&#10022; Seed 8 Quotient Archetypes</button>
-          <button class="btn btn-navy btn-sm" onclick="showModal('addArchModal')">+ New Archetype</button>
-        </span>
+        <button class="btn btn-navy btn-sm" onclick="showModal('addArchModal')">+ New Archetype</button>
       </div>
       <div class="section-body" style="padding:0">
         <div id="archetypesContainer"><p style="padding:20px;color:var(--dark)">Loading…</p></div>
@@ -563,17 +560,6 @@
       <p class="hint">Maximum 5 MB · .csv format only</p>
     </div>
     <input type="file" id="fileInput" accept=".csv" onchange="handleFileSelect(this)">
-    <div style="margin-top:14px;padding:12px;border:1px dashed var(--border,#d1d5db);border-radius:8px;">
-      <label style="font-size:.8rem;font-weight:600;display:block;margin-bottom:6px;">
-        Create a quiz from this upload <span style="font-weight:400;color:var(--dark)">(optional)</span>
-      </label>
-      <input type="text" id="importQuizTitle" placeholder="Quiz title e.g. Leadership Cohort A"
-             style="width:100%;padding:8px;border:1px solid var(--border,#d1d5db);border-radius:6px;font-size:.85rem;">
-      <label style="display:flex;align-items:center;gap:6px;font-size:.78rem;margin-top:8px;color:var(--dark)">
-        <input type="checkbox" id="importQuizDefault"> Make it the default quiz served at /8qt
-      </label>
-      <p class="hint" style="margin-top:6px;">Leave the title empty to just add the questions to the bank.</p>
-    </div>
     <div id="importStatus" style="margin-top:14px;font-size:.82rem"></div>
     <button class="btn btn-navy" style="margin-top:14px;width:100%" id="importBtn" onclick="doImport()" disabled>Import Questions</button>
   </div>
@@ -724,11 +710,6 @@ async function doImport() {
 
   const fd = new FormData();
   fd.append('file', selectedFile);
-  const qTitle = (document.getElementById('importQuizTitle')?.value || '').trim();
-  if (qTitle) {
-    fd.append('quizTitle', qTitle);
-    fd.append('quizDefault', document.getElementById('importQuizDefault')?.checked ? 'true' : 'false');
-  }
 
   const r = await fetch('/admin/8qt/questions/import', { method: 'POST', body: fd });
   const d = await r.json();
@@ -736,8 +717,7 @@ async function doImport() {
   const status = document.getElementById('importStatus');
   if (d.ok) {
     status.innerHTML = `<span style="color:var(--green)">&#10003; Imported ${d.inserted} questions.</span>
-      ${d.errors.length ? `<span style="color:var(--red)"> ${d.errors.length} row errors.</span>` : ''}
-      ${d.quiz ? `<br><span style="color:var(--green)">&#10003; Quiz "<b>${d.quiz.title}</b>" created${d.quiz.isDefault ? ' (default)' : ''} &rarr; <a href="${d.quiz.url}" target="_blank">${d.quiz.url}</a></span>` : ''}`;
+      ${d.errors.length ? `<span style="color:var(--red)"> ${d.errors.length} row errors.</span>` : ''}`;
   } else {
     status.innerHTML = `<span style="color:var(--red)">Error: ${d.error}</span>`;
   }
@@ -749,18 +729,6 @@ async function doImport() {
 // ════════════════════════════════════════════════════
 // ARCHETYPES
 // ════════════════════════════════════════════════════
-async function seedArchetypes() {
-  const btn = document.getElementById('seedArchBtn');
-  btn.textContent = 'Seeding…'; btn.disabled = true;
-  try {
-    const r = await fetch('/admin/8qt/archetypes/seed-defaults', { method: 'POST' });
-    const d = await r.json();
-    alert(d.ok ? d.message : ('Error: ' + d.error));
-  } catch (e) { alert('Error: ' + e.message); }
-  btn.textContent = '\u2726 Seed 8 Quotient Archetypes'; btn.disabled = false;
-  loadArchetypes();
-}
-
 async function loadArchetypes() {
   const r = await fetch('/admin/8qt/archetypes');
   const d = await r.json();
@@ -785,7 +753,7 @@ async function loadArchetypes() {
           </td>
           <td style="font-size:.76rem;color:var(--dark);max-width:180px">${a.tagline || '-'}</td>
           <td style="font-size:.72rem;color:var(--dark)">
-            ${a.dominantQuotient ? `<span class="badge badge-gold">Dominant: ${a.dominantQuotient}</span> ` : ''}${(a.conditions || []).map(c => `${c.quotient} ${c.operator} ${c.value}`).join(', ') || (a.dominantQuotient ? '' : '-')}
+            ${(a.conditions || []).map(c => `${c.quotient} ${c.operator} ${c.value}`).join(', ') || '-'}
           </td>
           <td>
             <span class="badge ${a.active ? 'badge-green' : 'badge-gray'}">${a.active ? 'Active' : 'Off'}</span>

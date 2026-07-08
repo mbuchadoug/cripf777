@@ -83,21 +83,40 @@ async function matchArchetype(quotientScores) {
   const archetypes = await EightQTArchetype.find({ active: true }).sort({ priority: -1 }).lean();
   const scoreMap = {};
   for (const s of quotientScores) scoreMap[s.code] = s.score;
+
+  // Participant's dominant quotient (highest score; stable sort = displayOrder tiebreak)
+  const dominant = quotientScores.length
+    ? [...quotientScores].sort((a, b) => b.score - a.score)[0].code
+    : null;
+
+  const passesConditions = (arch) => (arch.conditions || []).every(cond => {
+    const val = scoreMap[cond.quotient] ?? 0;
+    switch (cond.operator) {
+      case "gte": return val >= cond.value;
+      case "lte": return val <= cond.value;
+      case "gt":  return val >  cond.value;
+      case "lt":  return val <  cond.value;
+      case "between": return val >= cond.value && val <= (cond.value2 ?? 100);
+      default: return false;
+    }
+  });
+
+  // Pass 1: dominant-quotient archetypes - fire when that quotient is the
+  // participant's highest. Robust for any quiz size. Extra conditions must also pass.
   for (const arch of archetypes) {
     if (arch.isDefault) continue;
-    const allMatch = (arch.conditions || []).every(cond => {
-      const val = scoreMap[cond.quotient] ?? 0;
-      switch (cond.operator) {
-        case "gte": return val >= cond.value;
-        case "lte": return val <= cond.value;
-        case "gt":  return val >  cond.value;
-        case "lt":  return val <  cond.value;
-        case "between": return val >= cond.value && val <= (cond.value2 ?? 100);
-        default: return false;
-      }
-    });
-    if (allMatch) return arch;
+    if (!arch.dominantQuotient) continue;
+    if (arch.dominantQuotient !== dominant) continue;
+    if (passesConditions(arch)) return arch;
   }
+
+  // Pass 2: legacy threshold-only archetypes (unchanged original behaviour)
+  for (const arch of archetypes) {
+    if (arch.isDefault) continue;
+    if (arch.dominantQuotient) continue;
+    if ((arch.conditions || []).length && passesConditions(arch)) return arch;
+  }
+
   return archetypes.find(a => a.isDefault) || null;
 }
 

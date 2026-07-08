@@ -190,6 +190,14 @@ router.get("/questions", async (req, res) => {
 // CSV columns: quotient, text, opt_a_text, opt_a_scores (JSON),
 //              opt_b_text, opt_b_scores, opt_c_text, opt_c_scores,
 //              opt_d_text, opt_d_scores, is_blended
+// POST /admin/8qt/questions/import - CSV upload
+// CSV columns: quotient, text, opt_a_text, opt_a_scores (JSON),
+//              opt_b_text, opt_b_scores, opt_c_text, opt_c_scores,
+//              opt_d_text, opt_d_scores, is_blended
+// Optional form fields (multipart text alongside the file):
+//   quizTitle   - if present, a FIXED quiz is created from this upload's
+//                 questions, titled by admin, attemptable at /8qt/q/:slug
+//   quizDefault - "true" to make that quiz the default served at /8qt
 router.post("/questions/import", writeOnly, upload.single("file"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
@@ -243,19 +251,46 @@ router.post("/questions/import", writeOnly, upload.single("file"), async (req, r
     });
 
     let inserted = 0;
+    let insertedDocs = [];
     if (results.length > 0) {
-      const docs = await EightQTQuestion.insertMany(results, { ordered: false });
-      inserted = docs.length;
+      insertedDocs = await EightQTQuestion.insertMany(results, { ordered: false });
+      inserted = insertedDocs.length;
     }
 
     fs.unlink(req.file.path, () => {});
+
+    // ── Optionally wrap this upload as a titled, attemptable quiz ──
+    let quiz = null;
+    const quizTitle = (req.body.quizTitle || "").trim();
+    if (quizTitle && inserted > 0) {
+      try {
+        quiz = await EightQTQuiz.create({
+          title: quizTitle,
+          description: `Imported from CSV on ${new Date().toISOString().slice(0, 10)} (${inserted} questions)`,
+          mode: "fixed",
+          questionIds: insertedDocs.map(d => d._id),
+          shuffleQuestions: true,
+          shuffleOptions: true,
+          active: true,
+          isDefault: req.body.quizDefault === "true",
+          createdBy: req.user._id
+        });
+        if (quiz.isDefault) {
+          await EightQTQuiz.updateMany({ _id: { $ne: quiz._id } }, { $set: { isDefault: false } });
+        }
+      } catch (e) {
+        // Duplicate slug etc. - questions are already imported; report but don't fail
+        errors.push({ row: 0, error: `Quiz creation failed: ${e.message}` });
+      }
+    }
 
     res.json({
       ok: true,
       inserted,
       errors,
       batch,
-      message: `Imported ${inserted} questions. ${errors.length} errors.`
+      quiz: quiz ? { _id: quiz._id, title: quiz.title, slug: quiz.slug, url: `/8qt/q/${quiz.slug}`, isDefault: quiz.isDefault } : null,
+      message: `Imported ${inserted} questions. ${errors.length} errors.${quiz ? ` Quiz "${quiz.title}" created.` : ""}`
     });
   } catch (err) {
     fs.unlink(req.file.path, () => {});
@@ -334,6 +369,118 @@ router.delete("/archetypes/:id", writeOnly, async (req, res) => {
     await EightQTArchetype.findByIdAndUpdate(req.params.id, { $set: { active: false } });
     res.json({ ok: true });
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════
+// ARCHETYPE SEEDER - one per dominant quotient + default fallback
+// POST /admin/8qt/archetypes/seed-defaults
+// Idempotent: matches by name, updates if exists, creates if missing.
+// Every finished attempt will land on the archetype whose quotient
+// is that participant's HIGHEST score; ties break by displayOrder.
+// ══════════════════════════════════════════════════════════════
+router.post("/archetypes/seed-defaults", writeOnly, async (req, res) => {
+  try {
+    const seeds = [
+      {
+        name: "The Conscious Navigator", dominantQuotient: "CsQ", priority: 10,
+        tagline: "Sees the whole board before making a move.",
+        description: "Your strongest signal is Consciousness. You read situations, people and yourself with unusual clarity, noticing what others miss. Organisations rely on you for honest situational awareness - you are the early-warning system and the compass.",
+        reflectionPrompts: [
+          "Where has your awareness spotted a problem before anyone else - and did you act on it?",
+          "Which blind spot do you suspect you still have, and who could help you see it?"
+        ]
+      },
+      {
+        name: "The Responsible Builder", dominantQuotient: "RQ", priority: 10,
+        tagline: "Owns the outcome, not just the task.",
+        description: "Your strongest signal is Responsibility. You take ownership where others take cover, and you finish what you start. Teams anchor on you because commitments made to you - and by you - actually land.",
+        reflectionPrompts: [
+          "What is one responsibility you carry that nobody formally assigned to you?",
+          "Where might over-ownership be preventing others from growing?"
+        ]
+      },
+      {
+        name: "The Insightful Interpreter", dominantQuotient: "IQ", priority: 10,
+        tagline: "Turns noise into meaning.",
+        description: "Your strongest signal is Interpretation. You translate complexity - data, behaviour, ambiguity - into meaning others can act on. You are the bridge between what is happening and what it actually means.",
+        reflectionPrompts: [
+          "When did your reading of a situation change a decision for the better?",
+          "Whose perspective do you least understand right now - and what would it take to interpret it fairly?"
+        ]
+      },
+      {
+        name: "The Purposeful Pathfinder", dominantQuotient: "PQ", priority: 10,
+        tagline: "Knows why before deciding how.",
+        description: "Your strongest signal is Purpose. Direction comes naturally to you - you connect daily work to a larger why, and you pull others toward it. Without people like you, effort scatters; with you, it converges.",
+        reflectionPrompts: [
+          "What purpose are you serving that you have never said out loud?",
+          "Where are you busy but not aligned - and what would realignment cost?"
+        ]
+      },
+      {
+        name: "The Frequency Harmoniser", dominantQuotient: "FQ", priority: 10,
+        tagline: "Tunes the energy of every room they enter.",
+        description: "Your strongest signal is Frequencies. You sense and set the emotional wavelength of a group - calming turbulence, lifting flat energy, matching the moment. Culture forms around people like you.",
+        reflectionPrompts: [
+          "Which environments drain your frequency, and which amplify it?",
+          "When did you last deliberately shift a room's energy - what did it make possible?"
+        ]
+      },
+      {
+        name: "The Civilisation Steward", dominantQuotient: "CvQ", priority: 10,
+        tagline: "Builds things meant to outlast them.",
+        description: "Your strongest signal is Civilization. You think in systems, institutions and legacy - what endures beyond the quarter, beyond the founder, beyond you. You are the keeper of standards and the architect of continuity.",
+        reflectionPrompts: [
+          "What are you building that should still exist in twenty years?",
+          "Which tradition around you deserves protecting - and which deserves retiring?"
+        ]
+      },
+      {
+        name: "The Bridge Negotiator", dominantQuotient: "NQ", priority: 10,
+        tagline: "Finds the deal inside the deadlock.",
+        description: "Your strongest signal is Negotiation. You locate shared interest where others see only conflict, and you trade positions without trading trust. Progress that requires two unwilling parties usually requires you first.",
+        reflectionPrompts: [
+          "What is a conflict you resolved that nobody thanked you for?",
+          "Where are you compromising too early instead of negotiating fully?"
+        ]
+      },
+      {
+        name: "The Technology Pioneer", dominantQuotient: "TQ", priority: 10,
+        tagline: "Adopts tomorrow's tools today.",
+        description: "Your strongest signal is Technology. You reach for leverage - tools, automation, new methods - before they are obvious, and you multiply what a team can do. You are the force that keeps an organisation from being outrun.",
+        reflectionPrompts: [
+          "Which manual process around you is quietly begging to be automated?",
+          "What technology are you avoiding - and is that wisdom or comfort?"
+        ]
+      },
+      {
+        name: "The Emerging Thinker", dominantQuotient: null, priority: 0, isDefault: true,
+        tagline: "At the beginning of a deliberate journey.",
+        description: "Your profile shows balanced, early-stage signals across the eight quotients. This is not a verdict - it is a starting line. Retake the assessment as you grow and watch your dominant quotient reveal itself.",
+        reflectionPrompts: [
+          "Which of the eight quotients do you most want to strengthen this quarter?",
+          "What would a 10% braver version of you do differently this week?"
+        ]
+      }
+    ];
+
+    let created = 0, updated = 0;
+    for (const seed of seeds) {
+      const existing = await EightQTArchetype.findOne({ name: seed.name });
+      if (existing) {
+        await EightQTArchetype.updateOne({ _id: existing._id }, { $set: { ...seed, active: true } });
+        updated++;
+      } else {
+        await EightQTArchetype.create({ ...seed, active: true, conditions: [] });
+        created++;
+      }
+    }
+
+    res.json({ ok: true, created, updated, message: `Seeded archetypes: ${created} created, ${updated} updated.` });
+  } catch (err) {
+    console.error("[8qt archetype seed]", err);
     res.status(500).json({ error: err.message });
   }
 });
