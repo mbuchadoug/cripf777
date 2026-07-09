@@ -23,8 +23,8 @@ const EightQTCertTemplateSchema = new mongoose.Schema({
   showAllScores: { type: Boolean, default: true },
   fieldPositions: [FieldPositionSchema],
   // Pricing tiers - pulled into Stripe checkout
-  standardPriceCents: { type: Number, default: 999 },    // $9.99
-  premiumPriceCents: { type: Number, default: 2499 },    // $24.99
+  standardPriceCents: { type: Number, default: 300 },    // $9.99
+  premiumPriceCents: { type: Number, default: 900 },    // $24.99
   currency: { type: String, default: "usd" },
   // Retake policy
   retakeDays: { type: Number, default: 90 },
