@@ -8962,6 +8962,36 @@ router.get("/broadcast", requireSupplierAdmin, async (req, res) => {
     ]);
     const totalAll = new Set([...searchers, ...bizPhones, ...buyerPhones]).size;
 
+    // ── Formatted campaign templates (created programmatically via Graph API) ─
+    let _campaignTpls = [];
+    let _campaignCfgError = "";
+    try {
+      const _wabaId = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || process.env.META_WABA_ID || process.env.WABA_ID;
+      const _token  = process.env.META_ACCESS_TOKEN || process.env.WHATSAPP_ACCESS_TOKEN;
+      if (!_wabaId) {
+        _campaignCfgError = "WHATSAPP_BUSINESS_ACCOUNT_ID is not set in .env - add your WABA ID (Meta Business Manager, WhatsApp, API Setup) and restart to enable this feature.";
+      } else if (_token) {
+        const _r = await axios.get(
+          `https://graph.facebook.com/v24.0/${_wabaId}/message_templates`,
+          {
+            params:  { limit: 100, fields: "name,status,components" },
+            headers: { Authorization: `Bearer ${_token}` },
+            timeout: 10000
+          }
+        );
+        _campaignTpls = (_r.data?.data || [])
+          .filter(t => t.name && t.name.startsWith("zqm_campaign_"))
+          .map(t => ({
+            name:   t.name,
+            status: t.status || "PENDING",
+            body:   ((t.components || []).find(c => c.type === "BODY") || {}).text || ""
+          }));
+      }
+    } catch (e) {
+      _campaignCfgError = e.response?.data?.error?.message || e.message;
+      console.warn("[CAMPAIGN TPL LIST]", _campaignCfgError);
+    }
+
     const successMsg = req.query.success
       ? `<div style="background:#dcfce7;color:#16a34a;padding:14px 16px;border-radius:10px;margin-bottom:20px;font-size:13px;font-weight:600">✅ ${esc(req.query.success)}</div>` : "";
     const errorMsg = req.query.error
@@ -8988,6 +9018,60 @@ router.get("/broadcast", requireSupplierAdmin, async (req, res) => {
         ${stat(bizPhones.length,  "Businesses",     "green")}
         ${stat(buyerPhones.length,"Buyer Requests", "")}
         ${stat(totalAll,          "Total Contacts", "purple")}
+      </div>
+
+      <!-- ── FORMATTED CAMPAIGN BUILDER ──────────────────────────────────────
+           Meta forbids line breaks inside template {{n}} variables, so pasted
+           paragraphs always flatten (and workaround chars like U+2028 render
+           as ? on WhatsApp Android). The ONLY reliable way to send fully
+           formatted broadcasts is to bake the text into the TEMPLATE BODY
+           itself - template bodies support paragraphs, *bold*, and emojis.
+           This panel creates such a template programmatically via the Graph
+           API - no Business Manager visit needed. ──────────────────────── -->
+      <div style="background:white;border:1px solid var(--border);border-radius:10px;padding:18px;margin-bottom:20px">
+        <div style="font-size:15px;font-weight:800;margin-bottom:4px">📝 Formatted Campaign Builder</div>
+        <p style="font-size:12px;color:var(--muted);margin:0 0 12px;line-height:1.7">
+          Paste your announcement <b>exactly as you want it to arrive</b> - paragraphs, blank lines,
+          *bold*, emojis, links. One click creates it as a new Meta template (auto-named, MARKETING
+          category). When its status shows <b>APPROVED</b> - usually under a minute - select it in
+          <b>Step 2</b> below and broadcast. Because the text lives in the template body (not a
+          variable), the formatting is delivered pixel-perfect.
+        </p>
+        ${_campaignCfgError ? `<div style="background:#fee2e2;color:#b91c1c;border-radius:8px;padding:10px 14px;font-size:12px;margin-bottom:12px">⚠️ ${esc(_campaignCfgError)}</div>` : ""}
+        <form method="POST" action="/zq-admin/broadcast/create-campaign-template">
+          <textarea name="campaignText" required maxlength="1024" rows="10"
+            placeholder="📢 *New businesses have been added to ZimQuote!*&#10;&#10;🚗 Auto Brakes&#10;https://wa.me/263771143904?text=ZQ%3AS%3Aauto-brakes&#10;&#10;Reply *Hi* to get started."
+            style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;line-height:1.6;resize:vertical"></textarea>
+          <p style="font-size:11px;color:var(--muted);margin:6px 0 10px">
+            Max 1024 characters · keep emojis to 10 or fewer (Meta may reject marketing templates with more) ·
+            WhatsApp formatting works: *bold* _italic_ ~strikethrough~
+          </p>
+          <button type="submit" style="padding:9px 18px;border:none;border-radius:8px;background:#16a34a;color:white;font-size:13px;font-weight:700;cursor:pointer">
+            🚀 Create &amp; Submit Template
+          </button>
+        </form>
+        ${_campaignTpls.length ? `
+        <div style="margin-top:16px;border-top:1px solid var(--border);padding-top:12px">
+          <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:8px">MY CAMPAIGN TEMPLATES (refresh page to update status)</div>
+          <table style="width:100%;border-collapse:collapse">
+            <tbody>
+            ${_campaignTpls.map(t => `
+              <tr>
+                <td style="padding:6px 8px;border-bottom:1px solid #f1f5f9"><code style="font-size:11px;background:#f1f5f9;padding:2px 6px;border-radius:4px">${esc(t.name)}</code></td>
+                <td style="padding:6px 8px;border-bottom:1px solid #f1f5f9">
+                  <span style="background:${t.status === "APPROVED" ? "#dcfce7" : t.status === "REJECTED" ? "#fee2e2" : "#fef9c3"};color:${t.status === "APPROVED" ? "#15803d" : t.status === "REJECTED" ? "#b91c1c" : "#854d0e"};padding:2px 8px;border-radius:8px;font-size:10px;font-weight:700">${esc(t.status)}</span>
+                </td>
+                <td style="padding:6px 8px;border-bottom:1px solid #f1f5f9;font-size:11px;color:var(--muted);max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(t.body.slice(0, 90))}${t.body.length > 90 ? "…" : ""}</td>
+                <td style="padding:6px 8px;border-bottom:1px solid #f1f5f9;text-align:right">
+                  <form method="POST" action="/zq-admin/broadcast/delete-campaign-template" style="display:inline" onsubmit="return confirm('Delete template ${esc(t.name)}?')">
+                    <input type="hidden" name="name" value="${esc(t.name)}" />
+                    <button type="submit" style="padding:4px 10px;border:none;border-radius:6px;background:#fee2e2;color:#b91c1c;font-size:11px;font-weight:700;cursor:pointer">🗑 Delete</button>
+                  </form>
+                </td>
+              </tr>`).join("")}
+            </tbody>
+          </table>
+        </div>` : ""}
       </div>
 
       <!-- template reference -->
@@ -9065,11 +9149,12 @@ router.get("/broadcast", requireSupplierAdmin, async (req, res) => {
           var ta=document.getElementById('var1Textarea');
           var inp=document.getElementById('var1Input');
           if(ta && !ta.disabled && ta.value.trim()){
-            /* FORMATTING FIX: single-line inputs strip CR/LF on assignment (HTML spec),
-               and Meta rejects newlines in template params anyway. Convert every
-               newline to U+2028 LINE SEPARATOR - survives the input, passes Meta
-               validation, and WhatsApp renders it as a real line break. */
-            inp.value=ta.value.replace(/\\r\\n/g,'\\n').replace(/\\r/g,'\\n').replace(/\\n/g,'\\u2028');
+            /* Meta forbids newlines in {{n}} params and WhatsApp renders smuggled
+               line-separator chars (U+2028) as ? boxes - proven in production.
+               So for legacy templates we join lines with single spaces (keeps
+               words from gluing together). For REAL paragraphs use the
+               Formatted Campaign Builder at the top of this page. */
+            inp.value=ta.value.replace(/\\s+/g,' ').trim();
             inp.disabled=false;
           }
           return true;
@@ -9208,6 +9293,9 @@ router.get("/broadcast", requireSupplierAdmin, async (req, res) => {
                 <option value="zqm_add_your_business">zqm_add_your_business · Add Your Business · {{1}}=category</option>
                 <option value="zqm_news_update">zqm_news_update · News / Update · {{1}}=full text</option>
                 <option value="zqm_suppliers_ready">zqm_suppliers_ready · Suppliers Ready · {{1}}=category  {{2}}=count</option>
+                ${_campaignTpls.length ? `<optgroup label="📝 Formatted campaigns (full text, perfect formatting)">` + _campaignTpls.map(t =>
+                  `<option value="${esc(t.name)}" ${t.status === "APPROVED" ? "" : "disabled"}>${esc(t.name)} · ${t.status === "APPROVED" ? "APPROVED ✅" : esc(t.status) + " ⏳"}</option>`
+                ).join("") + `</optgroup>` : ""}
               </select>
             </div>
 
@@ -9221,7 +9309,7 @@ router.get("/broadcast", requireSupplierAdmin, async (req, res) => {
                 placeholder="Type your full message here. Line breaks and paragraphs will be preserved."
                 style="display:none;width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;min-height:180px;resize:vertical;font-family:inherit;line-height:1.5"></textarea>
               <p id="var1MultiHint" style="display:none;font-size:11px;color:var(--muted);margin:4px 0 0">
-                ✅ Line breaks and paragraphs are preserved in delivery.
+                ⚠️ Meta flattens line breaks in this template's {{1}} variable (lines are joined with spaces). For real paragraphs, use the 📝 Formatted Campaign Builder at the top of this page.
               </p>
             </div>
 
@@ -9364,7 +9452,10 @@ router.get("/broadcast", requireSupplierAdmin, async (req, res) => {
         zqm_suppliers_ready:   { v1: "{{1}} - Category name, capitalised (also goes in header)  e.g. Plumbing",               v2: "{{2}} - Number of suppliers  e.g. 4", hasMedia: false }
       };
       function onTplChange(v) {
-        const m = TPL_META[v] || {};
+        const isCampaign = v && v.indexOf("zqm_campaign_") === 0;
+        const m = isCampaign
+          ? { v1: "No variables needed - this template already contains your full formatted message.", v2: false, hasMedia: false }
+          : (TPL_META[v] || {});
         document.getElementById("var1Label").textContent = m.v1 || "{{1}}";
         const r2 = document.getElementById("var2Row");
         if (m.v2) { r2.style.display=""; document.getElementById("var2Label").textContent = m.v2; }
@@ -9387,6 +9478,13 @@ router.get("/broadcast", requireSupplierAdmin, async (req, res) => {
           ta.disabled        = true;
           inp.style.display  = "block";
           inp.disabled       = false;
+          if (hint) hint.style.display = "none";
+        }
+
+        // Formatted campaign templates: no inputs at all - the text is baked in
+        if (isCampaign) {
+          inp.style.display = "none"; inp.disabled = true;
+          ta.style.display  = "none"; ta.disabled  = true;
           if (hint) hint.style.display = "none";
         }
 
@@ -9658,10 +9756,113 @@ router.get("/broadcast/contacts", requireSupplierAdmin, async (req, res) => {
   }
 });
 
+// ── POST /zq-admin/broadcast/create-campaign-template ────────────────────────
+// Creates a static MARKETING template whose BODY is the full formatted text.
+// Template bodies (unlike {{n}} params) fully support newlines/paragraphs/bold,
+// so broadcasts sent with these templates arrive formatted exactly as typed.
+router.post("/broadcast/create-campaign-template", requireSupplierAdmin, async (req, res) => {
+  try {
+    const wabaId = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || process.env.META_WABA_ID || process.env.WABA_ID;
+    const token  = process.env.META_ACCESS_TOKEN || process.env.WHATSAPP_ACCESS_TOKEN;
+    if (!wabaId) throw new Error("WHATSAPP_BUSINESS_ACCOUNT_ID is not set in .env. Find your WABA ID in Meta Business Manager (WhatsApp > API Setup), add it, and restart.");
+    if (!token)  throw new Error("META_ACCESS_TOKEN is not configured.");
+
+    let text = String(req.body.campaignText || "").replace(/\r\n|\r/g, "\n").trim();
+    if (!text) throw new Error("Campaign text is required.");
+    if (text.length > 1024) throw new Error(`Template body max is 1024 characters - yours is ${text.length}. Please shorten it.`);
+    // Meta rejects tabs and 4+ consecutive spaces even inside template bodies
+    text = text.replace(/\t/g, " ").replace(/ {4,}/g, "   ");
+
+    // Auto-generated, unique, Meta-compliant name (lowercase + underscores only)
+    const _d = new Date();
+    const name = `zqm_campaign_${_d.toISOString().slice(0, 10).replace(/-/g, "")}_${Date.now().toString().slice(-6)}`;
+
+    const r = await axios.post(
+      `https://graph.facebook.com/v24.0/${wabaId}/message_templates`,
+      {
+        name,
+        language: "en",
+        category: "MARKETING",
+        components: [{ type: "BODY", text }]
+      },
+      { headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, timeout: 15000 }
+    );
+
+    const status = r.data?.status || "PENDING";
+    const msg = status === "APPROVED"
+      ? `Template "${name}" created and APPROVED - select it in Step 2 and send!`
+      : `Template "${name}" created - status: ${status}. Refresh this page in about a minute; once APPROVED, select it in Step 2 and send.`;
+    res.redirect(`/zq-admin/broadcast?success=${encodeURIComponent(msg)}`);
+  } catch (err) {
+    const metaMsg = err.response?.data?.error?.error_user_msg
+                 || err.response?.data?.error?.message
+                 || err.message;
+    res.redirect(`/zq-admin/broadcast?error=${encodeURIComponent("Template creation failed: " + metaMsg)}`);
+  }
+});
+
+// ── POST /zq-admin/broadcast/delete-campaign-template ────────────────────────
+router.post("/broadcast/delete-campaign-template", requireSupplierAdmin, async (req, res) => {
+  try {
+    const name = String(req.body.name || "").trim();
+    if (!name.startsWith("zqm_campaign_")) throw new Error("Only zqm_campaign_* templates can be deleted from here.");
+    const wabaId = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || process.env.META_WABA_ID || process.env.WABA_ID;
+    const token  = process.env.META_ACCESS_TOKEN || process.env.WHATSAPP_ACCESS_TOKEN;
+    if (!wabaId || !token) throw new Error("WABA ID / token not configured.");
+
+    await axios.delete(
+      `https://graph.facebook.com/v24.0/${wabaId}/message_templates`,
+      { params: { name }, headers: { Authorization: `Bearer ${token}` }, timeout: 15000 }
+    );
+    res.redirect(`/zq-admin/broadcast?success=${encodeURIComponent(`Template "${name}" deleted.`)}`);
+  } catch (err) {
+    const metaMsg = err.response?.data?.error?.message || err.message;
+    res.redirect(`/zq-admin/broadcast?error=${encodeURIComponent("Delete failed: " + metaMsg)}`);
+  }
+});
+
 // ── POST /zq-admin/broadcast ──────────────────────────────────────────────────
 // ── Self-contained sender for zqm_broadcast_image (image header + {{1}} body) ──
 // Bypasses sendBroadcastTemplate since that function only knows the 4 older templates.
 // Returns { sent, failed, skipped } matching the shape sendBroadcastTemplate returns.
+// ── Send a zero-variable "formatted campaign" template broadcast ─────────────
+async function _sendBroadcastCampaign({ phones, templateName, msPerMessage = 3000, dryRun = false }) {
+  const PHONE_ID = process.env.WHATSAPP_PHONE_NUMBER_ID
+                || process.env.META_PHONE_NUMBER_ID
+                || process.env.PHONE_NUMBER_ID;
+  const TOKEN    = process.env.META_ACCESS_TOKEN
+                || process.env.WHATSAPP_ACCESS_TOKEN;
+
+  let sent = 0, failed = 0, skipped = 0;
+
+  for (const phone of phones) {
+    if (dryRun) { skipped++; continue; }
+
+    try {
+      await axios.post(
+        `https://graph.facebook.com/v24.0/${PHONE_ID}/messages`,
+        {
+          messaging_product: "whatsapp",
+          to:   phone,
+          type: "template",
+          template: { name: templateName, language: { code: "en" } }
+        },
+        { headers: { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json" } }
+      );
+      sent++;
+    } catch (err) {
+      console.error(`[BROADCAST CAMPAIGN] Failed to ${phone}:`, err.response?.data?.error?.message || err.message);
+      failed++;
+    }
+
+    if (msPerMessage > 0) {
+      await new Promise(r => setTimeout(r, msPerMessage));
+    }
+  }
+
+  return { sent, failed, skipped };
+}
+
 async function _sendBroadcastImage({ phones, messageText, imageUrl, msPerMessage = 3000, dryRun = false }) {
   const PHONE_ID = process.env.WHATSAPP_PHONE_NUMBER_ID
                 || process.env.META_PHONE_NUMBER_ID
@@ -9740,18 +9941,17 @@ router.post("/broadcast", requireSupplierAdmin, async (req, res) => {
     } = req.body;
 
     if (!templateName) throw new Error("Please select a template.");
-    if (!var1.trim())  throw new Error("{{1}} variable is required.");
+    const _isCampaignTpl = String(templateName).startsWith("zqm_campaign_");
+    if (!var1.trim() && !_isCampaignTpl) throw new Error("{{1}} variable is required.");
 
     // ── TEMPLATE-SAFE TEXT ────────────────────────────────────────────────────
     // Meta rejects template {{n}} params containing \n, \t or 4+ consecutive
-    // spaces (error #100 "Param text cannot have new-line/tab characters...").
-    // Convert any newlines that reach the server (manual input, direct POSTs)
-    // to U+2028 LINE SEPARATOR: passes Meta validation, renders as a line
-    // break on WhatsApp. Tabs become spaces; 4+ spaces collapse to 3.
+    // spaces (error #100), and WhatsApp renders smuggled line separators
+    // (U+2028) as ? boxes. So for legacy templates any newline reaching the
+    // server becomes a single SPACE (prevents word-gluing). Real paragraph
+    // formatting is handled by the Formatted Campaign Builder templates.
     const _tplSafe = (s) => String(s || "")
-      .replace(/\r\n|\r/g, "\n")
-      .replace(/\t/g, " ")
-      .replace(/\n/g, "\u2028")
+      .replace(/[\r\n\t\u2028\u2029]+/g, " ")
       .replace(/ {4,}/g, "   ");
     const var1Safe = _tplSafe(var1).trim();
     const var2Safe = _tplSafe(var2).trim();
@@ -9820,7 +10020,16 @@ router.post("/broadcast", requireSupplierAdmin, async (req, res) => {
     const variables = [var1Safe, var2Safe].filter(Boolean);
 
     let result;
-    if (templateName === "zqm_broadcast_image") {
+    if (_isCampaignTpl) {
+      // Formatted campaign: full text lives in the template body - zero
+      // variables, so Meta cannot flatten anything. Perfect formatting.
+      result = await _sendBroadcastCampaign({
+        phones,
+        templateName,
+        msPerMessage: isDryRun ? 0 : 3000,
+        dryRun:       isDryRun
+      });
+    } else if (templateName === "zqm_broadcast_image") {
       // Handle the image broadcast template directly - sendBroadcastTemplate doesn't know this one
       if (!finalMediaUrl && !isDryRun) {
         return res.redirect(`/zq-admin/broadcast?error=${encodeURIComponent("zqm_broadcast_image requires an image. Please attach one in Step 3.")}`);
