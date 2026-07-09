@@ -9145,15 +9145,20 @@ router.get("/broadcast", requireSupplierAdmin, async (req, res) => {
           Rate: 1 message / 3 seconds. Enquiries: <a href="${_ENQUIRIES_LINK}" target="_blank" style="color:var(--blue)">wa.me/263789901058</a>
         </p>
 
-     <form method="POST" action="/zq-admin/broadcast" onsubmit="
-  var ta=document.getElementById('var1Textarea');
-  var inp=document.getElementById('var1Input');
-  if(ta && !ta.disabled && ta.value.trim()){
-    inp.value = ta.value.replace(/\\r\\n/g, '\\n').replace(/\\r/g, '\\n');
-    inp.disabled = false;
-  }
-  return true;
-">
+        <form method="POST" action="/zq-admin/broadcast" onsubmit="
+          var ta=document.getElementById('var1Textarea');
+          var inp=document.getElementById('var1Input');
+          if(ta && !ta.disabled && ta.value.trim()){
+            /* Meta forbids newlines in {{n}} params and WhatsApp renders smuggled
+               line-separator chars (U+2028) as ? boxes - proven in production.
+               So for legacy templates we join lines with single spaces (keeps
+               words from gluing together). For REAL paragraphs use the
+               Formatted Campaign Builder at the top of this page. */
+            inp.value=ta.value.replace(/\\s+/g,' ').trim();
+            inp.disabled=false;
+          }
+          return true;
+        ">
 
           <!-- Step 1: Audience -->
           <fieldset style="border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:16px">
@@ -9693,29 +9698,19 @@ router.get("/broadcast", requireSupplierAdmin, async (req, res) => {
 // ── POST /zq-admin/broadcast/upload  (file upload for media attachments) ─────
 router.post("/broadcast/upload", requireSupplierAdmin, _broadcastUpload.single("broadcastFile"), (req, res) => {
   try {
-    if (!req.file) {
-      return res.status(400).json({ error: "No file received or file type not allowed." });
-    }
+    if (!req.file) return res.status(400).json({ error: "No file received or file type not allowed." });
 
-    const ext = _receiptPath.extname(req.file.originalname).toLowerCase();
+    const ext       = _receiptPath.extname(req.file.originalname).toLowerCase();
+    const mediaType = [".jpg",".jpeg",".png",".gif",".webp"].includes(ext) ? "image"
+                    : [".mp4",".mov"].includes(ext)                         ? "video"
+                    :                                                         "document";
 
-    const mediaType = [".jpg", ".jpeg", ".png", ".gif", ".webp"].includes(ext)
-      ? "image"
-      : [".mp4", ".mov"].includes(ext)
-        ? "video"
-        : "document";
-
-    const host = req.protocol + "://" + req.get("host");
+    // Build the public URL - assumes express.static serves /public at root
+    const host    = req.protocol + "://" + req.get("host");
     const fileUrl = host + "/broadcasts/" + req.file.filename;
 
     console.log(`[BROADCAST UPLOAD] ${req.file.originalname} → ${fileUrl} (${mediaType})`);
-
-    res.json({
-      url: fileUrl,
-      mediaType,
-      filename: req.file.filename,
-      originalName: req.file.originalname
-    });
+    res.json({ url: fileUrl, mediaType, filename: req.file.filename, originalName: req.file.originalname });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -9872,52 +9867,32 @@ async function _sendBroadcastImage({ phones, messageText, imageUrl, msPerMessage
   const PHONE_ID = process.env.WHATSAPP_PHONE_NUMBER_ID
                 || process.env.META_PHONE_NUMBER_ID
                 || process.env.PHONE_NUMBER_ID;
-
-  const TOKEN = process.env.META_ACCESS_TOKEN
-             || process.env.WHATSAPP_ACCESS_TOKEN;
+  const TOKEN    = process.env.META_ACCESS_TOKEN
+                || process.env.WHATSAPP_ACCESS_TOKEN;
 
   let sent = 0, failed = 0, skipped = 0;
 
-  const formattedMessage = String(messageText || "")
-    .replace(/\r\n/g, "\n")
-    .replace(/\r/g, "\n")
-    .replace(/[ \t]+\n/g, "\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim()
-    .slice(0, 1024);
-
   for (const phone of phones) {
-    if (dryRun) {
-      skipped++;
-      continue;
-    }
+    if (dryRun) { skipped++; continue; }
 
     try {
       const body = {
         messaging_product: "whatsapp",
-        to: phone,
+        to:   phone,
         type: "template",
         template: {
-          name: "zqm_broadcast_image",
+          name:     "zqm_broadcast_image",
           language: { code: "en" },
           components: [
+            // Header: image
             {
               type: "header",
-              parameters: [
-                {
-                  type: "image",
-                  image: { link: imageUrl }
-                }
-              ]
+              parameters: [{ type: "image", image: { link: imageUrl } }]
             },
+            // Body: {{1}} = messageText
             {
               type: "body",
-              parameters: [
-                {
-                  type: "text",
-                  text: formattedMessage
-                }
-              ]
+              parameters: [{ type: "text", text: String(messageText || "").slice(0, 1024) }]
             }
           ]
         }
@@ -9926,20 +9901,11 @@ async function _sendBroadcastImage({ phones, messageText, imageUrl, msPerMessage
       await axios.post(
         `https://graph.facebook.com/v24.0/${PHONE_ID}/messages`,
         body,
-        {
-          headers: {
-            Authorization: `Bearer ${TOKEN}`,
-            "Content-Type": "application/json"
-          }
-        }
+        { headers: { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json" } }
       );
-
       sent++;
     } catch (err) {
-      console.error(
-        `[BROADCAST IMAGE] Failed to ${phone}:`,
-        err.response?.data?.error?.message || err.message
-      );
+      console.error(`[BROADCAST IMAGE] Failed to ${phone}:`, err.response?.data?.error?.message || err.message);
       failed++;
     }
 
@@ -9984,26 +9950,11 @@ router.post("/broadcast", requireSupplierAdmin, async (req, res) => {
     // (U+2028) as ? boxes. So for legacy templates any newline reaching the
     // server becomes a single SPACE (prevents word-gluing). Real paragraph
     // formatting is handled by the Formatted Campaign Builder templates.
-   const _tplSafe = (s, allowNewLines = false) => {
-  let text = String(s || "")
-    .replace(/\r\n/g, "\n")
-    .replace(/\r/g, "\n")
-    .replace(/\t/g, " ")
-    .replace(/\u2028|\u2029/g, "\n")
-    .replace(/ {4,}/g, "   ");
-
-  if (!allowNewLines) {
-    text = text.replace(/\n+/g, " ");
-  }
-
-  return text.trim();
-};
-
-const var1Safe = templateName === "zqm_broadcast_image"
-  ? _tplSafe(var1, true)
-  : _tplSafe(var1, false);
-
-const var2Safe = _tplSafe(var2, false);
+    const _tplSafe = (s) => String(s || "")
+      .replace(/[\r\n\t\u2028\u2029]+/g, " ")
+      .replace(/ {4,}/g, "   ");
+    const var1Safe = _tplSafe(var1).trim();
+    const var2Safe = _tplSafe(var2).trim();
 
     const isDryRun = dryRun === "1" || action === "preview";
 
