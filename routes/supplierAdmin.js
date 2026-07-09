@@ -9736,13 +9736,7 @@ router.post("/broadcast", requireSupplierAdmin, async (req, res) => {
     } = req.body;
 
     if (!templateName) throw new Error("Please select a template.");
-   const messageText = String(var1 || "")
-    .replace(/\r\n/g, "\n")
-    .replace(/\r/g, "\n");
-
-if (!messageText.trim()) {
-    throw new Error("{{1}} variable is required.");
-}
+    if (!var1.trim())  throw new Error("{{1}} variable is required.");
 
     const isDryRun = dryRun === "1" || action === "preview";
 
@@ -9805,10 +9799,7 @@ if (!messageText.trim()) {
       return res.redirect(`/zq-admin/broadcast?error=${encodeURIComponent("No contacts to send to. Check your audience settings.")}`);
     }
 
-    const variables = [
-    messageText,
-    String(var2 || "").trim()
-].filter(Boolean);
+    const variables = [var1.trim(), var2.trim()].filter(Boolean);
 
     let result;
     if (templateName === "zqm_broadcast_image") {
@@ -9818,10 +9809,7 @@ if (!messageText.trim()) {
       }
       result = await _sendBroadcastImage({
         phones,
-    messageText:
-    messageText
-        .replace(/\n{2,}/g, "\n\u200B\n") ||
-    "Dear customer, please find attached.",
+        messageText:  var1.trim() || "Dear customer, please find attached.",
         imageUrl:     finalMediaUrl || "",
         msPerMessage: isDryRun ? 0 : 3000,
         dryRun:       isDryRun
