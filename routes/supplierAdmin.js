@@ -9065,11 +9065,7 @@ router.get("/broadcast", requireSupplierAdmin, async (req, res) => {
           var ta=document.getElementById('var1Textarea');
           var inp=document.getElementById('var1Input');
           if(ta && !ta.disabled && ta.value.trim()){
-            /* FORMATTING FIX: single-line inputs strip CR/LF on assignment (HTML spec),
-               and Meta rejects newlines in template params anyway. Convert every
-               newline to U+2028 LINE SEPARATOR - survives the input, passes Meta
-               validation, and WhatsApp renders it as a real line break. */
-            inp.value=ta.value.replace(/\\r\\n/g,"\\n").replace(/\\r/g,"\\n").replace(/\\n/g,"\\u2028");
+            inp.value=ta.value;
             inp.disabled=false;
           }
           return true;
@@ -9742,20 +9738,6 @@ router.post("/broadcast", requireSupplierAdmin, async (req, res) => {
     if (!templateName) throw new Error("Please select a template.");
     if (!var1.trim())  throw new Error("{{1}} variable is required.");
 
-    // ── TEMPLATE-SAFE TEXT ────────────────────────────────────────────────────
-    // Meta rejects template {{n}} params containing \n, \t or 4+ consecutive
-    // spaces (error #100 "Param text cannot have new-line/tab characters...").
-    // Convert any newlines that reach the server (manual input, direct POSTs)
-    // to U+2028 LINE SEPARATOR: passes Meta validation, renders as a line
-    // break on WhatsApp. Tabs become spaces; 4+ spaces collapse to 3.
-    const _tplSafe = (s) => String(s || "")
-      .replace(/\r\n|\r/g, "\n")
-      .replace(/\t/g, " ")
-      .replace(/\n/g, "\u2028")
-      .replace(/ {4,}/g, "   ");
-    const var1Safe = _tplSafe(var1).trim();
-    const var2Safe = _tplSafe(var2).trim();
-
     const isDryRun = dryRun === "1" || action === "preview";
 
     // Resolve final media URL and type from whichever mode was used
@@ -9817,7 +9799,7 @@ router.post("/broadcast", requireSupplierAdmin, async (req, res) => {
       return res.redirect(`/zq-admin/broadcast?error=${encodeURIComponent("No contacts to send to. Check your audience settings.")}`);
     }
 
-    const variables = [var1Safe, var2Safe].filter(Boolean);
+    const variables = [var1.trim(), var2.trim()].filter(Boolean);
 
     let result;
     if (templateName === "zqm_broadcast_image") {
@@ -9827,7 +9809,7 @@ router.post("/broadcast", requireSupplierAdmin, async (req, res) => {
       }
       result = await _sendBroadcastImage({
         phones,
-        messageText:  var1Safe || "Dear customer, please find attached.",
+        messageText:  var1.trim() || "Dear customer, please find attached.",
         imageUrl:     finalMediaUrl || "",
         msPerMessage: isDryRun ? 0 : 3000,
         dryRun:       isDryRun
