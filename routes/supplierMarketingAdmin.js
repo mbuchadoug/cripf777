@@ -98,6 +98,22 @@ async function _uploadToBucket(bucket, filename, buffer, mime, metadata) {
   });
 }
 
+/**
+ * Find a GridFS file by filename, with legacy fallback: files uploaded before
+ * the nginx fix were stored WITH an extension (e.g. "..._flyer_123.jpg") but
+ * may now be requested extension-less. Try exact match first, then each known
+ * extension appended.
+ */
+async function _findBucketFile(bucket, filename) {
+  let files = await bucket.find({ filename }).toArray();
+  if (files && files.length) return files[0];
+  for (const ext of ["jpg", "jpeg", "png", "webp", "pdf"]) {
+    files = await bucket.find({ filename: `${filename}.${ext}` }).toArray();
+    if (files && files.length) return files[0];
+  }
+  return null;
+}
+
 async function _deleteFromBucket(bucket, url, pathSegment) {
   // url looks like <base>/zq-admin/supplier-media/<pathSegment>/<filename>
   try {
@@ -121,15 +137,15 @@ export const supplierMediaFiles = express.Router();
 supplierMediaFiles.get("/flyer/:filename", async (req, res) => {
   try {
     const bucket = getFlyerBucket();
-    const files  = await bucket.find({ filename: req.params.filename }).toArray();
-    if (!files || files.length === 0) return res.status(404).send("File not found.");
+    const file   = await _findBucketFile(bucket, req.params.filename);
+    if (!file) return res.status(404).send("File not found.");
 
-    const file = files[0];
     res.setHeader("Content-Type",        file.metadata?.mimeType || file.contentType || "image/jpeg");
     res.setHeader("Content-Disposition", `inline; filename="${file.filename}"`);
     res.setHeader("Cache-Control",       "public, max-age=86400");
+    if (file.length) res.setHeader("Content-Length", file.length);
 
-    const stream = bucket.openDownloadStreamByName(req.params.filename);
+    const stream = bucket.openDownloadStreamByName(file.filename);
     stream.on("error", () => res.status(404).send("File not found."));
     stream.pipe(res);
   } catch (err) {
@@ -141,15 +157,15 @@ supplierMediaFiles.get("/flyer/:filename", async (req, res) => {
 supplierMediaFiles.get("/brochure/:filename", async (req, res) => {
   try {
     const bucket = getBrochureBucket();
-    const files  = await bucket.find({ filename: req.params.filename }).toArray();
-    if (!files || files.length === 0) return res.status(404).send("File not found.");
+    const file   = await _findBucketFile(bucket, req.params.filename);
+    if (!file) return res.status(404).send("File not found.");
 
-    const file = files[0];
     res.setHeader("Content-Type",        file.metadata?.mimeType || file.contentType || "application/pdf");
     res.setHeader("Content-Disposition", `inline; filename="${file.filename}"`);
     res.setHeader("Cache-Control",       "public, max-age=86400");
+    if (file.length) res.setHeader("Content-Length", file.length);
 
-    const stream = bucket.openDownloadStreamByName(req.params.filename);
+    const stream = bucket.openDownloadStreamByName(file.filename);
     stream.on("error", () => res.status(404).send("File not found."));
     stream.pipe(res);
   } catch (err) {
@@ -339,9 +355,15 @@ router.post("/flyer/add", requireSupplierAdmin, flyerUpload.single("flyerFile"),
     if (!req.file)  throw new Error("No file uploaded.");
 
     const mime     = req.file.mimetype;
-    const ext      = _extFromMime(mime);
     const label    = (req.body.label || "").trim().slice(0, 60) || "flyer";
-    const filename = `${supplier._id}_flyer_${Date.now()}.${ext}`;
+    // NGINX FIX: filename/URL has NO extension. The server's nginx config has a
+    // static-asset regex (location ~* \.(jpg|jpeg|png|webp...)$) that intercepts
+    // any URL ending in an image extension and serves it from disk - so GridFS
+    // image URLs with .jpg never reach Node and 404. Extension-less URLs are
+    // proxied normally; Content-Type from GridFS metadata tells the browser and
+    // Meta/WhatsApp what the file is. (PDFs never had this issue but we keep the
+    // same convention for consistency.)
+    const filename = `${supplier._id}_flyer_${Date.now()}`;
 
     await _uploadToBucket(getFlyerBucket(), filename, req.file.buffer, mime, {
       supplierId:   supplier._id.toString(),
@@ -410,9 +432,9 @@ router.post("/brochure/add", requireSupplierAdmin, brochureUpload.single("brochu
 
     const mime     = req.file.mimetype;
     const isImage  = mime.startsWith("image/");
-    const ext      = _extFromMime(mime);
     const label    = (req.body.label || "").trim().slice(0, 60) || "brochure";
-    const filename = `${supplier._id}_${Date.now()}.${ext}`;
+    // NGINX FIX: no extension in filename/URL - see flyer/add comment above.
+    const filename = `${supplier._id}_${Date.now()}`;
 
     await _uploadToBucket(getBrochureBucket(), filename, req.file.buffer, mime, {
       supplierId:   supplier._id.toString(),
