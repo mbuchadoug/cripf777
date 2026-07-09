@@ -128,6 +128,36 @@ const SupplierProfileSchema = new mongoose.Schema({
   travelAvailable: { type: Boolean },
   serviceArea:     { type: String },
 
+  // ── Smart link marketing (mirrors SchoolProfile pattern) ───────────────────
+  // smartLinkPitch: marketing description sent FIRST when a buyer opens the
+  //                 seller's smart link - before the profile card and menu.
+  // smartLinkFlyers: images (JPG/PNG/WEBP) sent as WhatsApp image messages
+  //                  after the pitch. Managed at /zq-admin/suppliers/:id/marketing
+  // brochures: PDFs (or images) sent as WhatsApp documents after the flyers.
+  //            Same GridFS storage pattern as school brochures.
+  smartLinkPitch: { type: String, default: "" },
+
+  smartLinkFlyers: {
+    type: [{
+      label:    { type: String, default: "" },
+      url:      { type: String, required: true },
+      mimeType: { type: String, default: "image/jpeg" },
+      addedAt:  { type: Date,   default: Date.now }
+    }],
+    default: []
+  },
+
+  brochures: {
+    type: [{
+      label:    { type: String, default: "" },
+      url:      { type: String, required: true },
+      isImage:  { type: Boolean, default: false },
+      mimeType: { type: String, default: "application/pdf" },
+      addedAt:  { type: Date,   default: Date.now }
+    }],
+    default: []
+  },
+
   // ── Smart link / slug ──────────────────────────────────────────────────────
   zqSlug:            { type: String, unique: true, sparse: true },
   zqLinkViews:       { type: Number, default: 0 },

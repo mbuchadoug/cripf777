@@ -18,7 +18,6 @@ import { SUPPLIER_CATEGORIES } from "../services/supplierPlans.js";
 import { TEMPLATES, getPresetCategories, setTemplateForCategory } from "../services/supplierProductTemplates.js";
 
 import smartLinkRoutes from "./supplierSmartLinkAdmin.js";
-import marketingRoutes, { supplierMediaFiles } from "./supplierMarketingAdmin.js";
 import {
   createGroup,
   getAllGroups,
@@ -943,13 +942,6 @@ router.get("/suppliers/new", requireSupplierAdmin, async (req, res) => {
           </div>
         </div>
 
-        <!-- ── SECTION 5b: Smart Link Marketing Pitch ─────────────────── -->
-        <div class="fg full" style="margin-bottom:20px">
-          <label>Marketing Pitch (shown to buyers when they open the smart link)</label>
-          <textarea name="smartLinkPitch" rows="4" maxlength="1000"
-            placeholder="e.g. 🔧 Harare's brake &amp; clutch specialists. Genuine spares in stock, free assessment - request a quote below! (Optional - flyers &amp; brochures can be uploaded after registration via the Marketing &amp; Media page.)"></textarea>
-        </div>
-
         <!-- ── SECTION 6: Admin Note ─────────────────────────────────── -->
         <div class="fg full" style="margin-bottom:20px">
           <label>Admin Note (internal only)</label>
@@ -1398,7 +1390,6 @@ const supplier = await SupplierProfile.create({
   adminNote: adminNote?.trim()
     ? `[Admin registered on ${now.toDateString()}] ${adminNote.trim()}`
     : `[Admin registered on ${now.toDateString()}]`,
-  smartLinkPitch: (req.body.smartLinkPitch || "").trim().slice(0, 1000),
   // ── Hospitality fields ──────────────────────────────────────────────────
   tourismSubtype:  tourismSubtype  || [],
   tourismAreas:    tourismAreas    || [],
@@ -1608,10 +1599,6 @@ const successMsg = req.query.success
 
   <a href="/zq-admin/suppliers/${supplier._id}/vip-settings" class="btn btn-purple">
     🔒 VIP Notifications
-  </a>
-
-  <a href="/zq-admin/suppliers/${supplier._id}/marketing" class="btn" style="background:#be185d;color:white">
-    🎨 Marketing & Media
   </a>
 
   <a href="/zq-admin/suppliers/${supplier._id}/contacts" class="btn" style="background:#0d9488;color:white">
@@ -2080,11 +2067,6 @@ ${supplier.profileType === "hospitality" ? `
             <textarea name="categories" rows="2">${(supplier.categories || []).join(", ")}</textarea>
           </div>
           <div class="fg full">
-            <label>Marketing Pitch (sent to buyers first when they open the smart link)</label>
-            <textarea name="smartLinkPitch" rows="4" maxlength="1000"
-              placeholder="Short sales pitch shown before the profile card. Flyers &amp; brochures are managed on the Marketing &amp; Media page.">${esc(supplier.smartLinkPitch || "")}</textarea>
-          </div>
-          <div class="fg full">
             <label>Admin Note (internal only)</label>
             <textarea name="adminNote" rows="2" placeholder="Notes about this supplier...">${esc(supplier.adminNote || "")}</textarea>
           </div>
@@ -2136,11 +2118,6 @@ const update = {
 
     if (subscriptionExpiresAt) {
       update.subscriptionExpiresAt = new Date(subscriptionExpiresAt);
-    }
-
-    // ── Smart link marketing pitch ──────────────────────────────────────────
-    if (req.body.smartLinkPitch !== undefined) {
-      update.smartLinkPitch = (req.body.smartLinkPitch || "").trim().slice(0, 1000);
     }
 
     // ── Notification contacts (extra numbers for template alerts) ──────────────
@@ -7362,10 +7339,6 @@ router.get("/vip-sellers", requireSupplierAdmin, async (req, res) => {
 });
 
 router.use("/suppliers/:id/smart-link", smartLinkRoutes);
-// ── Seller smart link marketing (pitch + flyers + brochures) ─────────────────
-router.use("/suppliers/:id/marketing", marketingRoutes);
-// Public media serving - NO auth, Meta/WhatsApp fetches these URLs directly
-router.use("/supplier-media", supplierMediaFiles);
 router.use("/suppliers/:id/finance", financialAdminRoutes);
 router.use("/suppliers/:id/stock", stockAdminRoutes);
 

@@ -282,7 +282,7 @@ const uniqueNotifyPhones = [...new Set(notifyPhones)];
   }
 }
 
-export async function showSellerMenu(from, supplierId, biz, saveBiz, { source = "direct", parentName = "", staffCardId = null, skipIntro = false } = {}) {
+export async function showSellerMenu(from, supplierId, biz, saveBiz, { source = "direct", parentName = "", staffCardId = null } = {}) {
   const seller = await SupplierProfile.findById(supplierId).lean();
   if (!seller) return sendText(from, "❌ Seller profile not found. Please try again.");
 
@@ -440,90 +440,6 @@ export async function showSellerMenu(from, supplierId, biz, saveBiz, { source = 
   import("./supplierSmartLink.js").then(({ trackLinkEvent }) =>
     trackLinkEvent(supplierId, { source, isConversion: false, visitorPhone: from }).catch(() => {})
   ).catch(() => {});
-
-  // ── SMART LINK MARKETING INTRO: pitch + flyers + brochures ────────────────
-  // Sent BEFORE the profile card, mirroring the school smart link experience
-  // (schoolFAQ.js smart card):
-  //   msg 0:    seller marketing pitch (seller.smartLinkPitch)
-  //   msg 1..n: flyers as WhatsApp images (seller.smartLinkFlyers)
-  //   msg n+1:  brochures as documents/PDFs or images (seller.brochures)
-  // Then the existing profile card + action menu follow UNCHANGED.
-  //
-  // skipIntro=true is passed by INTERNAL navigation only (sc_back / "cancel")
-  // so buyers browsing the store are never re-spammed with the same media.
-  // Sellers with no pitch/flyers/brochures see ZERO change - every send is
-  // conditional and the whole block is wrapped so a media failure can never
-  // break the profile card or menu.
-  if (!skipIntro) {
-    try {
-      // ── msg 0: marketing pitch ──────────────────────────────────────────
-      const _pitch = (seller.smartLinkPitch || "").trim();
-      if (_pitch) await sendText(from, _pitch);
-
-      // ── msg 1..n: flyers as images (fallback to document if sendImage
-      //    unavailable or Meta rejects the image) ───────────────────────────
-      const _flyers = seller.smartLinkFlyers || [];
-      if (_flyers.length > 0) {
-        let _sendImage = null;
-        try {
-          const _meta = await import("./metaSender.js");
-          if (typeof _meta.sendImage === "function") _sendImage = _meta.sendImage;
-        } catch (_) {}
-        for (const _f of _flyers) {
-          if (!_f.url) continue;
-          try {
-            if (_sendImage) {
-              try {
-                await _sendImage(from, { imageUrl: _f.url, caption: _f.label || seller.businessName });
-                continue;
-              } catch (_) {}
-            }
-            await sendDocument(from, {
-              link:     _f.url,
-              filename: (_f.label || "flyer").replace(/[^a-zA-Z0-9 ]/g, "_").slice(0, 40) + ".jpg",
-              caption:  _f.label || seller.businessName
-            });
-          } catch (_) {}
-        }
-      }
-
-      // ── msg n+1..m: brochures as documents (images sent as images) ───────
-      const _brochures = seller.brochures || [];
-      if (_brochures.length > 0) {
-        for (const _b of _brochures) {
-          if (!_b.url) continue;
-          try {
-            const _safeName = (_b.label || "document")
-              .replace(/[^a-zA-Z0-9 ]/g, "")
-              .replace(/\s+/g, "_")
-              .slice(0, 40);
-            const _isImg = _b.isImage === true || /\.(jpg|jpeg|png|webp)$/i.test(_b.url);
-            if (_isImg) {
-              let _sendImage2 = null;
-              try {
-                const _meta2 = await import("./metaSender.js");
-                if (typeof _meta2.sendImage === "function") _sendImage2 = _meta2.sendImage;
-              } catch (_) {}
-              if (_sendImage2) {
-                try {
-                  await _sendImage2(from, { imageUrl: _b.url, caption: _b.label || "" });
-                  continue;
-                } catch (_) {}
-              }
-            }
-            await sendDocument(from, {
-              link:     _b.url,
-              filename: _safeName + (_isImg ? ".jpg" : ".pdf"),
-              caption:  _b.label || ""
-            });
-          } catch (_) {}
-        }
-      }
-    } catch (_introErr) {
-      // NEVER let marketing media break the profile card / menu
-      console.warn("[SC MARKETING INTRO]", _introErr.message);
-    }
-  }
 
   const hasHistory = biz?.sessionData?.scLastOrder;
   const repeatBtn  = hasHistory
@@ -720,7 +636,7 @@ export async function handleSellerChatAction({ from, action: a, biz, saveBiz }) 
     case "repeat":          return _scRepeat(from, supplierId, biz, saveBiz);
     case "contact":         return _scContact(from, supplierId);
     case "review":          return _scReview(from, supplierId, biz, saveBiz);
-    case "back":            return showSellerMenu(from, supplierId, biz, saveBiz, { skipIntro: true });
+    case "back":            return showSellerMenu(from, supplierId, biz, saveBiz);
     // ── Back to the numbered search results the buyer came from ────────────
     case "search_back": {
       const { resendSellerList } = await import("./sellerSearchList.js");
@@ -799,7 +715,7 @@ export async function handleSellerChatState({ state, from, text, biz, saveBiz })
   const raw = (text || "").trim();
   if (raw.toLowerCase() === "cancel") {
     if (biz) { biz.sessionState = "ready"; await saveBiz(biz); }
-    return showSellerMenu(from, supplierId, biz, saveBiz, { skipIntro: true });
+    return showSellerMenu(from, supplierId, biz, saveBiz);
   }
 
   // ── Seller editing prices on a pending smart-link quote ──────────────────
