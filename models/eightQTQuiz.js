@@ -73,4 +73,4 @@ EightQTQuizSchema.pre("validate", function (next) {
 });
 
 export default mongoose.models.EightQTQuiz ||
-  mongoose.model("EightQTQuiz", EightQTQuizSchema);s
+  mongoose.model("EightQTQuiz", EightQTQuizSchema);
