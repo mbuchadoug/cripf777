@@ -201,7 +201,6 @@
   <button class="tab active"  onclick="showTab('overview',   this)">Overview</button>
   <button class="tab"         onclick="showTab('quotients',  this)">Quotient Config</button>
   <button class="tab"         onclick="showTab('questions',  this)">Question Bank</button>
-  <button class="tab"         onclick="showTab('quizzes',    this)">Quizzes</button>
   <button class="tab"         onclick="showTab('archetypes', this)">Archetypes</button>
   <button class="tab"         onclick="showTab('template',   this)">Cert Template</button>
   <button class="tab"         onclick="showTab('attempts',   this)">Attempts</button>
@@ -344,27 +343,10 @@
             <option value="true">Active</option>
             <option value="false">Inactive</option>
           </select>
-          <select id="qBatchFilter" onchange="loadQuestions()" class="form-input" style="max-width:280px">
-            <option value="">All Upload Batches</option>
-          </select>
-          <button class="btn btn-danger btn-sm" id="disableBatchBtn" style="display:none" onclick="disableBatch()">Disable Batch</button>
         </div>
         <div id="questionsContainer">
           <p style="color:var(--dark);font-size:.85rem;padding:8px 0">Loading questions…</p>
         </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ══════════ QUIZZES ══════════ -->
-  <div id="tab-quizzes" style="display:none">
-    <div class="section">
-      <div class="section-head">
-        <span class="section-title">Quizzes</span>
-        <span style="font-size:.76rem;color:var(--dark)">Titled quizzes with shareable links · retake rules · preview before sharing</span>
-      </div>
-      <div class="section-body" style="padding:0">
-        <div id="quizzesContainer"><p style="padding:20px;color:var(--dark)">Loading…</p></div>
       </div>
     </div>
   </div>
@@ -391,32 +373,6 @@
       <div class="section-head"><span class="section-title">Certificate Template &amp; Pricing</span></div>
       <div class="section-body">
         {{#if template}}
-        <div style="padding:10px 12px;background:#f8f9fb;border:1px solid var(--border);border-radius:8px;margin-bottom:16px;font-size:.78rem;color:var(--dark);line-height:1.6">
-          <strong style="color:var(--navy)">Standardised wording:</strong> every participant is designated a
-          <strong>CRIPFCnt Navigator</strong> - the radar chart and eight scores carry the individuality.
-          Scores can change on a retake without awkward identity relabelling. The archetype stays on the
-          results page unless you flip the toggle below (reserved for the full 64-question assessment).
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label class="form-label">Certificate title</label>
-            <input class="form-input" id="tCertTitle" value="{{#if template.certTitle}}{{template.certTitle}}{{else}}Certificate of Assessment{{/if}}">
-          </div>
-          <div class="form-group">
-            <label class="form-label">Participant designation</label>
-            <input class="form-input" id="tDesignation" value="{{#if template.designation}}{{template.designation}}{{else}}CRIPFCnt Navigator{{/if}}">
-          </div>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Assessment name</label>
-          <input class="form-input" id="tAssessment" value="{{#if template.assessmentName}}{{template.assessmentName}}{{else}}CRIPFCnt 8 Quotients Assessment{{/if}}">
-        </div>
-        <div class="form-group">
-          <label class="form-label" style="display:flex;align-items:center;gap:8px;font-weight:400">
-            <input type="checkbox" id="tUseArch" {{#if template.useArchetypeAsDesignation}}checked{{/if}}>
-            Print the matched archetype as the designation instead (advanced assessments only)
-          </label>
-        </div>
         <div class="form-row">
           <div class="form-group">
             <label class="form-label">Signatory Name</label>
@@ -607,58 +563,17 @@
       <p class="hint">Maximum 5 MB · .csv format only</p>
     </div>
     <input type="file" id="fileInput" accept=".csv" onchange="handleFileSelect(this)">
-
     <div style="margin-top:14px;padding:12px;border:1px dashed var(--border,#d1d5db);border-radius:8px;">
-      <label style="font-size:.8rem;font-weight:600;display:block;margin-bottom:8px;">Where should these questions go?</label>
-
-      <label style="display:flex;align-items:flex-start;gap:8px;font-size:.8rem;margin-bottom:8px;cursor:pointer">
-        <input type="radio" name="importMode" value="bank" checked onchange="importModeChanged()" style="margin-top:2px">
-        <span><strong>Question bank only</strong><br>
-          <span style="color:var(--dark);font-size:.74rem">Feeds dynamic quizzes and the default draw. Tracked as one upload batch.</span></span>
+      <label style="font-size:.8rem;font-weight:600;display:block;margin-bottom:6px;">
+        Create a quiz from this upload <span style="font-weight:400;color:var(--dark)">(optional)</span>
       </label>
-
-      <label style="display:flex;align-items:flex-start;gap:8px;font-size:.8rem;margin-bottom:8px;cursor:pointer">
-        <input type="radio" name="importMode" value="newQuiz" onchange="importModeChanged()" style="margin-top:2px">
-        <span><strong>Create a new titled quiz</strong><br>
-          <span style="color:var(--dark);font-size:.74rem">A fixed quiz built from this upload, with its own shareable link /8qt/q/&lt;slug&gt;.</span></span>
+      <input type="text" id="importQuizTitle" placeholder="Quiz title e.g. Leadership Cohort A"
+             style="width:100%;padding:8px;border:1px solid var(--border,#d1d5db);border-radius:6px;font-size:.85rem;">
+      <label style="display:flex;align-items:center;gap:6px;font-size:.78rem;margin-top:8px;color:var(--dark)">
+        <input type="checkbox" id="importQuizDefault"> Make it the default quiz served at /8qt
       </label>
-
-      <label style="display:flex;align-items:flex-start;gap:8px;font-size:.8rem;margin-bottom:10px;cursor:pointer">
-        <input type="radio" name="importMode" value="append" onchange="importModeChanged()" style="margin-top:2px">
-        <span><strong>Append to an existing quiz</strong><br>
-          <span style="color:var(--dark);font-size:.74rem">Adds this upload's questions onto a fixed quiz you already created.</span></span>
-      </label>
-
-      <!-- New quiz options -->
-      <div id="importNewQuizOpts" style="display:none;padding:10px;background:#f8f9fb;border-radius:6px;margin-bottom:6px">
-        <input type="text" id="importQuizTitle" placeholder="Quiz title e.g. Leadership Cohort A"
-               style="width:100%;padding:8px;border:1px solid var(--border,#d1d5db);border-radius:6px;font-size:.85rem;">
-        <div style="display:flex;gap:10px;margin-top:8px">
-          <div style="flex:1">
-            <label style="font-size:.72rem;color:var(--dark);display:block;margin-bottom:3px">Retake after (days, 0 = anytime)</label>
-            <input type="number" id="importRetakeDays" value="0" min="0"
-                   style="width:100%;padding:6px 8px;border:1px solid var(--border,#d1d5db);border-radius:6px;font-size:.82rem;">
-          </div>
-          <div style="flex:1">
-            <label style="font-size:.72rem;color:var(--dark);display:block;margin-bottom:3px">Max attempts / person (0 = unlimited)</label>
-            <input type="number" id="importMaxAttempts" value="0" min="0"
-                   style="width:100%;padding:6px 8px;border:1px solid var(--border,#d1d5db);border-radius:6px;font-size:.82rem;">
-          </div>
-        </div>
-        <label style="display:flex;align-items:center;gap:6px;font-size:.78rem;margin-top:8px;color:var(--dark)">
-          <input type="checkbox" id="importQuizDefault"> Make it the default quiz served at /8qt
-        </label>
-      </div>
-
-      <!-- Append target -->
-      <div id="importAppendOpts" style="display:none;padding:10px;background:#f8f9fb;border-radius:6px;margin-bottom:6px">
-        <label style="font-size:.72rem;color:var(--dark);display:block;margin-bottom:3px">Append to fixed quiz</label>
-        <select id="importAppendQuiz" class="form-input" style="width:100%">
-          <option value="">Loading quizzes…</option>
-        </select>
-      </div>
+      <p class="hint" style="margin-top:6px;">Leave the title empty to just add the questions to the bank.</p>
     </div>
-
     <div id="importStatus" style="margin-top:14px;font-size:.82rem"></div>
     <button class="btn btn-navy" style="margin-top:14px;width:100%" id="importBtn" onclick="doImport()" disabled>Import Questions</button>
   </div>
@@ -685,8 +600,7 @@ function showTab(id, btn) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.getElementById('tab-' + id).style.display = '';
   btn.classList.add('active');
-  if (id === 'questions') { loadQuestions(); loadBatches(); }
-  if (id === 'quizzes') loadQuizzes();
+  if (id === 'questions') loadQuestions();
   if (id === 'archetypes') loadArchetypes();
   if (id === 'attempts') loadAttempts();
   if (id === 'pipeline') loadPipeline();
@@ -740,15 +654,9 @@ function editConfig(code) {
 async function loadQuestions(page = 1) {
   const q = document.getElementById('qFilter')?.value || '';
   const a = document.getElementById('qActiveFilter')?.value || '';
-  const b = document.getElementById('qBatchFilter')?.value || '';
   const params = new URLSearchParams({ page });
   if (q) params.set('quotient', q);
   if (a) params.set('active', a);
-  if (b) params.set('batch', b);
-
-  // Batch-disable button only appears when a specific batch is selected
-  const dbBtn = document.getElementById('disableBatchBtn');
-  if (dbBtn) dbBtn.style.display = b ? '' : 'none';
 
   const r = await fetch(`/admin/8qt/questions?${params}`);
   const d = await r.json();
@@ -776,8 +684,7 @@ async function loadQuestions(page = 1) {
             <td>
               <span class="badge ${q.active ? 'badge-green' : 'badge-gray'}">${q.active ? 'Active' : 'Inactive'}</span>
             </td>
-            <td style="white-space:nowrap">
-              <button class="btn btn-outline btn-sm" onclick="previewQuestion('${q._id}')">&#128065; Preview</button>
+            <td>
               <button class="btn btn-danger btn-sm" onclick="deactivateQ('${q._id}')">Disable</button>
             </td>
           </tr>
@@ -789,72 +696,6 @@ async function loadQuestions(page = 1) {
       ${d.page < d.pages ? `<button class="btn btn-outline btn-sm" onclick="loadQuestions(${d.page + 1})">Next →</button>` : ''}
     </div>
   `;
-}
-
-// ── Upload batches ──────────────────────────────────
-async function loadBatches() {
-  try {
-    const r = await fetch('/admin/8qt/questions/batches');
-    const d = await r.json();
-    const sel = document.getElementById('qBatchFilter');
-    if (!sel || !d.batches) return;
-    const current = sel.value;
-    sel.innerHTML = '<option value="">All Upload Batches</option>' + d.batches.map(b => {
-      const date = b.firstAt ? new Date(b.firstAt).toLocaleDateString() : '?';
-      const label = `${date} · ${b.active}/${b.total} active${b.quiz ? ' · quiz: ' + b.quiz.title : ''}`;
-      return `<option value="${b._id}" ${b._id === current ? 'selected' : ''}>${label}</option>`;
-    }).join('');
-  } catch (e) { /* non-fatal */ }
-}
-
-async function disableBatch() {
-  const b = document.getElementById('qBatchFilter')?.value;
-  if (!b) return;
-  if (!confirm('Disable ALL questions in this upload batch? Fixed quizzes referencing them will shrink.')) return;
-  const r = await fetch(`/admin/8qt/questions/batch/${b}`, { method: 'DELETE' });
-  const d = await r.json();
-  alert(d.ok ? `Disabled ${d.disabled} questions.` : ('Error: ' + d.error));
-  loadQuestions();
-  loadBatches();
-}
-
-// ── Single question preview (options + scores + best answer) ──
-function renderQuestionPreviewHtml(q, n) {
-  const num = n ? `<span class="badge badge-gray">Q${n}</span> ` : '';
-  return `
-    <div style="border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:12px">
-      <div style="margin-bottom:8px">
-        ${num}<span class="badge badge-blue">${q.quotient}</span>
-        ${q.isBlended ? ' <span class="badge badge-gold">blend</span>' : ''}
-        ${q.active === false ? ' <span class="badge badge-gray">inactive</span>' : ''}
-      </div>
-      <div style="font-size:.88rem;font-weight:600;color:var(--navy);margin-bottom:10px;line-height:1.45">${q.text}</div>
-      ${(q.options || []).map(o => `
-        <div style="display:flex;justify-content:space-between;gap:10px;padding:7px 10px;border-radius:6px;margin-bottom:5px;
-             ${o.isBest ? 'background:#ecfdf3;border:1px solid #a7f3d0' : 'background:#f8f9fb;border:1px solid var(--border)'}">
-          <span style="font-size:.8rem;line-height:1.4">${o.isBest ? '&#10003; ' : ''}${o.text}</span>
-          <code style="font-size:.7rem;white-space:nowrap;color:var(--dark)">${JSON.stringify(o.scores || {})}</code>
-        </div>
-      `).join('')}
-    </div>`;
-}
-
-async function previewQuestion(id) {
-  try {
-    const r = await fetch(`/admin/8qt/questions/${id}`);
-    const d = await r.json();
-    if (!d.ok) return alert('Error: ' + (d.error || 'Could not load question'));
-    const q = d.question;
-    // Flag the best option for its primary quotient (same rule as attempt review)
-    let bestIdx = 0, bestPts = -1;
-    (q.options || []).forEach((o, i) => {
-      const pts = Number(o.scores?.[q.quotient] || 0);
-      if (pts > bestPts) { bestPts = pts; bestIdx = i; }
-    });
-    const withBest = { ...q, options: (q.options || []).map((o, i) => ({ ...o, isBest: i === bestIdx })) };
-    openDrawer('Question Preview', renderQuestionPreviewHtml(withBest) + `
-      <p style="font-size:.72rem;color:var(--dark)">&#10003; marks the highest-scoring option for the primary quotient. The code block shows each option's full score map.</p>`);
-  } catch (e) { alert('Network error'); }
 }
 
 async function deactivateQ(id) {
@@ -875,210 +716,34 @@ function handleFileSelect(input) {
   }
 }
 
-function importModeChanged() {
-  const mode = document.querySelector('input[name="importMode"]:checked')?.value || 'bank';
-  document.getElementById('importNewQuizOpts').style.display = mode === 'newQuiz' ? '' : 'none';
-  document.getElementById('importAppendOpts').style.display  = mode === 'append'  ? '' : 'none';
-  if (mode === 'append') populateAppendQuizzes();
-}
-
-async function populateAppendQuizzes() {
-  const sel = document.getElementById('importAppendQuiz');
-  try {
-    const r = await fetch('/admin/8qt/quizzes');
-    const d = await r.json();
-    const fixed = (d.quizzes || []).filter(q => q.mode === 'fixed');
-    sel.innerHTML = fixed.length
-      ? fixed.map(q => `<option value="${q._id}">${q.title} (${(q.questionIds || []).length} questions)</option>`).join('')
-      : '<option value="">No fixed quizzes yet - create one first</option>';
-  } catch (e) {
-    sel.innerHTML = '<option value="">Could not load quizzes</option>';
-  }
-}
-
-function siteOrigin() { return window.location.origin; }
-
-function copyText(text, btn) {
-  navigator.clipboard.writeText(text).then(() => {
-    if (btn) { const old = btn.textContent; btn.textContent = '✓ Copied'; setTimeout(() => btn.textContent = old, 1400); }
-  }).catch(() => prompt('Copy this link:', text));
-}
-
 async function doImport() {
   if (!selectedFile) return;
   const btn = document.getElementById('importBtn');
-  const status = document.getElementById('importStatus');
-  const mode = document.querySelector('input[name="importMode"]:checked')?.value || 'bank';
+  btn.textContent = 'Importing…';
+  btn.disabled = true;
 
   const fd = new FormData();
   fd.append('file', selectedFile);
-
-  if (mode === 'newQuiz') {
-    const qTitle = (document.getElementById('importQuizTitle')?.value || '').trim();
-    if (!qTitle) { status.innerHTML = '<span style="color:var(--red)">Please enter a quiz title.</span>'; return; }
+  const qTitle = (document.getElementById('importQuizTitle')?.value || '').trim();
+  if (qTitle) {
     fd.append('quizTitle', qTitle);
     fd.append('quizDefault', document.getElementById('importQuizDefault')?.checked ? 'true' : 'false');
-    fd.append('retakeDays',  document.getElementById('importRetakeDays')?.value || '0');
-    fd.append('maxAttempts', document.getElementById('importMaxAttempts')?.value || '0');
-  } else if (mode === 'append') {
-    const target = document.getElementById('importAppendQuiz')?.value;
-    if (!target) { status.innerHTML = '<span style="color:var(--red)">Please pick a quiz to append to.</span>'; return; }
-    fd.append('appendQuizId', target);
   }
-
-  btn.textContent = 'Importing…';
-  btn.disabled = true;
 
   const r = await fetch('/admin/8qt/questions/import', { method: 'POST', body: fd });
   const d = await r.json();
 
+  const status = document.getElementById('importStatus');
   if (d.ok) {
-    const fullUrl = d.quiz ? siteOrigin() + d.quiz.url : '';
-    status.innerHTML = `<span style="color:var(--green)">&#10003; Imported ${d.inserted} questions (batched).</span>
+    status.innerHTML = `<span style="color:var(--green)">&#10003; Imported ${d.inserted} questions.</span>
       ${d.errors.length ? `<span style="color:var(--red)"> ${d.errors.length} row errors.</span>` : ''}
-      ${d.quiz ? `<br><span style="color:var(--green)">&#10003; Quiz "<b>${d.quiz.title}</b>"${mode === 'append' ? ' updated' : ' created'}${d.quiz.isDefault ? ' (default)' : ''}</span>
-        <br><a href="${d.quiz.url}" target="_blank">${fullUrl}</a>
-        <button class="btn btn-outline btn-sm" style="margin-left:6px" onclick="copyText('${fullUrl}', this)">Copy link</button>` : ''}`;
+      ${d.quiz ? `<br><span style="color:var(--green)">&#10003; Quiz "<b>${d.quiz.title}</b>" created${d.quiz.isDefault ? ' (default)' : ''} &rarr; <a href="${d.quiz.url}" target="_blank">${d.quiz.url}</a></span>` : ''}`;
   } else {
     status.innerHTML = `<span style="color:var(--red)">Error: ${d.error}</span>`;
   }
   btn.textContent = 'Import Questions';
   btn.disabled = false;
   loadQuestions();
-  loadBatches();
-}
-
-// ════════════════════════════════════════════════════
-// QUIZZES TAB
-// ════════════════════════════════════════════════════
-async function loadQuizzes() {
-  const r = await fetch('/admin/8qt/quizzes');
-  const d = await r.json();
-  const c = document.getElementById('quizzesContainer');
-
-  if (!d.quizzes?.length) {
-    c.innerHTML = `<p style="padding:20px;color:var(--dark);font-size:.85rem">
-      No quizzes yet. Import a CSV with "Create a new titled quiz" selected, and it will appear here with a shareable link.</p>`;
-    return;
-  }
-
-  const bank = {};
-  for (const b of (d.bankByQuotient || [])) bank[b._id] = b.count;
-  const bankTotal = Object.values(bank).reduce((s, v) => s + v, 0);
-
-  c.innerHTML = `
-    <div style="padding:10px 16px;font-size:.74rem;color:var(--dark);border-bottom:1px solid var(--border)">
-      Active question bank: <strong>${bankTotal}</strong> questions
-      (${Object.entries(bank).map(([k, v]) => `${k}:${v}`).join(' · ') || 'empty'})
-    </div>
-    <table>
-      <thead><tr>
-        <th>Quiz</th><th>Mode</th><th>Share link</th><th>Retake policy</th><th>Status</th><th>Actions</th>
-      </tr></thead>
-      <tbody>
-        ${d.quizzes.map(q => {
-          const url = siteOrigin() + '/8qt/q/' + q.slug;
-          const count = q.mode === 'fixed'
-            ? `${q.liveCount ?? (q.questionIds || []).length} live / ${(q.questionIds || []).length} total`
-            : `${q.size} per attempt (${q.drawStrategy})`;
-          return `
-          <tr>
-            <td>
-              <strong>${q.title}</strong>
-              ${q.isDefault ? ' <span class="badge badge-gold">default /8qt</span>' : ''}
-              <div class="att-sub">${count}</div>
-            </td>
-            <td><span class="badge ${q.mode === 'fixed' ? 'badge-blue' : 'badge-green'}">${q.mode}</span></td>
-            <td style="max-width:220px">
-              <div style="font-size:.72rem;word-break:break-all;color:var(--navy)">/8qt/q/${q.slug}</div>
-              <button class="btn btn-outline btn-sm" style="margin-top:4px" onclick="copyText('${url}', this)">Copy link</button>
-              <a class="btn btn-outline btn-sm" style="margin-top:4px" href="/8qt/q/${q.slug}" target="_blank">Open</a>
-            </td>
-            <td style="white-space:nowrap;font-size:.76rem">
-              <div style="display:flex;align-items:center;gap:5px;margin-bottom:4px">
-                <span style="width:76px;color:var(--dark)">Retake days</span>
-                <input type="number" min="0" value="${q.retakeDays || 0}" style="width:56px;padding:3px 5px;border:1px solid var(--border);border-radius:4px;font-size:.76rem"
-                  onchange="patchQuiz('${q._id}',{retakeDays:+this.value})">
-              </div>
-              <div style="display:flex;align-items:center;gap:5px;margin-bottom:4px">
-                <span style="width:76px;color:var(--dark)">Max attempts</span>
-                <input type="number" min="0" value="${q.maxAttemptsPerPerson || 0}" style="width:56px;padding:3px 5px;border:1px solid var(--border);border-radius:4px;font-size:.76rem"
-                  onchange="patchQuiz('${q._id}',{maxAttemptsPerPerson:+this.value})">
-              </div>
-              ${q.mode !== 'fixed' ? `
-              <label style="display:flex;align-items:center;gap:5px;cursor:pointer;color:var(--dark)">
-                <input type="checkbox" ${q.avoidRepeatQuestions !== false ? 'checked' : ''}
-                  onchange="patchQuiz('${q._id}',{avoidRepeatQuestions:this.checked})"> Fresh questions on retake
-              </label>` : ''}
-            </td>
-            <td><span class="badge ${q.active ? 'badge-green' : 'badge-gray'}">${q.active ? 'Active' : 'Off'}</span></td>
-            <td style="white-space:nowrap">
-              <button class="btn btn-outline btn-sm" onclick="previewQuiz('${q._id}')">&#128065; Preview</button>
-              ${!q.isDefault ? `<button class="btn btn-navy btn-sm" onclick="makeDefaultQuiz('${q._id}')">Make default</button>` : ''}
-              <button class="btn btn-outline btn-sm" onclick="patchQuiz('${q._id}',{active:${!q.active}},true)">${q.active ? 'Disable' : 'Enable'}</button>
-              <button class="btn btn-danger btn-sm" onclick="deleteQuiz('${q._id}','${q.title.replace(/'/g, "\\'")}')">Delete</button>
-            </td>
-          </tr>`;
-        }).join('')}
-      </tbody>
-    </table>`;
-}
-
-async function patchQuiz(id, data, reload = false) {
-  const r = await fetch(`/admin/8qt/quizzes/${id}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data)
-  });
-  const d = await r.json();
-  if (!d.ok) alert('Error: ' + (d.error || 'Could not update quiz'));
-  if (reload) loadQuizzes();
-}
-
-async function makeDefaultQuiz(id) {
-  if (!confirm('Serve this quiz to everyone visiting /8qt?')) return;
-  const r = await fetch(`/admin/8qt/quizzes/${id}/default`, { method: 'POST' });
-  const d = await r.json();
-  if (!d.ok) alert('Error: ' + (d.error || 'Could not set default'));
-  loadQuizzes();
-}
-
-async function deleteQuiz(id, title) {
-  if (!confirm(`Delete quiz "${title}"? The questions stay in the bank; only the quiz wrapper is removed.`)) return;
-  await fetch(`/admin/8qt/quizzes/${id}`, { method: 'DELETE' });
-  loadQuizzes();
-}
-
-// ── Quiz preview: dry-run of exactly what a participant would be served ──
-async function previewQuiz(id) {
-  openDrawer('Quiz Preview', '<p style="color:var(--dark)">Drawing questions…</p>');
-  try {
-    const r = await fetch(`/admin/8qt/quizzes/${id}/preview`);
-    const d = await r.json();
-    if (!d.ok) return openDrawer('Quiz Preview', `<p style="color:var(--red)">Error: ${d.error}</p>`);
-
-    const q = d.quiz;
-    const policy = [
-      q.retakeDays ? `retake after ${q.retakeDays}d` : 'retake anytime',
-      q.maxAttemptsPerPerson ? `max ${q.maxAttemptsPerPerson} attempts` : 'unlimited attempts',
-      q.mode !== 'fixed' && q.avoidRepeatQuestions ? 'fresh questions on retake' : null
-    ].filter(Boolean).join(' · ');
-
-    const html = `
-      <div style="margin-bottom:14px;font-size:.8rem;line-height:1.6">
-        <strong style="color:var(--navy);font-size:.95rem">${q.title}</strong>
-        ${q.isDefault ? ' <span class="badge badge-gold">default</span>' : ''}<br>
-        <span class="badge ${q.mode === 'fixed' ? 'badge-blue' : 'badge-green'}">${q.mode}</span>
-        <span style="color:var(--dark)">&nbsp;${d.count} question${d.count !== 1 ? 's' : ''} ·
-        ${q.mode === 'fixed' ? 'curated set (shuffled per attempt)' : `drawn fresh each attempt (${q.drawStrategy})`} · ${policy}</span>
-        ${q.mode !== 'fixed' ? `<br><button class="btn btn-outline btn-sm" style="margin-top:6px" onclick="previewQuiz('${q._id}')">&#8635; Redraw sample</button>` : ''}
-      </div>
-      ${d.questions.map(x => renderQuestionPreviewHtml(x, x.n)).join('')}
-      <p style="font-size:.72rem;color:var(--dark)">This is a dry run - no attempt was created and nothing was counted in analytics.</p>`;
-    openDrawer(`Quiz Preview - ${q.title}`, html);
-  } catch (e) {
-    openDrawer('Quiz Preview', '<p style="color:var(--red)">Network error.</p>');
-  }
 }
 
 // ════════════════════════════════════════════════════
@@ -1150,10 +815,6 @@ async function toggleArchetype(id, active) {
 // ════════════════════════════════════════════════════
 async function saveTemplate(id) {
   const data = {
-    certTitle:          document.getElementById('tCertTitle').value.trim() || 'Certificate of Assessment',
-    designation:        document.getElementById('tDesignation').value.trim() || 'CRIPFCnt Navigator',
-    assessmentName:     document.getElementById('tAssessment').value.trim() || 'CRIPFCnt 8 Quotients Assessment',
-    useArchetypeAsDesignation: document.getElementById('tUseArch').checked,
     signatoryName:     document.getElementById('tSigName').value,
     signatoryTitle:    document.getElementById('tSigTitle').value,
     standardPriceCents: +document.getElementById('tStdPrice').value,

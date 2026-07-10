@@ -116,6 +116,9 @@ const EightQTAttemptSchema = new mongoose.Schema({
 EightQTAttemptSchema.index({ participantCode: 1 });
 EightQTAttemptSchema.index({ certificateVerifyCode: 1 });
 EightQTAttemptSchema.index({ userId: 1, status: 1 });
+// Retake-policy lookups: previous attempts on a quiz by identity
+EightQTAttemptSchema.index({ quizId: 1, userId: 1, status: 1 });
+EightQTAttemptSchema.index({ quizId: 1, attemptIp: 1, status: 1 });
 
 export default mongoose.models.EightQTAttempt ||
   mongoose.model("EightQTAttempt", EightQTAttemptSchema);

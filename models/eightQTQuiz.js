@@ -32,6 +32,30 @@ const EightQTQuizSchema = new mongoose.Schema({
   shuffleQuestions: { type: Boolean, default: true },
   shuffleOptions:   { type: Boolean, default: true },
 
+  // ── retake / anti-repeat policy (per quiz) ──
+  // retakeDays: participant must wait this many days after finishing before
+  //             retaking THIS quiz. 0 = no cooldown.
+  retakeDays: { type: Number, default: 0, min: 0 },
+  // maxAttemptsPerPerson: hard cap on finished attempts per person for this
+  //             quiz (matched by userId / session code / IP). 0 = unlimited.
+  maxAttemptsPerPerson: { type: Number, default: 0, min: 0 },
+  // avoidRepeatQuestions (dynamic mode only): exclude questions this person
+  //             has already been served in previous attempts on this quiz,
+  //             so every retake draws fresh material until the bank is
+  //             exhausted (then it gracefully resets).
+  avoidRepeatQuestions: { type: Boolean, default: true },
+
+  // ── scheduling window (optional, both modes) ──
+  // Lets admins rotate quizzes: outside [opensAt, closesAt] the quiz refuses
+  // new attempts with a clear message. Null = always open on that side.
+  opensAt:  { type: Date, default: null },
+  closesAt: { type: Date, default: null },
+
+  // ── provenance ──
+  // When a quiz was created from a CSV upload, this links it to that upload's
+  // question batch (EightQTQuestion.importBatch) for preview/cleanup.
+  importBatch: { type: String, default: null, index: true },
+
   active:    { type: Boolean, default: true, index: true },
   isDefault: { type: Boolean, default: false, index: true },    // served at /8qt
 
@@ -49,4 +73,4 @@ EightQTQuizSchema.pre("validate", function (next) {
 });
 
 export default mongoose.models.EightQTQuiz ||
-  mongoose.model("EightQTQuiz", EightQTQuizSchema);
+  mongoose.model("EightQTQuiz", EightQTQuizSchema);s

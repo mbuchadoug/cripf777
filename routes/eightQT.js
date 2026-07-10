@@ -79,15 +79,41 @@ function computeQuotientMax(questions) {
   return max;
 }
 
-async function matchArchetype(quotientScores) {
+/**
+ * Pick the dominant (or, inverted, weakest) quotient with real tie-breaking.
+ * The old logic sorted by score only; with small quizzes (e.g. 8 questions,
+ * 1 per quotient) score ties are common and the stable sort meant ties ALWAYS
+ * resolved to the first config (CsQ) - so everyone got the same archetype.
+ * New order: highest % score -> highest raw points -> random among still-tied.
+ * The random pick happens ONCE at submit and is persisted on the attempt, so
+ * results stay stable afterwards while distribution varies across attempts.
+ */
+function pickByScore(quotientScores, highest = true) {
+  if (!quotientScores || !quotientScores.length) return null;
+  const dir = highest ? 1 : -1;
+  const bestScore = quotientScores.reduce((b, s) =>
+    (s.score * dir > b * dir ? s.score : b), quotientScores[0].score);
+  let tied = quotientScores.filter(s => s.score === bestScore);
+  if (tied.length > 1) {
+    const bestRaw = tied.reduce((b, s) =>
+      ((s.raw || 0) * dir > b * dir ? (s.raw || 0) : b), tied[0].raw || 0);
+    tied = tied.filter(s => (s.raw || 0) === bestRaw);
+  }
+  if (tied.length > 1) {
+    return tied[Math.floor(Math.random() * tied.length)].code;
+  }
+  return tied[0].code;
+}
+
+// dominantOverride: pass the dominant already computed at submit so the
+// archetype ALWAYS agrees with the attempt's stored dominantQuotient.
+async function matchArchetype(quotientScores, dominantOverride = null) {
   const archetypes = await EightQTArchetype.find({ active: true }).sort({ priority: -1 }).lean();
   const scoreMap = {};
   for (const s of quotientScores) scoreMap[s.code] = s.score;
 
-  // Participant's dominant quotient (highest score; stable sort = displayOrder tiebreak)
-  const dominant = quotientScores.length
-    ? [...quotientScores].sort((a, b) => b.score - a.score)[0].code
-    : null;
+  // Participant's dominant quotient (tie-broken; see pickByScore)
+  const dominant = dominantOverride || pickByScore(quotientScores, true);
 
   const passesConditions = (arch) => (arch.conditions || []).every(cond => {
     const val = scoreMap[cond.quotient] ?? 0;
@@ -122,8 +148,12 @@ async function matchArchetype(quotientScores) {
 
 function getDominantAndEdge(quotientScores) {
   if (!quotientScores.length) return { dominant: null, edge: null };
-  const sorted = [...quotientScores].sort((a, b) => b.score - a.score);
-  return { dominant: sorted[0].code, edge: sorted[sorted.length - 1].code };
+  const dominant = pickByScore(quotientScores, true);
+  // Edge = weakest quotient, excluding the dominant so a flat profile
+  // still yields two DIFFERENT quotients where possible.
+  const rest = quotientScores.filter(s => s.code !== dominant);
+  const edge = pickByScore(rest.length ? rest : quotientScores, false);
+  return { dominant, edge };
 }
 
 const router = Router();
@@ -203,9 +233,28 @@ async function resolveActiveQuiz(ref) {
  * Reshuffles every call, so each attempt is fresh.
  * Returns the ordered questions array (full docs).
  */
-async function buildQuizQuestionSet(quiz, configs) {
+// excludeIds (optional): Set of question _id strings this participant has
+// already been served on this quiz. Dynamic draws skip them first, so every
+// retake sees fresh material; if the remaining pool is too small the draw
+// tops up from previously-seen questions (graceful reset - never blocks).
+async function buildQuizQuestionSet(quiz, configs, excludeIds = null) {
   // No quiz configured anywhere -> original behaviour, untouched.
   if (!quiz) return await buildQuestionSet(configs);
+
+  const excl = excludeIds instanceof Set ? excludeIds : new Set();
+  const splitFresh = (pool) => {
+    if (!excl.size) return { fresh: pool, seen: [] };
+    const fresh = [], seen = [];
+    for (const q of pool) (excl.has(String(q._id)) ? seen : fresh).push(q);
+    return { fresh, seen };
+  };
+  // Take n from fresh first, then top up from seen
+  const drawFreshFirst = (pool, n) => {
+    const { fresh, seen } = splitFresh(pool);
+    const picked = shuffle(fresh).slice(0, n);
+    if (picked.length < n) picked.push(...shuffle(seen).slice(0, n - picked.length));
+    return picked;
+  };
 
   let selected = [];
 
@@ -229,7 +278,7 @@ async function buildQuizQuestionSet(quiz, configs) {
 
   if (quiz.drawStrategy === "random") {
     const pool = await EightQTQuestion.find({ quotient: { $in: activeCodes }, active: true }).lean();
-    selected = shuffle(pool).slice(0, size);
+    selected = drawFreshFirst(pool, size);
   } else {
     // "even": spread size across quotients; shuffle which quotients get the extras
     const codesShuffled = shuffle([...activeCodes]);
@@ -237,7 +286,7 @@ async function buildQuizQuestionSet(quiz, configs) {
     const buckets = await Promise.all(codesShuffled.map(async (code, i) => {
       if (counts[i] <= 0) return [];
       const pool = await EightQTQuestion.find({ quotient: code, active: true }).lean();
-      return shuffle(pool).slice(0, counts[i]);
+      return drawFreshFirst(pool, counts[i]);
     }));
     selected = buckets.flat();
   }
@@ -309,6 +358,19 @@ router.get("/q/:slug", async (req, res) => {
       active: true
     }).lean();
     if (!quiz) return res.status(404).render("8qt/error", { message: "Quiz not found." });
+
+    // Scheduling window: fail fast on the shared link with a clear message
+    const now = new Date();
+    if (quiz.opensAt && now < new Date(quiz.opensAt)) {
+      return res.status(403).render("8qt/error", {
+        message: `"${quiz.title}" opens on ${new Date(quiz.opensAt).toDateString()}. Please come back then.`
+      });
+    }
+    if (quiz.closesAt && now > new Date(quiz.closesAt)) {
+      return res.status(403).render("8qt/error", {
+        message: `"${quiz.title}" closed on ${new Date(quiz.closesAt).toDateString()} and is no longer accepting attempts.`
+      });
+    }
 
     // Remember the choice for POST /profile
     if (req.session) {
@@ -405,7 +467,65 @@ router.post("/profile", async (req, res) => {
     const quizRef = req.body.quiz || req.query.quiz || req.session?.eightQTQuizId || null;
     const quiz = await resolveActiveQuiz(quizRef);
 
-    const questions = await buildQuizQuestionSet(quiz, configs);
+    // ── Scheduling window: refuse new attempts outside [opensAt, closesAt] ──
+    if (quiz) {
+      const now = new Date();
+      if (quiz.opensAt && now < new Date(quiz.opensAt)) {
+        return res.status(403).json({
+          error: `"${quiz.title}" opens on ${new Date(quiz.opensAt).toDateString()}. Please come back then.`
+        });
+      }
+      if (quiz.closesAt && now > new Date(quiz.closesAt)) {
+        return res.status(403).json({
+          error: `"${quiz.title}" closed on ${new Date(quiz.closesAt).toDateString()} and is no longer accepting attempts.`
+        });
+      }
+    }
+
+    // ── Identity for retake policy: userId > session code > IP ──
+    // Anonymous participants get a NEW code per attempt, so the session code
+    // + IP are what tie their attempts together across retakes.
+    const identityOr = [];
+    if (req.user?._id) identityOr.push({ userId: req.user._id });
+    if (req.session?.eightQTParticipantCode) {
+      identityOr.push({ participantCode: req.session.eightQTParticipantCode });
+    }
+    if (req.ip) identityOr.push({ attemptIp: req.ip });
+
+    // ── Retake policy + fresh-question exclusion (per quiz) ──
+    let excludeIds = null;
+    if (quiz && identityOr.length) {
+      const prior = await EightQTAttempt.find({
+        quizId: quiz._id, status: "finished", $or: identityOr
+      }).select("finishedAt questionIds").sort({ finishedAt: -1 }).limit(20).lean();
+
+      if (prior.length) {
+        const maxA = Number(quiz.maxAttemptsPerPerson) || 0;
+        if (maxA > 0 && prior.length >= maxA) {
+          return res.status(429).json({
+            error: `You have reached the maximum of ${maxA} attempt${maxA > 1 ? "s" : ""} for "${quiz.title}".`
+          });
+        }
+        const coolDays = Number(quiz.retakeDays) || 0;
+        if (coolDays > 0 && prior[0].finishedAt) {
+          const nextAt = new Date(new Date(prior[0].finishedAt).getTime() + coolDays * 86400000);
+          if (nextAt > new Date()) {
+            return res.status(429).json({
+              error: `You recently completed "${quiz.title}". You can retake it from ${nextAt.toDateString()}.`
+            });
+          }
+        }
+        // Dynamic quizzes: avoid re-serving questions this person already saw
+        if (quiz.mode !== "fixed" && quiz.avoidRepeatQuestions !== false) {
+          excludeIds = new Set();
+          for (const p of prior) {
+            for (const qid of (p.questionIds || [])) excludeIds.add(String(qid));
+          }
+        }
+      }
+    }
+
+    const questions = await buildQuizQuestionSet(quiz, configs, excludeIds);
     if (!questions.length) {
       return res.status(400).json({ error: "No questions available yet. Please check back soon." });
     }
@@ -610,14 +730,15 @@ router.get("/submit/:attemptId", async (req, res) => {
     // Compute scores (uses this attempt's stored per-quotient max when present)
     const quotientScores = computeQuotientScores(attempt.answers, configs, attempt.quotientMax);
 
-    // Match archetype
-    const archetype = await matchArchetype(quotientScores);
+    // Dominant/edge first (tie-broken), then match archetype AGAINST that
+    // dominant so the archetype always fits this attempt's actual result.
     const { dominant, edge } = getDominantAndEdge(quotientScores);
+    const archetype = await matchArchetype(quotientScores, dominant);
 
     // Save results
     attempt.quotientScores = quotientScores;
     attempt.archetypeId = archetype?._id || null;
-    attempt.archetypeName = archetype?.name || "The Emerging Thinker";
+    attempt.archetypeName = archetype?.name || "CRIPFCnt Navigator";
     attempt.dominantQuotient = dominant;
     attempt.developmentEdge = edge;
     attempt.status = "finished";
@@ -796,8 +917,8 @@ router.get("/checkout/:attemptId", async (req, res) => {
         price_data: {
           currency: template?.currency || "usd",
           product_data: {
-            name: `CRIPFCnt 8 Quotients Certificate (${tier === "premium" ? "Premium" : "Standard"})`,
-            description: `Official ${attempt.archetypeName || ""} profile certificate with verification code`
+            name: `${template?.assessmentName || "CRIPFCnt 8 Quotients Assessment"} Certificate (${tier === "premium" ? "Premium" : "Standard"})`,
+            description: `Official ${template?.designation || "CRIPFCnt Navigator"} certificate with verification code`
           },
           unit_amount: priceCents
         },

@@ -170,6 +170,7 @@ router.get("/questions", async (req, res) => {
     const filter = {};
     if (req.query.quotient) filter.quotient = req.query.quotient;
     if (req.query.active !== undefined) filter.active = req.query.active === "true";
+    if (req.query.batch) filter.importBatch = req.query.batch;
 
     const page = Math.max(1, Number(req.query.page) || 1);
     const limit = 20;
@@ -260,9 +261,30 @@ router.post("/questions/import", writeOnly, upload.single("file"), async (req, r
     fs.unlink(req.file.path, () => {});
 
     // ── Optionally wrap this upload as a titled, attemptable quiz ──
+    // Three admin modes (mutually exclusive, all batched under `batch`):
+    //   1. Bank only        - no quizTitle, no appendQuizId
+    //   2. Create new quiz  - quizTitle set: fixed quiz from THIS upload's
+    //                         questions, shareable at /8qt/q/:slug,
+    //                         optionally made default
+    //   3. Append to quiz   - appendQuizId set: pushes this upload's
+    //                         questions onto an existing FIXED quiz
     let quiz = null;
-    const quizTitle = (req.body.quizTitle || "").trim();
-    if (quizTitle && inserted > 0) {
+    const quizTitle    = (req.body.quizTitle || "").trim();
+    const appendQuizId = (req.body.appendQuizId || "").trim();
+
+    if (appendQuizId && inserted > 0) {
+      try {
+        if (!mongoose.isValidObjectId(appendQuizId)) throw new Error("Invalid quiz id");
+        const target = await EightQTQuiz.findById(appendQuizId);
+        if (!target) throw new Error("Quiz to append to was not found");
+        if (target.mode !== "fixed") throw new Error("Can only append questions to a FIXED quiz");
+        target.questionIds.push(...insertedDocs.map(d => d._id));
+        await target.save();
+        quiz = target;
+      } catch (e) {
+        errors.push({ row: 0, error: `Append to quiz failed: ${e.message}` });
+      }
+    } else if (quizTitle && inserted > 0) {
       try {
         quiz = await EightQTQuiz.create({
           title: quizTitle,
@@ -273,6 +295,10 @@ router.post("/questions/import", writeOnly, upload.single("file"), async (req, r
           shuffleOptions: true,
           active: true,
           isDefault: req.body.quizDefault === "true",
+          // Per-quiz retake policy straight from the upload form
+          retakeDays:           Math.max(0, Number(req.body.retakeDays) || 0),
+          maxAttemptsPerPerson: Math.max(0, Number(req.body.maxAttempts) || 0),
+          importBatch: batch,
           createdBy: req.user._id
         });
         if (quiz.isDefault) {
@@ -295,6 +321,64 @@ router.post("/questions/import", writeOnly, upload.single("file"), async (req, r
   } catch (err) {
     fs.unlink(req.file.path, () => {});
     res.status(500).json({ error: err.message, errors });
+  }
+});
+
+// ── Upload batches: every CSV import is stamped with a UUID (importBatch) ──
+// GET /admin/8qt/questions/batches - list batches with counts + linked quiz
+// NOTE: registered before any /questions/:id route so "batches" never
+//       matches as an :id parameter.
+router.get("/questions/batches", async (req, res) => {
+  try {
+    const batches = await EightQTQuestion.aggregate([
+      { $match: { importBatch: { $ne: null } } },
+      { $group: {
+          _id: "$importBatch",
+          total:  { $sum: 1 },
+          active: { $sum: { $cond: ["$active", 1, 0] } },
+          firstAt: { $min: "$createdAt" },
+          quotients: { $addToSet: "$quotient" }
+        }
+      },
+      { $sort: { firstAt: -1 } },
+      { $limit: 50 }
+    ]);
+    // Attach the quiz created from each batch (if any)
+    const quizByBatch = {};
+    const quizzes = await EightQTQuiz.find({ importBatch: { $in: batches.map(b => b._id) } })
+      .select("title slug importBatch isDefault active").lean();
+    for (const q of quizzes) quizByBatch[q.importBatch] = q;
+    for (const b of batches) b.quiz = quizByBatch[b._id] || null;
+    res.json({ ok: true, batches });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Disable an entire upload batch in one click (soft delete)
+// DELETE /admin/8qt/questions/batch/:batch
+router.delete("/questions/batch/:batch", writeOnly, async (req, res) => {
+  try {
+    const r = await EightQTQuestion.updateMany(
+      { importBatch: req.params.batch },
+      { $set: { active: false } }
+    );
+    res.json({ ok: true, disabled: r.modifiedCount });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Single question with full options + scores (for admin preview drawer)
+// GET /admin/8qt/questions/:id
+router.get("/questions/:id", async (req, res) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ error: "bad id" });
+    const question = await EightQTQuestion.findById(req.params.id).lean();
+    if (!question) return res.status(404).json({ error: "Question not found" });
+    res.json({ ok: true, question });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -1079,6 +1163,92 @@ router.get("/quizzes/:id", async (req, res) => {
   }
 });
 
+// ── Quiz PREVIEW (dry run) ──────────────────────────────────────────
+// Simulates exactly what a participant would be served, WITHOUT creating
+// an attempt. Fixed quizzes return the curated set; dynamic quizzes run a
+// real draw (hit "Redraw" in the UI to see another sample). Options are
+// returned with their score maps and the best-scoring option flagged.
+// GET /admin/8qt/quizzes/:id/preview
+router.get("/quizzes/:id/preview", async (req, res) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ error: "bad id" });
+    const quiz = await EightQTQuiz.findById(req.params.id).lean();
+    if (!quiz) return res.status(404).json({ error: "Quiz not found" });
+
+    const shuffle = arr => {
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      return arr;
+    };
+
+    let questions = [];
+    if (quiz.mode === "fixed") {
+      const ids = (quiz.questionIds || []).map(String);
+      const docs = await EightQTQuestion.find({ _id: { $in: ids } }).lean();
+      const byId = {};
+      for (const d of docs) byId[String(d._id)] = d;
+      questions = ids.map(id => byId[id]).filter(Boolean); // admin order
+    } else {
+      const size = Math.max(1, Number(quiz.size) || 8);
+      const activeCodes = (quiz.quotients && quiz.quotients.length)
+        ? quiz.quotients
+        : (await EightQTConfig.find({ active: true }).lean()).map(c => c.code);
+      if (quiz.drawStrategy === "random") {
+        const pool = await EightQTQuestion.find({ quotient: { $in: activeCodes }, active: true }).lean();
+        questions = shuffle(pool).slice(0, size);
+      } else {
+        const codes = shuffle([...activeCodes]);
+        const base = Math.floor(size / codes.length);
+        let rem = size - base * codes.length;
+        const counts = codes.map(() => base + (rem-- > 0 ? 1 : 0));
+        const buckets = await Promise.all(codes.map(async (code, i) => {
+          if (counts[i] <= 0) return [];
+          const pool = await EightQTQuestion.find({ quotient: code, active: true }).lean();
+          return shuffle(pool).slice(0, counts[i]);
+        }));
+        questions = shuffle(buckets.flat());
+      }
+    }
+
+    // Flag the best option per question (highest points toward its primary quotient)
+    const preview = questions.map((q, n) => {
+      let bestIdx = 0, bestPts = -1;
+      (q.options || []).forEach((opt, oi) => {
+        const pts = Number(opt.scores?.[q.quotient] || 0);
+        if (pts > bestPts) { bestPts = pts; bestIdx = oi; }
+      });
+      return {
+        n: n + 1,
+        _id: q._id,
+        quotient: q.quotient,
+        isBlended: q.isBlended,
+        active: q.active,
+        text: q.text,
+        options: (q.options || []).map((opt, oi) => ({
+          text: opt.text, scores: opt.scores || {}, isBest: oi === bestIdx
+        }))
+      };
+    });
+
+    res.json({
+      ok: true,
+      quiz: {
+        _id: quiz._id, title: quiz.title, slug: quiz.slug, mode: quiz.mode,
+        size: quiz.size, drawStrategy: quiz.drawStrategy, isDefault: quiz.isDefault,
+        retakeDays: quiz.retakeDays || 0, maxAttemptsPerPerson: quiz.maxAttemptsPerPerson || 0,
+        avoidRepeatQuestions: quiz.avoidRepeatQuestions !== false,
+        opensAt: quiz.opensAt, closesAt: quiz.closesAt
+      },
+      count: preview.length,
+      questions: preview
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Create
 // POST /admin/8qt/quizzes  { title, mode, size, drawStrategy, quotients[], questionIds[], shuffleQuestions, shuffleOptions, active, isDefault }
 router.post("/quizzes", writeOnly, async (req, res) => {
@@ -1097,6 +1267,11 @@ router.post("/quizzes", writeOnly, async (req, res) => {
       questionIds: Array.isArray(body.questionIds) ? body.questionIds : [],
       shuffleQuestions: body.shuffleQuestions !== false && body.shuffleQuestions !== "false",
       shuffleOptions:   body.shuffleOptions   !== false && body.shuffleOptions   !== "false",
+      retakeDays:           Math.max(0, Number(body.retakeDays) || 0),
+      maxAttemptsPerPerson: Math.max(0, Number(body.maxAttemptsPerPerson) || 0),
+      avoidRepeatQuestions: body.avoidRepeatQuestions !== false && body.avoidRepeatQuestions !== "false",
+      opensAt:  body.opensAt  ? new Date(body.opensAt)  : null,
+      closesAt: body.closesAt ? new Date(body.closesAt) : null,
       active: body.active !== false && body.active !== "false",
       isDefault: !!body.isDefault && body.isDefault !== "false",
       createdBy: req.user._id
@@ -1120,10 +1295,15 @@ router.patch("/quizzes/:id", writeOnly, async (req, res) => {
   try {
     if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ error: "bad id" });
     const allowed = ["title", "description", "mode", "size", "drawStrategy",
-      "quotients", "questionIds", "shuffleQuestions", "shuffleOptions", "active", "isDefault", "slug"];
+      "quotients", "questionIds", "shuffleQuestions", "shuffleOptions", "active", "isDefault", "slug",
+      "retakeDays", "maxAttemptsPerPerson", "avoidRepeatQuestions", "opensAt", "closesAt"];
     const update = {};
     for (const k of allowed) if (req.body[k] !== undefined) update[k] = req.body[k];
     if (update.size !== undefined) update.size = Math.max(1, Number(update.size) || 8);
+    if (update.retakeDays !== undefined) update.retakeDays = Math.max(0, Number(update.retakeDays) || 0);
+    if (update.maxAttemptsPerPerson !== undefined) update.maxAttemptsPerPerson = Math.max(0, Number(update.maxAttemptsPerPerson) || 0);
+    if (update.opensAt  !== undefined) update.opensAt  = update.opensAt  ? new Date(update.opensAt)  : null;
+    if (update.closesAt !== undefined) update.closesAt = update.closesAt ? new Date(update.closesAt) : null;
     if (update.slug) update.slug = String(update.slug).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 
     const quiz = await EightQTQuiz.findByIdAndUpdate(req.params.id, { $set: update }, { new: true });

@@ -20,6 +20,17 @@ const EightQTCertTemplateSchema = new mongoose.Schema({
   height: { type: Number, default: 794 },
   signatoryName: { type: String, default: "Donald Mataranyika" },
   signatoryTitle: { type: String, default: "Founder, CRIPFCnt" },
+
+  // ── Standardised certificate wording ──
+  // The participant designation is FIXED ("CRIPFCnt Navigator") so scores can
+  // change on a retake without awkward identity relabelling. The radar chart
+  // and eight scores carry the individuality. The archetype stays on the
+  // results page; it is only printed on the cert if useArchetypeAsDesignation
+  // is flipped on (reserved for the full 64-question assessment later).
+  certTitle:      { type: String, default: "Certificate of Assessment" },
+  designation:    { type: String, default: "CRIPFCnt Navigator" },
+  assessmentName: { type: String, default: "CRIPFCnt 8 Quotients Assessment" },
+  useArchetypeAsDesignation: { type: Boolean, default: false },
   showAllScores: { type: Boolean, default: true },
   fieldPositions: [FieldPositionSchema],
   // Pricing tiers - pulled into Stripe checkout
