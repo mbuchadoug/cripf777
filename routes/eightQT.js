@@ -260,12 +260,38 @@ async function buildQuizQuestionSet(quiz, configs, excludeIds = null) {
 
   if (quiz.mode === "fixed") {
     const ids = (quiz.questionIds || []).map(String);
+    let pool = [];
     if (ids.length) {
       const docs = await EightQTQuestion.find({ _id: { $in: ids }, active: true }).lean();
       const byId = {};
       for (const d of docs) byId[String(d._id)] = d;
-      selected = ids.map(id => byId[id]).filter(Boolean); // preserve admin order
+      pool = ids.map(id => byId[id]).filter(Boolean); // preserve admin order
     }
+
+    // ── Per-attempt size cap (this is the "quiz keeps growing" fix) ──
+    // Appending an upload GROWS the quiz's pool, but each participant is only
+    // served `size` questions drawn from that pool (0 = serve everything,
+    // the old behaviour). The draw spreads evenly across the quotients present
+    // in the pool and, via drawFreshFirst, prefers questions this person has
+    // NOT seen before - so the quiz rotates through the pool across retakes.
+    const cap = Math.max(0, Number(quiz.size) || 0);
+    if (cap > 0 && pool.length > cap) {
+      const byQuotient = {};
+      for (const q of pool) (byQuotient[q.quotient] = byQuotient[q.quotient] || []).push(q);
+      const codes = shuffle(Object.keys(byQuotient));
+      const counts = distribute(cap, codes.length);
+      selected = codes.flatMap((code, i) => drawFreshFirst(byQuotient[code], counts[i]));
+      // Some quotient buckets may be smaller than their share - top up from
+      // the rest of the pool so we always serve exactly `cap` questions.
+      if (selected.length < cap) {
+        const chosen = new Set(selected.map(q => String(q._id)));
+        const rest = pool.filter(q => !chosen.has(String(q._id)));
+        selected.push(...drawFreshFirst(rest, cap - selected.length));
+      }
+    } else {
+      selected = pool;
+    }
+
     if (quiz.shuffleQuestions !== false) selected = shuffle([...selected]);
     return selected;
   }
@@ -315,7 +341,9 @@ router.get("/", async (req, res) => {
     const quiz = await resolveActiveQuiz(req.session?.eightQTQuizId || null);
     let totalQuestions;
     if (quiz && quiz.mode === "fixed") {
-      totalQuestions = (quiz.questionIds || []).length;
+      const poolLen = (quiz.questionIds || []).length;
+      const cap = Math.max(0, Number(quiz.size) || 0);
+      totalQuestions = cap > 0 ? Math.min(cap, poolLen) : poolLen;
     } else if (quiz) {
       totalQuestions = Math.max(1, Number(quiz.size) || 8);
     } else {
@@ -515,8 +543,13 @@ router.post("/profile", async (req, res) => {
             });
           }
         }
-        // Dynamic quizzes: avoid re-serving questions this person already saw
-        if (quiz.mode !== "fixed" && quiz.avoidRepeatQuestions !== false) {
+        // Avoid re-serving questions this person already saw. Applies to
+        // dynamic quizzes AND to fixed quizzes with a per-attempt size cap
+        // (where each attempt draws a subset of the pool and should rotate).
+        const fixedCap = Math.max(0, Number(quiz.size) || 0);
+        const isSubsetDraw = quiz.mode !== "fixed" ||
+          (fixedCap > 0 && (quiz.questionIds || []).length > fixedCap);
+        if (isSubsetDraw && quiz.avoidRepeatQuestions !== false) {
           excludeIds = new Set();
           for (const p of prior) {
             for (const qid of (p.questionIds || [])) excludeIds.add(String(qid));

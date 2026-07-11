@@ -347,10 +347,7 @@
           <select id="qBatchFilter" onchange="loadQuestions()" class="form-input" style="max-width:280px">
             <option value="">All Upload Batches</option>
           </select>
-          <span id="batchActions" style="display:none;white-space:nowrap">
-            <button class="btn btn-navy btn-sm" onclick="setBatchActive(true)">Activate Batch</button>
-            <button class="btn btn-danger btn-sm" onclick="setBatchActive(false)">Disable Batch</button>
-          </span>
+          <button class="btn btn-danger btn-sm" id="disableBatchBtn" style="display:none" onclick="disableBatch()">Disable Batch</button>
         </div>
         <div id="questionsContainer">
           <p style="color:var(--dark);font-size:.85rem;padding:8px 0">Loading questions…</p>
@@ -638,11 +635,6 @@
                style="width:100%;padding:8px;border:1px solid var(--border,#d1d5db);border-radius:6px;font-size:.85rem;">
         <div style="display:flex;gap:10px;margin-top:8px">
           <div style="flex:1">
-            <label style="font-size:.72rem;color:var(--dark);display:block;margin-bottom:3px">Questions per attempt (0 = serve all)</label>
-            <input type="number" id="importQuizSize" value="8" min="0"
-                   style="width:100%;padding:6px 8px;border:1px solid var(--border,#d1d5db);border-radius:6px;font-size:.82rem;">
-          </div>
-          <div style="flex:1">
             <label style="font-size:.72rem;color:var(--dark);display:block;margin-bottom:3px">Retake after (days, 0 = anytime)</label>
             <input type="number" id="importRetakeDays" value="0" min="0"
                    style="width:100%;padding:6px 8px;border:1px solid var(--border,#d1d5db);border-radius:6px;font-size:.82rem;">
@@ -653,7 +645,6 @@
                    style="width:100%;padding:6px 8px;border:1px solid var(--border,#d1d5db);border-radius:6px;font-size:.82rem;">
           </div>
         </div>
-        <p class="hint" style="margin-top:6px">With size 8: appending future uploads grows this quiz's POOL, but every participant still gets exactly 8 questions, rotated from the pool.</p>
         <label style="display:flex;align-items:center;gap:6px;font-size:.78rem;margin-top:8px;color:var(--dark)">
           <input type="checkbox" id="importQuizDefault"> Make it the default quiz served at /8qt
         </label>
@@ -755,9 +746,9 @@ async function loadQuestions(page = 1) {
   if (a) params.set('active', a);
   if (b) params.set('batch', b);
 
-  // Batch activate/disable buttons only appear when a specific batch is selected
-  const bActions = document.getElementById('batchActions');
-  if (bActions) bActions.style.display = b ? '' : 'none';
+  // Batch-disable button only appears when a specific batch is selected
+  const dbBtn = document.getElementById('disableBatchBtn');
+  if (dbBtn) dbBtn.style.display = b ? '' : 'none';
 
   const r = await fetch(`/admin/8qt/questions?${params}`);
   const d = await r.json();
@@ -816,20 +807,13 @@ async function loadBatches() {
   } catch (e) { /* non-fatal */ }
 }
 
-async function setBatchActive(active) {
+async function disableBatch() {
   const b = document.getElementById('qBatchFilter')?.value;
   if (!b) return;
-  const msg = active
-    ? 'Activate ALL questions in this upload batch? They become drawable by dynamic quizzes and count again in fixed quizzes that reference them.'
-    : 'Disable ALL questions in this upload batch? Fixed quizzes referencing them will shrink.';
-  if (!confirm(msg)) return;
-  const r = await fetch(`/admin/8qt/questions/batch/${b}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ active })
-  });
+  if (!confirm('Disable ALL questions in this upload batch? Fixed quizzes referencing them will shrink.')) return;
+  const r = await fetch(`/admin/8qt/questions/batch/${b}`, { method: 'DELETE' });
   const d = await r.json();
-  alert(d.ok ? `${active ? 'Activated' : 'Disabled'} ${d.modified} questions.` : ('Error: ' + d.error));
+  alert(d.ok ? `Disabled ${d.disabled} questions.` : ('Error: ' + d.error));
   loadQuestions();
   loadBatches();
 }
@@ -934,7 +918,6 @@ async function doImport() {
     if (!qTitle) { status.innerHTML = '<span style="color:var(--red)">Please enter a quiz title.</span>'; return; }
     fd.append('quizTitle', qTitle);
     fd.append('quizDefault', document.getElementById('importQuizDefault')?.checked ? 'true' : 'false');
-    fd.append('quizSize',    document.getElementById('importQuizSize')?.value || '0');
     fd.append('retakeDays',  document.getElementById('importRetakeDays')?.value || '0');
     fd.append('maxAttempts', document.getElementById('importMaxAttempts')?.value || '0');
   } else if (mode === 'append') {
@@ -995,13 +978,8 @@ async function loadQuizzes() {
       <tbody>
         ${d.quizzes.map(q => {
           const url = siteOrigin() + '/8qt/q/' + q.slug;
-          const poolLen = (q.questionIds || []).length;
-          const liveLen = q.liveCount ?? poolLen;
-          const cap = Math.max(0, Number(q.size) || 0);
           const count = q.mode === 'fixed'
-            ? (cap > 0 && liveLen > cap
-                ? `serves ${cap} per attempt · pool ${liveLen} live / ${poolLen} total`
-                : `serves all · ${liveLen} live / ${poolLen} total`)
+            ? `${q.liveCount ?? (q.questionIds || []).length} live / ${(q.questionIds || []).length} total`
             : `${q.size} per attempt (${q.drawStrategy})`;
           return `
           <tr>
@@ -1018,11 +996,6 @@ async function loadQuizzes() {
             </td>
             <td style="white-space:nowrap;font-size:.76rem">
               <div style="display:flex;align-items:center;gap:5px;margin-bottom:4px">
-                <span style="width:76px;color:var(--dark)" title="${q.mode === 'fixed' ? 'Questions served per attempt, drawn from the quiz pool. 0 = serve the whole pool.' : 'Questions drawn from the bank per attempt.'}">Per attempt${q.mode === 'fixed' ? ' (0=all)' : ''}</span>
-                <input type="number" min="0" value="${q.size ?? 0}" style="width:56px;padding:3px 5px;border:1px solid var(--border);border-radius:4px;font-size:.76rem"
-                  onchange="patchQuiz('${q._id}',{size:+this.value},true)">
-              </div>
-              <div style="display:flex;align-items:center;gap:5px;margin-bottom:4px">
                 <span style="width:76px;color:var(--dark)">Retake days</span>
                 <input type="number" min="0" value="${q.retakeDays || 0}" style="width:56px;padding:3px 5px;border:1px solid var(--border);border-radius:4px;font-size:.76rem"
                   onchange="patchQuiz('${q._id}',{retakeDays:+this.value})">
@@ -1032,10 +1005,11 @@ async function loadQuizzes() {
                 <input type="number" min="0" value="${q.maxAttemptsPerPerson || 0}" style="width:56px;padding:3px 5px;border:1px solid var(--border);border-radius:4px;font-size:.76rem"
                   onchange="patchQuiz('${q._id}',{maxAttemptsPerPerson:+this.value})">
               </div>
+              ${q.mode !== 'fixed' ? `
               <label style="display:flex;align-items:center;gap:5px;cursor:pointer;color:var(--dark)">
                 <input type="checkbox" ${q.avoidRepeatQuestions !== false ? 'checked' : ''}
                   onchange="patchQuiz('${q._id}',{avoidRepeatQuestions:this.checked})"> Fresh questions on retake
-              </label>
+              </label>` : ''}
             </td>
             <td><span class="badge ${q.active ? 'badge-green' : 'badge-gray'}">${q.active ? 'Active' : 'Off'}</span></td>
             <td style="white-space:nowrap">
@@ -1084,11 +1058,10 @@ async function previewQuiz(id) {
     if (!d.ok) return openDrawer('Quiz Preview', `<p style="color:var(--red)">Error: ${d.error}</p>`);
 
     const q = d.quiz;
-    const isRotatingFixed = q.mode === 'fixed' && d.poolSize && d.count < d.poolSize;
     const policy = [
       q.retakeDays ? `retake after ${q.retakeDays}d` : 'retake anytime',
       q.maxAttemptsPerPerson ? `max ${q.maxAttemptsPerPerson} attempts` : 'unlimited attempts',
-      (q.mode !== 'fixed' || isRotatingFixed) && q.avoidRepeatQuestions ? 'fresh questions on retake' : null
+      q.mode !== 'fixed' && q.avoidRepeatQuestions ? 'fresh questions on retake' : null
     ].filter(Boolean).join(' · ');
 
     const html = `
@@ -1097,12 +1070,8 @@ async function previewQuiz(id) {
         ${q.isDefault ? ' <span class="badge badge-gold">default</span>' : ''}<br>
         <span class="badge ${q.mode === 'fixed' ? 'badge-blue' : 'badge-green'}">${q.mode}</span>
         <span style="color:var(--dark)">&nbsp;${d.count} question${d.count !== 1 ? 's' : ''} ·
-        ${q.mode === 'fixed'
-          ? (isRotatingFixed
-              ? `rotating draw of ${d.count} from a pool of ${d.poolSize}`
-              : 'curated set (shuffled per attempt)')
-          : `drawn fresh each attempt (${q.drawStrategy})`} · ${policy}</span>
-        ${(q.mode !== 'fixed' || isRotatingFixed) ? `<br><button class="btn btn-outline btn-sm" style="margin-top:6px" onclick="previewQuiz('${q._id}')">&#8635; Redraw sample</button>` : ''}
+        ${q.mode === 'fixed' ? 'curated set (shuffled per attempt)' : `drawn fresh each attempt (${q.drawStrategy})`} · ${policy}</span>
+        ${q.mode !== 'fixed' ? `<br><button class="btn btn-outline btn-sm" style="margin-top:6px" onclick="previewQuiz('${q._id}')">&#8635; Redraw sample</button>` : ''}
       </div>
       ${d.questions.map(x => renderQuestionPreviewHtml(x, x.n)).join('')}
       <p style="font-size:.72rem;color:var(--dark)">This is a dry run - no attempt was created and nothing was counted in analytics.</p>`;

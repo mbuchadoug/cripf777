@@ -106,7 +106,20 @@ async function qrDataUrl(text, provided) {
  */
 export async function buildEightQTCertHtml({ attempt = {}, template = {}, archetype = null, verifyCode = null, qrDataUrl: qrProvided = null } = {}) {
   const recipient = esc(attempt.certificateName || attempt.participantName || "Recipient");
-  const archName  = esc(archetype?.name || attempt.archetypeName || "The Emerging Thinker");
+
+  // -- Standardised wording (admin-editable on EightQTCertTemplate) ----------
+  // Every participant is designated a "CRIPFCnt Navigator"; the radar chart and
+  // eight scores carry the individuality, so a retake can change the profile
+  // without awkward identity relabelling. The matched archetype stays on the
+  // results page and is only printed here when the admin flips
+  // template.useArchetypeAsDesignation (reserved for the 64-question tier).
+  const useArch        = !!(template?.useArchetypeAsDesignation && (archetype?.name || attempt.archetypeName));
+  const designation    = useArch
+    ? esc(archetype?.name || attempt.archetypeName)
+    : esc(template?.designation || "CRIPFCnt Navigator");
+  const certTitle      = esc(template?.certTitle || "Certificate of Assessment");
+  const assessmentName = esc(template?.assessmentName || "CRIPFCnt 8 Quotients Assessment");
+
   const orgName   = esc(attempt.certificateOrg || "CRIPFCnt");
   const issuedBy  = "CRIPFCnt";
   const dateSrc   = attempt.certificateIssuedAt || new Date();
@@ -280,8 +293,8 @@ body{font-family:${FF_SANS};color:var(--ink);background:#fff;}
     <div class="mfoot">
       <div class="mrow"><div class="mlabel">DOMINANT QUOTIENT</div>
         <div class="mval">${esc(domCode || "\u2014")}<small>${esc(domName)}</small></div></div>
-      <div class="mrow"><div class="mlabel">ARCHETYPE</div>
-        <div class="mval" style="font-size:13px">${archName}</div></div>
+      <div class="mrow"><div class="mlabel">DESIGNATION</div>
+        <div class="mval" style="font-size:13px">${designation}</div></div>
       <div class="qrbox">
         ${qrImg}
         <div class="qrtxt"><b>VERIFY AUTHENTICITY</b>Scan to validate this credential at<br>${esc(verifyPath)}</div>
@@ -291,13 +304,13 @@ body{font-family:${FF_SANS};color:var(--ink);background:#fff;}
   <div class="main">
     <div class="eyebrow">
       <div class="tag">OFFICIAL DOCUMENT</div>
-      <div class="doc"><div class="t">Certificate of Assessment</div><div class="d">${esc(dateLong.toUpperCase())}</div></div>
+      <div class="doc"><div class="t">${certTitle}</div><div class="d">${esc(dateLong.toUpperCase())}</div></div>
     </div>
     <div class="grule"></div>
     <div class="certify">THIS IS TO CERTIFY THAT</div>
     <div class="name">${recipient}</div>
-    <div class="arche">${archName}</div>
-    <div class="cite">has completed the <b>CRIPFCnt 8 Quotients Assessment</b> and has been mapped across the eight
+    <div class="arche">${designation}</div>
+    <div class="cite">has completed the <b>${assessmentName}</b> and has been mapped across the eight
       dimensions of Placement Intelligence &mdash; the framework developed by Donald Mataranyika for locating an
       individual&rsquo;s optimal contribution within an organisation.</div>
     <div class="framework"><div class="fl">ASSESSMENT INSTRUMENT</div>

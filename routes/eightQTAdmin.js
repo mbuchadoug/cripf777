@@ -298,6 +298,10 @@ router.post("/questions/import", writeOnly, upload.single("file"), async (req, r
           // Per-quiz retake policy straight from the upload form
           retakeDays:           Math.max(0, Number(req.body.retakeDays) || 0),
           maxAttemptsPerPerson: Math.max(0, Number(req.body.maxAttempts) || 0),
+          // Per-attempt size cap: each participant gets `size` questions drawn
+          // from this quiz's pool (0 = serve all). Future appended uploads
+          // grow the pool, NOT the test length.
+          size: Math.max(0, Number(req.body.quizSize) || 0),
           importBatch: batch,
           createdBy: req.user._id
         });
@@ -350,6 +354,21 @@ router.get("/questions/batches", async (req, res) => {
     for (const q of quizzes) quizByBatch[q.importBatch] = q;
     for (const b of batches) b.quiz = quizByBatch[b._id] || null;
     res.json({ ok: true, batches });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Enable or disable an entire upload batch in one click
+// PATCH /admin/8qt/questions/batch/:batch  { active: true|false }
+router.patch("/questions/batch/:batch", writeOnly, async (req, res) => {
+  try {
+    const active = req.body.active === true || req.body.active === "true";
+    const r = await EightQTQuestion.updateMany(
+      { importBatch: req.params.batch },
+      { $set: { active } }
+    );
+    res.json({ ok: true, active, modified: r.modifiedCount });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1184,12 +1203,35 @@ router.get("/quizzes/:id/preview", async (req, res) => {
     };
 
     let questions = [];
+    let poolSize = null;
     if (quiz.mode === "fixed") {
       const ids = (quiz.questionIds || []).map(String);
       const docs = await EightQTQuestion.find({ _id: { $in: ids } }).lean();
       const byId = {};
       for (const d of docs) byId[String(d._id)] = d;
-      questions = ids.map(id => byId[id]).filter(Boolean); // admin order
+      const pool = ids.map(id => byId[id]).filter(Boolean); // admin order
+      poolSize = pool.length;
+
+      // Mirror the participant-facing per-attempt cap: draw `size` from the
+      // pool with even quotient spread. Hit "Redraw" to see another sample.
+      const cap = Math.max(0, Number(quiz.size) || 0);
+      if (cap > 0 && pool.length > cap) {
+        const byQuotient = {};
+        for (const q of pool) (byQuotient[q.quotient] = byQuotient[q.quotient] || []).push(q);
+        const codes = shuffle(Object.keys(byQuotient));
+        const base = Math.floor(cap / codes.length);
+        let rem = cap - base * codes.length;
+        const counts = codes.map(() => base + (rem-- > 0 ? 1 : 0));
+        questions = codes.flatMap((code, i) => shuffle(byQuotient[code]).slice(0, counts[i]));
+        if (questions.length < cap) {
+          const chosen = new Set(questions.map(q => String(q._id)));
+          const rest = pool.filter(q => !chosen.has(String(q._id)));
+          questions.push(...shuffle(rest).slice(0, cap - questions.length));
+        }
+        questions = shuffle(questions);
+      } else {
+        questions = pool;
+      }
     } else {
       const size = Math.max(1, Number(quiz.size) || 8);
       const activeCodes = (quiz.quotients && quiz.quotients.length)
@@ -1242,6 +1284,7 @@ router.get("/quizzes/:id/preview", async (req, res) => {
         opensAt: quiz.opensAt, closesAt: quiz.closesAt
       },
       count: preview.length,
+      poolSize,
       questions: preview
     });
   } catch (err) {
@@ -1261,7 +1304,7 @@ router.post("/quizzes", writeOnly, async (req, res) => {
       title: String(body.title).trim(),
       description: body.description || "",
       mode: body.mode === "fixed" ? "fixed" : "dynamic",
-      size: Math.max(1, Number(body.size) || 8),
+      size: body.size !== undefined ? Math.max(0, Number(body.size) || 0) : 8, // 0 = serve all (fixed mode)
       drawStrategy: body.drawStrategy === "random" ? "random" : "even",
       quotients: Array.isArray(body.quotients) ? body.quotients : [],
       questionIds: Array.isArray(body.questionIds) ? body.questionIds : [],
@@ -1299,7 +1342,7 @@ router.patch("/quizzes/:id", writeOnly, async (req, res) => {
       "retakeDays", "maxAttemptsPerPerson", "avoidRepeatQuestions", "opensAt", "closesAt"];
     const update = {};
     for (const k of allowed) if (req.body[k] !== undefined) update[k] = req.body[k];
-    if (update.size !== undefined) update.size = Math.max(1, Number(update.size) || 8);
+    if (update.size !== undefined) update.size = Math.max(0, Number(update.size) || 0); // 0 = serve all (fixed mode)
     if (update.retakeDays !== undefined) update.retakeDays = Math.max(0, Number(update.retakeDays) || 0);
     if (update.maxAttemptsPerPerson !== undefined) update.maxAttemptsPerPerson = Math.max(0, Number(update.maxAttemptsPerPerson) || 0);
     if (update.opensAt  !== undefined) update.opensAt  = update.opensAt  ? new Date(update.opensAt)  : null;

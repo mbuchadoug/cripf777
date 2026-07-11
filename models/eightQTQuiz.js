@@ -19,8 +19,13 @@ const EightQTQuizSchema = new mongoose.Schema({
 
   mode: { type: String, enum: ["dynamic", "fixed"], default: "dynamic", index: true },
 
-  // ── dynamic mode ──
-  size: { type: Number, default: 8, min: 1 },                   // questions per attempt
+  // ── size: questions served PER ATTEMPT (both modes) ──
+  // dynamic: how many to draw from the bank (min 1 at serve time).
+  // fixed:   per-attempt cap on the quiz's question pool. When the pool is
+  //          bigger than size, each attempt draws `size` questions (even
+  //          spread across quotients, fresh-first for retakes) so appending
+  //          uploads GROWS the pool without growing the test. 0 = serve all.
+  size: { type: Number, default: 8, min: 0 },
   drawStrategy: { type: String, enum: ["even", "random"], default: "even" },
   // Optional: restrict a dynamic draw to these quotients (empty = all active)
   quotients: [{ type: String, enum: CODES }],
