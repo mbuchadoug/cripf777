@@ -364,7 +364,10 @@
     <div class="section">
       <div class="section-head">
         <span class="section-title">Quizzes</span>
-        <span style="font-size:.76rem;color:var(--dark)">Titled quizzes with shareable links · retake rules · preview before sharing</span>
+        <span style="display:flex;gap:8px;align-items:center">
+          <span style="font-size:.76rem;color:var(--dark)">Titled quizzes with shareable links · retake rules · preview before sharing</span>
+          <button class="btn btn-navy btn-sm" onclick="openNewQuizModal()">+ New Quiz</button>
+        </span>
       </div>
       <div class="section-body" style="padding:0">
         <div id="quizzesContainer"><p style="padding:20px;color:var(--dark)">Loading…</p></div>
@@ -673,6 +676,56 @@
   </div>
 </div>
 
+<!-- NEW QUIZ (no CSV needed) -->
+<div class="modal-overlay" id="newQuizModal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal('newQuizModal')">&#x2715;</button>
+    <div class="modal-title">Create Quiz</div>
+    <p style="font-size:.8rem;color:var(--dark);margin-bottom:14px;line-height:1.6">
+      A <strong>dynamic</strong> quiz draws fresh random questions from the whole question bank on every attempt -
+      this is the recommended setup for the main quotient quiz. A <strong>fixed</strong> quiz starts empty;
+      grow its pool by importing CSVs with "Append to an existing quiz".
+    </p>
+    <div class="form-group">
+      <label class="form-label">Quiz title *</label>
+      <input class="form-input" id="nqTitle" placeholder="e.g. 8 Quotients Assessment">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Mode</label>
+        <select class="form-input" id="nqMode">
+          <option value="dynamic" selected>Dynamic - random from question bank</option>
+          <option value="fixed">Fixed - curated pool (fill via CSV append)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Questions per attempt</label>
+        <input class="form-input" id="nqSize" type="number" value="8" min="0">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Draw strategy (dynamic)</label>
+        <select class="form-input" id="nqStrategy">
+          <option value="even" selected>Even - spread across the 8 quotients</option>
+          <option value="random">Random - anywhere in the bank</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Retake after (days, 0 = anytime)</label>
+        <input class="form-input" id="nqRetakeDays" type="number" value="0" min="0">
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label" style="display:flex;align-items:center;gap:8px;font-weight:400">
+        <input type="checkbox" id="nqDefault"> Make it the default quiz served at /8qt
+      </label>
+    </div>
+    <div id="newQuizStatus" style="margin-top:6px;font-size:.82rem"></div>
+    <button class="btn btn-navy" style="margin-top:10px;width:100%" id="newQuizBtn" onclick="createNewQuiz()">Create Quiz</button>
+  </div>
+</div>
+
 <!-- QUIZ REVIEW DRAWER -->
 <div class="drawer-overlay" id="drawerOverlay" onclick="closeDrawer()"></div>
 <div class="drawer" id="reviewDrawer">
@@ -968,6 +1021,47 @@ async function doImport() {
 // ════════════════════════════════════════════════════
 // QUIZZES TAB
 // ════════════════════════════════════════════════════
+function openNewQuizModal() {
+  document.getElementById('newQuizStatus').innerHTML = '';
+  showModal('newQuizModal');
+}
+
+async function createNewQuiz() {
+  const title = document.getElementById('nqTitle').value.trim();
+  const status = document.getElementById('newQuizStatus');
+  if (!title) { status.innerHTML = '<span style="color:var(--red)">Please enter a title.</span>'; return; }
+
+  const btn = document.getElementById('newQuizBtn');
+  btn.disabled = true; btn.textContent = 'Creating…';
+  try {
+    const r = await fetch('/admin/8qt/quizzes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title,
+        mode: document.getElementById('nqMode').value,
+        size: +document.getElementById('nqSize').value || 0,
+        drawStrategy: document.getElementById('nqStrategy').value,
+        retakeDays: +document.getElementById('nqRetakeDays').value || 0,
+        isDefault: document.getElementById('nqDefault').checked
+      })
+    });
+    const d = await r.json();
+    if (d.ok) {
+      const url = siteOrigin() + '/8qt/q/' + d.quiz.slug;
+      status.innerHTML = `<span style="color:var(--green)">&#10003; Quiz "<b>${d.quiz.title}</b>" created${d.quiz.isDefault ? ' (default)' : ''}.</span>
+        <br><a href="/8qt/q/${d.quiz.slug}" target="_blank">${url}</a>
+        <button class="btn btn-outline btn-sm" style="margin-left:6px" onclick="copyText('${url}', this)">Copy link</button>`;
+      loadQuizzes();
+    } else {
+      status.innerHTML = `<span style="color:var(--red)">Error: ${d.error || 'Could not create quiz'}</span>`;
+    }
+  } catch (e) {
+    status.innerHTML = '<span style="color:var(--red)">Network error.</span>';
+  }
+  btn.disabled = false; btn.textContent = 'Create Quiz';
+}
+
 async function loadQuizzes() {
   const r = await fetch('/admin/8qt/quizzes');
   const d = await r.json();
@@ -983,7 +1077,17 @@ async function loadQuizzes() {
   for (const b of (d.bankByQuotient || [])) bank[b._id] = b.count;
   const bankTotal = Object.values(bank).reduce((s, v) => s + v, 0);
 
-  c.innerHTML = `
+  // Warn when nothing is marked default: /8qt then uses the legacy
+  // per-quotient fallback whose length = sum of Quotient Config counts.
+  const hasDefault = d.quizzes.some(q => q.isDefault && q.active);
+  const defaultNotice = hasDefault ? '' : `
+    <div style="padding:10px 16px;font-size:.78rem;background:#fff7ed;border-bottom:1px solid #fcd34d;color:#92400e;line-height:1.55">
+      &#9888; <strong>No default quiz is set.</strong> Visitors to /8qt currently get the legacy per-quotient draw
+      (test length = the sum of the "Questions" column in Quotient Config). Create a dynamic quiz with
+      "Questions per attempt" = 8 and tick "Make it the default" to take control of the main quiz.
+    </div>`;
+
+  c.innerHTML = defaultNotice + `
     <div style="padding:10px 16px;font-size:.74rem;color:var(--dark);border-bottom:1px solid var(--border)">
       Active question bank: <strong>${bankTotal}</strong> questions
       (${Object.entries(bank).map(([k, v]) => `${k}:${v}`).join(' · ') || 'empty'})
@@ -998,17 +1102,21 @@ async function loadQuizzes() {
           const poolLen = (q.questionIds || []).length;
           const liveLen = q.liveCount ?? poolLen;
           const cap = Math.max(0, Number(q.size) || 0);
+          const servesAllBig = q.mode === 'fixed' && cap === 0 && liveLen > 8;
           const count = q.mode === 'fixed'
             ? (cap > 0 && liveLen > cap
                 ? `serves ${cap} per attempt · pool ${liveLen} live / ${poolLen} total`
                 : `serves all · ${liveLen} live / ${poolLen} total`)
             : `${q.size} per attempt (${q.drawStrategy})`;
+          const warn = servesAllBig
+            ? `<div style="color:var(--red,#dc2626);font-size:.72rem;font-weight:600;margin-top:2px">&#9888; Serving ALL ${liveLen} questions - set "Per attempt" (e.g. 8) to cap &amp; rotate</div>`
+            : '';
           return `
           <tr>
             <td>
               <strong>${q.title}</strong>
               ${q.isDefault ? ' <span class="badge badge-gold">default /8qt</span>' : ''}
-              <div class="att-sub">${count}</div>
+              <div class="att-sub">${count}</div>${warn}
             </td>
             <td><span class="badge ${q.mode === 'fixed' ? 'badge-blue' : 'badge-green'}">${q.mode}</span></td>
             <td style="max-width:220px">

@@ -300,8 +300,12 @@ router.post("/questions/import", writeOnly, upload.single("file"), async (req, r
           maxAttemptsPerPerson: Math.max(0, Number(req.body.maxAttempts) || 0),
           // Per-attempt size cap: each participant gets `size` questions drawn
           // from this quiz's pool (0 = serve all). Future appended uploads
-          // grow the pool, NOT the test length.
-          size: Math.max(0, Number(req.body.quizSize) || 0),
+          // grow the pool, NOT the test length. Defaults to 8 when the form
+          // does not send a value, so a stale admin panel can never create
+          // an accidental serve-everything quiz again.
+          size: req.body.quizSize !== undefined
+            ? Math.max(0, Number(req.body.quizSize) || 0)
+            : 8,
           importBatch: batch,
           createdBy: req.user._id
         });
