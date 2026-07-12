@@ -108,6 +108,7 @@ import adminRoutes from "./routes/admin.js"; // merged admin (includes import/up
 import supplierAdminRoutes from "./routes/supplierAdmin.js"; // ← ADD THIS
 import schoolAdminRoutes from "./routes/schoolAdmin.js";
 import schoolApplyRouter from "./routes/schoolApplyRouter.js"; // Public apply form - mounted at root
+import steuritApplyRouter from "./routes/steuritApplyRouter.js"; // St Eurit website apply form + fees calculator submissions (CORS)
 import User from "./models/user.js";
 import adminAttempts from "./routes/admin_attempts.js";
 // org-specific quiz API (if present)
@@ -524,6 +525,7 @@ app.use("/admin/8qt", eightQTAdminRoutes);
 // Static: serve generated certificates
 app.use("/certificates", express.static(path.join(__dirname, "public", "certificates")));
 app.use("/", schoolApplyRouter);          // Public apply form: /apply/school/:id
+app.use("/", steuritApplyRouter);         // St Eurit website: /apply/steurit/web, /apply/steurit/ping
 app.use("/zq-admin", schoolAdminRoutes);
 app.use("/zq-admin", supplierAdminRoutes);
 // API routes - keep LMS API on /api/lms so quiz UI fetches work
