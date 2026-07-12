@@ -184,6 +184,104 @@ router.get("/apply/steurit/ping", (req, res) => {
   res.json({ ok: true, service: "steurit-apply", time: new Date().toISOString() });
 });
 
+// ── SHARED SUBMISSION PIPELINE (used by JSON + form endpoints) ──────────────
+function extractData(b) {
+  const clean = (v, max = 400) => String(v ?? "").trim().slice(0, max);
+  return {
+    section:        clean(b.section, 20),
+    grade:          clean(b.grade, 60),
+    intakeYear:     clean(b.intakeYear, 8),
+    studentName:    clean(b.studentName, 120),
+    dob:            clean(b.dob, 20),
+    gender:         clean(b.gender, 20),
+    nationality:    clean(b.nationality, 60),
+    currentSchool:  clean(b.currentSchool, 160),
+    homeAddress:    clean(b.homeAddress, 240),
+    boardingOption: clean(b.boardingOption, 30),
+    parentName:     clean(b.parentName, 120),
+    relationship:   clean(b.relationship, 40),
+    parentPhone:    clean(b.parentPhone, 30),
+    parentEmail:    clean(b.parentEmail, 120),
+    extras:         clean(b.extras, 240),
+    medical:        clean(b.medical, 600),
+    notes:          clean(b.notes, 600),
+    feesEstimate:   clean(b.feesEstimate, 800),
+    submittedVia:   "steurit-website"
+  };
+}
+
+function runBackgroundNotifications(data, fullP) {
+  setImmediate(async () => {
+    try {
+      const school = await findSchool();
+      if (!school) return;
+      try {
+        const SC = (await import("../models/schoolContact.js")).default;
+        await SC.findOneAndUpdate(
+          { schoolId: school._id, phone: fullP },
+          {
+            $set: { lastSeen: new Date(), source: "apply", converted: true,
+                    appliedAt: new Date(), studentName: data.studentName,
+                    parentName: data.parentName, gradeInterest: data.grade,
+                    applicationData: data },
+            $inc: { viewCount: 1 },
+            $setOnInsert: { firstSeen: new Date(), phone: fullP, schoolId: school._id }
+          },
+          { upsert: true }
+        );
+      } catch (ce) { console.warn("[STEURIT APPLY CONTACT]", ce.message); }
+      try {
+        const { notifySchoolWebSubmission } =
+          await import("../services/schoolApplicationForm.js");
+        await notifySchoolWebSubmission({ school, data, applicantPhone: fullP });
+      } catch (ne) { console.warn("[STEURIT APPLY NOTIFY]", ne.message); }
+    } catch (bg) { console.warn("[STEURIT APPLY BG]", bg.message); }
+  });
+}
+
+// Where to send the parent's browser back to after a form-navigation submit.
+function siteBase(req) {
+  const cand = [req.headers.origin, req.headers.referer]
+    .filter(Boolean)
+    .map(u => { try { return new URL(u).origin; } catch { return ""; } });
+  for (const c of cand) if (ALLOWED_ORIGINS.includes(c)) return c;
+  return "https://www.steuritinternationalschool.org.zw";
+}
+
+// ── FORM-NAVIGATION ENDPOINT (CORS-immune) ──────────────────────────────────
+// The website submits a real HTML <form> POST here and the browser follows a
+// redirect back to apply.html. Full-page navigation is never subject to CORS,
+// so no proxy/CDN header behaviour on this server can break the flow.
+router.post("/apply/steurit/web-form", async (req, res) => {
+  const back = siteBase(req) + "/apply.html";
+  try {
+    const b = req.body || {};
+
+    // Honeypot — pretend success for bots.
+    if (String(b.website || "").trim() !== "") {
+      console.warn("[STEURIT APPLY] 🍯 honeypot tripped (form) - dropping");
+      return res.redirect(303, back + "?submitted=1#apply-form");
+    }
+
+    const data = extractData(b);
+    if (!data.studentName || !data.grade || !data.dob || !data.parentName || !data.parentPhone) {
+      return res.redirect(303, back + "?error=missing#apply-form");
+    }
+
+    const normP = data.parentPhone.replace(/\D/g, "");
+    const fullP = normP.startsWith("0") ? "263" + normP.slice(1) : normP;
+
+    await emailApplication(data, fullP);          // primary email — awaited
+    res.redirect(303, back + "?submitted=1&student=" +
+      encodeURIComponent(data.studentName.split(" ")[0] || "") + "#apply-form");
+
+    runBackgroundNotifications(data, fullP);      // the slow chain — background
+  } catch (err) {
+    console.error("[STEURIT APPLY FORM] ❌", err.message);
+    res.redirect(303, back + "?error=failed#apply-form");
+  }
+});
+
 router.post(
   "/apply/steurit/web",
   express.json({ limit: "200kb" }),
@@ -204,28 +302,7 @@ router.post(
       return res.json({ ok: true });
     }
 
-    const clean = (v, max = 400) => String(v ?? "").trim().slice(0, max);
-    const data = {
-      section:        clean(b.section, 20),
-      grade:          clean(b.grade, 60),
-      intakeYear:     clean(b.intakeYear, 8),
-      studentName:    clean(b.studentName, 120),
-      dob:            clean(b.dob, 20),
-      gender:         clean(b.gender, 20),
-      nationality:    clean(b.nationality, 60),
-      currentSchool:  clean(b.currentSchool, 160),
-      homeAddress:    clean(b.homeAddress, 240),
-      boardingOption: clean(b.boardingOption, 30),
-      parentName:     clean(b.parentName, 120),
-      relationship:   clean(b.relationship, 40),
-      parentPhone:    clean(b.parentPhone, 30),
-      parentEmail:    clean(b.parentEmail, 120),
-      extras:         clean(b.extras, 240),
-      medical:        clean(b.medical, 600),
-      notes:          clean(b.notes, 600),
-      feesEstimate:   clean(b.feesEstimate, 800),
-      submittedVia:   "steurit-website"
-    };
+    const data = extractData(b);
 
     if (!data.studentName || !data.grade || !data.dob || !data.parentName || !data.parentPhone) {
       return res.status(400).json({
@@ -249,39 +326,7 @@ router.post(
     res.json({ ok: true });
 
     // 3. Background: lead capture + notifications (best-effort, fully guarded)
-    setImmediate(async () => {
-      try {
-        const school = await findSchool();
-        if (!school) return;
-
-        try {
-          const SC = (await import("../models/schoolContact.js")).default;
-          await SC.findOneAndUpdate(
-            { schoolId: school._id, phone: fullP },
-            {
-              $set: { lastSeen: new Date(), source: "apply", converted: true,
-                      appliedAt: new Date(), studentName: data.studentName,
-                      parentName: data.parentName, gradeInterest: data.grade,
-                      applicationData: data },
-              $inc: { viewCount: 1 },
-              $setOnInsert: { firstSeen: new Date(), phone: fullP, schoolId: school._id }
-            },
-            { upsert: true }
-          );
-        } catch (ce) { console.warn("[STEURIT APPLY CONTACT]", ce.message); }
-
-        try {
-          // Reuse the existing web-submission notifier untouched:
-          // → school gets its usual email copy (notifyEmail/school.email),
-          // → school notifyPhone gets the WhatsApp alert,
-          // → parent gets the WhatsApp confirmation.
-          // info@zimqoute.co.zw already received the dedicated email above.
-          const { notifySchoolWebSubmission } =
-            await import("../services/schoolApplicationForm.js");
-          await notifySchoolWebSubmission({ school, data, applicantPhone: fullP });
-        } catch (ne) { console.warn("[STEURIT APPLY NOTIFY]", ne.message); }
-      } catch (bg) { console.warn("[STEURIT APPLY BG]", bg.message); }
-    });
+    runBackgroundNotifications(data, fullP);
   } catch (err) {
     console.error("[STEURIT APPLY] ❌", err.message);
     res.status(500).json({ ok: false, error: "Submission failed. Please try again or contact the school on WhatsApp." });
