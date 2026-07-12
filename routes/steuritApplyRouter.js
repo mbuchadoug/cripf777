@@ -50,6 +50,9 @@ function esc(s) {
 
 function applyCors(req, res) {
   const origin = req.headers.origin || "";
+  if (origin && !ALLOWED_ORIGINS.includes(origin)) {
+    console.warn(`[STEURIT APPLY] ⚠ origin not in allowlist: "${origin}"`);
+  }
   if (ALLOWED_ORIGINS.includes(origin)) {
     res.setHeader("Access-Control-Allow-Origin", origin);
     res.setHeader("Vary", "Origin");
@@ -238,38 +241,47 @@ router.post(
     // 1. Email to info@zimqoute.co.zw (the primary requirement — awaited)
     await emailApplication(data, fullP);
 
-    // 2. Lead capture + WhatsApp notify via existing services (best-effort)
-    const school = await findSchool();
-    if (school) {
-      try {
-        const SC = (await import("../models/schoolContact.js")).default;
-        await SC.findOneAndUpdate(
-          { schoolId: school._id, phone: fullP },
-          {
-            $set: { lastSeen: new Date(), source: "apply", converted: true,
-                    appliedAt: new Date(), studentName: data.studentName,
-                    parentName: data.parentName, gradeInterest: data.grade,
-                    applicationData: data },
-            $inc: { viewCount: 1 },
-            $setOnInsert: { firstSeen: new Date(), phone: fullP, schoolId: school._id }
-          },
-          { upsert: true }
-        );
-      } catch (ce) { console.warn("[STEURIT APPLY CONTACT]", ce.message); }
-
-      try {
-        // Reuse the existing web-submission notifier untouched:
-        // → school gets its usual email copy (notifyEmail/school.email),
-        // → school notifyPhone gets the WhatsApp alert,
-        // → parent gets the WhatsApp confirmation.
-        // info@zimqoute.co.zw already received the dedicated email above.
-        const { notifySchoolWebSubmission } =
-          await import("../services/schoolApplicationForm.js");
-        await notifySchoolWebSubmission({ school, data, applicantPhone: fullP });
-      } catch (ne) { console.warn("[STEURIT APPLY NOTIFY]", ne.message); }
-    }
-
+    // 2. Respond to the browser NOW. The remaining work (lead capture,
+    //    school email copy, WhatsApp alerts) runs in the background — a
+    //    second SMTP send plus Meta Graph API calls can take 15-30s, and
+    //    keeping the HTTP response open that long makes proxies/browsers
+    //    give up and report a network error even when everything succeeds.
     res.json({ ok: true });
+
+    // 3. Background: lead capture + notifications (best-effort, fully guarded)
+    setImmediate(async () => {
+      try {
+        const school = await findSchool();
+        if (!school) return;
+
+        try {
+          const SC = (await import("../models/schoolContact.js")).default;
+          await SC.findOneAndUpdate(
+            { schoolId: school._id, phone: fullP },
+            {
+              $set: { lastSeen: new Date(), source: "apply", converted: true,
+                      appliedAt: new Date(), studentName: data.studentName,
+                      parentName: data.parentName, gradeInterest: data.grade,
+                      applicationData: data },
+              $inc: { viewCount: 1 },
+              $setOnInsert: { firstSeen: new Date(), phone: fullP, schoolId: school._id }
+            },
+            { upsert: true }
+          );
+        } catch (ce) { console.warn("[STEURIT APPLY CONTACT]", ce.message); }
+
+        try {
+          // Reuse the existing web-submission notifier untouched:
+          // → school gets its usual email copy (notifyEmail/school.email),
+          // → school notifyPhone gets the WhatsApp alert,
+          // → parent gets the WhatsApp confirmation.
+          // info@zimqoute.co.zw already received the dedicated email above.
+          const { notifySchoolWebSubmission } =
+            await import("../services/schoolApplicationForm.js");
+          await notifySchoolWebSubmission({ school, data, applicantPhone: fullP });
+        } catch (ne) { console.warn("[STEURIT APPLY NOTIFY]", ne.message); }
+      } catch (bg) { console.warn("[STEURIT APPLY BG]", bg.message); }
+    });
   } catch (err) {
     console.error("[STEURIT APPLY] ❌", err.message);
     res.status(500).json({ ok: false, error: "Submission failed. Please try again or contact the school on WhatsApp." });
