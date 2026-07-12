@@ -164,6 +164,13 @@ async function findSchool() {
 }
 
 // ── ROUTES ───────────────────────────────────────────────────────────────────
+// CORS on every /apply/steurit request (incl. errors), before anything else.
+router.use("/apply/steurit", (req, res, next) => {
+  applyCors(req, res);
+  if (req.method === "OPTIONS") return res.sendStatus(204);
+  next();
+});
+
 router.options("/apply/steurit/web", (req, res) => {
   applyCors(req, res);
   res.sendStatus(204);
@@ -174,10 +181,19 @@ router.get("/apply/steurit/ping", (req, res) => {
   res.json({ ok: true, service: "steurit-apply", time: new Date().toISOString() });
 });
 
-router.post("/apply/steurit/web", express.json({ limit: "200kb" }), async (req, res) => {
+router.post(
+  "/apply/steurit/web",
+  express.json({ limit: "200kb" }),
+  express.text({ type: "text/plain", limit: "200kb" }),
+  async (req, res) => {
   applyCors(req, res);
   try {
-    const b = req.body || {};
+    // Body may arrive as parsed JSON (application/json) or as a raw string
+    // (text/plain - sent by the website to avoid CORS preflight entirely).
+    let b = req.body || {};
+    if (typeof b === "string") {
+      try { b = JSON.parse(b); } catch { b = {}; }
+    }
 
     // Honeypot — bots fill the hidden "website" field; pretend success.
     if (String(b.website || "").trim() !== "") {
@@ -258,6 +274,7 @@ router.post("/apply/steurit/web", express.json({ limit: "200kb" }), async (req, 
     console.error("[STEURIT APPLY] ❌", err.message);
     res.status(500).json({ ok: false, error: "Submission failed. Please try again or contact the school on WhatsApp." });
   }
-});
+  }
+);
 
 export default router;
