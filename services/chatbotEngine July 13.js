@@ -174,8 +174,7 @@ import {
   buildSavePreviewText,
   parsePriceUpdates,
   buildPriceUpdatePreviewText,
-  formatServiceRate,
-  buildFastAddHelpText
+  formatServiceRate
 } from "./invoiceHelpers.js";
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -10100,8 +10099,13 @@ if (a === "expense_generate_receipt") {
       : "Invoice";
     return sendButtons(from, {
       text:
-        `✍️ *Add items - ${_docLabel}*\n\n` +
-        buildFastAddHelpText(biz),
+        `✍️ *Custom items - ${_docLabel}*\n\n` +
+        `Type one or more items separated by commas:\n\n` +
+        `• _labour charge_\n` +
+        `• _materials, transport fee, call-out charge_\n` +
+        `• _geyser installation, plumbing supplies, consultation_\n\n` +
+        `Quantities and prices come in the next step.\n` +
+        `_Type *cancel* at any time to stop._`,
       buttons: [{ id: "inv_cancel", title: "❌ Cancel" }]
     });
   }

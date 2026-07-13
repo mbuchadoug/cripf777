@@ -23,7 +23,9 @@ import {
   buildDocPreviewText,
   sendDocPreview,
   preserveSessionCore,
-  sendAddItemPrompt
+  sendAddItemPrompt,
+  parseFastItemLines,
+  buildFastAddHelpText
 } from "./invoiceHelpers.js";
 
 
@@ -305,6 +307,122 @@ function getEffectiveBranchId(caller, sessionData) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FAST ITEM ENTRY (simplified invoice / quotation / receipt item capture)
+// Lets a user type "name x qty @ price", one item per line, and add many items
+// in a single message. Unpriced lines fall through to the existing bulk
+// price-entry step; fully priced messages go straight to the document preview.
+// ─────────────────────────────────────────────────────────────────────────────
+function escapeRegExp(s) {
+  return String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// True when the message clearly uses the fast one-line format and should skip
+// the older name → confirm → qty → price sequence. Plain comma name lists
+// (no "@", no spaced qty, no line breaks) still use the legacy path.
+function looksStructuredItemInput(raw) {
+  const s = String(raw || "");
+  const hasPrice = /@\s*\d/.test(s);
+  const hasLines = /[\n;]/.test(s);
+  const hasQty   = /(?:^|\s)[x×*]\s*\d/i.test(s);
+  const hasComma = /,/.test(s);
+  return hasPrice || hasLines || (hasQty && !hasComma);
+}
+
+// Parse fast lines, back-fill prices from the saved catalogue where possible,
+// push the items, then route to bulk price entry (if anything is unpriced) or
+// straight to the document preview.
+async function handleFastItemEntry({ from, biz, caller, trimmed }) {
+  const { items: parsed, errors } = parseFastItemLines(trimmed);
+
+  if (!parsed.length) {
+    return sendButtons(from, {
+      text: "❌ *Couldn\u2019t read any items.*\n\n" + buildFastAddHelpText(biz),
+      buttons: [{ id: "inv_cancel", title: "❌ Cancel" }]
+    });
+  }
+
+  // Best-effort: fill in prices for unpriced lines that match a saved product.
+  let finalItems = parsed;
+  try {
+    const needNames = parsed.filter(p => !p.hadPrice).map(p => p.item.trim());
+    if (needNames.length) {
+      const effectiveBranchId = getEffectiveBranchId(caller, biz.sessionData);
+      const rx = needNames.map(n => new RegExp("^" + escapeRegExp(n) + "$", "i"));
+      const matches = await Product.find({
+        businessId: biz._id,
+        isActive:   true,
+        name:       { $in: rx },
+        $or: [
+          { branchId: effectiveBranchId },
+          { branchId: null },
+          { branchId: { $exists: false } }
+        ]
+      }).lean();
+
+      const byName = {};
+      for (const m of matches) {
+        const k = String(m.name || "").trim().toLowerCase();
+        if (!(k in byName) && Number(m.unitPrice) > 0) byName[k] = m;
+      }
+
+      finalItems = parsed.map(p => {
+        if (p.hadPrice) return p;
+        const m = byName[p.item.trim().toLowerCase()];
+        if (!m) return p;
+        return {
+          ...p,
+          unit:      Number(m.unitPrice) || 0,
+          rateUnit:  p.rateUnit || m.rateUnit || null,
+          isService: p.isService || !!m.isService,
+          hadPrice:  true,
+          source:    "catalogue"
+        };
+      });
+    }
+  } catch (_e) {
+    // Catalogue back-fill is optional; ignore lookup failures.
+  }
+
+  const newItems = finalItems.map(p => ({
+    item:      p.item,
+    qty:       p.qty,
+    unit:      p.unit,
+    rateUnit:  p.rateUnit || null,
+    isService: !!p.isService,
+    source:    p.source || "custom"
+  }));
+
+  biz.sessionData.items              = [...(biz.sessionData.items || []), ...newItems];
+  biz.sessionData.pendingCustomNames = [];
+  biz.sessionData.pendingCustomItems = [];
+  biz.sessionData.itemMode           = null;
+  biz.sessionData.lastItem           = null;
+  biz.sessionData.expectingQty       = false;
+
+  const errorNote       = errors.length ? `⚠️ Skipped: ${errors.join(" · ")}` : "";
+  const unpricedIndexes = findUnpricedIndexes(biz.sessionData.items);
+
+  if (unpricedIndexes.length) {
+    biz.sessionData.unpricedIndexes = unpricedIndexes;
+    biz.sessionState = "creating_invoice_enter_catalogue_prices";
+    await saveBizSafe(biz);
+
+    const promptText = buildUnpricedPromptText(biz.sessionData.items, unpricedIndexes, biz.currency || "USD");
+    return sendButtons(from, {
+      text:
+        (errorNote ? errorNote + "\n\n" : "") +
+        `✅ *${newItems.length} item${newItems.length === 1 ? "" : "s"} added.*\n\n` +
+        promptText,
+      buttons: [{ id: "inv_cancel", title: "❌ Cancel" }]
+    });
+  }
+
+  biz.sessionState = "creating_invoice_confirm";
+  await saveBizSafe(biz);
+  return sendDocPreview(from, biz, errorNote);
+}
 
 export async function continueTwilioFlow({ from, text }) {
   const phone = from.replace(/\D+/g, "");
@@ -1997,6 +2115,16 @@ if (state === "creating_invoice_enter_catalogue_prices") {
 
 
   if (state === "creating_invoice_add_items") {
+    // FAST PATH: "name x qty @ price" typed directly → add instantly.
+    if (
+      looksStructuredItemInput(trimmed) &&
+      biz.sessionData.itemMode !== "custom_qty" &&
+      biz.sessionData.itemMode !== "custom_price" &&
+      !biz.sessionData.expectingQty
+    ) {
+      return handleFastItemEntry({ from, biz, caller, trimmed });
+    }
+
     // Show mode-choice if nothing is in flight
     if (biz.sessionData.itemMode === null && !biz.sessionData.lastItem && !biz.sessionData.expectingQty) {
       biz.sessionData.itemMode = "choose";
@@ -2179,6 +2307,11 @@ if (state === "creating_invoice_enter_catalogue_prices") {
      User types comma-separated item names, then sees a preview.
   =========================== */
   if (state === "creating_invoice_custom_names") {
+    // ── FAST PATH: "name x qty @ price", one item per line ───────────────────
+    if (looksStructuredItemInput(trimmed)) {
+      return handleFastItemEntry({ from, biz, caller, trimmed });
+    }
+
     const rawNames = parseCommaNames(trimmed);
     if (!rawNames.length) {
       return sendButtons(from, {

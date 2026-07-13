@@ -363,3 +363,91 @@ export function buildPriceUpdatePreviewText(updates, currency, isService = false
     `${lines}`
   );
 }
+
+
+// ─── 14. Fast one-line item parser (name x qty @ price) ───────────────────────
+/**
+ * Parses fast "one item per line" entry used by the simplified invoice /
+ * quotation / receipt item flow.
+ *
+ * Grammar (per item):
+ *     NAME  [x QTY]  [@ PRICE[/rateUnit]]
+ *
+ *   • Items are separated by NEW LINES or ";". If neither is present, a single
+ *     line is split on commas so "a x1 @2, b x3 @4" still works.
+ *   • "x" | "×" | "*" introduces a quantity (spaced, so hardware names like
+ *     "2x4" are never mistaken for a quantity).
+ *   • "@" introduces a unit price; an optional "/unit" makes it a service rate
+ *     (e.g. "plumbing @ 50/hour x 3").
+ *   • Missing qty → 1.  Missing price → left unpriced (unit = 0, hadPrice=false).
+ *
+ * Returns { items, errors }. Each item:
+ *   { item, qty, unit, rateUnit, isService, hadPrice, source:"custom" }
+ */
+export function parseFastItemLines(text) {
+  const raw   = String(text || "");
+  const parts = /[\n;]/.test(raw) ? raw.split(/[\n;]+/) : raw.split(",");
+
+  const items  = [];
+  const errors = [];
+
+  for (const part of parts) {
+    const segRaw = part.trim();
+    if (!segRaw) continue;
+
+    let work     = " " + segRaw + " ";   // pad so boundary regexes stay simple
+    let unit     = 0;
+    let rateUnit = null;
+    let hadPrice = false;
+
+    // 1) Price:  "@ 50"  |  "@50"  |  "@ 50/hour"
+    const priceMatch = work.match(/@\s*(\d+(?:\.\d+)?)\s*(?:\/\s*([a-zA-Z]+))?/);
+    if (priceMatch) {
+      unit     = parseFloat(priceMatch[1]);
+      rateUnit = priceMatch[2] ? priceMatch[2].toLowerCase() : null;
+      hadPrice = !isNaN(unit) && unit >= 0;
+      work     = work.replace(priceMatch[0], " ");
+    }
+
+    // 2) Quantity: spaced x/×/* + number, taken as the LAST remaining token
+    let qty = 1;
+    const qtyMatch = work.match(/(?:^|\s)[x×*]\s*(\d+(?:\.\d+)?)\s*$/i);
+    if (qtyMatch) {
+      const q = parseFloat(qtyMatch[1]);
+      if (!isNaN(q) && q > 0) { qty = q; work = work.replace(qtyMatch[0], " "); }
+    }
+
+    // 3) Name = whatever is left
+    const name = work.replace(/\s+/g, " ").trim().replace(/[,;]+$/, "").trim();
+    if (name.length < 2) { errors.push(`"${segRaw}" - name too short`); continue; }
+
+    items.push({
+      item:      name,
+      qty,
+      unit:      hadPrice ? unit : 0,
+      rateUnit:  rateUnit || null,
+      isService: !!rateUnit,
+      hadPrice,
+      source:    "custom"
+    });
+  }
+
+  return { items, errors };
+}
+
+// ─── 15. Fast-add help / instruction text ─────────────────────────────────────
+export function buildFastAddHelpText(biz) {
+  const cur = (biz && biz.currency) || "USD";
+  return (
+    `Type each item on its own line as *name x qty @ price*:\n\n` +
+    `cement x 100 @ 12\n` +
+    `river sand x 50 @ 8\n` +
+    `labour @ 200\n` +
+    `transport\n\n` +
+    `• *x* = quantity   ·   *@* = unit price\n` +
+    `• No *@ price*? We\u2019ll ask for it right after.\n` +
+    `• No *x qty*? It defaults to 1.\n` +
+    `• Service rate: *plumbing @ 50/hour x 3*\n\n` +
+    `_Amounts are in ${cur}. Type *cancel* to stop._`
+  );
+}
