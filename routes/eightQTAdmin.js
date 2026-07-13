@@ -173,8 +173,11 @@ router.get("/questions", async (req, res) => {
     if (req.query.batch) filter.importBatch = req.query.batch;
     // Language filter: "en"/"sn"/"all". Absent -> "en" so the default admin
     // view shows the original English bank unchanged. "all" shows everything.
-    if (req.query.lang !== "all") {
-      filter.lang = (req.query.lang === "sn") ? "sn" : "en";
+    // For English, also include pre-partition questions that have no lang field.
+    if (req.query.lang === "sn") {
+      filter.lang = "sn";
+    } else if (req.query.lang !== "all") {
+      filter.$or = [{ lang: "en" }, { lang: { $exists: false } }, { lang: null }];
     }
 
     const page = Math.max(1, Number(req.query.page) || 1);
@@ -1275,12 +1278,15 @@ router.get("/quizzes/:id/preview", async (req, res) => {
       }
     } else {
       const size = Math.max(1, Number(quiz.size) || 8);
-      const qLang = (quiz.lang === "sn") ? "sn" : "en";
+      // Match pre-partition English questions (no lang field) as well as "en".
+      const lq = (quiz.lang === "sn")
+        ? { lang: "sn" }
+        : { $or: [{ lang: "en" }, { lang: { $exists: false } }, { lang: null }] };
       const activeCodes = (quiz.quotients && quiz.quotients.length)
         ? quiz.quotients
         : (await EightQTConfig.find({ active: true }).lean()).map(c => c.code);
       if (quiz.drawStrategy === "random") {
-        const pool = await EightQTQuestion.find({ quotient: { $in: activeCodes }, active: true, lang: qLang }).lean();
+        const pool = await EightQTQuestion.find({ quotient: { $in: activeCodes }, active: true, ...lq }).lean();
         questions = shuffle(pool).slice(0, size);
       } else {
         const codes = shuffle([...activeCodes]);
@@ -1289,7 +1295,7 @@ router.get("/quizzes/:id/preview", async (req, res) => {
         const counts = codes.map(() => base + (rem-- > 0 ? 1 : 0));
         const buckets = await Promise.all(codes.map(async (code, i) => {
           if (counts[i] <= 0) return [];
-          const pool = await EightQTQuestion.find({ quotient: code, active: true, lang: qLang }).lean();
+          const pool = await EightQTQuestion.find({ quotient: code, active: true, ...lq }).lean();
           return shuffle(pool).slice(0, counts[i]);
         }));
         questions = shuffle(buckets.flat());

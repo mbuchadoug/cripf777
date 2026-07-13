@@ -192,14 +192,28 @@ function normLang(l) {
 }
 
 /** Build the full question set based on active quotient configs (lang-scoped) */
+/**
+ * Mongo filter fragment for a language. Critically, questions/quizzes created
+ * BEFORE the language partition have NO `lang` field at all (not "en"). A plain
+ * { lang: "en" } query would miss them and serve "no questions". So for English
+ * we also match documents where lang is missing or null. Shona docs always have
+ * lang:"sn" set explicitly, so its match stays exact.
+ */
+function langQuery(lang) {
+  return normLang(lang) === "sn"
+    ? { lang: "sn" }
+    : { $or: [{ lang: "en" }, { lang: { $exists: false } }, { lang: null }] };
+}
+
 async function buildQuestionSet(configs, lang = "en") {
   const allQuestions = [];
+  const lq = langQuery(lang);
   for (const cfg of configs) {
     if (!cfg.active) continue;
     const questions = await EightQTQuestion.find({
       quotient: cfg.code,
       active: true,
-      lang
+      ...lq
     }).lean();
 
     // Shuffle and pick questionCount
@@ -315,9 +329,10 @@ async function buildQuizQuestionSet(quiz, configs, excludeIds = null) {
   const activeCodes = (quiz.quotients && quiz.quotients.length)
     ? quiz.quotients
     : configs.filter(c => c.active).map(c => c.code);
+  const lq = langQuery(qLang);
 
   if (quiz.drawStrategy === "random") {
-    const pool = await EightQTQuestion.find({ quotient: { $in: activeCodes }, active: true, lang: qLang }).lean();
+    const pool = await EightQTQuestion.find({ quotient: { $in: activeCodes }, active: true, ...lq }).lean();
     selected = drawFreshFirst(pool, size);
   } else {
     // "even": spread size across quotients; shuffle which quotients get the extras
@@ -325,7 +340,7 @@ async function buildQuizQuestionSet(quiz, configs, excludeIds = null) {
     const counts = distribute(size, codesShuffled.length);
     const buckets = await Promise.all(codesShuffled.map(async (code, i) => {
       if (counts[i] <= 0) return [];
-      const pool = await EightQTQuestion.find({ quotient: code, active: true, lang: qLang }).lean();
+      const pool = await EightQTQuestion.find({ quotient: code, active: true, ...lq }).lean();
       return drawFreshFirst(pool, counts[i]);
     }));
     selected = buckets.flat();
@@ -378,8 +393,10 @@ async function renderLanding(req, res, lang) {
       totalQuestions = Math.max(1, Number(quiz.size) || 8);
     } else {
       // Legacy fallback counts only questions that exist in THIS language
+      // (matching pre-partition English docs that have no lang field).
+      const lq = langQuery(lang);
       const counts = await Promise.all(configs.map(c =>
-        EightQTQuestion.countDocuments({ quotient: c.code, active: true, lang })
+        EightQTQuestion.countDocuments({ quotient: c.code, active: true, ...lq })
           .then(n => Math.min(n, c.questionCount))
       ));
       totalQuestions = counts.reduce((s, n) => s + n, 0);
