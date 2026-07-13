@@ -1,0 +1,266 @@
+{{!-- views/8qt/landing_sn.hbs — standalone chiShona landing (testing) --}}
+{{!-- Deliberately separate from the international English landing.hbs so the   --}}
+{{!-- two never share copy. The start/resume flow is language-agnostic: the     --}}
+{{!-- server already remembered lang="sn" in the session when this page loaded, --}}
+{{!-- so /8qt/start/anonymous -> profile -> submit all resolve the Shona quiz.  --}}
+<!DOCTYPE html>
+<html lang="sn">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Bvunzo yeMakwikwi 8 eCRIPFCnt — chiShona</title>
+  <meta name="description" content="Ongorora Njere dzako muzvikamu zvisere. Mahara. Hapana ruzivo rweCRIPFCnt runodiwa.">
+  <meta name="robots" content="noindex">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root{
+      --navy:#1E3A5F;--navy-dark:#0F1C2E;--gold:#C9A961;--gold-light:#E5D4A6;
+      --white:#fff;--light-gray:#F8F9FA;--medium-gray:#E9ECEF;--dark-gray:#495057;
+      --text:#212529;--font-serif:'Crimson Pro',serif;--font-sans:'Inter',sans-serif;
+    }
+    *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+    html{scroll-behavior:smooth}
+    body{font-family:var(--font-sans);color:var(--text);background:var(--white);-webkit-font-smoothing:antialiased}
+
+    /* NAV */
+    .nav{background:var(--white);border-bottom:1px solid var(--medium-gray);padding:0.875rem 5%;position:sticky;top:0;z-index:100;box-shadow:0 2px 8px rgba(30,58,95,.08)}
+    .nav-in{max-width:1200px;margin:0 auto;display:flex;justify-content:space-between;align-items:center}
+    .logo{display:flex;align-items:center;gap:.6rem;text-decoration:none}
+    .logo-icon{width:38px;height:38px;background:var(--navy);display:flex;align-items:center;justify-content:center;font-family:var(--font-serif);font-weight:700;font-size:1.1rem;color:var(--gold);border:2px solid var(--gold)}
+    .logo-text{font-family:var(--font-serif);font-size:1.5rem;font-weight:700;color:var(--navy)}
+    .nav-back{color:var(--navy);text-decoration:none;font-size:.875rem;font-weight:500;padding:.45rem .9rem;border:1px solid var(--medium-gray);border-radius:4px;transition:background .2s}
+    .nav-back:hover{background:var(--light-gray)}
+
+    /* TESTING BANNER */
+    .test-banner{background:#fff7ed;border-bottom:1px solid #fcd34d;color:#92400e;text-align:center;font-size:.8rem;padding:8px 5%;font-weight:600}
+
+    /* HERO */
+    .hero{background:linear-gradient(135deg,var(--navy-dark) 0%,var(--navy) 100%);color:var(--white);padding:80px 5% 60px;text-align:center}
+    .hero-label{font-size:.75rem;letter-spacing:4px;text-transform:uppercase;color:var(--gold);font-weight:600;margin-bottom:16px}
+    .hero h1{font-family:var(--font-serif);font-size:clamp(2.2rem,5vw,3.5rem);font-weight:700;line-height:1.15;margin-bottom:16px}
+    .hero h1 em{color:var(--gold);font-style:normal}
+    .hero-sub{font-size:1.1rem;color:var(--gold-light);max-width:600px;margin:0 auto 32px;line-height:1.7}
+    .hero-meta{display:flex;gap:24px;justify-content:center;flex-wrap:wrap;margin-bottom:48px}
+    .hero-meta span{font-size:.875rem;color:var(--gold-light);display:flex;align-items:center;gap:6px}
+    .hero-meta span::before{content:'✓';color:var(--gold)}
+
+    /* IDENTITY CARDS */
+    .identity-section{max-width:960px;margin:-32px auto 0;padding:0 5%;position:relative;z-index:10}
+    .identity-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
+    .id-card{background:var(--white);border:2px solid var(--medium-gray);border-radius:12px;padding:28px 24px;text-align:center;cursor:pointer;transition:all .2s;box-shadow:0 4px 16px rgba(30,58,95,.08)}
+    .id-card:hover{border-color:var(--navy);transform:translateY(-2px);box-shadow:0 8px 24px rgba(30,58,95,.16)}
+    .id-card.primary{border-color:var(--gold);background:linear-gradient(135deg,#fff 80%,#fdf8ef)}
+    .id-icon{font-size:2.5rem;margin-bottom:12px;display:block}
+    .id-card h3{font-family:var(--font-serif);font-size:1.3rem;color:var(--navy);margin-bottom:8px}
+    .id-card p{font-size:.875rem;color:var(--dark-gray);line-height:1.6;margin-bottom:16px}
+    .id-btn{display:inline-block;width:100%;padding:.7rem 1rem;border-radius:6px;font-weight:600;font-size:.9rem;text-decoration:none;border:none;cursor:pointer;transition:all .2s}
+    .id-btn.navy{background:var(--navy);color:var(--white)}
+    .id-btn.navy:hover{background:var(--navy-dark)}
+    .id-btn.gold{background:var(--gold);color:var(--navy-dark)}
+    .id-btn.gold:hover{background:#b8943a}
+    .id-btn.outline{background:transparent;color:var(--navy);border:2px solid var(--navy)}
+    .id-btn.outline:hover{background:var(--light-gray)}
+
+    /* RETURN FORM */
+    .return-form{margin-top:12px}
+    .return-form input{width:100%;padding:.6rem .8rem;border:1.5px solid var(--medium-gray);border-radius:6px;font-family:var(--font-sans);font-size:.9rem;text-transform:uppercase;letter-spacing:2px}
+    .return-form input:focus{outline:none;border-color:var(--navy)}
+    .return-form button{margin-top:8px;width:100%;padding:.7rem;background:var(--navy);color:var(--white);border:none;border-radius:6px;font-weight:600;cursor:pointer}
+
+    /* QUOTIENT PREVIEW */
+    .quotients-section{max-width:1100px;margin:72px auto;padding:0 5%}
+    .section-label{text-align:center;font-size:.75rem;letter-spacing:4px;text-transform:uppercase;color:var(--gold);font-weight:600;margin-bottom:12px}
+    .section-title{text-align:center;font-family:var(--font-serif);font-size:clamp(1.8rem,3vw,2.5rem);color:var(--navy);margin-bottom:8px}
+    .section-sub{text-align:center;color:var(--dark-gray);max-width:600px;margin:0 auto 48px;line-height:1.7}
+    .quotient-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px}
+    .q-card{border:1px solid var(--medium-gray);border-radius:10px;padding:20px;background:var(--white)}
+    .q-code{display:inline-block;padding:.2rem .6rem;border-radius:4px;font-size:.75rem;font-weight:700;font-family:var(--font-sans);margin-bottom:10px;letter-spacing:1px}
+    .q-name{font-family:var(--font-serif);font-size:1.15rem;font-weight:700;color:var(--navy);margin-bottom:6px}
+    .q-desc{font-size:.8rem;color:var(--dark-gray);line-height:1.6}
+
+    /* FAQ */
+    .faq-section{background:var(--light-gray);padding:72px 5%}
+    .faq-inner{max-width:720px;margin:0 auto}
+    .faq-item{background:var(--white);border-radius:8px;padding:20px 24px;margin-bottom:12px;border:1px solid var(--medium-gray)}
+    .faq-q{font-weight:600;color:var(--navy);font-size:.95rem;cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center}
+    .faq-q::after{content:'+';font-size:1.2rem;color:var(--gold)}
+    .faq-item.open .faq-q::after{content:'−'}
+    .faq-a{margin-top:10px;color:var(--dark-gray);font-size:.9rem;line-height:1.7;display:none}
+    .faq-item.open .faq-a{display:block}
+
+    /* CTA bottom */
+    .cta-bottom{background:var(--navy);padding:72px 5%;text-align:center;color:var(--white)}
+    .cta-bottom h2{font-family:var(--font-serif);font-size:2rem;margin-bottom:12px}
+    .cta-bottom p{color:var(--gold-light);margin-bottom:32px}
+    .cta-big{display:inline-block;background:var(--gold);color:var(--navy-dark);padding:1rem 2.5rem;border-radius:6px;font-weight:700;font-size:1.1rem;text-decoration:none;transition:all .2s;border:none;cursor:pointer}
+    .cta-big:hover{background:#b8943a;transform:translateY(-2px)}
+
+    @media(max-width:640px){
+      .hero{padding:60px 5% 80px}
+      .identity-grid{grid-template-columns:1fr}
+    }
+  </style>
+</head>
+<body>
+
+<div class="test-banner">Peji iri riri kuedzwa (testing) — chiShona</div>
+
+<nav class="nav">
+  <div class="nav-in">
+    <a href="/" class="logo">
+      <div class="logo-icon">C</div>
+      <span class="logo-text">CRIPFCnt</span>
+    </a>
+    <a href="/" class="nav-back">← Dzokera kuSaiti</a>
+  </div>
+</nav>
+
+<section class="hero">
+  <div class="hero-label">CRIPFCnt Njere Dzokuisa Panzvimbo</div>
+  <h1>Bvunzo ye<em>Makwikwi Masere</em></h1>
+  <p class="hero-sub">
+    Haisi bvunzo yeruzivo. Chishandiso chokuzvionga uchitarisa zvikamu zvisere
+    zvokuti unonzwisisa sei nyika — kubva paKuziva kusvika paBudiriro yeVanhu.
+  </p>
+  <div class="hero-meta">
+    <span>Mibvunzo 8</span>
+    <span>Maminitsi 5</span>
+    <span>Ndeyemahara</span>
+    <span>Hapana ruzivo rwunodiwa</span>
+  </div>
+</section>
+
+<!-- SARUDZO YOKUPINDA -->
+<section class="identity-section">
+  <div class="identity-grid">
+
+    <!-- Google Sign-In -->
+    <div class="id-card primary">
+      <span class="id-icon">🔐</span>
+      <h3>Pinda neGoogle</h3>
+      <p>Mhedzisiro dzako dzinochengetedzwa nokusingaperi. Dzokorora bvunzo mushure memazuva makumi mapfumbamwe (90) uchitarisa kukura kwako.</p>
+      <a href="/8qt/google" class="id-btn gold">Enderera neGoogle</a>
+    </div>
+
+    <!-- Anonymous -->
+    <div class="id-card">
+      <span class="id-icon">⚡</span>
+      <h3>Tanga Usingazivikanwe</h3>
+      <p>Tanga izvozvi. Uchapiwa kodhi yokutora mhedzisiro dzako gare gare. Hapana akaundi inodiwa.</p>
+      <button class="id-btn navy" id="anonBtn" onclick="startAnonymous()">Tanga Izvozvi</button>
+    </div>
+
+    <!-- Return with code -->
+    <div class="id-card">
+      <span class="id-icon">🔄</span>
+      <h3>Dzoka neKodhi</h3>
+      <p>Wakatotanga? Isa kodhi yako yokutora kana kuti kuenderera mberi nemhedzisiro dzako.</p>
+      <div class="return-form">
+        <input type="text" id="codeInput" placeholder="PIQ-0000-AMBER" maxlength="20" style="text-transform:uppercase;letter-spacing:2px">
+        <button onclick="resumeWithCode()">Tora Mhedzisiro</button>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ZVIKAMU ZVISERE -->
+<section class="quotients-section">
+  <div class="section-label">Zvauchawana</div>
+  <h2 class="section-title">Zvikamu Zvisere</h2>
+  <p class="section-sub">
+    Chikamu chimwe nechimwe chinoyera maonero ako emamiriro ezvinhu,
+    kupa mutoro, uye kunzwisisa mhedzisiro.
+  </p>
+  <div class="quotient-grid">
+    {{#each configs}}
+    <div class="q-card">
+      <span class="q-code" style="background:{{this.color}}20;color:{{this.color}}">{{this.code}}</span>
+      <div class="q-name">{{this.name}}</div>
+      <div class="q-desc">{{this.description}}</div>
+    </div>
+    {{/each}}
+  </div>
+</section>
+
+<!-- MIBVUNZO INOWANZOBVUNZWA -->
+<section class="faq-section">
+  <div class="faq-inner">
+    <div class="section-label" style="text-align:center">Mibvunzo inowanzobvunzwa</div>
+    <h2 class="section-title" style="margin-bottom:32px">Zvaunofanira kuziva usati watanga</h2>
+
+    <div class="faq-item">
+      <div class="faq-q" onclick="toggleFaq(this)">Ndinofanira here kuziva CRIPFCnt kuti nditore bvunzo iyi?</div>
+      <div class="faq-a">Kwete. Bvunzo inoshandisa mamiriro ezvinhu chaiwo eupenyu. Murimi, mutsvairi, kana CEO — chero munhu anogona kuitora. Hapana dzidziso inodiwa.</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q" onclick="toggleFaq(this)">Iyi yakafanana neIQ test here?</div>
+      <div class="faq-a">Kwete. IQ inobvunza kuti "unogona kugadzirisa chiratidzo here?" Bvunzo iyi inobvunza kuti "unogona kuona chii chisiri panzvimbo here?" Inobudisa mepu yehunhu, kwete nhamba imwe chete.</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q" onclick="toggleFaq(this)">Ndichawanei pakupera?</div>
+      <div class="faq-a">Girafu rinoratidza zvibodzwa zvako zvisere, zita rehunhu hwako, chikamu chako chakasimba, uye mibvunzo yokufungisisa yakagadzirirwa iwe. Kadhi rokugovana rinogadzirwawo.</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q" onclick="toggleFaq(this)">Chi certificate chii uye ndinochida here?</div>
+      <div class="faq-a">Certificate haisi yakakosha. Igwaro repamutemo reCRIPFCnt rine zvibodzwa zvako zvakazara, hunhu hwako, uye kodhi yokusimbisa. Unochikumbira mushure mokupedza bvunzo uye wobhadhara mari diki. Haudi chikwereti kuti uone mhedzisiro dzako.</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q" onclick="toggleFaq(this)">Ndinogona kudzokorora bvunzo here?</div>
+      <div class="faq-a">Hongu. Kudzokorora kwemahara kunowanikwa mushure memazuva makumi mapfumbamwe (90). Kudzokorora nokukurumidza kungangoda mari diki kana kugadzira akaundi.</div>
+    </div>
+  </div>
+</section>
+
+<section class="cta-bottom">
+  <h2>Wagadzirira kuona mepu yako?</h2>
+  <p>Bvunzo inotora maminitsi {{estimatedMinutes}}. Hapana mhinduro dzakanaka kana dzakaipa — dzechokwadi chete.</p>
+  <button class="cta-big" onclick="startAnonymous()">Tanga Bvunzo</button>
+</section>
+
+<script>
+async function startAnonymous() {
+  const btn = document.getElementById('anonBtn');
+  if (btn) { btn.textContent = 'Kutanga…'; btn.disabled = true; }
+  try {
+    const r = await fetch('/8qt/start/anonymous', { method: 'POST' });
+    const d = await r.json();
+    if (d.ok && d.redirect) {
+      window.location.href = d.redirect;
+    } else {
+      alert(d.error || 'Hazvina kubudirira. Edza zvakare.');
+      if (btn) { btn.textContent = 'Tanga Izvozvi'; btn.disabled = false; }
+    }
+  } catch (e) {
+    alert('Pane dambudziko renetwork. Edza zvakare.');
+    if (btn) { btn.textContent = 'Tanga Izvozvi'; btn.disabled = false; }
+  }
+}
+
+async function resumeWithCode() {
+  const code = document.getElementById('codeInput').value.trim().toUpperCase();
+  if (!code) { alert('Ndapota isa kodhi yako.'); return; }
+  try {
+    const r = await fetch('/8qt/resume', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code })
+    });
+    const d = await r.json();
+    if (d.ok && d.redirect) {
+      window.location.href = d.redirect;
+    } else {
+      alert(d.error || 'Kodhi haina kuwanikwa. Tarisa uedze zvakare.');
+    }
+  } catch (e) {
+    alert('Pane dambudziko renetwork. Edza zvakare.');
+  }
+}
+
+function toggleFaq(el) {
+  el.closest('.faq-item').classList.toggle('open');
+}
+</script>
+</body>
+</html>

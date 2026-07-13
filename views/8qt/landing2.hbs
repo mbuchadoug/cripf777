@@ -1,0 +1,257 @@
+{{!-- views/8qt/landing.hbs --}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>CRIPFCnt 8 Quotients Test - Placement Intelligence Assessment</title>
+  <meta name="description" content="Discover your Placement Intelligence across 8 dimensions. Free. No prior knowledge of CRIPFCnt required.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root{
+      --navy:#1E3A5F;--navy-dark:#0F1C2E;--gold:#C9A961;--gold-light:#E5D4A6;
+      --white:#fff;--light-gray:#F8F9FA;--medium-gray:#E9ECEF;--dark-gray:#495057;
+      --text:#212529;--font-serif:'Crimson Pro',serif;--font-sans:'Inter',sans-serif;
+    }
+    *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+    html{scroll-behavior:smooth}
+    body{font-family:var(--font-sans);color:var(--text);background:var(--white);-webkit-font-smoothing:antialiased}
+
+    /* NAV */
+    .nav{background:var(--white);border-bottom:1px solid var(--medium-gray);padding:0.875rem 5%;position:sticky;top:0;z-index:100;box-shadow:0 2px 8px rgba(30,58,95,.08)}
+    .nav-in{max-width:1200px;margin:0 auto;display:flex;justify-content:space-between;align-items:center}
+    .logo{display:flex;align-items:center;gap:.6rem;text-decoration:none}
+    .logo-icon{width:38px;height:38px;background:var(--navy);display:flex;align-items:center;justify-content:center;font-family:var(--font-serif);font-weight:700;font-size:1.1rem;color:var(--gold);border:2px solid var(--gold)}
+    .logo-text{font-family:var(--font-serif);font-size:1.5rem;font-weight:700;color:var(--navy)}
+    .nav-back{color:var(--navy);text-decoration:none;font-size:.875rem;font-weight:500;padding:.45rem .9rem;border:1px solid var(--medium-gray);border-radius:4px;transition:background .2s}
+    .nav-back:hover{background:var(--light-gray)}
+
+    /* HERO */
+    .hero{background:linear-gradient(135deg,var(--navy-dark) 0%,var(--navy) 100%);color:var(--white);padding:80px 5% 60px;text-align:center}
+    .hero-label{font-size:.75rem;letter-spacing:4px;text-transform:uppercase;color:var(--gold);font-weight:600;margin-bottom:16px}
+    .hero h1{font-family:var(--font-serif);font-size:clamp(2.2rem,5vw,3.5rem);font-weight:700;line-height:1.15;margin-bottom:16px}
+    .hero h1 em{color:var(--gold);font-style:normal}
+    .hero-sub{font-size:1.1rem;color:var(--gold-light);max-width:600px;margin:0 auto 32px;line-height:1.7}
+    .hero-meta{display:flex;gap:24px;justify-content:center;flex-wrap:wrap;margin-bottom:48px}
+    .hero-meta span{font-size:.875rem;color:var(--gold-light);display:flex;align-items:center;gap:6px}
+    .hero-meta span::before{content:'✓';color:var(--gold)}
+
+    /* IDENTITY CARDS */
+    .identity-section{max-width:960px;margin:-32px auto 0;padding:0 5%;position:relative;z-index:10}
+    .identity-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
+    .id-card{background:var(--white);border:2px solid var(--medium-gray);border-radius:12px;padding:28px 24px;text-align:center;cursor:pointer;transition:all .2s;box-shadow:0 4px 16px rgba(30,58,95,.08)}
+    .id-card:hover{border-color:var(--navy);transform:translateY(-2px);box-shadow:0 8px 24px rgba(30,58,95,.16)}
+    .id-card.primary{border-color:var(--gold);background:linear-gradient(135deg,#fff 80%,#fdf8ef)}
+    .id-icon{font-size:2.5rem;margin-bottom:12px;display:block}
+    .id-card h3{font-family:var(--font-serif);font-size:1.3rem;color:var(--navy);margin-bottom:8px}
+    .id-card p{font-size:.875rem;color:var(--dark-gray);line-height:1.6;margin-bottom:16px}
+    .id-btn{display:inline-block;width:100%;padding:.7rem 1rem;border-radius:6px;font-weight:600;font-size:.9rem;text-decoration:none;border:none;cursor:pointer;transition:all .2s}
+    .id-btn.navy{background:var(--navy);color:var(--white)}
+    .id-btn.navy:hover{background:var(--navy-dark)}
+    .id-btn.gold{background:var(--gold);color:var(--navy-dark)}
+    .id-btn.gold:hover{background:#b8943a}
+    .id-btn.outline{background:transparent;color:var(--navy);border:2px solid var(--navy)}
+    .id-btn.outline:hover{background:var(--light-gray)}
+
+    /* RETURN FORM */
+    .return-form{margin-top:12px}
+    .return-form input{width:100%;padding:.6rem .8rem;border:1.5px solid var(--medium-gray);border-radius:6px;font-family:var(--font-sans);font-size:.9rem;text-transform:uppercase;letter-spacing:2px}
+    .return-form input:focus{outline:none;border-color:var(--navy)}
+    .return-form button{margin-top:8px;width:100%;padding:.7rem;background:var(--navy);color:var(--white);border:none;border-radius:6px;font-weight:600;cursor:pointer}
+
+    /* QUOTIENT PREVIEW */
+    .quotients-section{max-width:1100px;margin:72px auto;padding:0 5%}
+    .section-label{text-align:center;font-size:.75rem;letter-spacing:4px;text-transform:uppercase;color:var(--gold);font-weight:600;margin-bottom:12px}
+    .section-title{text-align:center;font-family:var(--font-serif);font-size:clamp(1.8rem,3vw,2.5rem);color:var(--navy);margin-bottom:8px}
+    .section-sub{text-align:center;color:var(--dark-gray);max-width:600px;margin:0 auto 48px;line-height:1.7}
+    .quotient-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px}
+    .q-card{border:1px solid var(--medium-gray);border-radius:10px;padding:20px;background:var(--white)}
+    .q-code{display:inline-block;padding:.2rem .6rem;border-radius:4px;font-size:.75rem;font-weight:700;font-family:var(--font-sans);margin-bottom:10px;letter-spacing:1px}
+    .q-name{font-family:var(--font-serif);font-size:1.15rem;font-weight:700;color:var(--navy);margin-bottom:6px}
+    .q-desc{font-size:.8rem;color:var(--dark-gray);line-height:1.6}
+
+    /* FAQ */
+    .faq-section{background:var(--light-gray);padding:72px 5%}
+    .faq-inner{max-width:720px;margin:0 auto}
+    .faq-item{background:var(--white);border-radius:8px;padding:20px 24px;margin-bottom:12px;border:1px solid var(--medium-gray)}
+    .faq-q{font-weight:600;color:var(--navy);font-size:.95rem;cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center}
+    .faq-q::after{content:'+';font-size:1.2rem;color:var(--gold)}
+    .faq-item.open .faq-q::after{content:'−'}
+    .faq-a{margin-top:10px;color:var(--dark-gray);font-size:.9rem;line-height:1.7;display:none}
+    .faq-item.open .faq-a{display:block}
+
+    /* CTA bottom */
+    .cta-bottom{background:var(--navy);padding:72px 5%;text-align:center;color:var(--white)}
+    .cta-bottom h2{font-family:var(--font-serif);font-size:2rem;margin-bottom:12px}
+    .cta-bottom p{color:var(--gold-light);margin-bottom:32px}
+    .cta-big{display:inline-block;background:var(--gold);color:var(--navy-dark);padding:1rem 2.5rem;border-radius:6px;font-weight:700;font-size:1.1rem;text-decoration:none;transition:all .2s}
+    .cta-big:hover{background:#b8943a;transform:translateY(-2px)}
+
+    @media(max-width:640px){
+      .hero{padding:60px 5% 80px}
+      .identity-grid{grid-template-columns:1fr}
+    }
+  </style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-in">
+    <a href="/" class="logo">
+      <div class="logo-icon">C</div>
+      <span class="logo-text">CRIPFCnt</span>
+    </a>
+    <a href="/" class="nav-back">← Back to Site</a>
+  </div>
+</nav>
+
+<section class="hero">
+  <div class="hero-label">CRIPFCnt Placement Intelligence</div>
+  <h1>The <em>8 Quotients</em> Test</h1>
+  <p class="hero-sub">
+    Not a knowledge test. A self-mapping instrument across eight dimensions
+    of how you process the world - from Consciousness to Civilization.
+  </p>
+  <div class="hero-meta">
+    <!--<span>{{totalQuestions}} questions</span>-->
+     <span>8 questions</span>
+    <span>5 minutes</span>
+    <span>Free to take</span>
+    <span>No prior knowledge required</span>
+  </div>
+</section>
+
+<!-- STEP 2: IDENTITY SELECTION -->
+<section class="identity-section">
+  <div class="identity-grid">
+
+    <!-- Google Sign-In -->
+    <div class="id-card primary">
+      <span class="id-icon">🔐</span>
+      <h3>Sign in with Google</h3>
+      <p>Your results are saved permanently. Retake the test after 90 days and track your growth.</p>
+      <a href="/8qt/google" class="id-btn gold">Continue with Google</a>
+    </div>
+
+    <!-- Anonymous -->
+    <div class="id-card">
+      <span class="id-icon">⚡</span>
+      <h3>Start Anonymously</h3>
+      <p>Begin immediately. You'll receive a code to retrieve your results later. No account needed.</p>
+      <button class="id-btn navy" id="anonBtn" onclick="startAnonymous()">Start Now</button>
+    </div>
+
+    <!-- Return with code -->
+    <div class="id-card">
+      <span class="id-icon">🔄</span>
+      <h3>Return with Code</h3>
+      <p>Already started? Enter your participant code to resume or view your results.</p>
+      <div class="return-form">
+        <input type="text" id="codeInput" placeholder="PIQ-0000-AMBER" maxlength="20" style="text-transform:uppercase;letter-spacing:2px">
+        <button onclick="resumeWithCode()">Retrieve Results</button>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- QUOTIENT PREVIEW -->
+<section class="quotients-section">
+  <div class="section-label">What you'll discover</div>
+  <h2 class="section-title">The 8 Dimensions</h2>
+  <p class="section-sub">
+    Each quotient measures a different aspect of how you interpret situations,
+    assign responsibility, and understand consequences.
+  </p>
+  <div class="quotient-grid">
+    {{#each configs}}
+    <div class="q-card">
+      <span class="q-code" style="background:{{this.color}}20;color:{{this.color}}">{{this.code}}</span>
+      <div class="q-name">{{this.name}}</div>
+      <div class="q-desc">{{this.description}}</div>
+    </div>
+    {{/each}}
+  </div>
+</section>
+
+<!-- FAQ -->
+<section class="faq-section">
+  <div class="faq-inner">
+    <div class="section-label" style="text-align:center">Common questions</div>
+    <h2 class="section-title" style="margin-bottom:32px">What to know before you start</h2>
+
+    <div class="faq-item">
+      <div class="faq-q" onclick="toggleFaq(this)">Do I need to know CRIPFCnt to take this test?</div>
+      <div class="faq-a">No. The test uses real-world scenarios. A farmer, a janitor, a CEO - anyone can take it. No theory required.</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q" onclick="toggleFaq(this)">Is this like an IQ test?</div>
+      <div class="faq-a">No. Traditional IQ asks "can you solve the puzzle?" This test asks "can you see what is misplaced in the puzzle?" It produces a profile map, not a single number.</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q" onclick="toggleFaq(this)">What do I get at the end?</div>
+      <div class="faq-a">A radar chart showing your 8 scores, your archetype name, your dominant quotient, and reflection prompts personalised to your profile. A shareable results card is also generated.</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q" onclick="toggleFaq(this)">What is the certificate and do I need it?</div>
+      <div class="faq-a">The certificate is optional. It is an official CRIPFCnt document with your full quotient scores, archetype, and a unique verification code. You request it after completing the test and pay a small fee. You do not need it to see your results.</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q" onclick="toggleFaq(this)">Can I retake the test?</div>
+      <div class="faq-a">Yes. Free retakes are available after 90 days. Earlier retakes may require a small fee or account creation.</div>
+    </div>
+  </div>
+</section>
+
+<section class="cta-bottom">
+  <h2>Ready to see your placement map?</h2>
+  <p>The test takes {{estimatedMinutes}} minutes. No right or wrong answers - only honest ones.</p>
+  <button class="cta-big" onclick="startAnonymous()">Begin the Assessment</button>
+</section>
+
+<script>
+async function startAnonymous() {
+  const btn = document.getElementById('anonBtn');
+  if (btn) { btn.textContent = 'Starting…'; btn.disabled = true; }
+  try {
+    const r = await fetch('/8qt/start/anonymous', { method: 'POST' });
+    const d = await r.json();
+    if (d.ok && d.redirect) {
+      window.location.href = d.redirect;
+    } else {
+      alert(d.error || 'Could not start. Please try again.');
+      if (btn) { btn.textContent = 'Start Now'; btn.disabled = false; }
+    }
+  } catch (e) {
+    alert('Network error. Please try again.');
+    if (btn) { btn.textContent = 'Start Now'; btn.disabled = false; }
+  }
+}
+
+async function resumeWithCode() {
+  const code = document.getElementById('codeInput').value.trim().toUpperCase();
+  if (!code) { alert('Please enter your participant code.'); return; }
+  try {
+    const r = await fetch('/8qt/resume', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code })
+    });
+    const d = await r.json();
+    if (d.ok && d.redirect) {
+      window.location.href = d.redirect;
+    } else {
+      alert(d.error || 'Code not found. Please check and try again.');
+    }
+  } catch (e) {
+    alert('Network error. Please try again.');
+  }
+}
+
+function toggleFaq(el) {
+  el.closest('.faq-item').classList.toggle('open');
+}
+</script>
+</body>
+</html>

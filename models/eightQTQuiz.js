@@ -17,6 +17,18 @@ const EightQTQuizSchema = new mongoose.Schema({
   slug:        { type: String, unique: true, index: true },     // /8qt/q/:slug
   description: { type: String, default: "" },
 
+  // Language partition. A quiz only draws from questions of the SAME lang,
+  // and each language has its own default quiz (served at /8qt for "en",
+  // /8qt/sn for "sn"). "en" is the implicit default so existing quizzes stay
+  // English with no migration. Dynamic draws are scoped to this lang; fixed
+  // quizzes should only ever hold questionIds of this same lang.
+  lang: {
+    type: String,
+    enum: ["en", "sn"],   // en = English, sn = chiShona
+    default: "en",
+    index: true
+  },
+
   mode: { type: String, enum: ["dynamic", "fixed"], default: "dynamic", index: true },
 
   // ── size: questions served PER ATTEMPT (both modes) ──
@@ -62,10 +74,19 @@ const EightQTQuizSchema = new mongoose.Schema({
   importBatch: { type: String, default: null, index: true },
 
   active:    { type: Boolean, default: true, index: true },
-  isDefault: { type: Boolean, default: false, index: true },    // served at /8qt
+  // isDefault is now PER-LANGUAGE: the en default is served at /8qt, the sn
+  // default at /8qt/sn. Enforced in the admin "make default" route which only
+  // clears the flag within the same lang.
+  isDefault: { type: Boolean, default: false, index: true },
 
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null }
 }, { timestamps: true });
+
+// One default quiz per language (partial index: only where isDefault:true)
+EightQTQuizSchema.index(
+  { lang: 1, isDefault: 1 },
+  { unique: true, partialFilterExpression: { isDefault: true } }
+);
 
 // Auto-slug from title if not supplied
 EightQTQuizSchema.pre("validate", function (next) {

@@ -335,11 +335,6 @@
       </div>
       <div class="section-body" style="padding-bottom:0">
         <div class="filter-bar">
-          <select id="qLangFilter" onchange="onLangChange()" class="form-input" title="Language partition - English and chiShona never mix">
-            <option value="en">🇬🇧 English</option>
-            <option value="sn">🇿🇼 chiShona</option>
-            <option value="all">Both languages</option>
-          </select>
           <select id="qFilter" onchange="loadQuestions()" class="form-input">
             <option value="">All Quotients</option>
             {{#each configs}}<option value="{{this.code}}">{{this.code}} - {{this.name}}</option>{{/each}}
@@ -619,15 +614,6 @@
     </div>
     <input type="file" id="fileInput" accept=".csv" onchange="handleFileSelect(this)">
 
-    <div style="margin-top:14px;padding:12px;border:2px solid var(--navy,#1e3a5f);border-radius:8px;background:#f0f6ff">
-      <label style="font-size:.82rem;font-weight:700;display:block;margin-bottom:6px;color:var(--navy)">Language of this upload</label>
-      <select id="importLang" onchange="importLangChanged()" class="form-input" style="width:100%">
-        <option value="en">🇬🇧 English (adds to the English pool)</option>
-        <option value="sn">🇿🇼 chiShona (adds to the separate Shona pool)</option>
-      </select>
-      <p class="hint" style="margin-top:6px">Same CSV template for both languages - only the words inside change. English and Shona pools never mix; each has its own quizzes, links and default test.</p>
-    </div>
-
     <div style="margin-top:14px;padding:12px;border:1px dashed var(--border,#d1d5db);border-radius:8px;">
       <label style="font-size:.8rem;font-weight:600;display:block;margin-bottom:8px;">Where should these questions go?</label>
 
@@ -703,14 +689,6 @@
     <div class="form-group">
       <label class="form-label">Quiz title *</label>
       <input class="form-input" id="nqTitle" placeholder="e.g. 8 Quotients Assessment">
-    </div>
-    <div class="form-group">
-      <label class="form-label">Language</label>
-      <select class="form-input" id="nqLang">
-        <option value="en">🇬🇧 English</option>
-        <option value="sn">🇿🇼 chiShona</option>
-      </select>
-      <p class="hint" style="margin-top:4px">A dynamic quiz draws only from this language's question pool. Can't be changed later.</p>
     </div>
     <div class="form-row">
       <div class="form-group">
@@ -821,25 +799,11 @@ function editConfig(code) {
 // ════════════════════════════════════════════════════
 // QUESTION BANK
 // ════════════════════════════════════════════════════
-// Global language scope shared by the Question Bank and Quizzes tabs.
-function currentLang() { return document.getElementById('qLangFilter')?.value || 'en'; }
-const LANG_BADGE = { en: '🇬🇧 EN', sn: '🇿🇼 SN' };
-
-function onLangChange() {
-  // Reset the batch filter (batches are language-specific) and reload both views
-  const bf = document.getElementById('qBatchFilter');
-  if (bf) bf.value = '';
-  loadQuestions();
-  loadBatches();
-  loadQuizzes();
-}
-
 async function loadQuestions(page = 1) {
   const q = document.getElementById('qFilter')?.value || '';
   const a = document.getElementById('qActiveFilter')?.value || '';
   const b = document.getElementById('qBatchFilter')?.value || '';
-  const lang = currentLang();
-  const params = new URLSearchParams({ page, lang });
+  const params = new URLSearchParams({ page });
   if (q) params.set('quotient', q);
   if (a) params.set('active', a);
   if (b) params.set('batch', b);
@@ -853,15 +817,14 @@ async function loadQuestions(page = 1) {
   const container = document.getElementById('questionsContainer');
 
   if (!d.questions?.length) {
-    container.innerHTML = `<p style="padding:16px;color:var(--dark)">No ${lang === 'all' ? '' : (LANG_BADGE[lang] + ' ')}questions found.</p>`;
+    container.innerHTML = '<p style="padding:16px;color:var(--dark)">No questions found.</p>';
     return;
   }
 
-  const showLangCol = lang === 'all';
   container.innerHTML = `
     <table>
       <thead><tr>
-        <th>Quotient</th>${showLangCol ? '<th>Lang</th>' : ''}<th>Question</th><th>Options</th><th>Status</th><th>Actions</th>
+        <th>Quotient</th><th>Question</th><th>Options</th><th>Status</th><th>Actions</th>
       </tr></thead>
       <tbody>
         ${d.questions.map(q => `
@@ -870,7 +833,6 @@ async function loadQuestions(page = 1) {
               <span class="badge badge-blue">${q.quotient}</span>
               ${q.isBlended ? ' <span class="badge badge-gold">blend</span>' : ''}
             </td>
-            ${showLangCol ? `<td><span class="badge badge-gray">${LANG_BADGE[q.lang || 'en']}</span></td>` : ''}
             <td style="max-width:300px;font-size:.82rem;line-height:1.4">${q.text}</td>
             <td style="font-size:.76rem;color:var(--dark)">${q.options.length} options</td>
             <td>
@@ -894,18 +856,14 @@ async function loadQuestions(page = 1) {
 // ── Upload batches ──────────────────────────────────
 async function loadBatches() {
   try {
-    const lang = currentLang();
     const r = await fetch('/admin/8qt/questions/batches');
     const d = await r.json();
     const sel = document.getElementById('qBatchFilter');
     if (!sel || !d.batches) return;
-    // Only show batches of the selected language (unless "both" is chosen)
-    const batches = lang === 'all' ? d.batches : d.batches.filter(b => (b.lang || 'en') === lang);
     const current = sel.value;
-    sel.innerHTML = '<option value="">All Upload Batches</option>' + batches.map(b => {
+    sel.innerHTML = '<option value="">All Upload Batches</option>' + d.batches.map(b => {
       const date = b.firstAt ? new Date(b.firstAt).toLocaleDateString() : '?';
-      const langTag = lang === 'all' ? `[${LANG_BADGE[b.lang || 'en']}] ` : '';
-      const label = `${langTag}${date} · ${b.active}/${b.total} active${b.quiz ? ' · quiz: ' + b.quiz.title : ''}`;
+      const label = `${date} · ${b.active}/${b.total} active${b.quiz ? ' · quiz: ' + b.quiz.title : ''}`;
       return `<option value="${b._id}" ${b._id === current ? 'selected' : ''}>${label}</option>`;
     }).join('');
   } catch (e) { /* non-fatal */ }
@@ -986,11 +944,6 @@ function handleFileSelect(input) {
   }
 }
 
-function importLangChanged() {
-  const mode = document.querySelector('input[name="importMode"]:checked')?.value || 'bank';
-  if (mode === 'append') populateAppendQuizzes();
-}
-
 function importModeChanged() {
   const mode = document.querySelector('input[name="importMode"]:checked')?.value || 'bank';
   document.getElementById('importNewQuizOpts').style.display = mode === 'newQuiz' ? '' : 'none';
@@ -1000,15 +953,13 @@ function importModeChanged() {
 
 async function populateAppendQuizzes() {
   const sel = document.getElementById('importAppendQuiz');
-  const lang = document.getElementById('importLang')?.value || 'en';
   try {
-    const r = await fetch('/admin/8qt/quizzes?lang=' + lang);
+    const r = await fetch('/admin/8qt/quizzes');
     const d = await r.json();
-    // Only fixed quizzes of the SAME language can receive this upload
-    const fixed = (d.quizzes || []).filter(q => q.mode === 'fixed' && (q.lang || 'en') === lang);
+    const fixed = (d.quizzes || []).filter(q => q.mode === 'fixed');
     sel.innerHTML = fixed.length
       ? fixed.map(q => `<option value="${q._id}">${q.title} (${(q.questionIds || []).length} questions)</option>`).join('')
-      : `<option value="">No ${LANG_BADGE[lang]} fixed quizzes yet - create one first</option>`;
+      : '<option value="">No fixed quizzes yet - create one first</option>';
   } catch (e) {
     sel.innerHTML = '<option value="">Could not load quizzes</option>';
   }
@@ -1027,11 +978,9 @@ async function doImport() {
   const btn = document.getElementById('importBtn');
   const status = document.getElementById('importStatus');
   const mode = document.querySelector('input[name="importMode"]:checked')?.value || 'bank';
-  const lang = document.getElementById('importLang')?.value || 'en';
 
   const fd = new FormData();
   fd.append('file', selectedFile);
-  fd.append('lang', lang);
 
   if (mode === 'newQuiz') {
     const qTitle = (document.getElementById('importQuizTitle')?.value || '').trim();
@@ -1055,14 +1004,11 @@ async function doImport() {
 
   if (d.ok) {
     const fullUrl = d.quiz ? siteOrigin() + d.quiz.url : '';
-    const langNote = `<span class="badge badge-gray">${LANG_BADGE[d.lang || lang]}</span> `;
-    status.innerHTML = `<span style="color:var(--green)">&#10003; ${langNote}Imported ${d.inserted} questions (batched).</span>
-      ${d.errors.length ? `<span style="color:var(--red)"> ${d.errors.length} row errors: ${d.errors.slice(0,3).map(e => e.error).join('; ')}</span>` : ''}
+    status.innerHTML = `<span style="color:var(--green)">&#10003; Imported ${d.inserted} questions (batched).</span>
+      ${d.errors.length ? `<span style="color:var(--red)"> ${d.errors.length} row errors.</span>` : ''}
       ${d.quiz ? `<br><span style="color:var(--green)">&#10003; Quiz "<b>${d.quiz.title}</b>"${mode === 'append' ? ' updated' : ' created'}${d.quiz.isDefault ? ' (default)' : ''}</span>
         <br><a href="${d.quiz.url}" target="_blank">${fullUrl}</a>
         <button class="btn btn-outline btn-sm" style="margin-left:6px" onclick="copyText('${fullUrl}', this)">Copy link</button>` : ''}`;
-    // Set the bank view to the language we just imported so the new questions are visible
-    const lf = document.getElementById('qLangFilter'); if (lf) lf.value = lang;
   } else {
     status.innerHTML = `<span style="color:var(--red)">Error: ${d.error}</span>`;
   }
@@ -1093,7 +1039,6 @@ async function createNewQuiz() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         title,
-        lang: document.getElementById('nqLang').value,
         mode: document.getElementById('nqMode').value,
         size: +document.getElementById('nqSize').value || 0,
         drawStrategy: document.getElementById('nqStrategy').value,
@@ -1118,19 +1063,13 @@ async function createNewQuiz() {
 }
 
 async function loadQuizzes() {
-  const lang = currentLang();
-  // "both" view isn't meaningful for the default-quiz logic; treat as en scope
-  const scope = (lang === 'sn') ? 'sn' : 'en';
-  const r = await fetch('/admin/8qt/quizzes?lang=' + scope);
+  const r = await fetch('/admin/8qt/quizzes');
   const d = await r.json();
   const c = document.getElementById('quizzesContainer');
-  const langName = scope === 'sn' ? 'chiShona' : 'English';
-  const landingPath = scope === 'sn' ? '/8qt/sn' : '/8qt';
 
   if (!d.quizzes?.length) {
     c.innerHTML = `<p style="padding:20px;color:var(--dark);font-size:.85rem">
-      No ${LANG_BADGE[scope]} quizzes yet. Click <strong>+ New Quiz</strong> (pick ${langName}) or import a ${langName} CSV
-      with "Create a new titled quiz" - it will appear here with a shareable link.</p>`;
+      No quizzes yet. Import a CSV with "Create a new titled quiz" selected, and it will appear here with a shareable link.</p>`;
     return;
   }
 
@@ -1138,19 +1077,20 @@ async function loadQuizzes() {
   for (const b of (d.bankByQuotient || [])) bank[b._id] = b.count;
   const bankTotal = Object.values(bank).reduce((s, v) => s + v, 0);
 
-  // Warn when nothing is marked default IN THIS LANGUAGE.
+  // Warn when nothing is marked default: /8qt then uses the legacy
+  // per-quotient fallback whose length = sum of Quotient Config counts.
   const hasDefault = d.quizzes.some(q => q.isDefault && q.active);
   const defaultNotice = hasDefault ? '' : `
     <div style="padding:10px 16px;font-size:.78rem;background:#fff7ed;border-bottom:1px solid #fcd34d;color:#92400e;line-height:1.55">
-      &#9888; <strong>No default ${LANG_BADGE[scope]} quiz is set.</strong> Visitors to ${landingPath} currently get the legacy
-      per-quotient draw. Create a dynamic ${langName} quiz with "Questions per attempt" = 8 and tick "Make it the default".
+      &#9888; <strong>No default quiz is set.</strong> Visitors to /8qt currently get the legacy per-quotient draw
+      (test length = the sum of the "Questions" column in Quotient Config). Create a dynamic quiz with
+      "Questions per attempt" = 8 and tick "Make it the default" to take control of the main quiz.
     </div>`;
 
   c.innerHTML = defaultNotice + `
     <div style="padding:10px 16px;font-size:.74rem;color:var(--dark);border-bottom:1px solid var(--border)">
-      ${LANG_BADGE[scope]} active question bank: <strong>${bankTotal}</strong> questions
+      Active question bank: <strong>${bankTotal}</strong> questions
       (${Object.entries(bank).map(([k, v]) => `${k}:${v}`).join(' · ') || 'empty'})
-      &nbsp;·&nbsp; landing page: <code>${landingPath}</code>
     </div>
     <table>
       <thead><tr>

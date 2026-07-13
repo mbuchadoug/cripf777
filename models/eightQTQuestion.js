@@ -17,6 +17,16 @@ const EightQTQuestionSchema = new mongoose.Schema({
     index: true,
     enum: ["CsQ", "RQ", "IQ", "PQ", "FQ", "CvQ", "NQ", "TQ"]
   },
+  // Language partition. Questions only ever mix with questions of the SAME
+  // lang, so a Shona pool never bleeds into an English draw and vice-versa.
+  // "en" is the implicit default, so every pre-existing question stays English
+  // with no migration needed. Add more codes here to add more languages.
+  lang: {
+    type: String,
+    enum: ["en", "sn"],   // en = English, sn = chiShona
+    default: "en",
+    index: true
+  },
   text: { type: String, required: true },
   options: {
     type: [OptionSchema],
@@ -33,6 +43,8 @@ const EightQTQuestionSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 EightQTQuestionSchema.index({ quotient: 1, active: 1 });
+// Language-scoped draws: fetch active questions for a quotient in one language
+EightQTQuestionSchema.index({ lang: 1, quotient: 1, active: 1 });
 
 export default mongoose.models.EightQTQuestion ||
   mongoose.model("EightQTQuestion", EightQTQuestionSchema);

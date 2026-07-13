@@ -171,6 +171,11 @@ router.get("/questions", async (req, res) => {
     if (req.query.quotient) filter.quotient = req.query.quotient;
     if (req.query.active !== undefined) filter.active = req.query.active === "true";
     if (req.query.batch) filter.importBatch = req.query.batch;
+    // Language filter: "en"/"sn"/"all". Absent -> "en" so the default admin
+    // view shows the original English bank unchanged. "all" shows everything.
+    if (req.query.lang !== "all") {
+      filter.lang = (req.query.lang === "sn") ? "sn" : "en";
+    }
 
     const page = Math.max(1, Number(req.query.page) || 1);
     const limit = 20;
@@ -203,6 +208,13 @@ router.post("/questions/import", writeOnly, upload.single("file"), async (req, r
   if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
   const batch = crypto.randomUUID();
+  // Language partition for this whole upload. Same CSV template regardless of
+  // language - the language is chosen in the form, not in the file. Defaults
+  // to English so existing tooling/scripts keep working unchanged.
+  const SUPPORTED_LANGS = ["en", "sn"];
+  const lang = SUPPORTED_LANGS.includes(String(req.body.lang || "").toLowerCase())
+    ? String(req.body.lang).toLowerCase()
+    : "en";
   const results = [];
   const errors = [];
   let rowNum = 0;
@@ -240,6 +252,7 @@ router.post("/questions/import", writeOnly, upload.single("file"), async (req, r
               options,
               isBlended: row.is_blended === "true" || row.is_blended === "1",
               active: true,
+              lang,
               createdBy: req.user._id,
               importBatch: batch
             });
@@ -278,6 +291,11 @@ router.post("/questions/import", writeOnly, upload.single("file"), async (req, r
         const target = await EightQTQuiz.findById(appendQuizId);
         if (!target) throw new Error("Quiz to append to was not found");
         if (target.mode !== "fixed") throw new Error("Can only append questions to a FIXED quiz");
+        // Never mix languages inside one quiz.
+        const targetLang = (target.lang || "en");
+        if (targetLang !== lang) {
+          throw new Error(`Language mismatch: this upload is "${lang}" but the quiz is "${targetLang}". Import into a ${targetLang} quiz, or create a new ${lang} quiz.`);
+        }
         target.questionIds.push(...insertedDocs.map(d => d._id));
         await target.save();
         quiz = target;
@@ -290,6 +308,7 @@ router.post("/questions/import", writeOnly, upload.single("file"), async (req, r
           title: quizTitle,
           description: `Imported from CSV on ${new Date().toISOString().slice(0, 10)} (${inserted} questions)`,
           mode: "fixed",
+          lang,
           questionIds: insertedDocs.map(d => d._id),
           shuffleQuestions: true,
           shuffleOptions: true,
@@ -310,7 +329,8 @@ router.post("/questions/import", writeOnly, upload.single("file"), async (req, r
           createdBy: req.user._id
         });
         if (quiz.isDefault) {
-          await EightQTQuiz.updateMany({ _id: { $ne: quiz._id } }, { $set: { isDefault: false } });
+          await EightQTQuiz.updateMany(
+            { _id: { $ne: quiz._id }, lang }, { $set: { isDefault: false } });
         }
       } catch (e) {
         // Duplicate slug etc. - questions are already imported; report but don't fail
@@ -323,8 +343,9 @@ router.post("/questions/import", writeOnly, upload.single("file"), async (req, r
       inserted,
       errors,
       batch,
-      quiz: quiz ? { _id: quiz._id, title: quiz.title, slug: quiz.slug, url: `/8qt/q/${quiz.slug}`, isDefault: quiz.isDefault } : null,
-      message: `Imported ${inserted} questions. ${errors.length} errors.${quiz ? ` Quiz "${quiz.title}" created.` : ""}`
+      lang,
+      quiz: quiz ? { _id: quiz._id, title: quiz.title, slug: quiz.slug, url: `/8qt/q/${quiz.slug}`, isDefault: quiz.isDefault, lang: quiz.lang || lang } : null,
+      message: `Imported ${inserted} ${lang.toUpperCase()} questions. ${errors.length} errors.${quiz ? ` Quiz "${quiz.title}" created.` : ""}`
     });
   } catch (err) {
     fs.unlink(req.file.path, () => {});
@@ -345,7 +366,8 @@ router.get("/questions/batches", async (req, res) => {
           total:  { $sum: 1 },
           active: { $sum: { $cond: ["$active", 1, 0] } },
           firstAt: { $min: "$createdAt" },
-          quotients: { $addToSet: "$quotient" }
+          quotients: { $addToSet: "$quotient" },
+          lang: { $first: "$lang" }
         }
       },
       { $sort: { firstAt: -1 } },
@@ -1154,18 +1176,33 @@ router.get("/export/csv", async (req, res) => {
 // GET /admin/8qt/quizzes
 router.get("/quizzes", async (req, res) => {
   try {
-    const quizzes = await EightQTQuiz.find().sort({ isDefault: -1, updatedAt: -1 }).lean();
+    // Optional lang filter: "en"/"sn"/"all" (absent = all, so nothing hides
+    // unexpectedly). The UI passes a specific lang when a tab is selected.
+    const quizFilter = {};
+    if (req.query.lang === "en" || req.query.lang === "sn") quizFilter.lang = req.query.lang;
+
+    const quizzes = await EightQTQuiz.find(quizFilter).sort({ isDefault: -1, updatedAt: -1 }).lean();
     // enrich fixed quizzes with a live count of still-active questions
     for (const q of quizzes) {
+      if (!q.lang) q.lang = "en"; // legacy quizzes are English
       if (q.mode === "fixed") {
         q.liveCount = await EightQTQuestion.countDocuments({ _id: { $in: q.questionIds || [] }, active: true });
       }
     }
-    const bankByQuotient = await EightQTQuestion.aggregate([
+    // Bank counts split by language so the builder can show "en 32 · sn 16"
+    const bankAgg = await EightQTQuestion.aggregate([
       { $match: { active: true } },
-      { $group: { _id: "$quotient", count: { $sum: 1 } } }
+      { $group: { _id: { lang: "$lang", quotient: "$quotient" }, count: { $sum: 1 } } }
     ]);
-    res.json({ ok: true, quizzes, bankByQuotient });
+    const langFilter = (req.query.lang === "en" || req.query.lang === "sn") ? req.query.lang : null;
+    const bankByQuotient = [];  // back-compat shape (filtered to the requested lang, or en)
+    const bankByLang = {};      // { en: {CsQ:4,...}, sn: {...} }
+    for (const row of bankAgg) {
+      const l = row._id.lang || "en";
+      (bankByLang[l] = bankByLang[l] || {})[row._id.quotient] = row.count;
+      if ((langFilter || "en") === l) bankByQuotient.push({ _id: row._id.quotient, count: row.count });
+    }
+    res.json({ ok: true, quizzes, bankByQuotient, bankByLang });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1238,11 +1275,12 @@ router.get("/quizzes/:id/preview", async (req, res) => {
       }
     } else {
       const size = Math.max(1, Number(quiz.size) || 8);
+      const qLang = (quiz.lang === "sn") ? "sn" : "en";
       const activeCodes = (quiz.quotients && quiz.quotients.length)
         ? quiz.quotients
         : (await EightQTConfig.find({ active: true }).lean()).map(c => c.code);
       if (quiz.drawStrategy === "random") {
-        const pool = await EightQTQuestion.find({ quotient: { $in: activeCodes }, active: true }).lean();
+        const pool = await EightQTQuestion.find({ quotient: { $in: activeCodes }, active: true, lang: qLang }).lean();
         questions = shuffle(pool).slice(0, size);
       } else {
         const codes = shuffle([...activeCodes]);
@@ -1251,7 +1289,7 @@ router.get("/quizzes/:id/preview", async (req, res) => {
         const counts = codes.map(() => base + (rem-- > 0 ? 1 : 0));
         const buckets = await Promise.all(codes.map(async (code, i) => {
           if (counts[i] <= 0) return [];
-          const pool = await EightQTQuestion.find({ quotient: code, active: true }).lean();
+          const pool = await EightQTQuestion.find({ quotient: code, active: true, lang: qLang }).lean();
           return shuffle(pool).slice(0, counts[i]);
         }));
         questions = shuffle(buckets.flat());
@@ -1281,7 +1319,7 @@ router.get("/quizzes/:id/preview", async (req, res) => {
     res.json({
       ok: true,
       quiz: {
-        _id: quiz._id, title: quiz.title, slug: quiz.slug, mode: quiz.mode,
+        _id: quiz._id, title: quiz.title, slug: quiz.slug, mode: quiz.mode, lang: quiz.lang || "en",
         size: quiz.size, drawStrategy: quiz.drawStrategy, isDefault: quiz.isDefault,
         retakeDays: quiz.retakeDays || 0, maxAttemptsPerPerson: quiz.maxAttemptsPerPerson || 0,
         avoidRepeatQuestions: quiz.avoidRepeatQuestions !== false,
@@ -1307,6 +1345,7 @@ router.post("/quizzes", writeOnly, async (req, res) => {
     const doc = {
       title: String(body.title).trim(),
       description: body.description || "",
+      lang: (body.lang === "sn") ? "sn" : "en",
       mode: body.mode === "fixed" ? "fixed" : "dynamic",
       size: body.size !== undefined ? Math.max(0, Number(body.size) || 0) : 8, // 0 = serve all (fixed mode)
       drawStrategy: body.drawStrategy === "random" ? "random" : "even",
@@ -1325,9 +1364,10 @@ router.post("/quizzes", writeOnly, async (req, res) => {
     };
     if (body.slug) doc.slug = String(body.slug).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
     const quiz = await EightQTQuiz.create(doc);
-    // Only one default at a time
+    // Only one default PER LANGUAGE
     if (quiz.isDefault) {
-      await EightQTQuiz.updateMany({ _id: { $ne: quiz._id } }, { $set: { isDefault: false } });
+      await EightQTQuiz.updateMany(
+        { _id: { $ne: quiz._id }, lang: quiz.lang }, { $set: { isDefault: false } });
     }
     res.json({ ok: true, quiz });
   } catch (err) {
@@ -1353,10 +1393,13 @@ router.patch("/quizzes/:id", writeOnly, async (req, res) => {
     if (update.closesAt !== undefined) update.closesAt = update.closesAt ? new Date(update.closesAt) : null;
     if (update.slug) update.slug = String(update.slug).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 
+    // NOTE: `lang` is intentionally NOT in `allowed` - a quiz can't change
+    // language, since that would strand its questions in the other partition.
     const quiz = await EightQTQuiz.findByIdAndUpdate(req.params.id, { $set: update }, { new: true });
     if (!quiz) return res.status(404).json({ error: "Quiz not found" });
     if (update.isDefault === true || update.isDefault === "true") {
-      await EightQTQuiz.updateMany({ _id: { $ne: quiz._id } }, { $set: { isDefault: false } });
+      await EightQTQuiz.updateMany(
+        { _id: { $ne: quiz._id }, lang: quiz.lang || "en" }, { $set: { isDefault: false } });
     }
     res.json({ ok: true, quiz });
   } catch (err) {
@@ -1374,7 +1417,10 @@ router.post("/quizzes/:id/default", writeOnly, async (req, res) => {
       req.params.id, { $set: { isDefault: true, active: true } }, { new: true }
     );
     if (!quiz) return res.status(404).json({ error: "Quiz not found" });
-    await EightQTQuiz.updateMany({ _id: { $ne: quiz._id } }, { $set: { isDefault: false } });
+    // Only clear the default within the SAME language, so en and sn each keep
+    // their own default served at /8qt and /8qt/sn respectively.
+    await EightQTQuiz.updateMany(
+      { _id: { $ne: quiz._id }, lang: quiz.lang || "en" }, { $set: { isDefault: false } });
     res.json({ ok: true, quiz });
   } catch (err) {
     res.status(500).json({ error: err.message });

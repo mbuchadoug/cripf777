@@ -183,14 +183,23 @@ function shuffle(arr) {
   return arr;
 }
 
-/** Build the full question set based on active quotient configs */
-async function buildQuestionSet(configs) {
+// Supported languages. "en" is the implicit default everywhere.
+const SUPPORTED_LANGS = ["en", "sn"];
+const LANG_LABELS = { en: "English", sn: "chiShona" };
+function normLang(l) {
+  const v = String(l || "en").toLowerCase();
+  return SUPPORTED_LANGS.includes(v) ? v : "en";
+}
+
+/** Build the full question set based on active quotient configs (lang-scoped) */
+async function buildQuestionSet(configs, lang = "en") {
   const allQuestions = [];
   for (const cfg of configs) {
     if (!cfg.active) continue;
     const questions = await EightQTQuestion.find({
       quotient: cfg.code,
-      active: true
+      active: true,
+      lang
     }).lean();
 
     // Shuffle and pick questionCount
@@ -216,7 +225,10 @@ function distribute(total, buckets) {
  *  - else the quiz flagged isDefault
  *  - else null  -> caller falls back to legacy per-quotient behaviour
  */
-async function resolveActiveQuiz(ref) {
+// lang scopes ONLY the default fallback: an explicit id/slug always wins and
+// carries its own language (so a shared Shona link works even if the visitor
+// landed on the English page first).
+async function resolveActiveQuiz(ref, lang = "en") {
   if (ref) {
     if (mongoose.isValidObjectId(ref)) {
       const byId = await EightQTQuiz.findOne({ _id: ref, active: true }).lean();
@@ -225,7 +237,7 @@ async function resolveActiveQuiz(ref) {
     const bySlug = await EightQTQuiz.findOne({ slug: String(ref).toLowerCase(), active: true }).lean();
     if (bySlug) return bySlug;
   }
-  return await EightQTQuiz.findOne({ isDefault: true, active: true }).lean();
+  return await EightQTQuiz.findOne({ isDefault: true, active: true, lang: normLang(lang) }).lean();
 }
 
 /**
@@ -238,8 +250,10 @@ async function resolveActiveQuiz(ref) {
 // retake sees fresh material; if the remaining pool is too small the draw
 // tops up from previously-seen questions (graceful reset - never blocks).
 async function buildQuizQuestionSet(quiz, configs, excludeIds = null) {
-  // No quiz configured anywhere -> original behaviour, untouched.
-  if (!quiz) return await buildQuestionSet(configs);
+  // No quiz configured anywhere -> original per-quotient behaviour, in English.
+  if (!quiz) return await buildQuestionSet(configs, "en");
+
+  const qLang = normLang(quiz.lang);
 
   const excl = excludeIds instanceof Set ? excludeIds : new Set();
   const splitFresh = (pool) => {
@@ -303,7 +317,7 @@ async function buildQuizQuestionSet(quiz, configs, excludeIds = null) {
     : configs.filter(c => c.active).map(c => c.code);
 
   if (quiz.drawStrategy === "random") {
-    const pool = await EightQTQuestion.find({ quotient: { $in: activeCodes }, active: true }).lean();
+    const pool = await EightQTQuestion.find({ quotient: { $in: activeCodes }, active: true, lang: qLang }).lean();
     selected = drawFreshFirst(pool, size);
   } else {
     // "even": spread size across quotients; shuffle which quotients get the extras
@@ -311,7 +325,7 @@ async function buildQuizQuestionSet(quiz, configs, excludeIds = null) {
     const counts = distribute(size, codesShuffled.length);
     const buckets = await Promise.all(codesShuffled.map(async (code, i) => {
       if (counts[i] <= 0) return [];
-      const pool = await EightQTQuestion.find({ quotient: code, active: true }).lean();
+      const pool = await EightQTQuestion.find({ quotient: code, active: true, lang: qLang }).lean();
       return drawFreshFirst(pool, counts[i]);
     }));
     selected = buckets.flat();
@@ -325,8 +339,17 @@ async function buildQuizQuestionSet(quiz, configs, excludeIds = null) {
 // STEP 1 - LANDING PAGE
 // GET /8qt
 // ══════════════════════════════════════════════════════════════
-router.get("/", async (req, res) => {
+// Shared handler for the landing page in a given language.
+async function renderLanding(req, res, lang) {
   try {
+    lang = normLang(lang);
+    // Remember which language page we're on so the anonymous flow
+    // (start -> profile -> POST) resolves the right language even though the
+    // profile POST body may not carry it.
+    if (req.session) {
+      req.session.eightQTLang = lang;
+      await req.session.save();
+    }
     const configs = await EightQTConfig.find({ active: true })
       .sort({ displayOrder: 1 }).lean();
 
@@ -336,9 +359,16 @@ router.get("/", async (req, res) => {
       await req.session.save();
     }
 
+    // A session quiz pick only applies on the page of its OWN language, so
+    // switching /8qt <-> /8qt/sn cleanly resolves each language's default.
+    let sessionRef = req.session?.eightQTQuizId || null;
+    if (sessionRef) {
+      const picked = await resolveActiveQuiz(sessionRef, lang);
+      if (picked && normLang(picked.lang) !== lang) sessionRef = null; // ignore cross-lang pick
+    }
+
     // Reflect the quiz that will actually be served (default or session pick).
-    // Falls back to the legacy per-quotient total when no quiz exists.
-    const quiz = await resolveActiveQuiz(req.session?.eightQTQuizId || null);
+    const quiz = await resolveActiveQuiz(sessionRef, lang);
     let totalQuestions;
     if (quiz && quiz.mode === "fixed") {
       const poolLen = (quiz.questionIds || []).length;
@@ -347,7 +377,12 @@ router.get("/", async (req, res) => {
     } else if (quiz) {
       totalQuestions = Math.max(1, Number(quiz.size) || 8);
     } else {
-      totalQuestions = configs.reduce((sum, c) => sum + c.questionCount, 0);
+      // Legacy fallback counts only questions that exist in THIS language
+      const counts = await Promise.all(configs.map(c =>
+        EightQTQuestion.countDocuments({ quotient: c.code, active: true, lang })
+          .then(n => Math.min(n, c.questionCount))
+      ));
+      totalQuestions = counts.reduce((s, n) => s + n, 0);
     }
     const estimatedMinutes = Math.ceil(totalQuestions * 0.75); // ~45s per question
 
@@ -361,19 +396,31 @@ router.get("/", async (req, res) => {
       if (ongoing) resumeCode = ongoing._id;
     }
 
-    res.render("8qt/landing", {
+    // Each language renders its OWN standalone template so the two pages are
+    // fully independent: the international (English) landing has no Shona
+    // references, and the Shona page is its own file for testing.
+    const view = lang === "sn" ? "8qt/landing_sn" : "8qt/landing";
+    res.render(view, {
       configs,
       totalQuestions,
       estimatedMinutes,
       resumeCode,
       quiz: quiz || null,
+      lang,
+      langLabel: LANG_LABELS[lang],
+      isShona: lang === "sn",
       user: req.user || null
     });
   } catch (err) {
     console.error("[8qt landing]", err);
     res.status(500).send("Error loading page");
   }
-});
+}
+
+// GET /8qt        -> English landing
+router.get("/", (req, res) => renderLanding(req, res, "en"));
+// GET /8qt/sn     -> chiShona landing (its own default quiz + question pool)
+router.get("/sn", (req, res) => renderLanding(req, res, "sn"));
 
 // ══════════════════════════════════════════════════════════════
 // ENTRY: Select a titled quiz, then go through the normal flow.
@@ -405,7 +452,8 @@ router.get("/q/:slug", async (req, res) => {
       req.session.eightQTQuizId = String(quiz._id);
       await req.session.save();
     }
-    return res.redirect("/8qt");
+    // Land on the page matching the quiz's language so the UI + estimates match.
+    return res.redirect(normLang(quiz.lang) === "sn" ? "/8qt/sn" : "/8qt");
   } catch (err) {
     console.error("[8qt quiz entry]", err);
     return res.status(500).render("8qt/error", { message: "Error opening quiz." });
@@ -491,9 +539,17 @@ router.post("/profile", async (req, res) => {
       return res.status(400).json({ error: "Test not yet configured. Please check back soon." });
     }
 
-    // Resolve which quiz to serve: explicit pick -> session -> default -> legacy
-    const quizRef = req.body.quiz || req.query.quiz || req.session?.eightQTQuizId || null;
-    const quiz = await resolveActiveQuiz(quizRef);
+    // Resolve which quiz to serve: explicit pick -> session -> per-lang default.
+    // lang comes from the posting page (hidden field) so /8qt/sn resolves the
+    // Shona default even for an anonymous first-timer with no session pick.
+    const pageLang = normLang(req.body.lang || req.query.lang || req.session?.eightQTLang);
+    let quizRef = req.body.quiz || req.query.quiz || req.session?.eightQTQuizId || null;
+    // Ignore a stale session pick from the other language's page.
+    if (quizRef && !req.body.quiz && !req.query.quiz) {
+      const picked = await resolveActiveQuiz(quizRef, pageLang);
+      if (picked && normLang(picked.lang) !== pageLang) quizRef = null;
+    }
+    const quiz = await resolveActiveQuiz(quizRef, pageLang);
 
     // ── Scheduling window: refuse new attempts outside [opensAt, closesAt] ──
     if (quiz) {
@@ -558,9 +614,21 @@ router.post("/profile", async (req, res) => {
       }
     }
 
-    const questions = await buildQuizQuestionSet(quiz, configs, excludeIds);
+    // On a non-English page with no quiz configured, the legacy fallback would
+    // serve English questions - which would be wrong. Draw from THIS language
+    // instead, and if that pool is empty, say so rather than mixing languages.
+    let questions;
+    if (!quiz && pageLang !== "en") {
+      questions = await buildQuestionSet(configs, pageLang);
+    } else {
+      questions = await buildQuizQuestionSet(quiz, configs, excludeIds);
+    }
     if (!questions.length) {
-      return res.status(400).json({ error: "No questions available yet. Please check back soon." });
+      return res.status(400).json({
+        error: pageLang !== "en"
+          ? "This assessment isn't available in this language yet. Please check back soon."
+          : "No questions available yet. Please check back soon."
+      });
     }
 
     // Per-quotient max for THIS served set (correct denominator for any size/mode)
