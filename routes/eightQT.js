@@ -396,11 +396,11 @@ async function renderLanding(req, res, lang) {
       if (ongoing) resumeCode = ongoing._id;
     }
 
-    // Each language renders its OWN standalone template so the two pages are
-    // fully independent: the international (English) landing has no Shona
-    // references, and the Shona page is its own file for testing.
-    const view = lang === "sn" ? "8qt/landing_sn" : "8qt/landing";
-    res.render(view, {
+    // Both languages render the SAME English landing template. The landing
+    // wording stays English (for international readers); the language partition
+    // still applies underneath - /8qt/sn serves the Shona default quiz and
+    // Shona questions, only the landing page copy is English.
+    res.render("8qt/landing", {
       configs,
       totalQuestions,
       estimatedMinutes,
