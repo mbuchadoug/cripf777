@@ -205,23 +205,38 @@ function langQuery(lang) {
     : { $or: [{ lang: "en" }, { lang: { $exists: false } }, { lang: null }] };
 }
 
-async function buildQuestionSet(configs, lang = "en") {
-  const allQuestions = [];
+// targetTotal caps the WHOLE test (default 8). The old logic took
+// cfg.questionCount PER quotient, so with 8 configs and several questions per
+// quotient it served far more than intended (e.g. every Shona question).
+// Now we draw a total, spread evenly across the quotients that actually have
+// questions in this language, and randomised each call.
+async function buildQuestionSet(configs, lang = "en", targetTotal = 8) {
   const lq = langQuery(lang);
-  for (const cfg of configs) {
-    if (!cfg.active) continue;
-    const questions = await EightQTQuestion.find({
-      quotient: cfg.code,
-      active: true,
-      ...lq
+  const activeCfgs = configs.filter(c => c.active);
+  // Bucket available questions per quotient (language-scoped)
+  const buckets = {};
+  for (const cfg of activeCfgs) {
+    const qs = await EightQTQuestion.find({
+      quotient: cfg.code, active: true, ...lq
     }).lean();
-
-    // Shuffle and pick questionCount
-    const shuffled = shuffle([...questions]);
-    const selected = shuffled.slice(0, cfg.questionCount);
-    allQuestions.push(...selected);
+    if (qs.length) buckets[cfg.code] = shuffle([...qs]);
   }
-  // Mix across quotients so they're not in quotient blocks from participant's perspective
+  const codes = shuffle(Object.keys(buckets));
+  if (!codes.length) return [];
+
+  const total = Math.max(1, Number(targetTotal) || 8);
+  const counts = distribute(total, codes.length);
+  const allQuestions = [];
+  codes.forEach((code, i) => {
+    allQuestions.push(...buckets[code].slice(0, counts[i]));
+  });
+  // If some quotients had fewer than their share, top up from whatever's left
+  if (allQuestions.length < total) {
+    const chosen = new Set(allQuestions.map(q => String(q._id)));
+    const rest = shuffle(codes.flatMap(c => buckets[c]).filter(q => !chosen.has(String(q._id))));
+    allQuestions.push(...rest.slice(0, total - allQuestions.length));
+  }
+  // Mix so they're not grouped by quotient from the participant's perspective
   return shuffle(allQuestions);
 }
 
@@ -392,14 +407,12 @@ async function renderLanding(req, res, lang) {
     } else if (quiz) {
       totalQuestions = Math.max(1, Number(quiz.size) || 8);
     } else {
-      // Legacy fallback counts only questions that exist in THIS language
-      // (matching pre-partition English docs that have no lang field).
+      // Legacy fallback now serves a capped total (default 8), not per-quotient
+      // counts. Show the smaller of that cap and how many questions actually
+      // exist in this language (matching pre-partition docs with no lang field).
       const lq = langQuery(lang);
-      const counts = await Promise.all(configs.map(c =>
-        EightQTQuestion.countDocuments({ quotient: c.code, active: true, ...lq })
-          .then(n => Math.min(n, c.questionCount))
-      ));
-      totalQuestions = counts.reduce((s, n) => s + n, 0);
+      const available = await EightQTQuestion.countDocuments({ active: true, ...lq });
+      totalQuestions = Math.min(8, available) || 8;
     }
     const estimatedMinutes = Math.ceil(totalQuestions * 0.75); // ~45s per question
 
