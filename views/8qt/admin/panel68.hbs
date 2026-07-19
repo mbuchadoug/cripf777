@@ -438,40 +438,15 @@
             <input class="form-input" id="tSigTitle" value="{{template.signatoryTitle}}">
           </div>
         </div>
-        <!-- ══ CERTIFICATE PRICING ══ -->
-        <div style="border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:18px;background:#fffdf7">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;flex-wrap:wrap">
-            <strong style="color:var(--navy);font-size:.9rem">Certificate Pricing</strong>
-            <span id="pricePreview" class="badge badge-gold"></span>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Standard Price (cents, e.g. 999 = $9.99)</label>
+            <input class="form-input" id="tStdPrice" type="number" value="{{template.standardPriceCents}}">
           </div>
-          <p style="font-size:.76rem;color:var(--dark);margin:0 0 12px;line-height:1.55">
-            Enter the amount participants pay, in the currency selected below. This is what goes
-            straight into Stripe checkout on the next purchase - no redeploy needed.
-            Use <strong>0</strong> to make a tier free; otherwise the minimum Stripe accepts is 0.50.
-          </p>
-          <div class="form-row">
-            <div class="form-group">
-              <label class="form-label">Standard certificate price</label>
-              <div style="display:flex;align-items:center;gap:8px">
-                <span class="priceSym" style="font-weight:700;color:var(--navy);font-size:1rem">$</span>
-                <input class="form-input" id="tStdPriceUsd" type="number" step="0.01" min="0" oninput="syncPriceCents()" placeholder="9.99">
-              </div>
-              <div style="font-size:.7rem;color:#aaa;margin-top:4px" id="tStdCentsHint"></div>
-            </div>
-            <div class="form-group">
-              <label class="form-label">Premium certificate price</label>
-              <div style="display:flex;align-items:center;gap:8px">
-                <span class="priceSym" style="font-weight:700;color:var(--navy);font-size:1rem">$</span>
-                <input class="form-input" id="tPremPriceUsd" type="number" step="0.01" min="0" oninput="syncPriceCents()" placeholder="24.99">
-              </div>
-              <div style="font-size:.7rem;color:#aaa;margin-top:4px" id="tPremCentsHint"></div>
-            </div>
+          <div class="form-group">
+            <label class="form-label">Premium Price (cents)</label>
+            <input class="form-input" id="tPremPrice" type="number" value="{{template.premiumPriceCents}}">
           </div>
-          <!-- kept in cents so the existing template save keeps working unchanged -->
-          <input type="hidden" id="tStdPrice"  value="{{template.standardPriceCents}}">
-          <input type="hidden" id="tPremPrice" value="{{template.premiumPriceCents}}">
-          <button class="btn btn-gold btn-sm" onclick="savePricing(this)">Save Pricing Only</button>
-          <span id="priceSaveMsg" style="font-size:.75rem;margin-left:10px;color:var(--dark)"></span>
         </div>
         <div class="form-row">
           <div class="form-group">
@@ -480,7 +455,7 @@
           </div>
           <div class="form-group">
             <label class="form-label">Currency</label>
-            <select class="form-input" id="tCurrency" onchange="syncPriceCents()">
+            <select class="form-input" id="tCurrency">
               <option {{#if (eq template.currency "usd")}}selected{{/if}}>usd</option>
               <option {{#if (eq template.currency "gbp")}}selected{{/if}}>gbp</option>
               <option {{#if (eq template.currency "eur")}}selected{{/if}}>eur</option>
@@ -518,13 +493,6 @@
             <option value="">All Status</option>
             <option value="finished">Finished</option>
             <option value="in_progress">In Progress</option>
-          </select>
-          <select id="attQuizFilter" onchange="loadAttempts()" class="form-input">
-            <option value="">All Quizzes</option>
-            <option value="none">Legacy (no quiz)</option>
-            {{#each quizzes}}
-            <option value="{{this._id}}">{{this.title}} ({{#if this.lang}}{{this.lang}}{{else}}en{{/if}})</option>
-            {{/each}}
           </select>
           <select id="attCertFilter" onchange="loadAttempts()" class="form-input">
             <option value="">All Cert Status</option>
@@ -1379,93 +1347,6 @@ async function toggleArchetype(id, active) {
 // ════════════════════════════════════════════════════
 // CERTIFICATE TEMPLATE
 // ════════════════════════════════════════════════════
-// ════════════════════════════════════════════════════
-// CERTIFICATE PRICING
-// The USD/GBP/EUR inputs are the friendly face; the hidden cents inputs
-// (tStdPrice / tPremPrice) stay in sync so saveTemplate() is untouched.
-// ════════════════════════════════════════════════════
-const CUR_SYMBOLS = { usd: '$', gbp: '\u00A3', eur: '\u20AC' };
-
-function currentCurrency() {
-  return (document.getElementById('tCurrency')?.value || 'usd').toLowerCase();
-}
-
-function fmtMoney(cents) {
-  const sym = CUR_SYMBOLS[currentCurrency()] || '$';
-  if (!cents) return 'Free';
-  return sym + (cents / 100).toFixed(2);
-}
-
-// Push the dollar inputs down into the hidden cents fields + refresh labels.
-function syncPriceCents() {
-  const stdUsd  = document.getElementById('tStdPriceUsd');
-  const premUsd = document.getElementById('tPremPriceUsd');
-  if (!stdUsd || !premUsd) return;
-
-  const stdCents  = Math.round((parseFloat(stdUsd.value)  || 0) * 100);
-  const premCents = Math.round((parseFloat(premUsd.value) || 0) * 100);
-
-  document.getElementById('tStdPrice').value  = stdCents;
-  document.getElementById('tPremPrice').value = premCents;
-
-  const sym = CUR_SYMBOLS[currentCurrency()] || '$';
-  document.querySelectorAll('.priceSym').forEach(el => el.textContent = sym);
-  document.getElementById('tStdCentsHint').textContent  = stdCents  + ' cents stored';
-  document.getElementById('tPremCentsHint').textContent = premCents + ' cents stored';
-  const prev = document.getElementById('pricePreview');
-  if (prev) prev.textContent = 'Standard ' + fmtMoney(stdCents) + '  \u00B7  Premium ' + fmtMoney(premCents);
-}
-
-// Fill the dollar inputs from the cents the server rendered.
-function initPricingUI() {
-  const std = document.getElementById('tStdPrice');
-  if (!std) return; // no template configured yet - nothing to init
-  document.getElementById('tStdPriceUsd').value  = ((+std.value || 0) / 100).toFixed(2);
-  document.getElementById('tPremPriceUsd').value =
-    ((+document.getElementById('tPremPrice').value || 0) / 100).toFixed(2);
-  syncPriceCents();
-}
-document.addEventListener('DOMContentLoaded', initPricingUI);
-
-async function savePricing(btn) {
-  syncPriceCents();
-  const msg = document.getElementById('priceSaveMsg');
-  const original = btn.textContent;
-  btn.disabled = true;
-  btn.textContent = 'Saving\u2026';
-  msg.textContent = '';
-  try {
-    const r = await fetch('/admin/8qt/pricing', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        standardPrice: parseFloat(document.getElementById('tStdPriceUsd').value) || 0,
-        premiumPrice:  parseFloat(document.getElementById('tPremPriceUsd').value) || 0,
-        currency:      currentCurrency()
-      })
-    });
-    const d = await r.json();
-    if (d.ok) {
-      document.getElementById('tStdPrice').value  = d.template.standardPriceCents;
-      document.getElementById('tPremPrice').value = d.template.premiumPriceCents;
-      document.getElementById('tStdPriceUsd').value  = (d.template.standardPriceCents / 100).toFixed(2);
-      document.getElementById('tPremPriceUsd').value = (d.template.premiumPriceCents / 100).toFixed(2);
-      syncPriceCents();
-      msg.style.color = 'var(--green, #065f46)';
-      msg.textContent = '\u2713 Live now \u2014 next checkout uses these prices.';
-    } else {
-      msg.style.color = 'var(--red, #b91c1c)';
-      msg.textContent = '\u26A0 ' + (d.error || 'Could not save');
-    }
-  } catch (e) {
-    msg.style.color = 'var(--red, #b91c1c)';
-    msg.textContent = '\u26A0 Network error: ' + e.message;
-  } finally {
-    btn.disabled = false;
-    btn.textContent = original;
-  }
-}
-
 async function saveTemplate(id) {
   const data = {
     certTitle:          document.getElementById('tCertTitle').value.trim() || 'Certificate of Assessment',
@@ -1512,11 +1393,10 @@ async function loadAttempts(page = 1) {
   const q  = document.getElementById('attSearch')?.value?.trim() || '';
   const st = document.getElementById('attStatusFilter')?.value  || '';
   const ct = document.getElementById('attCertFilter')?.value    || '';
-  const qz = document.getElementById('attQuizFilter')?.value    || '';
 
   const endpoint = q
-    ? `/admin/8qt/attempts/search?${new URLSearchParams({ q, status: st, certStatus: ct, quizId: qz, page })}`
-    : `/admin/8qt/attempts?${new URLSearchParams({ status: st, certStatus: ct, quizId: qz, page })}`;
+    ? `/admin/8qt/attempts/search?${new URLSearchParams({ q, status: st, certStatus: ct, page })}`
+    : `/admin/8qt/attempts?${new URLSearchParams({ status: st, certStatus: ct, page })}`;
 
   const r = await fetch(endpoint);
   const d = await r.json();
@@ -1537,21 +1417,6 @@ async function loadAttempts(page = 1) {
     return `<div class="score-pills">${a.quotientScores.map(s =>
       `<span class="score-pill" title="${s.name}: ${s.score}/100 (${s.band})">${s.code} ${s.score}</span>`
     ).join('')}</div>`;
-  }
-
-  // Which quiz produced this attempt. Legacy attempts predate quizzes and
-  // carry no quizId - they fall back to the stored title, then a plain label.
-  function quizCell(a) {
-    const title = a.quizId?.title || a.quizTitle;
-    if (!title) return '<span style="color:#bbb;font-size:.75rem">Legacy (no quiz)</span>';
-    const lang = a.quizId?.lang || 'en';
-    const slug = a.quizId?.slug || '';
-    const mode = a.quizId?.mode || '';
-    let html = `<div style="font-size:.8rem;font-weight:600;color:var(--navy)">${title}</div>`;
-    if (slug) html += `<div class="att-code">${slug}</div>`;
-    html += `<div class="att-sub"><span class="badge ${lang === 'sn' ? 'badge-gold' : 'badge-blue'}">${lang}</span>` +
-            (mode ? ` <span class="badge badge-gray">${mode}</span>` : '') + `</div>`;
-    return html;
   }
 
   function certActions(a) {
@@ -1578,7 +1443,6 @@ async function loadAttempts(page = 1) {
     <table>
       <thead><tr>
         <th>Participant</th>
-        <th>Quiz</th>
         <th>Archetype / Dominant</th>
         <th>Status</th>
         <th>Scores</th>
@@ -1596,7 +1460,6 @@ async function loadAttempts(page = 1) {
               ${(a.profile?.country || a.profile?.sector) ? `<div class="att-sub">${[a.profile?.country, a.profile?.sector].filter(Boolean).join(' · ')}</div>` : ''}
               ${a.adminIssueNote ? `<div class="att-sub" style="color:var(--amber)">&#9888; ${a.adminIssueNote}</div>` : ''}
             </td>
-            <td>${quizCell(a)}</td>
             <td>
               <div style="font-size:.8rem">${a.archetypeName || '-'}</div>
               ${a.dominantQuotient ? `<div class="att-sub">Dominant: <strong>${a.dominantQuotient}</strong></div>` : ''}
@@ -1755,7 +1618,6 @@ async function openReviewDrawer(attemptId) {
       <div style="margin-bottom:14px">
         <div style="font-size:.76rem;color:var(--dark)">${a.participantCode || (a.userId?.email || '')}</div>
         <div style="font-size:.8rem;margin-top:2px">${[a.profile?.country, a.profile?.sector].filter(Boolean).join(' · ')}</div>
-        <div style="font-size:.8rem;margin-top:2px">Quiz: <strong>${a.quizTitle || a.quizId?.title || 'Legacy (no quiz)'}</strong>${a.quizId?.slug ? ` <span class="att-code">${a.quizId.slug}</span>` : ''}</div>
         <div style="font-size:.8rem;margin-top:2px">Archetype: <strong>${a.archetypeName || '-'}</strong> &nbsp;·&nbsp; Dominant: <strong>${a.dominantQuotient || '-'}</strong></div>
         <div style="font-size:.8rem;margin-top:2px">Cert status: <span class="badge badge-${a.certificateStatus === 'issued' ? 'green' : a.certificateStatus === 'paid' ? 'blue' : 'gray'}">${a.certificateStatus}</span>
           ${a.certificatePdfUrl ? `&nbsp;<a href="${a.certificatePdfUrl}" target="_blank" class="btn btn-gold btn-sm" style="vertical-align:middle">&#8595; PDF</a>` : ''}

@@ -647,6 +647,90 @@ router.patch("/template/:id", writeOnly, async (req, res) => {
   }
 });
 
+// ── Certificate pricing (standalone) ────────────────────────────────
+// Lets an admin change certificate prices without touching any other
+// template field. Accepts either dollars (standardPrice / premiumPrice)
+// or raw cents (standardPriceCents / premiumPriceCents); dollars win if
+// both are sent. Always writes the ACTIVE template, creating one if the
+// system has never had a template configured.
+// GET  /admin/8qt/pricing
+// POST /admin/8qt/pricing
+function _toCents(dollars, cents, fallback) {
+  const d = Number(dollars);
+  if (dollars !== undefined && dollars !== null && dollars !== "" && Number.isFinite(d) && d >= 0) {
+    return Math.round(d * 100);
+  }
+  const c = Number(cents);
+  if (cents !== undefined && cents !== null && cents !== "" && Number.isFinite(c) && c >= 0) {
+    return Math.round(c);
+  }
+  return fallback;
+}
+
+router.get("/pricing", async (req, res) => {
+  try {
+    const t = await EightQTCertTemplate.findOne({ active: true })
+      .select("_id label standardPriceCents premiumPriceCents currency")
+      .lean();
+    if (!t) return res.json({ ok: true, template: null });
+    res.json({
+      ok: true,
+      template: t,
+      standardPrice: (t.standardPriceCents || 0) / 100,
+      premiumPrice:  (t.premiumPriceCents  || 0) / 100
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post("/pricing", writeOnly, async (req, res) => {
+  try {
+    let t = await EightQTCertTemplate.findOne({ active: true });
+    if (!t) {
+      // No template yet - create one so pricing can be set on day one.
+      await EightQTCertTemplate.updateMany({}, { $set: { active: false } });
+      t = await EightQTCertTemplate.create({ active: true });
+    }
+
+    const std  = _toCents(req.body.standardPrice, req.body.standardPriceCents, t.standardPriceCents);
+    const prem = _toCents(req.body.premiumPrice,  req.body.premiumPriceCents,  t.premiumPriceCents);
+
+    if (!Number.isFinite(std) || std < 0 || !Number.isFinite(prem) || prem < 0) {
+      return res.status(400).json({ error: "Prices must be zero or a positive amount." });
+    }
+    // Stripe rejects non-zero amounts under 50 cents on most currencies.
+    if ((std > 0 && std < 50) || (prem > 0 && prem < 50)) {
+      return res.status(400).json({ error: "Stripe minimum is 0.50 - use 0 for free, or 0.50 and up." });
+    }
+
+    const allowedCurrencies = ["usd", "gbp", "eur"];
+    const currency = allowedCurrencies.includes(String(req.body.currency || "").toLowerCase())
+      ? String(req.body.currency).toLowerCase()
+      : t.currency;
+
+    t.standardPriceCents = std;
+    t.premiumPriceCents  = prem;
+    t.currency           = currency;
+    await t.save();
+
+    res.json({
+      ok: true,
+      template: {
+        _id: t._id,
+        standardPriceCents: t.standardPriceCents,
+        premiumPriceCents:  t.premiumPriceCents,
+        currency:           t.currency
+      },
+      standardPrice: t.standardPriceCents / 100,
+      premiumPrice:  t.premiumPriceCents / 100
+    });
+  } catch (err) {
+    console.error("[8qt pricing]", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ══════════════════════════════════════════════════════════════
 // ANALYTICS
 // GET /admin/8qt/analytics
@@ -744,6 +828,10 @@ router.get("/attempts", async (req, res) => {
     const filter = {};
     if (req.query.status) filter.status = req.query.status;
     if (req.query.certStatus) filter.certificateStatus = req.query.certStatus;
+    // Optional quiz filter. "none" = legacy attempts taken before quizzes
+    // existed (quizId null). Anything unparseable is ignored, not fatal.
+    if (req.query.quizId === "none") filter.quizId = null;
+    else if (req.query.quizId && mongoose.isValidObjectId(req.query.quizId)) filter.quizId = req.query.quizId;
 
     const total = await EightQTAttempt.countDocuments(filter);
     const attempts = await EightQTAttempt.find(filter)
@@ -751,7 +839,8 @@ router.get("/attempts", async (req, res) => {
       .skip((page - 1) * limit)
       .limit(limit)
       .populate("userId", "email displayName")
-      .select("userId participantName participantCode archetypeName status certificateStatus certificatePdfUrl certificateVerifyCode certificateName certificateEmail dominantQuotient quotientScores profile createdAt finishedAt adminIssuedBy adminIssueNote")
+      .populate("quizId", "title slug lang mode")
+      .select("userId quizId quizTitle participantName participantCode archetypeName status certificateStatus certificatePdfUrl certificateVerifyCode certificateName certificateEmail dominantQuotient quotientScores profile createdAt finishedAt adminIssuedBy adminIssueNote")
       .lean();
 
     res.json({ attempts, total, page, pages: Math.ceil(total / limit) });
@@ -774,6 +863,8 @@ router.get("/attempts/search", async (req, res) => {
     if (req.query.status)     filter.status = req.query.status;
     if (req.query.certStatus) filter.certificateStatus = req.query.certStatus;
     if (req.query.archetype)  filter.archetypeName = new RegExp(req.query.archetype, "i");
+    if (req.query.quizId === "none") filter.quizId = null;
+    else if (req.query.quizId && mongoose.isValidObjectId(req.query.quizId)) filter.quizId = req.query.quizId;
 
     if (q) {
       filter.$or = [
@@ -782,6 +873,7 @@ router.get("/attempts/search", async (req, res) => {
         { certificateName:   new RegExp(q, "i") },
         { certificateEmail:  new RegExp(q, "i") },
         { archetypeName:     new RegExp(q, "i") },
+        { quizTitle:         new RegExp(q, "i") },
         { "profile.country": new RegExp(q, "i") },
         { "profile.sector":  new RegExp(q, "i") }
       ];
@@ -793,7 +885,8 @@ router.get("/attempts/search", async (req, res) => {
       .skip((page - 1) * limit)
       .limit(limit)
       .populate("userId", "email displayName")
-      .select("userId participantName participantCode archetypeName status certificateStatus certificatePdfUrl certificateVerifyCode certificateName certificateEmail dominantQuotient quotientScores profile createdAt finishedAt")
+      .populate("quizId", "title slug lang mode")
+      .select("userId quizId quizTitle participantName participantCode archetypeName status certificateStatus certificatePdfUrl certificateVerifyCode certificateName certificateEmail dominantQuotient quotientScores profile createdAt finishedAt adminIssuedBy adminIssueNote")
       .lean();
 
     res.json({ attempts, total, page, pages: Math.ceil(total / limit) });
@@ -1123,12 +1216,14 @@ router.get("/export/csv", async (req, res) => {
     if (req.query.certStatus) filter.certificateStatus = req.query.certStatus;
 
     const attempts = await EightQTAttempt.find(filter)
-      .select("participantName participantCode certificateName certificateEmail certificateOrg archetypeName dominantQuotient developmentEdge quotientScores certificateStatus certificateIssuedAt finishedAt profile adminIssueNote")
+      .select("participantName participantCode certificateName certificateEmail certificateOrg archetypeName dominantQuotient developmentEdge quotientScores certificateStatus certificateIssuedAt finishedAt profile adminIssueNote quizId quizTitle")
+      .populate("quizId", "title slug lang")
       .lean();
 
     const quotientCodes = ["CsQ", "RQ", "IQ", "PQ", "FQ", "CvQ", "NQ", "TQ"];
     const headers = [
-      "Participant Name", "Code", "Certificate Name", "Email", "Organisation",
+      "Participant Name", "Code", "Quiz", "Quiz Code", "Quiz Lang",
+      "Certificate Name", "Email", "Organisation",
       "Archetype", "Dominant Q", "Development Edge", "Cert Status",
       "Country", "Sector", "Finished At", "Cert Issued At", "Admin Note",
       ...quotientCodes.flatMap(c => [`${c} Score`, `${c} Band`])
@@ -1140,6 +1235,9 @@ router.get("/export/csv", async (req, res) => {
       return [
         a.participantName || "",
         a.participantCode || "",
+        a.quizId?.title || a.quizTitle || "Legacy (no quiz)",
+        a.quizId?.slug  || "",
+        a.quizId?.lang  || "",
         a.certificateName || "",
         a.certificateEmail || "",
         a.certificateOrg || "",
