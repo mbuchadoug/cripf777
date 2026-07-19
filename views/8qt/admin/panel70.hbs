@@ -170,22 +170,6 @@
     .att-name{font-size:.8rem;font-weight:600;color:var(--navy)}
     .att-sub{font-size:.7rem;color:var(--dark);margin-top:1px}
     .att-code{font-size:.68rem;color:#aaa;font-family:monospace}
-    /* Attempts table got wide (9 columns) - scroll it horizontally and pin
-       the Actions column to the right edge so Preview/Re-gen/Issue are
-       always reachable no matter the screen width. */
-    .table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
-    .table-scroll table{min-width:1120px}
-    .table-scroll th.col-actions,
-    .table-scroll td.col-actions{
-      position:sticky;right:0;z-index:2;background:#fff;
-      box-shadow:-8px 0 10px -8px rgba(0,0,0,.18);
-      min-width:142px;width:142px
-    }
-    .table-scroll thead th.col-actions{background:#fff;z-index:3}
-    .table-scroll tr:hover td.col-actions{background:#fafafa}
-    .col-actions .btn{display:block;width:100%;margin-bottom:4px;text-align:center;white-space:nowrap}
-    .col-actions .btn:last-child{margin-bottom:0}
-    .col-scores{max-width:190px}
     .ts-cell{white-space:nowrap;vertical-align:top}
     .ts-rel{font-size:.76rem;color:var(--navy);font-weight:600}
     .ts-abs{font-size:.68rem;color:var(--dark);opacity:.75;font-family:monospace;margin-top:2px}
@@ -1711,7 +1695,6 @@ async function loadAttempts(page = 1) {
   }
 
   container.innerHTML = `
-    <div class="table-scroll">
     <table>
       <thead><tr>
         <th>Participant</th>
@@ -1722,7 +1705,7 @@ async function loadAttempts(page = 1) {
         <th>Certificate</th>
         <th>Started (CAT)</th>
         <th>Finished (CAT)</th>
-        <th class="col-actions">Actions</th>
+        <th>Actions</th>
       </tr></thead>
       <tbody>
         ${d.attempts.map(a => `
@@ -1739,8 +1722,11 @@ async function loadAttempts(page = 1) {
               <div style="font-size:.8rem">${a.archetypeName || '-'}</div>
               ${a.dominantQuotient ? `<div class="att-sub">Dominant: <strong>${a.dominantQuotient}</strong></div>` : ''}
             </td>
-            <td><span class="badge ${a.status === 'finished' ? 'badge-green' : 'badge-gray'}">${a.status}</span></td>
-            <td class="col-scores">${scoresPills(a)}</td>
+            <td>
+              <span class="badge ${a.status === 'finished' ? 'badge-green' : 'badge-gray'}">${a.status}</span>
+              ${certBadge(a)}
+            </td>
+            <td>${scoresPills(a)}</td>
             <td>${certBadge(a)}</td>
             <td class="ts-cell" title="${catFull(a.startedAt || a.createdAt)}">
               ${timeCell(a.startedAt || a.createdAt)}
@@ -1750,15 +1736,14 @@ async function loadAttempts(page = 1) {
                 ? timeCell(a.finishedAt, '&#9201; took ' + durationText(a.startedAt || a.createdAt, a.finishedAt))
                 : '<span class="badge badge-gray">in progress</span>'}
             </td>
-            <td class="col-actions">
-              ${a.status === 'finished' ? `<button class="btn btn-outline btn-sm" onclick="openReviewDrawer('${a._id}')">&#128270; Review</button>` : ''}
+            <td style="white-space:nowrap">
+              ${a.status === 'finished' ? `<button class="btn btn-outline btn-sm" style="margin-bottom:3px" onclick="openReviewDrawer('${a._id}')">&#128270; Review</button><br>` : ''}
               ${certActions(a)}
             </td>
           </tr>
         `).join('')}
       </tbody>
     </table>
-    </div>
     <div class="pager">
       Showing ${d.attempts.length} of ${d.total} &middot; Page ${d.page}/${d.pages}
       ${d.page < d.pages ? `<button class="btn btn-outline btn-sm" onclick="loadAttempts(${d.page + 1})">Next &rarr;</button>` : ''}
