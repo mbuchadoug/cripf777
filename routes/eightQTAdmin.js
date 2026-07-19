@@ -48,6 +48,41 @@ function writeOnly(req, res, next) {
   next();
 }
 
+// ── Central Africa Time helpers ─────────────────────────────────────
+// Admins are in Zimbabwe (Africa/Harare, UTC+2, no DST). Timestamps are
+// stored in Mongo as UTC and stay that way - these only affect DISPLAY,
+// so nothing breaks if the VPS clock is set to UTC (it should be).
+const CAT_TZ = "Africa/Harare";
+
+const _catStamp = new Intl.DateTimeFormat("en-GB", {
+  timeZone: CAT_TZ,
+  day: "2-digit", month: "short", year: "numeric",
+  hour: "2-digit", minute: "2-digit", second: "2-digit",
+  hour12: false
+});
+
+// "19 Jul 2026 16:42:03" - safe for spreadsheets, no ambiguity
+function catDateTime(d) {
+  if (!d) return "";
+  const dt = new Date(d);
+  if (isNaN(dt.getTime())) return "";
+  return _catStamp.format(dt).replace(",", "");
+}
+
+// Elapsed time between two instants as "12m 34s" / "1h 05m"
+function durationText(start, end) {
+  if (!start || !end) return "";
+  const ms = new Date(end).getTime() - new Date(start).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return "";
+  const totalSec = Math.round(ms / 1000);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const sec = totalSec % 60;
+  if (h > 0) return `${h}h ${String(m).padStart(2, "0")}m`;
+  if (m > 0) return `${m}m ${String(sec).padStart(2, "0")}s`;
+  return `${sec}s`;
+}
+
 router.use(ensureAuth, adminOnly);
 
 // ══════════════════════════════════════════════════════════════
@@ -840,7 +875,7 @@ router.get("/attempts", async (req, res) => {
       .limit(limit)
       .populate("userId", "email displayName")
       .populate("quizId", "title slug lang mode")
-      .select("userId quizId quizTitle participantName participantCode archetypeName status certificateStatus certificatePdfUrl certificateVerifyCode certificateName certificateEmail dominantQuotient quotientScores profile createdAt finishedAt adminIssuedBy adminIssueNote")
+      .select("userId quizId quizTitle participantName participantCode archetypeName status certificateStatus certificatePdfUrl certificateVerifyCode certificateName certificateEmail dominantQuotient quotientScores profile createdAt startedAt finishedAt certificateIssuedAt adminIssuedBy adminIssueNote")
       .lean();
 
     res.json({ attempts, total, page, pages: Math.ceil(total / limit) });
@@ -886,7 +921,7 @@ router.get("/attempts/search", async (req, res) => {
       .limit(limit)
       .populate("userId", "email displayName")
       .populate("quizId", "title slug lang mode")
-      .select("userId quizId quizTitle participantName participantCode archetypeName status certificateStatus certificatePdfUrl certificateVerifyCode certificateName certificateEmail dominantQuotient quotientScores profile createdAt finishedAt adminIssuedBy adminIssueNote")
+      .select("userId quizId quizTitle participantName participantCode archetypeName status certificateStatus certificatePdfUrl certificateVerifyCode certificateName certificateEmail dominantQuotient quotientScores profile createdAt startedAt finishedAt certificateIssuedAt adminIssuedBy adminIssueNote")
       .lean();
 
     res.json({ attempts, total, page, pages: Math.ceil(total / limit) });
@@ -1216,7 +1251,7 @@ router.get("/export/csv", async (req, res) => {
     if (req.query.certStatus) filter.certificateStatus = req.query.certStatus;
 
     const attempts = await EightQTAttempt.find(filter)
-      .select("participantName participantCode certificateName certificateEmail certificateOrg archetypeName dominantQuotient developmentEdge quotientScores certificateStatus certificateIssuedAt finishedAt profile adminIssueNote quizId quizTitle")
+      .select("participantName participantCode certificateName certificateEmail certificateOrg archetypeName dominantQuotient developmentEdge quotientScores certificateStatus certificateIssuedAt createdAt startedAt finishedAt profile adminIssueNote quizId quizTitle")
       .populate("quizId", "title slug lang")
       .lean();
 
@@ -1226,6 +1261,7 @@ router.get("/export/csv", async (req, res) => {
       "Certificate Name", "Email", "Organisation",
       "Archetype", "Dominant Q", "Development Edge", "Cert Status",
       "Country", "Sector", "Finished At", "Cert Issued At", "Admin Note",
+      "Started (CAT)", "Finished (CAT)", "Duration", "Cert Issued (CAT)",
       ...quotientCodes.flatMap(c => [`${c} Score`, `${c} Band`])
     ];
 
@@ -1250,6 +1286,10 @@ router.get("/export/csv", async (req, res) => {
         a.finishedAt   ? new Date(a.finishedAt).toISOString().split("T")[0]        : "",
         a.certificateIssuedAt ? new Date(a.certificateIssuedAt).toISOString().split("T")[0] : "",
         a.adminIssueNote || "",
+        catDateTime(a.startedAt || a.createdAt),
+        catDateTime(a.finishedAt),
+        durationText(a.startedAt || a.createdAt, a.finishedAt),
+        catDateTime(a.certificateIssuedAt),
         ...quotientCodes.flatMap(c => [
           scoreMap[c]?.score ?? "",
           scoreMap[c]?.band  ?? ""

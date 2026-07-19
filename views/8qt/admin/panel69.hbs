@@ -170,12 +170,6 @@
     .att-name{font-size:.8rem;font-weight:600;color:var(--navy)}
     .att-sub{font-size:.7rem;color:var(--dark);margin-top:1px}
     .att-code{font-size:.68rem;color:#aaa;font-family:monospace}
-    .ts-cell{white-space:nowrap;vertical-align:top}
-    .ts-rel{font-size:.76rem;color:var(--navy);font-weight:600}
-    .ts-abs{font-size:.68rem;color:var(--dark);opacity:.75;font-family:monospace;margin-top:2px}
-    .ts-dur{font-size:.66rem;color:#999;margin-top:2px}
-    .ts-none{font-size:.72rem;color:#bbb}
-    .cat-clock{font-size:.72rem;color:var(--dark);font-family:monospace;white-space:nowrap}
     .score-pills{display:flex;flex-wrap:wrap;gap:2px}
     .score-pill{font-size:.63rem;font-weight:700;padding:1px 5px;border-radius:3px;background:#eef2ff;color:var(--navy)}
 
@@ -513,8 +507,7 @@
     <div class="section">
       <div class="section-head">
         <span class="section-title">All Attempts</span>
-        <div style="display:flex;gap:10px;align-items:center">
-          <span class="cat-clock" id="catClock" title="Current Central Africa Time (UTC+2)"></span>
+        <div style="display:flex;gap:8px">
           <a href="/admin/8qt/export/csv" class="btn btn-outline btn-sm">&#8595; Export CSV</a>
         </div>
       </div>
@@ -1507,119 +1500,6 @@ async function createTemplate() {
 }
 
 // ════════════════════════════════════════════════════
-// TIME DISPLAY - Central Africa Time (Africa/Harare, UTC+2)
-// Timestamps are stored as UTC in Mongo. Everything below is display
-// only, and the timezone is FORCED to Harare rather than relying on the
-// admin's device clock - so the panel reads the same on a laptop set to
-// UTC, a phone roaming abroad, or a browser with a wrong timezone.
-// ════════════════════════════════════════════════════
-const CAT_TZ = 'Africa/Harare';
-
-const CAT_FULL = new Intl.DateTimeFormat('en-GB', {
-  timeZone: CAT_TZ, weekday: 'short',
-  day: '2-digit', month: 'short', year: 'numeric',
-  hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
-});
-const CAT_STAMP = new Intl.DateTimeFormat('en-GB', {
-  timeZone: CAT_TZ,
-  day: '2-digit', month: 'short', year: 'numeric',
-  hour: '2-digit', minute: '2-digit', hour12: false
-});
-const CAT_TIME_ONLY = new Intl.DateTimeFormat('en-GB', {
-  timeZone: CAT_TZ, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
-});
-
-// "19 Jul 2026, 16:42" - the exact wall-clock time in Zimbabwe
-function catStamp(v) {
-  if (!v) return '';
-  const d = new Date(v);
-  if (isNaN(d.getTime())) return '';
-  return CAT_STAMP.format(d) + ' CAT';
-}
-
-// Long form for tooltips, including the raw UTC for cross-checking logs
-function catFull(v) {
-  if (!v) return '';
-  const d = new Date(v);
-  if (isNaN(d.getTime())) return '';
-  return CAT_FULL.format(d) + ' CAT  (UTC: ' + d.toISOString().replace('T', ' ').slice(0, 19) + ')';
-}
-
-// "just now" / "5 minutes ago" / "3 hours ago" / "2 days ago"
-function relTime(v) {
-  if (!v) return '';
-  const t = new Date(v).getTime();
-  if (isNaN(t)) return '';
-  let diff = Date.now() - t;
-  const ahead = diff < 0;           // clock skew - never say "-3 minutes ago"
-  diff = Math.abs(diff);
-
-  const sec = Math.round(diff / 1000);
-  const say = (txt) => ahead ? ('in ' + txt) : (txt + ' ago');
-
-  if (sec < 10)  return ahead ? 'in a moment' : 'just now';
-  if (sec < 60)  return say(sec + ' seconds');
-  const min = Math.round(sec / 60);
-  if (min === 1) return say('a minute');
-  if (min < 60)  return say(min + ' minutes');
-  const hr = Math.round(min / 60);
-  if (hr === 1)  return say('an hour');
-  if (hr < 24)   return say(hr + ' hours');
-  const day = Math.round(hr / 24);
-  if (day === 1) return ahead ? 'tomorrow' : 'yesterday';
-  if (day < 7)   return say(day + ' days');
-  const wk = Math.round(day / 7);
-  if (wk === 1)  return say('a week');
-  if (wk < 5)    return say(wk + ' weeks');
-  const mo = Math.round(day / 30);
-  if (mo === 1)  return say('a month');
-  if (mo < 12)   return say(mo + ' months');
-  const yr = Math.round(day / 365);
-  return yr === 1 ? say('a year') : say(yr + ' years');
-}
-
-// How long the participant spent on the quiz: "12m 34s" / "1h 05m"
-function durationText(start, end) {
-  if (!start || !end) return '';
-  const ms = new Date(end).getTime() - new Date(start).getTime();
-  if (!isFinite(ms) || ms < 0) return '';
-  const total = Math.round(ms / 1000);
-  const h = Math.floor(total / 3600);
-  const m = Math.floor((total % 3600) / 60);
-  const s = total % 60;
-  if (h > 0) return h + 'h ' + String(m).padStart(2, '0') + 'm';
-  if (m > 0) return m + 'm ' + String(s).padStart(2, '0') + 's';
-  return s + 's';
-}
-
-// A stacked cell: relative on top, exact CAT stamp underneath.
-// The relative line carries data-ts so the ticker can re-render it in
-// place without another round trip to the server.
-function timeCell(v, extra) {
-  const d = v ? new Date(v) : null;
-  if (!d || isNaN(d.getTime())) return '<div class="ts-none">&mdash;</div>';
-  return `<div class="ts-rel" data-ts="${d.toISOString()}">${relTime(d)}</div>` +
-         `<div class="ts-abs">${catStamp(d)}</div>` +
-         (extra ? `<div class="ts-dur">${extra}</div>` : '');
-}
-
-// Keep "5 minutes ago" honest without reloading the table.
-function refreshRelTimes() {
-  document.querySelectorAll('.ts-rel[data-ts]').forEach(el => {
-    const txt = relTime(el.getAttribute('data-ts'));
-    if (txt && el.textContent !== txt) el.textContent = txt;
-  });
-}
-
-function tickCatClock() {
-  const el = document.getElementById('catClock');
-  if (el) el.textContent = '\u{1F551} ' + CAT_TIME_ONLY.format(new Date()) + ' CAT';
-}
-
-setInterval(() => { refreshRelTimes(); tickCatClock(); }, 1000);
-document.addEventListener('DOMContentLoaded', tickCatClock);
-
-// ════════════════════════════════════════════════════
 // ATTEMPTS TABLE
 // ════════════════════════════════════════════════════
 let attDebounce;
@@ -1703,8 +1583,7 @@ async function loadAttempts(page = 1) {
         <th>Status</th>
         <th>Scores</th>
         <th>Certificate</th>
-        <th>Started (CAT)</th>
-        <th>Finished (CAT)</th>
+        <th>Date</th>
         <th>Actions</th>
       </tr></thead>
       <tbody>
@@ -1728,14 +1607,7 @@ async function loadAttempts(page = 1) {
             </td>
             <td>${scoresPills(a)}</td>
             <td>${certBadge(a)}</td>
-            <td class="ts-cell" title="${catFull(a.startedAt || a.createdAt)}">
-              ${timeCell(a.startedAt || a.createdAt)}
-            </td>
-            <td class="ts-cell" title="${a.finishedAt ? catFull(a.finishedAt) : 'Not finished'}">
-              ${a.finishedAt
-                ? timeCell(a.finishedAt, '&#9201; took ' + durationText(a.startedAt || a.createdAt, a.finishedAt))
-                : '<span class="badge badge-gray">in progress</span>'}
-            </td>
+            <td style="font-size:.72rem;color:var(--dark);white-space:nowrap">${new Date(a.createdAt).toLocaleDateString()}</td>
             <td style="white-space:nowrap">
               ${a.status === 'finished' ? `<button class="btn btn-outline btn-sm" style="margin-bottom:3px" onclick="openReviewDrawer('${a._id}')">&#128270; Review</button><br>` : ''}
               ${certActions(a)}
@@ -1885,8 +1757,6 @@ async function openReviewDrawer(attemptId) {
         <div style="font-size:.8rem;margin-top:2px">${[a.profile?.country, a.profile?.sector].filter(Boolean).join(' · ')}</div>
         <div style="font-size:.8rem;margin-top:2px">Quiz: <strong>${a.quizTitle || a.quizId?.title || 'Legacy (no quiz)'}</strong>${a.quizId?.slug ? ` <span class="att-code">${a.quizId.slug}</span>` : ''}</div>
         <div style="font-size:.8rem;margin-top:2px">Archetype: <strong>${a.archetypeName || '-'}</strong> &nbsp;·&nbsp; Dominant: <strong>${a.dominantQuotient || '-'}</strong></div>
-        <div style="font-size:.8rem;margin-top:2px" title="${catFull(a.startedAt || a.createdAt)}">Started: <strong>${catStamp(a.startedAt || a.createdAt)}</strong> <span style="color:var(--dark)">(${relTime(a.startedAt || a.createdAt)})</span></div>
-        <div style="font-size:.8rem;margin-top:2px" title="${a.finishedAt ? catFull(a.finishedAt) : ''}">Finished: <strong>${a.finishedAt ? catStamp(a.finishedAt) : 'Not finished'}</strong>${a.finishedAt ? ` <span style="color:var(--dark)">(${relTime(a.finishedAt)}) &middot; took ${durationText(a.startedAt || a.createdAt, a.finishedAt)}</span>` : ''}</div>
         <div style="font-size:.8rem;margin-top:2px">Cert status: <span class="badge badge-${a.certificateStatus === 'issued' ? 'green' : a.certificateStatus === 'paid' ? 'blue' : 'gray'}">${a.certificateStatus}</span>
           ${a.certificatePdfUrl ? `&nbsp;<a href="${a.certificatePdfUrl}" target="_blank" class="btn btn-gold btn-sm" style="vertical-align:middle">&#8595; PDF</a>` : ''}
         </div>
