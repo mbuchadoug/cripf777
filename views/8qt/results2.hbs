@@ -81,24 +81,6 @@
     .btn-cert{display:inline-block;background:var(--gold);color:var(--navy-dark);padding:.9rem 2.2rem;border-radius:8px;font-weight:700;font-size:1rem;text-decoration:none;transition:all .2s;border:none;cursor:pointer}
     .btn-cert:hover{background:#b8943a;transform:translateY(-2px)}
     .cert-issued{background:#ecfdf5;border:1px solid #6ee7b7;border-radius:8px;padding:16px;color:#065f46;text-align:center;font-size:.9rem}
-
-    /* OPTIONAL POST-TEST DETAILS */
-    .details-card{background:var(--white);border-radius:12px;padding:28px;border:1px solid var(--border);box-shadow:0 2px 8px rgba(30,58,95,.06);margin-bottom:24px}
-    .details-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
-    .details-card h3{font-family:'Crimson Pro',serif;color:var(--navy);font-size:1.3rem;margin-bottom:4px}
-    .details-optional{display:inline-block;background:#e8f5e9;color:#2e7d32;font-size:.65rem;padding:.2rem .55rem;border-radius:20px;font-weight:600;letter-spacing:1px}
-    .details-card p.details-sub{font-size:.85rem;color:var(--dark);margin:8px 0 18px;line-height:1.6}
-    .details-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
-    @media(max-width:520px){.details-grid{grid-template-columns:1fr}}
-    .details-field label{display:block;font-size:.75rem;font-weight:600;color:var(--navy);margin-bottom:5px}
-    .details-field input,.details-field select{width:100%;padding:.65rem .8rem;border:1.5px solid var(--border);border-radius:8px;font-family:'Inter',sans-serif;font-size:.9rem;color:var(--text);background:var(--white);outline:none;transition:border-color .2s}
-    .details-field input:focus,.details-field select:focus{border-color:var(--navy)}
-    .details-actions{display:flex;gap:10px;margin-top:6px;flex-wrap:wrap}
-    .details-save{flex:1;min-width:160px;padding:.75rem 1rem;background:var(--navy);color:var(--white);border:none;border-radius:8px;font-family:'Inter',sans-serif;font-weight:600;font-size:.9rem;cursor:pointer;transition:background .2s}
-    .details-save:hover{background:var(--navy-dark)}
-    .details-skip{padding:.75rem 1.2rem;background:transparent;color:var(--dark);border:1px solid var(--border);border-radius:8px;font-family:'Inter',sans-serif;font-size:.9rem;cursor:pointer}
-    .details-skip:hover{background:var(--light)}
-    .details-done{background:#ecfdf5;border:1px solid #6ee7b7;border-radius:8px;padding:14px 18px;color:#065f46;font-size:.9rem;text-align:center}
   </style>
 </head>
 <body>
@@ -182,63 +164,6 @@
     </div>
   </div>
 
-  <!-- OPTIONAL POST-TEST DETAILS (replaces the old pre-test form) -->
-  {{#if showProfilePrompt}}
-  <div class="details-card" id="detailsCard">
-    <div class="details-head">
-      <div>
-        <h3>A few quick details</h3>
-      </div>
-      <span class="details-optional">OPTIONAL</span>
-    </div>
-    <p class="details-sub">
-      Never required. These help us understand who is taking the test, and if you
-      request a certificate your name is filled in for you. Skip freely.
-    </p>
-
-    <div class="details-grid">
-      <div class="details-field">
-        <label for="dFirstName">First name (for your certificate)</label>
-        <input type="text" id="dFirstName" placeholder="e.g. Tendai">
-      </div>
-      <div class="details-field">
-        <label for="dCountry">Country</label>
-        <select id="dCountry">
-          <option value="">— Select country —</option>
-          <option value="Zimbabwe">Zimbabwe</option>
-          <option value="South Africa">South Africa</option>
-          <option value="Nigeria">Nigeria</option>
-          <option value="Kenya">Kenya</option>
-          <option value="Ghana">Ghana</option>
-          <option value="United Kingdom">United Kingdom</option>
-          <option value="United States">United States</option>
-          <option value="Other">Other</option>
-        </select>
-      </div>
-    </div>
-    <div class="details-field" style="margin-bottom:16px">
-      <label for="dSector">Field / sector</label>
-      <select id="dSector">
-        <option value="">— Select sector —</option>
-        <option value="Education">Education</option>
-        <option value="Business">Business</option>
-        <option value="Government">Government</option>
-        <option value="Health">Health</option>
-        <option value="Technology">Technology</option>
-        <option value="Agriculture">Agriculture</option>
-        <option value="NGO / Charity">NGO / Charity</option>
-        <option value="Student">Student</option>
-        <option value="Other">Other</option>
-      </select>
-    </div>
-
-    <div class="details-actions">
-      <button class="details-save" onclick="saveDetails()">Save details</button>
-      <button class="details-skip" onclick="skipDetails()">Skip</button>
-    </div>
-  </div>
-  {{/if}}
-
   <!-- CERTIFICATE CTA -->
   {{#if (eq certStatus "issued")}}
   <div class="cert-issued">
@@ -308,47 +233,6 @@ function copyLink() {
     btn.textContent = '✓ Copied!';
     setTimeout(() => btn.textContent = '🔗 Copy link', 2000);
   });
-}
-
-// Optional post-test details (replaces the old pre-test form)
-async function saveDetails() {
-  const btn = document.querySelector('.details-save');
-  const body = {
-    firstName: (document.getElementById('dFirstName')?.value || '').trim(),
-    country:   document.getElementById('dCountry')?.value || '',
-    sector:    document.getElementById('dSector')?.value || ''
-  };
-  if (btn) { btn.textContent = 'Saving…'; btn.disabled = true; }
-  try {
-    const r = await fetch('/8qt/results/{{attempt._id}}/profile', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
-    });
-    const d = await r.json();
-    if (d.ok) {
-      collapseDetails('✓ Thanks — saved.');
-    } else {
-      alert(d.error || 'Could not save. Please try again.');
-      if (btn) { btn.textContent = 'Save details'; btn.disabled = false; }
-    }
-  } catch (e) {
-    alert('Network error. Please try again.');
-    if (btn) { btn.textContent = 'Save details'; btn.disabled = false; }
-  }
-}
-
-function skipDetails() { collapseDetails(); }
-
-function collapseDetails(msg) {
-  const card = document.getElementById('detailsCard');
-  if (!card) return;
-  if (msg) {
-    card.innerHTML = '<div class="details-done">' + msg + '</div>';
-    setTimeout(() => { card.style.display = 'none'; }, 1600);
-  } else {
-    card.style.display = 'none';
-  }
 }
 </script>
 </body>

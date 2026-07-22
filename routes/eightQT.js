@@ -491,27 +491,217 @@ router.get("/q/:slug", async (req, res) => {
 });
 
 // ══════════════════════════════════════════════════════════════
+// SHARED: Create an in-progress attempt for the current request.
+// This is the single source of truth for turning a "start" action
+// (anonymous, Google, or a legacy profile POST) into a live attempt.
+// It performs quiz resolution, scheduling-window checks, retake policy,
+// fresh-question exclusion, scoring denominators and attempt creation.
+//
+// The optional `profile` arg carries demographic data. It is now ALWAYS
+// optional and NEVER blocks starting - participants can begin with an
+// empty profile and (optionally) fill it in AFTER the test, on the
+// results page, when they decide whether they want a certificate.
+//
+// Returns { ok:true, attempt, participantCode, quiz }
+//      or { ok:false, status, error } for the caller to surface.
+// ══════════════════════════════════════════════════════════════
+async function createAttemptForRequest(req, { profile } = {}) {
+  const configs = await EightQTConfig.find({ active: true })
+    .sort({ displayOrder: 1 }).lean();
+  if (!configs.length) {
+    return { ok: false, status: 400, error: "Test not yet configured. Please check back soon." };
+  }
+
+  // Resolve which quiz to serve: explicit pick -> session -> per-lang default.
+  const pageLang = normLang(req.body?.lang || req.query?.lang || req.session?.eightQTLang);
+  let quizRef = req.body?.quiz || req.query?.quiz || req.session?.eightQTQuizId || null;
+  // Ignore a stale session pick from the other language's page.
+  if (quizRef && !req.body?.quiz && !req.query?.quiz) {
+    const picked = await resolveActiveQuiz(quizRef, pageLang);
+    if (picked && normLang(picked.lang) !== pageLang) quizRef = null;
+  }
+  const quiz = await resolveActiveQuiz(quizRef, pageLang);
+
+  // ── Scheduling window: refuse new attempts outside [opensAt, closesAt] ──
+  if (quiz) {
+    const now = new Date();
+    if (quiz.opensAt && now < new Date(quiz.opensAt)) {
+      return { ok: false, status: 403, error: `"${quiz.title}" opens on ${new Date(quiz.opensAt).toDateString()}. Please come back then.` };
+    }
+    if (quiz.closesAt && now > new Date(quiz.closesAt)) {
+      return { ok: false, status: 403, error: `"${quiz.title}" closed on ${new Date(quiz.closesAt).toDateString()} and is no longer accepting attempts.` };
+    }
+  }
+
+  // ── Identity for retake policy: userId > session code > IP ──
+  const identityOr = [];
+  if (req.user?._id) identityOr.push({ userId: req.user._id });
+  if (req.session?.eightQTParticipantCode) {
+    identityOr.push({ participantCode: req.session.eightQTParticipantCode });
+  }
+  if (req.ip) identityOr.push({ attemptIp: req.ip });
+
+  // ── Retake policy + fresh-question exclusion (per quiz) ──
+  let excludeIds = null;
+  if (quiz && identityOr.length) {
+    const prior = await EightQTAttempt.find({
+      quizId: quiz._id, status: "finished", $or: identityOr
+    }).select("finishedAt questionIds").sort({ finishedAt: -1 }).limit(20).lean();
+
+    if (prior.length) {
+      const maxA = Number(quiz.maxAttemptsPerPerson) || 0;
+      if (maxA > 0 && prior.length >= maxA) {
+        return { ok: false, status: 429, error: `You have reached the maximum of ${maxA} attempt${maxA > 1 ? "s" : ""} for "${quiz.title}".` };
+      }
+      const coolDays = Number(quiz.retakeDays) || 0;
+      if (coolDays > 0 && prior[0].finishedAt) {
+        const nextAt = new Date(new Date(prior[0].finishedAt).getTime() + coolDays * 86400000);
+        if (nextAt > new Date()) {
+          return { ok: false, status: 429, error: `You recently completed "${quiz.title}". You can retake it from ${nextAt.toDateString()}.` };
+        }
+      }
+      const fixedCap = Math.max(0, Number(quiz.size) || 0);
+      const isSubsetDraw = quiz.mode !== "fixed" ||
+        (fixedCap > 0 && (quiz.questionIds || []).length > fixedCap);
+      if (isSubsetDraw && quiz.avoidRepeatQuestions !== false) {
+        excludeIds = new Set();
+        for (const p of prior) {
+          for (const qid of (p.questionIds || [])) excludeIds.add(String(qid));
+        }
+      }
+    }
+  }
+
+  // Draw questions (language-aware; never mix languages on a non-EN page)
+  let questions;
+  if (!quiz && pageLang !== "en") {
+    questions = await buildQuestionSet(configs, pageLang);
+  } else {
+    questions = await buildQuizQuestionSet(quiz, configs, excludeIds);
+  }
+  if (!questions.length) {
+    return { ok: false, status: 400, error: pageLang !== "en"
+      ? "This assessment isn't available in this language yet. Please check back soon."
+      : "No questions available yet. Please check back soon." };
+  }
+
+  // Per-quotient max for THIS served set (correct denominator for any size/mode)
+  const quotientMax = computeQuotientMax(questions);
+
+  const optionsOrder = questions.map(q =>
+    (quiz && quiz.shuffleOptions === false)
+      ? [...Array(q.options.length).keys()]
+      : shuffle([...Array(q.options.length).keys()])
+  );
+
+  // Identity: Google user -> no code; anonymous -> unique participant code.
+  let participantCode = req.session?.eightQTParticipantCode || null;
+  let userId = req.user?._id || null;
+  if (userId) participantCode = null;
+  if (!userId && !participantCode) {
+    for (let i = 0; i < 10; i++) {
+      const c = generateParticipantCode();
+      const exists = await EightQTAttempt.findOne({ participantCode: c }).lean();
+      if (!exists) { participantCode = c; break; }
+    }
+    if (!participantCode) participantCode = `PIQ-${Date.now()}-X`;
+  }
+
+  const displayName = participantCode ? generateDisplayName(participantCode) : null;
+
+  const attemptDoc = {
+    userId,
+    participantName: displayName,
+    profile: {
+      firstName: profile?.firstName?.trim() || "",
+      country:   profile?.country?.trim()   || "",
+      sector:    profile?.sector?.trim()    || ""
+    },
+    questionIds: questions.map(q => q._id),
+    optionsOrder,
+    quizId: quiz?._id || null,
+    quizTitle: quiz?.title || null,
+    quotientMax,
+    status: "in_progress",
+    startedAt: new Date(),
+    attemptIp: req.ip,
+    referrer: req.get("referer") || null
+  };
+  if (participantCode) attemptDoc.participantCode = participantCode;
+  const attempt = await EightQTAttempt.create(attemptDoc);
+
+  if (req.session) {
+    req.session.eightQTAttemptId = String(attempt._id);
+    if (participantCode) req.session.eightQTParticipantCode = participantCode;
+    await req.session.save();
+  }
+
+  return { ok: true, attempt, participantCode, quiz };
+}
+
+// If this identity already has a live (in_progress) attempt, return it so a
+// second "start" click resumes instead of spawning a duplicate attempt.
+async function findResumableAttempt(req) {
+  const or = [];
+  if (req.user?._id) or.push({ userId: req.user._id });
+  if (req.session?.eightQTParticipantCode) {
+    or.push({ participantCode: req.session.eightQTParticipantCode });
+  }
+  if (!or.length) return null;
+  return await EightQTAttempt.findOne({ status: "in_progress", $or: or })
+    .sort({ startedAt: -1 }).lean();
+}
+
+// ══════════════════════════════════════════════════════════════
 // STEP 2 - IDENTITY: Anonymous start
 // POST /8qt/start/anonymous
+//
+// CHANGED: this now creates the attempt and drops the participant
+// STRAIGHT into question 1. No pre-test details form. Demographics /
+// certificate name are collected AFTER the test (results page + cert form).
 // ══════════════════════════════════════════════════════════════
 router.post("/start/anonymous", async (req, res) => {
   try {
-    let code;
-    // Ensure unique code
-    for (let i = 0; i < 10; i++) {
-      const candidate = generateParticipantCode();
-      const exists = await EightQTAttempt.findOne({ participantCode: candidate }).lean();
-      if (!exists) { code = candidate; break; }
+    // Resume a live attempt for this session instead of duplicating it.
+    const resumable = await findResumableAttempt(req);
+    if (resumable) {
+      return res.json({ ok: true, participantCode: resumable.participantCode || null, redirect: `/8qt/test/${resumable._id}` });
     }
-    if (!code) code = `PIQ-${Date.now()}-X`;
 
-    // Store in session so they can continue
-    req.session.eightQTParticipantCode = code;
-    await req.session.save();
-
-    res.json({ ok: true, participantCode: code, redirect: `/8qt/profile?code=${code}` });
+    const result = await createAttemptForRequest(req, {});
+    if (!result.ok) {
+      return res.status(result.status || 400).json({ error: result.error });
+    }
+    return res.json({
+      ok: true,
+      participantCode: result.participantCode,
+      redirect: `/8qt/test/${result.attempt._id}`
+    });
   } catch (err) {
+    console.error("[8qt start/anonymous]", err);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════
+// STEP 2 - IDENTITY: Generic start (used after Google auth, and as a
+// plain GET entry). Creates the attempt for the current identity and
+// redirects straight to the test. Resumes any live attempt first.
+// GET /8qt/start
+// ══════════════════════════════════════════════════════════════
+router.get("/start", async (req, res) => {
+  try {
+    const resumable = await findResumableAttempt(req);
+    if (resumable) return res.redirect(`/8qt/test/${resumable._id}`);
+
+    const result = await createAttemptForRequest(req, {});
+    if (!result.ok) {
+      return res.status(result.status || 400).render("8qt/error", { message: result.error });
+    }
+    return res.redirect(`/8qt/test/${result.attempt._id}`);
+  } catch (err) {
+    console.error("[8qt start]", err);
+    return res.status(500).render("8qt/error", { message: "Could not start the assessment. Please try again." });
   }
 });
 
@@ -543,7 +733,8 @@ router.post("/resume", async (req, res) => {
 // GET /8qt/google - sets session marker and redirects to /auth/google
 router.get("/google", (req, res) => {
   req.session.signupSource = "8qt";
-  req.session.returnTo = "/8qt/profile";
+  // After Google auth, start immediately (no pre-test details form).
+  req.session.returnTo = "/8qt/start";
   req.session.save(() => res.redirect("/auth/google"));
 });
 
@@ -552,178 +743,34 @@ router.get("/google", (req, res) => {
 // GET  /8qt/profile
 // POST /8qt/profile
 // ══════════════════════════════════════════════════════════════
-router.get("/profile", (req, res) => {
-  const code = req.query.code || req.session?.eightQTParticipantCode || null;
-  res.render("8qt/profile", { code, user: req.user || null });
-});
+// GET /8qt/profile
+// DEPRECATED as a user-facing step. The pre-test details form has been
+// removed from the flow (it asked people for details BEFORE they'd even
+// seen the test). Any old link/bookmark to it now just starts the test.
+router.get("/profile", (req, res) => res.redirect("/8qt/start"));
 
+// POST /8qt/profile
+// Kept ONLY for backward compatibility (e.g. a stale cached profile page).
+// It now delegates to the shared helper - the profile fields remain fully
+// optional and no longer gate the test.
 router.post("/profile", async (req, res) => {
   try {
-    const { firstName, country, sector, code } = req.body;
+    const { firstName, country, sector } = req.body;
 
-    // Attempt creation happens here - after we have profile data
-    const configs = await EightQTConfig.find({ active: true })
-      .sort({ displayOrder: 1 }).lean();
-
-    if (!configs.length) {
-      return res.status(400).json({ error: "Test not yet configured. Please check back soon." });
+    const resumable = await findResumableAttempt(req);
+    if (resumable) {
+      return res.json({ ok: true, attemptId: resumable._id, participantCode: resumable.participantCode || null, redirect: `/8qt/test/${resumable._id}` });
     }
 
-    // Resolve which quiz to serve: explicit pick -> session -> per-lang default.
-    // lang comes from the posting page (hidden field) so /8qt/sn resolves the
-    // Shona default even for an anonymous first-timer with no session pick.
-    const pageLang = normLang(req.body.lang || req.query.lang || req.session?.eightQTLang);
-    let quizRef = req.body.quiz || req.query.quiz || req.session?.eightQTQuizId || null;
-    // Ignore a stale session pick from the other language's page.
-    if (quizRef && !req.body.quiz && !req.query.quiz) {
-      const picked = await resolveActiveQuiz(quizRef, pageLang);
-      if (picked && normLang(picked.lang) !== pageLang) quizRef = null;
+    const result = await createAttemptForRequest(req, { profile: { firstName, country, sector } });
+    if (!result.ok) {
+      return res.status(result.status || 400).json({ error: result.error });
     }
-    const quiz = await resolveActiveQuiz(quizRef, pageLang);
-
-    // ── Scheduling window: refuse new attempts outside [opensAt, closesAt] ──
-    if (quiz) {
-      const now = new Date();
-      if (quiz.opensAt && now < new Date(quiz.opensAt)) {
-        return res.status(403).json({
-          error: `"${quiz.title}" opens on ${new Date(quiz.opensAt).toDateString()}. Please come back then.`
-        });
-      }
-      if (quiz.closesAt && now > new Date(quiz.closesAt)) {
-        return res.status(403).json({
-          error: `"${quiz.title}" closed on ${new Date(quiz.closesAt).toDateString()} and is no longer accepting attempts.`
-        });
-      }
-    }
-
-    // ── Identity for retake policy: userId > session code > IP ──
-    // Anonymous participants get a NEW code per attempt, so the session code
-    // + IP are what tie their attempts together across retakes.
-    const identityOr = [];
-    if (req.user?._id) identityOr.push({ userId: req.user._id });
-    if (req.session?.eightQTParticipantCode) {
-      identityOr.push({ participantCode: req.session.eightQTParticipantCode });
-    }
-    if (req.ip) identityOr.push({ attemptIp: req.ip });
-
-    // ── Retake policy + fresh-question exclusion (per quiz) ──
-    let excludeIds = null;
-    if (quiz && identityOr.length) {
-      const prior = await EightQTAttempt.find({
-        quizId: quiz._id, status: "finished", $or: identityOr
-      }).select("finishedAt questionIds").sort({ finishedAt: -1 }).limit(20).lean();
-
-      if (prior.length) {
-        const maxA = Number(quiz.maxAttemptsPerPerson) || 0;
-        if (maxA > 0 && prior.length >= maxA) {
-          return res.status(429).json({
-            error: `You have reached the maximum of ${maxA} attempt${maxA > 1 ? "s" : ""} for "${quiz.title}".`
-          });
-        }
-        const coolDays = Number(quiz.retakeDays) || 0;
-        if (coolDays > 0 && prior[0].finishedAt) {
-          const nextAt = new Date(new Date(prior[0].finishedAt).getTime() + coolDays * 86400000);
-          if (nextAt > new Date()) {
-            return res.status(429).json({
-              error: `You recently completed "${quiz.title}". You can retake it from ${nextAt.toDateString()}.`
-            });
-          }
-        }
-        // Avoid re-serving questions this person already saw. Applies to
-        // dynamic quizzes AND to fixed quizzes with a per-attempt size cap
-        // (where each attempt draws a subset of the pool and should rotate).
-        const fixedCap = Math.max(0, Number(quiz.size) || 0);
-        const isSubsetDraw = quiz.mode !== "fixed" ||
-          (fixedCap > 0 && (quiz.questionIds || []).length > fixedCap);
-        if (isSubsetDraw && quiz.avoidRepeatQuestions !== false) {
-          excludeIds = new Set();
-          for (const p of prior) {
-            for (const qid of (p.questionIds || [])) excludeIds.add(String(qid));
-          }
-        }
-      }
-    }
-
-    // On a non-English page with no quiz configured, the legacy fallback would
-    // serve English questions - which would be wrong. Draw from THIS language
-    // instead, and if that pool is empty, say so rather than mixing languages.
-    let questions;
-    if (!quiz && pageLang !== "en") {
-      questions = await buildQuestionSet(configs, pageLang);
-    } else {
-      questions = await buildQuizQuestionSet(quiz, configs, excludeIds);
-    }
-    if (!questions.length) {
-      return res.status(400).json({
-        error: pageLang !== "en"
-          ? "This assessment isn't available in this language yet. Please check back soon."
-          : "No questions available yet. Please check back soon."
-      });
-    }
-
-    // Per-quotient max for THIS served set (correct denominator for any size/mode)
-    const quotientMax = computeQuotientMax(questions);
-
-    // Build options order. Honour the quiz's shuffleOptions (default: shuffle).
-    const optionsOrder = questions.map(q =>
-      (quiz && quiz.shuffleOptions === false)
-        ? [...Array(q.options.length).keys()]
-        : shuffle([...Array(q.options.length).keys()])
-    );
-
-    // Generate participant code if anonymous
-    let participantCode = code || req.session?.eightQTParticipantCode || null;
-    let userId = req.user?._id || null;
-
-    // If Google-authed user, no participantCode needed
-    if (userId) participantCode = null;
-
-    // If anonymous, ensure code exists
-    if (!userId && !participantCode) {
-      for (let i = 0; i < 10; i++) {
-        const c = generateParticipantCode();
-        const exists = await EightQTAttempt.findOne({ participantCode: c }).lean();
-        if (!exists) { participantCode = c; break; }
-      }
-    }
-
-    const displayName = participantCode ? generateDisplayName(participantCode) : null;
-
-    // Build attempt doc - omit participantCode entirely for Google users
-    // (sparse index ignores absent fields, but fails on explicit null duplicates)
-    const attemptDoc = {
-      userId,
-      participantName: displayName,
-      profile: {
-        firstName: firstName?.trim() || "",
-        country: country?.trim() || "",
-        sector: sector?.trim() || ""
-      },
-      questionIds: questions.map(q => q._id),
-      optionsOrder,
-      quizId: quiz?._id || null,
-      quizTitle: quiz?.title || null,
-      quotientMax,
-      status: "in_progress",
-      startedAt: new Date(),
-      attemptIp: req.ip,
-      referrer: req.get("referer") || null
-    };
-    if (participantCode) attemptDoc.participantCode = participantCode;
-    const attempt = await EightQTAttempt.create(attemptDoc);
-
-    // Store attempt ID in session
-    if (req.session) {
-      req.session.eightQTAttemptId = String(attempt._id);
-      if (participantCode) req.session.eightQTParticipantCode = participantCode;
-      await req.session.save();
-    }
-
     res.json({
       ok: true,
-      attemptId: attempt._id,
-      participantCode,
-      redirect: `/8qt/test/${attempt._id}`
+      attemptId: result.attempt._id,
+      participantCode: result.participantCode,
+      redirect: `/8qt/test/${result.attempt._id}`
     });
   } catch (err) {
     console.error("[8qt profile/create]", err);
@@ -911,6 +958,22 @@ router.get("/results/:attemptId", async (req, res) => {
     const shareUrl = `${process.env.SITE_URL || ""}/8qt/results/${attempt._id}`;
     const publicProfileUrl = attempt.profilePublic ? shareUrl : null;
 
+    // Ownership: results are shareable, so a public visitor may open someone
+    // else's results. Only the owner sees (and can save) the optional details
+    // card, and only while those details haven't been captured yet.
+    const sessionCode = req.session?.eightQTParticipantCode;
+    const sessionAttemptId = req.session?.eightQTAttemptId;
+    const isOwner =
+      (req.user && attempt.userId && String(attempt.userId) === String(req.user._id)) ||
+      (sessionCode && attempt.participantCode === sessionCode) ||
+      (sessionAttemptId && String(attempt._id) === sessionAttemptId);
+
+    const p = attempt.profile || {};
+    const hasProfile = !!(p.firstName || p.country || p.sector);
+    // Don't nag once a cert has been requested/issued (name already collected).
+    const certDone = ["requested", "paid", "issued"].includes(attempt.certificateStatus);
+    const showProfilePrompt = !!isOwner && !hasProfile && !certDone;
+
     res.render("8qt/results", {
       attempt,
       archetype,
@@ -923,11 +986,52 @@ router.get("/results/:attemptId", async (req, res) => {
       certStatus: attempt.certificateStatus,
       participantCode: attempt.participantCode,
       displayName: attempt.participantName,
+      isOwner: !!isOwner,
+      showProfilePrompt,
       user: req.user || null
     });
   } catch (err) {
     console.error("[8qt results]", err);
     res.status(500).render("8qt/error", { message: "Error loading results." });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════
+// STEP 6b - OPTIONAL POST-TEST PROFILE (from the results page)
+// POST /8qt/results/:attemptId/profile
+//
+// Replaces the old pre-test details form. Fully optional, non-blocking,
+// AJAX-only. Captures demographics AFTER the test so they never stand
+// between a participant and question 1. firstName here also pre-fills the
+// certificate request form if they go on to request one.
+// ══════════════════════════════════════════════════════════════
+router.post("/results/:attemptId/profile", async (req, res) => {
+  try {
+    const attempt = await EightQTAttempt.findById(req.params.attemptId);
+    if (!attempt) return res.status(404).json({ error: "Attempt not found" });
+
+    // Only the owner may update the profile.
+    const sessionCode = req.session?.eightQTParticipantCode;
+    const sessionAttemptId = req.session?.eightQTAttemptId;
+    const isOwner =
+      (req.user && attempt.userId && String(attempt.userId) === String(req.user._id)) ||
+      (sessionCode && attempt.participantCode === sessionCode) ||
+      (sessionAttemptId && String(attempt._id) === sessionAttemptId);
+    if (!isOwner) return res.status(403).json({ error: "Access denied." });
+
+    const { firstName, country, sector } = req.body;
+    const prev = attempt.profile || {};
+    attempt.profile = {
+      firstName: (firstName ?? prev.firstName ?? "").toString().trim(),
+      country:   (country   ?? prev.country   ?? "").toString().trim(),
+      sector:    (sector    ?? prev.sector    ?? "").toString().trim()
+    };
+    await attempt.save();
+
+    res.json({ ok: true, profile: attempt.profile });
+  } catch (err) {
+    console.error("[8qt results profile]", err);
+    res.status(500).json({ error: err.message });
   }
 });
 
