@@ -116,6 +116,7 @@ import apiOrgQuizRoutes from "./routes/api_org_quiz.js";
 
 import configurePassport from "./config/passport.js";
 import authRoutes from "./routes/auth.js";
+import mobileApiRouter from "./routes/mobileApi.js"; // ← mobile app JSON API
 import placementAuditRoutes from "./routes/admin_placement_audits.js";
 import adminOrganizationRoutes from "./routes/admin_organizations.js";
 import orgManagementRoutes from "./routes/org_management.js";
@@ -512,6 +513,9 @@ app.use((req, res, next) => {
 
 // mount auth routes first (so /auth is available when needed)
 app.use("/auth", authRoutes);
+
+// ── MOBILE APP JSON API (additive; does not touch web/session flows) ──
+app.use("/api/mobile", mobileApiRouter);
 
 // ADMIN (single mount for admin UI & import routes)
 app.use("/admin", adminRoutes);
