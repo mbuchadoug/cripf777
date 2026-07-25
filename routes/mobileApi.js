@@ -20,6 +20,8 @@ import crypto from "crypto";
 import mongoose from "mongoose";
 
 import User from "../models/user.js";
+import Organization from "../models/organization.js";
+import OrgMembership from "../models/orgMembership.js";
 import MobileAuthCode from "../models/mobileAuthCode.js";
 import EightQTQuestion from "../models/eightQTQuestion.js";
 import EightQTQuiz from "../models/eightQTQuiz.js";
@@ -191,6 +193,126 @@ router.post("/auth/google/exchange", async (req, res) => {
   } catch (err) {
     console.error("[mobile google/exchange]", err);
     return res.status(500).json({ error: "Sign-in failed. Try again." });
+  }
+});
+
+/* ══════════════════════════════════════════════════════════════════
+   REGISTER — username + password sign-up, no Google or email required.
+   The user picks ONE role; we generate a username and issue a token.
+   Same endpoint powers the app AND a web sign-up page.
+   ════════════════════════════════════════════════════════════════════ */
+
+// Roles a person may self-select at sign-up. Admin roles are never self-served.
+const SELF_SIGNUP_ROLES = new Set(["parent", "private_teacher", "student"]);
+
+// Enrol a freshly created user into the right org, mirroring passport.js so
+// the app and web behave identically.
+async function enrolNewUser(user) {
+  try {
+    const homeOrg = await Organization.findOne({ slug: "cripfcnt-home" }).lean();
+    if ((user.role === "parent" || user.role === "private_teacher") && homeOrg) {
+      const exists = await OrgMembership.findOne({ org: homeOrg._id, user: user._id });
+      if (!exists) {
+        await OrgMembership.create({
+          org: homeOrg._id,
+          user: user._id,
+          role: user.role === "private_teacher" ? "private_teacher" : "parent",
+          joinedAt: new Date()
+        });
+      }
+    }
+    // Students belong to the home org too (a parent links them later via parentUserId).
+    if (user.role === "student" && homeOrg) {
+      const exists = await OrgMembership.findOne({ org: homeOrg._id, user: user._id });
+      if (!exists) {
+        await OrgMembership.create({
+          org: homeOrg._id,
+          user: user._id,
+          role: "student",
+          joinedAt: new Date()
+        });
+      }
+    }
+  } catch (err) {
+    console.error("[mobile register] enrol failed (non-fatal):", err.message);
+  }
+}
+
+/**
+ * POST /api/mobile/auth/register
+ * Body: { role, firstName, lastName, password, email? }
+ * Returns: { token, user, username }  — username is shown to the user to save.
+ */
+router.post("/auth/register", async (req, res) => {
+  try {
+    const role = String(req.body?.role || "").trim();
+    const firstName = String(req.body?.firstName || "").trim();
+    const lastName = String(req.body?.lastName || "").trim();
+    const password = String(req.body?.password || "");
+    const email = String(req.body?.email || "").trim().toLowerCase();
+
+    if (!SELF_SIGNUP_ROLES.has(role)) {
+      return res.status(400).json({ error: "Choose Parent, Private teacher or Student." });
+    }
+    if (!firstName) {
+      return res.status(400).json({ error: "Enter your first name." });
+    }
+    if (password.length < 6) {
+      return res.status(400).json({ error: "Use a password of at least 6 characters." });
+    }
+
+    // If an email is given, it must be free.
+    if (email) {
+      const clash = await User.findOne({ email }).lean();
+      if (clash) {
+        return res.status(409).json({
+          code: "EMAIL_TAKEN",
+          error: "An account already uses that email. Try signing in instead."
+        });
+      }
+    }
+
+    const username = await User.createUniqueUsername(firstName, lastName);
+
+    const user = new User({
+      role,
+      firstName,
+      lastName,
+      displayName: [firstName, lastName].filter(Boolean).join(" ") || username,
+      username,
+      email: email || undefined,
+      provider: "password",
+      consumerEnabled: role === "parent" || role === "private_teacher",
+      accountType:
+        role === "parent" ? "parent" : role === "student" ? "student_self" : undefined,
+      lastLogin: new Date()
+    });
+
+    await user.setPassword(password); // sets passwordHash, clears needsPasswordSetup
+
+    // Teacher accounts start on a trial with zero AI credits, like passport.js.
+    if (role === "private_teacher") {
+      user.teacherSubscriptionStatus = "trial";
+      user.teacherSubscriptionPlan = "none";
+      user.aiQuizCredits = 0;
+      user.needsProfileSetup = true;
+    }
+
+    await user.save();
+    await enrolNewUser(user);
+
+    return res.json({
+      token: signToken(user),
+      user: publicUser(user),
+      username // surfaced so the app can tell the user their handle
+    });
+  } catch (err) {
+    // Duplicate key (username/email race) → ask them to retry.
+    if (err?.code === 11000) {
+      return res.status(409).json({ error: "That did not save. Please try again." });
+    }
+    console.error("[mobile auth/register]", err);
+    return res.status(500).json({ error: "Could not create your account. Try again." });
   }
 });
 

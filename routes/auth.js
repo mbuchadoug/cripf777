@@ -27,6 +27,7 @@ import ExamInstance from "../models/examInstance.js";
 import Question from "../models/question.js";
 import { ensureAuth } from "../middleware/authGuard.js";
 import User from "../models/user.js";
+import { mobileGoogleReturn } from "./mobileApi.js"; // mobile app return hook
 
 const router = Router();
 
@@ -141,6 +142,14 @@ router.get(
   passport.authenticate("google", { failureRedirect: "/" }),
   async (req, res) => {
     try {
+      // ── Mobile app login? Hand back a one-time code and stop. ──
+      // Set by /api/mobile/auth/google/start. Browser logins never set it,
+      // so the web flow below is completely unaffected.
+      if (req.session?.mobileFlow) {
+        const handled = await mobileGoogleReturn(req, res);
+        if (handled) return;
+      }
+
       const rawState  = req.query?.state ? String(req.query.state) : null;
       const decoded   = rawState ? decodeState(rawState) : null;
       const fromState   = decoded && safeReturnTo(decoded) ? decoded : null;
