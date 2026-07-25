@@ -23,6 +23,8 @@ import User from "../models/user.js";
 import Organization from "../models/organization.js";
 import OrgMembership from "../models/orgMembership.js";
 import MobileAuthCode from "../models/mobileAuthCode.js";
+import MobileVerification from "../models/mobileVerification.js";
+import { sendVerificationCode } from "../services/mobileMailer.js";
 import EightQTQuestion from "../models/eightQTQuestion.js";
 import EightQTQuiz from "../models/eightQTQuiz.js";
 import EightQTAttempt from "../models/eightQTAttempt.js";
@@ -238,12 +240,53 @@ async function enrolNewUser(user) {
   }
 }
 
+// Actually create the account. Shared by the verified-email path and the
+// no-email path so account creation lives in exactly one place.
+async function createAccount({ role, firstName, lastName, password, email }) {
+  const username = await User.createUniqueUsername(firstName, lastName);
+  const user = new User({
+    role,
+    firstName,
+    lastName,
+    displayName: [firstName, lastName].filter(Boolean).join(" ") || username,
+    username,
+    email: email || undefined,
+    provider: "password",
+    consumerEnabled: role === "parent" || role === "private_teacher",
+    accountType: role === "parent" ? "parent" : role === "student" ? "student_self" : undefined,
+    lastLogin: new Date()
+  });
+  await user.setPassword(password);
+  if (role === "private_teacher") {
+    user.teacherSubscriptionStatus = "trial";
+    user.teacherSubscriptionPlan = "none";
+    user.aiQuizCredits = 0;
+    user.needsProfileSetup = true;
+  }
+  await user.save();
+  await enrolNewUser(user);
+  return user;
+}
+
+function validateSignup({ role, firstName, password }) {
+  if (!SELF_SIGNUP_ROLES.has(role)) return "Choose Parent, Private teacher or Student.";
+  if (!firstName) return "Enter your first name.";
+  if (String(password).length < 6) return "Use a password of at least 6 characters.";
+  return null;
+}
+
 /**
- * POST /api/mobile/auth/register
- * Body: { role, firstName, lastName, password, email? }
- * Returns: { token, user, username }  — username is shown to the user to save.
+ * POST /api/mobile/auth/register/start
+ * Body: { role, firstName, lastName, password, email }
+ *
+ * If an email is given: we DON'T create the account yet. We stash the details,
+ * email a 6-digit code, and wait for /register/verify. This proves the email is
+ * real and lets them sign in with email+password on any device afterwards.
+ *
+ * If NO email is given: there is nothing to verify, so we create the account
+ * immediately and return the token + generated username.
  */
-router.post("/auth/register", async (req, res) => {
+router.post("/auth/register/start", async (req, res) => {
   try {
     const role = String(req.body?.role || "").trim();
     const firstName = String(req.body?.firstName || "").trim();
@@ -251,68 +294,205 @@ router.post("/auth/register", async (req, res) => {
     const password = String(req.body?.password || "");
     const email = String(req.body?.email || "").trim().toLowerCase();
 
-    if (!SELF_SIGNUP_ROLES.has(role)) {
-      return res.status(400).json({ error: "Choose Parent, Private teacher or Student." });
-    }
-    if (!firstName) {
-      return res.status(400).json({ error: "Enter your first name." });
-    }
-    if (password.length < 6) {
-      return res.status(400).json({ error: "Use a password of at least 6 characters." });
-    }
-
-    // If an email is given, it must be free.
-    if (email) {
-      const clash = await User.findOne({ email }).lean();
-      if (clash) {
-        return res.status(409).json({
-          code: "EMAIL_TAKEN",
-          error: "An account already uses that email. Try signing in instead."
-        });
+    // ── Resend path: re-send a code for an in-flight signup. ──
+    if (req.body?.resend && email) {
+      const pendingRec = await MobileVerification.findOne({ email, purpose: "signup" });
+      if (!pendingRec) {
+        return res.status(410).json({ error: "Your sign-up session expired. Start again." });
       }
+      const newCode = MobileVerification.generateCode();
+      pendingRec.codeHash = MobileVerification.hashCode(newCode);
+      pendingRec.attempts = 0;
+      pendingRec.createdAt = new Date(); // resets the 10-min TTL window
+      await pendingRec.save();
+      const wasSent = await sendVerificationCode(email, newCode, "confirm your email");
+      return res.json({ verified: false, needsCode: true, email, ...(wasSent ? {} : { devCode: newCode }) });
     }
 
-    const username = await User.createUniqueUsername(firstName, lastName);
+    const problem = validateSignup({ role, firstName, password });
+    if (problem) return res.status(400).json({ error: problem });
 
-    const user = new User({
-      role,
-      firstName,
-      lastName,
-      displayName: [firstName, lastName].filter(Boolean).join(" ") || username,
-      username,
-      email: email || undefined,
-      provider: "password",
-      consumerEnabled: role === "parent" || role === "private_teacher",
-      accountType:
-        role === "parent" ? "parent" : role === "student" ? "student_self" : undefined,
-      lastLogin: new Date()
+    // ── No email → create straight away, no verification needed. ──
+    if (!email) {
+      const user = await createAccount({ role, firstName, lastName, password, email: null });
+      return res.json({
+        verified: true,
+        token: signToken(user),
+        user: publicUser(user),
+        username: user.username
+      });
+    }
+
+    // ── Email given → it must be free, then send a code. ──
+    const clash = await User.findOne({ email }).lean();
+    if (clash) {
+      return res.status(409).json({
+        code: "EMAIL_TAKEN",
+        error: "An account already uses that email. Try signing in instead."
+      });
+    }
+
+    const code = MobileVerification.generateCode();
+
+    // Replace any earlier pending code for this email.
+    await MobileVerification.deleteMany({ email, purpose: "signup" });
+    await MobileVerification.create({
+      email,
+      purpose: "signup",
+      codeHash: MobileVerification.hashCode(code),
+      pending: { role, firstName, lastName, password } // password used once, then discarded
     });
 
-    await user.setPassword(password); // sets passwordHash, clears needsPasswordSetup
+    const sent = await sendVerificationCode(email, code, "confirm your email");
 
-    // Teacher accounts start on a trial with zero AI credits, like passport.js.
-    if (role === "private_teacher") {
-      user.teacherSubscriptionStatus = "trial";
-      user.teacherSubscriptionPlan = "none";
-      user.aiQuizCredits = 0;
-      user.needsProfileSetup = true;
-    }
-
-    await user.save();
-    await enrolNewUser(user);
-
+    // In production the code only goes by email. If SMTP isn't configured we
+    // return it so you're never blocked in testing — remove devCode for launch.
     return res.json({
-      token: signToken(user),
-      user: publicUser(user),
-      username // surfaced so the app can tell the user their handle
+      verified: false,
+      needsCode: true,
+      email,
+      ...(sent ? {} : { devCode: code, devNote: "SMTP not configured; code returned for testing." })
     });
   } catch (err) {
-    // Duplicate key (username/email race) → ask them to retry.
-    if (err?.code === 11000) {
-      return res.status(409).json({ error: "That did not save. Please try again." });
+    console.error("[mobile register/start]", err);
+    return res.status(500).json({ error: "Could not start sign-up. Try again." });
+  }
+});
+
+/**
+ * POST /api/mobile/auth/register/verify
+ * Body: { email, code }
+ * Confirms the code, creates the account, returns token + username.
+ */
+router.post("/auth/register/verify", async (req, res) => {
+  try {
+    const email = String(req.body?.email || "").trim().toLowerCase();
+    const code = String(req.body?.code || "").trim();
+    if (!email || !code) return res.status(400).json({ error: "Enter the 6-digit code." });
+
+    const rec = await MobileVerification.findOne({ email, purpose: "signup", consumed: false });
+    if (!rec) {
+      return res.status(410).json({ error: "That code has expired. Start again." });
     }
-    console.error("[mobile auth/register]", err);
-    return res.status(500).json({ error: "Could not create your account. Try again." });
+    if (rec.attempts >= 5) {
+      await MobileVerification.deleteOne({ _id: rec._id });
+      return res.status(429).json({ error: "Too many tries. Start again." });
+    }
+
+    if (rec.codeHash !== MobileVerification.hashCode(code)) {
+      rec.attempts += 1;
+      await rec.save();
+      return res.status(401).json({ error: "That code is not right." });
+    }
+
+    // Guard against a race where the email got taken meanwhile.
+    const clash = await User.findOne({ email }).lean();
+    if (clash) {
+      await MobileVerification.deleteOne({ _id: rec._id });
+      return res.status(409).json({ code: "EMAIL_TAKEN", error: "That email is now in use. Sign in instead." });
+    }
+
+    const p = rec.pending || {};
+    const user = await createAccount({
+      role: p.role,
+      firstName: p.firstName,
+      lastName: p.lastName,
+      password: p.password,
+      email
+    });
+
+    rec.consumed = true;
+    await MobileVerification.deleteOne({ _id: rec._id });
+
+    return res.json({
+      verified: true,
+      token: signToken(user),
+      user: publicUser(user),
+      username: user.username
+    });
+  } catch (err) {
+    console.error("[mobile register/verify]", err);
+    return res.status(500).json({ error: "Could not confirm the code. Try again." });
+  }
+});
+
+/**
+ * POST /api/mobile/auth/password/start
+ * Body: { email }
+ * For EXISTING accounts (e.g. Google users) that have no password yet — sends a
+ * code so they can set one in-app and sign in with email+password afterwards.
+ */
+router.post("/auth/password/start", async (req, res) => {
+  try {
+    const email = String(req.body?.email || "").trim().toLowerCase();
+    if (!email) return res.status(400).json({ error: "Enter your email." });
+
+    const user = await User.findOne({ email });
+    // Always answer the same way so we don't reveal which emails exist.
+    if (!user) {
+      return res.json({ needsCode: true, email });
+    }
+
+    const code = MobileVerification.generateCode();
+    await MobileVerification.deleteMany({ email, purpose: "set_password" });
+    await MobileVerification.create({
+      email,
+      purpose: "set_password",
+      codeHash: MobileVerification.hashCode(code)
+    });
+
+    const sent = await sendVerificationCode(email, code, "set your password");
+    return res.json({
+      needsCode: true,
+      email,
+      ...(sent ? {} : { devCode: code, devNote: "SMTP not configured; code returned for testing." })
+    });
+  } catch (err) {
+    console.error("[mobile password/start]", err);
+    return res.status(500).json({ error: "Could not start. Try again." });
+  }
+});
+
+/**
+ * POST /api/mobile/auth/password/verify
+ * Body: { email, code, password }
+ * Confirms the code and sets the new password, then signs them in.
+ */
+router.post("/auth/password/verify", async (req, res) => {
+  try {
+    const email = String(req.body?.email || "").trim().toLowerCase();
+    const code = String(req.body?.code || "").trim();
+    const password = String(req.body?.password || "");
+    if (!email || !code) return res.status(400).json({ error: "Enter the 6-digit code." });
+    if (password.length < 6) return res.status(400).json({ error: "Use a password of at least 6 characters." });
+
+    const rec = await MobileVerification.findOne({ email, purpose: "set_password", consumed: false });
+    if (!rec) return res.status(410).json({ error: "That code has expired. Start again." });
+    if (rec.attempts >= 5) {
+      await MobileVerification.deleteOne({ _id: rec._id });
+      return res.status(429).json({ error: "Too many tries. Start again." });
+    }
+    if (rec.codeHash !== MobileVerification.hashCode(code)) {
+      rec.attempts += 1;
+      await rec.save();
+      return res.status(401).json({ error: "That code is not right." });
+    }
+
+    const user = await User.findOne({ email });
+    if (!user) {
+      await MobileVerification.deleteOne({ _id: rec._id });
+      return res.status(404).json({ error: "No account uses that email." });
+    }
+
+    await user.setPassword(password);
+    user.lastLogin = new Date();
+    await user.save();
+    await MobileVerification.deleteOne({ _id: rec._id });
+
+    return res.json({ token: signToken(user), user: publicUser(user) });
+  } catch (err) {
+    console.error("[mobile password/verify]", err);
+    return res.status(500).json({ error: "Could not set your password. Try again." });
   }
 });
 
@@ -348,9 +528,14 @@ router.post("/auth/login", async (req, res) => {
     }
 
     if (!user.passwordHash) {
+      // Account exists but has no password (e.g. created via Google). Offer to
+      // set one by email code — only works if we can reach them by email.
       return res.status(409).json({
-        code: "USE_GOOGLE",
-        error: "This account uses Google sign-in. Tap “Continue with Google”."
+        code: "SET_PASSWORD",
+        email: user.email || null,
+        error: user.email
+          ? "This account has no password yet. Set one to sign in here."
+          : "This account uses Google. Continue with Google, or add an email on the website first."
       });
     }
 
