@@ -4,8 +4,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // WHY THE OLD (teal/chevron) CERTIFICATE KEPT BEING ISSUED
 //
-// BUG A: This file used to contain its OWN buildEightQTCertHtml function —
-//   ~390 lines of the old teal table-layout design — defined right here.
+// BUG A: This file used to contain its OWN buildEightQTCertHtml function -
+//   ~390 lines of the old teal table-layout design - defined right here.
 //   generateEightQTCertPdf() called that LOCAL function, so the new
 //   services/eightQTCertTemplate.js sat on disk completely unused. JavaScript
 //   resolves the local name first; no error, no warning, old design forever.
@@ -26,15 +26,15 @@
 //
 // Nothing else changed: same OUTPUT_DIR, same verifyCode format (12 hex,
 // uppercase), same filename pattern, same { url, verifyCode } return shape.
-// All four call sites — admin preview-cert, issue-cert, regenerate-cert, and
-// the Stripe webhook — keep working with ZERO changes to them.
+// All four call sites - admin preview-cert, issue-cert, regenerate-cert, and
+// the Stripe webhook - keep working with ZERO changes to them.
 //
 // REQUIREMENTS on the server:
 //   services/eightQTCertTemplate.js            (the new HTML builder)
 //   services/assets/8qt-fonts/Fraunces.ttf
 //   services/assets/8qt-fonts/Fraunces-Italic.ttf
 //   services/assets/8qt-fonts/Archivo.ttf
-//   npm i qrcode        (optional — QR box renders text-only without it)
+//   npm i qrcode        (optional - QR box renders text-only without it)
 // ─────────────────────────────────────────────────────────────────────────────
 
 import puppeteer from "puppeteer";
@@ -50,7 +50,7 @@ export { buildEightQTCertHtml };
 const OUTPUT_DIR = path.join(process.cwd(), "public", "certificates", "8qt");
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PDF GENERATION — proven working sequence, unchanged:
+// PDF GENERATION - proven working sequence, unchanged:
 //   1. launch
 //   2. newPage
 //   3. emulateMediaType("print")   ← BEFORE setContent
@@ -58,8 +58,8 @@ const OUTPUT_DIR = path.join(process.cwd(), "public", "certificates", "8qt");
 //   5. 1200ms font-settle delay
 //   6. page.pdf with format:"A4", landscape:true, printBackground:true, zero margins
 //
-// Do NOT use setViewport — it conflicts with page.pdf's paper size.
-// Do NOT pass width/height to page.pdf when using format — they override each other.
+// Do NOT use setViewport - it conflicts with page.pdf's paper size.
+// Do NOT pass width/height to page.pdf when using format - they override each other.
 // ─────────────────────────────────────────────────────────────────────────────
 export async function generateEightQTCertPdf({ attempt, template, archetype }) {
   if (!fs.existsSync(OUTPUT_DIR)) {
@@ -72,7 +72,7 @@ export async function generateEightQTCertPdf({ attempt, template, archetype }) {
   // Stamp verifyCode onto attempt object so the builder can embed it
   attempt = { ...attempt, certificateVerifyCode: verifyCode };
 
-  // NEW DESIGN — built by services/eightQTCertTemplate.js.
+  // NEW DESIGN - built by services/eightQTCertTemplate.js.
   // MUST be awaited: the builder is async (font embed + QR generation).
   const html = await buildEightQTCertHtml({ attempt, template, archetype, verifyCode });
 
@@ -110,7 +110,7 @@ export async function generateEightQTCertPdf({ attempt, template, archetype }) {
       landscape:       true,
       printBackground: true,
       margin:          { top: "0", bottom: "0", left: "0", right: "0" }
-      // Do NOT pass width/height here — format:"A4" already sets the paper size.
+      // Do NOT pass width/height here - format:"A4" already sets the paper size.
     });
 
     const url = `/certificates/8qt/${filename}`;

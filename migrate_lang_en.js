@@ -1,4 +1,4 @@
-// migrate_lang_en.js — one-time migration.
+// migrate_lang_en.js - one-time migration.
 // Stamps every pre-partition question and quiz (those with no `lang` field)
 // as English. Safe to run more than once; only touches docs missing `lang`.
 //

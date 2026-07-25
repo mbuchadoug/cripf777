@@ -204,7 +204,7 @@
       <div class="details-field">
         <label for="dCountry">Country</label>
         <select id="dCountry">
-          <option value="">— Select country —</option>
+          <option value="">- Select country -</option>
           <option value="Zimbabwe">Zimbabwe</option>
           <option value="South Africa">South Africa</option>
           <option value="Nigeria">Nigeria</option>
@@ -219,7 +219,7 @@
     <div class="details-field" style="margin-bottom:16px">
       <label for="dSector">Field / sector</label>
       <select id="dSector">
-        <option value="">— Select sector —</option>
+        <option value="">- Select sector -</option>
         <option value="Education">Education</option>
         <option value="Business">Business</option>
         <option value="Government">Government</option>
@@ -327,7 +327,7 @@ async function saveDetails() {
     });
     const d = await r.json();
     if (d.ok) {
-      collapseDetails('✓ Thanks — saved.');
+      collapseDetails('✓ Thanks - saved.');
     } else {
       alert(d.error || 'Could not save. Please try again.');
       if (btn) { btn.textContent = 'Save details'; btn.disabled = false; }
