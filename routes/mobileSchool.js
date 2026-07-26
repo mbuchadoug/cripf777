@@ -199,9 +199,10 @@ router.post("/children", requireMobileAuth, async (req, res) => {
       username,
       grade,
       parentUserId: parent._id,
-      org: org?._id || undefined,
+      organization: org?._id || null, // schema field is "organization", not "org"
       provider: "managed", // created by a parent, no own login yet
-      accountType: "student_managed"
+      accountType: "student_self", // must be one of: parent | guardian | student_self
+      consumerEnabled: true
     });
 
     // Give the child a starter/trial quiz set right away.
@@ -226,7 +227,7 @@ router.post("/children", requireMobileAuth, async (req, res) => {
       return res.status(409).json({ error: "That did not save. Please try again." });
     }
     console.error("[mobile school/children create]", err);
-    return res.status(500).json({ error: "Could not add the child." });
+    return res.status(500).json({ error: "Could not add the child.", detail: String(err?.message || err) });
   }
 });
 
@@ -596,7 +597,7 @@ router.post("/pay/ecocash", requireMobileAuth, async (req, res) => {
     });
   } catch (err) {
     console.error("[mobile pay/ecocash]", err);
-    return res.status(500).json({ error: "Payment error. Try again." });
+    return res.status(500).json({ error: "Payment error. Try again.", detail: String(err?.message || err) });
   }
 });
 
