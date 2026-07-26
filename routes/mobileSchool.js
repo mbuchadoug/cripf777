@@ -22,6 +22,9 @@ import Organization from "../models/organization.js";
 import QuizRule from "../models/quizRule.js";
 import Question from "../models/question.js";
 import ExamInstance from "../models/examInstance.js";
+import Payment from "../models/payment.js";
+import paynow from "../services/paynow.js";
+import { getStudentKnowledgeMap } from "../services/topicMasteryTracker.js";
 
 const router = Router();
 
@@ -527,6 +530,177 @@ router.get("/performance", requireMobileAuth, async (req, res) => {
   } catch (err) {
     console.error("[mobile school/performance]", err);
     return res.status(500).json({ error: "Could not load performance." });
+  }
+});
+
+/* ══════════════════════════════════════════════════════════════════
+   ECOCASH PAYMENT (Paynow mobile) — native, in-app.
+   Enter phone → USSD push → poll until paid → plan activates.
+   Mirrors routes/payments.js but authed with the mobile JWT.
+   ════════════════════════════════════════════════════════════════════ */
+
+// Plan keys the app can buy. Maps a plan to its Paynow amount + label.
+// Kept in sync with routes/payments.js PLANS.
+const PAY_PLANS = {
+  silver: { name: "Silver", amount: 5 },
+  gold: { name: "Gold", amount: 10 },
+  teacher_starter: { name: "Teacher Starter", amount: 9 },
+  teacher_professional: { name: "Teacher Professional", amount: 19 }
+};
+
+/**
+ * POST /api/mobile/school/pay/ecocash   { plan, phone }
+ * Triggers the EcoCash USSD prompt on the user's phone.
+ */
+router.post("/pay/ecocash", requireMobileAuth, async (req, res) => {
+  try {
+    const user = req.mobileUser;
+    const plan = String(req.body?.plan || "");
+    const rawPhone = String(req.body?.phone || "");
+
+    if (!PAY_PLANS[plan]) return res.status(400).json({ error: "Choose a valid plan." });
+
+    const phone = rawPhone.replace(/\s|-/g, "").replace(/^\+263/, "0").replace(/^263/, "0");
+    if (!/^07[7-8]\d{7}$/.test(phone)) {
+      return res.status(400).json({ error: "Enter a valid EcoCash number, e.g. 0771234567." });
+    }
+
+    const selected = PAY_PLANS[plan];
+    const reference = `PN-${crypto.randomUUID()}`;
+
+    const paymentRequest = paynow.createPayment(
+      reference,
+      user.email || `${phone}@ecocash.local`
+    );
+    paymentRequest.add(`${selected.name} Plan - Monthly`, selected.amount);
+
+    const response = await paynow.sendMobile(paymentRequest, phone, "ecocash");
+    if (!response.success) {
+      return res.status(400).json({ error: response.error || "Could not send the EcoCash prompt." });
+    }
+
+    await Payment.create({
+      userId: user._id,
+      reference,
+      amount: selected.amount,
+      plan,
+      pollUrl: response.pollUrl,
+      status: "pending",
+      meta: { phone, method: "ecocash_mobile", source: "mobile-app" }
+    });
+
+    return res.json({
+      success: true,
+      reference,
+      message: `Check ${phone} and approve the EcoCash prompt.`
+    });
+  } catch (err) {
+    console.error("[mobile pay/ecocash]", err);
+    return res.status(500).json({ error: "Payment error. Try again." });
+  }
+});
+
+/**
+ * GET /api/mobile/school/pay/poll/:reference
+ * The app polls this until status is "paid". Reuses the same processing the
+ * web webhook uses, so plan activation is identical.
+ */
+router.get("/pay/poll/:reference", requireMobileAuth, async (req, res) => {
+  try {
+    const user = req.mobileUser;
+    const reference = String(req.params.reference || "");
+    const payment = await Payment.findOne({ reference, userId: user._id });
+    if (!payment) return res.status(404).json({ error: "Payment not found." });
+
+    if (payment.status === "paid") {
+      return res.json({ status: "paid" });
+    }
+
+    // Ask Paynow for the latest status.
+    let paid = false;
+    try {
+      if (payment.pollUrl && typeof paynow.pollTransaction === "function") {
+        const status = await paynow.pollTransaction(payment.pollUrl);
+        paid = !!(status && (status.paid === true || String(status.status).toLowerCase() === "paid"));
+      }
+    } catch (e) {
+      console.warn("[mobile pay/poll] poll error:", e.message);
+    }
+
+    if (paid) {
+      // Reuse the exact same processor the web poll/webhook uses, so plan
+      // activation (days, slots, credits) is identical. It takes a payment _id.
+      try {
+        const mod = await import("./payments.js");
+        if (typeof mod.processSuccessfulPayment === "function") {
+          await mod.processSuccessfulPayment(payment._id);
+        } else {
+          payment.status = "paid";
+          payment.paidAt = new Date();
+          await payment.save();
+        }
+      } catch (e) {
+        console.warn("[mobile pay/poll] finalise fallback:", e.message);
+        payment.status = "paid";
+        payment.paidAt = new Date();
+        await payment.save();
+      }
+      // Return the refreshed entitlement so the app can update instantly.
+      const fresh = await User.findById(user._id).lean();
+      return res.json({
+        status: "paid",
+        plan:
+          fresh.role === "private_teacher"
+            ? fresh.teacherSubscriptionPlan
+            : fresh.subscriptionPlan
+      });
+    }
+
+    return res.json({ status: payment.status || "pending" });
+  } catch (err) {
+    console.error("[mobile pay/poll]", err);
+    return res.status(500).json({ error: "Could not check payment." });
+  }
+});
+
+/* ══════════════════════════════════════════════════════════════════
+   KNOWLEDGE MAP — per-subject topic mastery: strengths and areas to
+   improve. Reuses services/topicMasteryTracker.js so it matches the web.
+   ════════════════════════════════════════════════════════════════════ */
+
+router.get("/knowledge-map", requireMobileAuth, async (req, res) => {
+  try {
+    const parent = req.mobileUser;
+    const childId = String(req.query.childId || "");
+    const child = await User.findOne({ _id: childId, parentUserId: parent._id }).lean();
+    if (!child) return res.status(404).json({ error: "Child not found." });
+    if (!child.grade) {
+      return res.json({ child: { _id: String(child._id), displayName: child.displayName }, maps: {}, note: "Set the child's grade to see their knowledge map." });
+    }
+
+    const subjects = [
+      "math", "environmentalstudies", "biology", "english",
+      "computerstudies", "history", "geography", "science", "responsibility"
+    ];
+
+    const maps = {};
+    for (const subject of subjects) {
+      try {
+        const map = await getStudentKnowledgeMap(child._id, subject, child.grade);
+        if (map?.stats?.totalTopics > 0) maps[subject] = map;
+      } catch (e) {
+        // skip subjects with no data
+      }
+    }
+
+    return res.json({
+      child: { _id: String(child._id), displayName: child.displayName, grade: child.grade },
+      subjects: Object.keys(maps),
+      maps
+    });
+  } catch (err) {
+    console.error("[mobile knowledge-map]", err);
+    return res.status(500).json({ error: "Could not load the knowledge map." });
   }
 });
 

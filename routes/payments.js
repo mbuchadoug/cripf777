@@ -48,7 +48,7 @@ const PLANS = {
    SHARED: Process a successful payment
    Called by webhook AND manual poll
 -------------------------------- */
-async function processSuccessfulPayment(paymentId) {
+export async function processSuccessfulPayment(paymentId) {
   const payment = await Payment.findById(paymentId);
   if (!payment || payment.status === "paid") return; // idempotent
 
