@@ -1,6 +1,6 @@
 // routes/mobileApi.js
 //
-// The JSON surface the mobile app talks to. Purely additive - it does not touch
+// The JSON surface the mobile app talks to. Purely additive — it does not touch
 // any existing Handlebars route, session flow or Passport strategy. It REUSES
 // the existing /auth/google flow rather than duplicating OAuth.
 //
@@ -159,7 +159,7 @@ export async function mobileGoogleReturn(req, res) {
       delete req.session.signupSource;
     } catch {}
 
-    // Log the app out of the web session - the app uses its token, not a cookie.
+    // Log the app out of the web session — the app uses its token, not a cookie.
     return req.logout(() => {
       res.redirect(`${APP_SCHEME}://auth?code=${code}`);
     });
@@ -184,7 +184,7 @@ router.post("/auth/google/exchange", async (req, res) => {
       return res.status(401).json({ error: "This sign-in link has expired. Try again." });
     }
 
-    // burn it immediately - single use
+    // burn it immediately — single use
     record.usedAt = new Date();
     await record.save();
 
@@ -199,7 +199,7 @@ router.post("/auth/google/exchange", async (req, res) => {
 });
 
 /* ══════════════════════════════════════════════════════════════════
-   REGISTER - username + password sign-up, no Google or email required.
+   REGISTER — username + password sign-up, no Google or email required.
    The user picks ONE role; we generate a username and issue a token.
    Same endpoint powers the app AND a web sign-up page.
    ════════════════════════════════════════════════════════════════════ */
@@ -346,7 +346,7 @@ router.post("/auth/register/start", async (req, res) => {
     const sent = await sendVerificationCode(email, code, "confirm your email");
 
     // In production the code only goes by email. If SMTP isn't configured we
-    // return it so you're never blocked in testing - remove devCode for launch.
+    // return it so you're never blocked in testing — remove devCode for launch.
     return res.json({
       verified: false,
       needsCode: true,
@@ -419,7 +419,7 @@ router.post("/auth/register/verify", async (req, res) => {
 /**
  * POST /api/mobile/auth/password/start
  * Body: { email }
- * For EXISTING accounts (e.g. Google users) that have no password yet - sends a
+ * For EXISTING accounts (e.g. Google users) that have no password yet — sends a
  * code so they can set one in-app and sign in with email+password afterwards.
  */
 router.post("/auth/password/start", async (req, res) => {
@@ -529,7 +529,7 @@ router.post("/auth/login", async (req, res) => {
 
     if (!user.passwordHash) {
       // Account exists but has no password (e.g. created via Google). Offer to
-      // set one by email code - only works if we can reach them by email.
+      // set one by email code — only works if we can reach them by email.
       return res.status(409).json({
         code: "SET_PASSWORD",
         email: user.email || null,
@@ -552,13 +552,13 @@ router.post("/auth/login", async (req, res) => {
   }
 });
 
-/** GET /api/mobile/auth/me - refresh the cached profile when online. */
+/** GET /api/mobile/auth/me — refresh the cached profile when online. */
 router.get("/auth/me", requireMobileAuth, async (req, res) => {
   return res.json({ user: publicUser(req.mobileUser) });
 });
 
 /* ══════════════════════════════════════════════════════════════════
-   SYNC - everything the device needs to work offline.
+   SYNC — everything the device needs to work offline.
    Works with or without a token; anonymous callers get public 8QT only.
    ════════════════════════════════════════════════════════════════════ */
 
@@ -651,7 +651,7 @@ router.get("/sync", optionalMobileAuth, async (req, res) => {
 });
 
 /* ══════════════════════════════════════════════════════════════════
-   8QT ATTEMPT INGESTION - idempotent on localId.
+   8QT ATTEMPT INGESTION — idempotent on localId.
    ════════════════════════════════════════════════════════════════════ */
 
 router.post("/8qt/attempts", optionalMobileAuth, async (req, res) => {
