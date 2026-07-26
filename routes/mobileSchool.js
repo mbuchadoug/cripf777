@@ -118,7 +118,7 @@ router.get("/children", requireMobileAuth, async (req, res) => {
     const children = [];
     for (const c of kids) {
       const finished = await ExamInstance.find({ userId: c._id, status: "finished" })
-        .select("meta.percentage meta.scorePct quizTitle finishedAt")
+        .select("meta quizTitle updatedAt")
         .lean();
       const pending = await ExamInstance.countDocuments({
         userId: c._id,
@@ -446,7 +446,6 @@ router.post("/quiz/submit", requireMobileAuth, async (req, res) => {
     const passed = percentage >= PASS_THRESHOLD;
 
     exam.status = "finished";
-    exam.finishedAt = new Date();
     exam.meta = {
       ...(exam.meta || {}),
       score: correct,
@@ -454,8 +453,11 @@ router.post("/quiz/submit", requireMobileAuth, async (req, res) => {
       percentage,
       passed,
       answers: saved,
+      finishedAt: new Date().toISOString(), // stored in meta; ExamInstance has no finishedAt field
       source: "mobile-app"
     };
+    exam.markModified("meta"); // Mixed fields need this to persist
+    // ExamInstance uses timestamps, so updatedAt reflects completion too.
     await exam.save();
 
     return res.json({
@@ -486,8 +488,8 @@ router.get("/performance", requireMobileAuth, async (req, res) => {
     if (!child) return res.status(404).json({ error: "Child not found." });
 
     const finished = await ExamInstance.find({ userId: child._id, status: "finished" })
-      .select("quizTitle title module meta finishedAt")
-      .sort({ finishedAt: -1 })
+      .select("quizTitle title module meta updatedAt")
+      .sort({ updatedAt: -1 })
       .limit(50)
       .lean();
 
@@ -499,7 +501,7 @@ router.get("/performance", requireMobileAuth, async (req, res) => {
       score: e.meta?.score ?? null,
       total: e.meta?.total ?? null,
       passed: e.meta?.passed ?? null,
-      finishedAt: e.finishedAt
+      finishedAt: e.meta?.finishedAt || e.updatedAt
     }));
 
     const pcts = attempts.map((a) => a.percentage).filter((n) => typeof n === "number");
