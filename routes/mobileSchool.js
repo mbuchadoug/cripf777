@@ -560,6 +560,7 @@ router.post("/pay/ecocash", requireMobileAuth, async (req, res) => {
     const user = req.mobileUser;
     const plan = String(req.body?.plan || "");
     const rawPhone = String(req.body?.phone || "");
+    const bodyEmail = String(req.body?.email || "").trim().toLowerCase();
 
     if (!PAY_PLANS[plan]) return res.status(400).json({ error: "Choose a valid plan." });
 
@@ -568,13 +569,40 @@ router.post("/pay/ecocash", requireMobileAuth, async (req, res) => {
       return res.status(400).json({ error: "Enter a valid EcoCash number, e.g. 0771234567." });
     }
 
+    // Paynow REQUIRES a real, valid email for mobile payments — a placeholder
+    // like phone@ecocash.local is rejected. Use the account email if valid,
+    // otherwise the one the app collected; if neither, ask for one.
+    const isValidEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(e || ""));
+    const payerEmail = isValidEmail(user.email)
+      ? user.email
+      : isValidEmail(bodyEmail)
+      ? bodyEmail
+      : null;
+
+    if (!payerEmail) {
+      return res.status(400).json({
+        code: "EMAIL_REQUIRED",
+        error: "Add a valid email to pay with EcoCash."
+      });
+    }
+
+    // If the account had no email and the user provided one, save it for
+    // receipts and future email sign-in (non-fatal if it clashes).
+    if (isValidEmail(bodyEmail) && !isValidEmail(user.email)) {
+      try {
+        await User.updateOne(
+          { _id: user._id, email: { $in: [null, undefined, ""] } },
+          { $set: { email: bodyEmail } }
+        );
+      } catch (e) {
+        /* ignore */
+      }
+    }
+
     const selected = PAY_PLANS[plan];
     const reference = `PN-${crypto.randomUUID()}`;
 
-    const paymentRequest = paynow.createPayment(
-      reference,
-      user.email || `${phone}@ecocash.local`
-    );
+    const paymentRequest = paynow.createPayment(reference, payerEmail);
     paymentRequest.add(`${selected.name} Plan - Monthly`, selected.amount);
 
     const response = await paynow.sendMobile(paymentRequest, phone, "ecocash");
