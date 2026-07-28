@@ -58,25 +58,6 @@ async function resolveHomeOrg() {
   return Organization.findOne({ slug: "cripfcnt-home" }).lean();
 }
 
-/**
- * Resolve the learner a request targets. Two cases:
- *   • parent/teacher acting on a child  → childId must be their student
- *   • a student acting on themselves    → childId === their own id (or omitted)
- * Returns the learner User (lean) or null.
- */
-async function resolveLearner(mobileUser, childId) {
-  // Student self-learner: no childId, or childId is their own id.
-  if (mobileUser.role === "student") {
-    if (!childId || String(childId) === String(mobileUser._id)) {
-      return mobileUser;
-    }
-    return null; // a student can't act on anyone else
-  }
-  // Parent/teacher: the child must belong to them.
-  if (!childId) return null;
-  return User.findOne({ _id: childId, parentUserId: mobileUser._id }).lean();
-}
-
 /** Turn a Question doc into safe app JSON — correctIndex is NOT sent to the app. */
 function publicQuestion(q) {
   return {
@@ -261,8 +242,8 @@ router.get("/quizzes", requireMobileAuth, async (req, res) => {
     if (!mongoose.isValidObjectId(childId)) {
       return res.status(400).json({ error: "Which child?" });
     }
-    const child = await resolveLearner(parent, childId);
-    if (!child) return res.status(404).json({ error: "Learner not found." });
+    const child = await User.findOne({ _id: childId, parentUserId: parent._id }).lean();
+    if (!child) return res.status(404).json({ error: "Child not found." });
 
     const paid = isPaid(parent);
 
@@ -330,8 +311,8 @@ router.get("/quiz", requireMobileAuth, async (req, res) => {
     const examId = req.query.examId ? String(req.query.examId) : null;
     const ruleId = req.query.ruleId ? String(req.query.ruleId) : null;
 
-    const child = await resolveLearner(parent, childId);
-    if (!child) return res.status(404).json({ error: "Learner not found." });
+    const child = await User.findOne({ _id: childId, parentUserId: parent._id }).lean();
+    if (!child) return res.status(404).json({ error: "Child not found." });
 
     let exam = null;
     let title = "Quiz";
@@ -436,8 +417,8 @@ router.post("/quiz/submit", requireMobileAuth, async (req, res) => {
     if (!examId) return res.status(400).json({ error: "Missing examId." });
     if (!answers.length) return res.status(400).json({ error: "No answers submitted." });
 
-    const child = await resolveLearner(parent, childId);
-    if (!child) return res.status(404).json({ error: "Learner not found." });
+    const child = await User.findOne({ _id: childId, parentUserId: parent._id }).lean();
+    if (!child) return res.status(404).json({ error: "Child not found." });
 
     const exam = await ExamInstance.findOne({ examId, userId: child._id });
     if (!exam) return res.status(404).json({ error: "Quiz not found." });
@@ -503,8 +484,8 @@ router.get("/performance", requireMobileAuth, async (req, res) => {
   try {
     const parent = req.mobileUser;
     const childId = String(req.query.childId || "");
-    const child = await resolveLearner(parent, childId);
-    if (!child) return res.status(404).json({ error: "Learner not found." });
+    const child = await User.findOne({ _id: childId, parentUserId: parent._id }).lean();
+    if (!child) return res.status(404).json({ error: "Child not found." });
 
     const finished = await ExamInstance.find({ userId: child._id, status: "finished" })
       .select("quizTitle title module meta updatedAt")
@@ -588,16 +569,18 @@ router.post("/pay/ecocash", requireMobileAuth, async (req, res) => {
       return res.status(400).json({ error: "Enter a valid EcoCash number, e.g. 0771234567." });
     }
 
-    // Paynow REQUIRES a real, valid email for mobile payments — a placeholder
-    // like phone@ecocash.local is rejected. Use the account email if valid,
-    // otherwise the one the app collected; if neither, ask for one.
+    const selected = PAY_PLANS[plan];
+    const reference = `PN-${crypto.randomUUID()}`;
+
     const isValidEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(e || ""));
-    const payerEmail = isValidEmail(user.email)
-      ? user.email
-      : isValidEmail(bodyEmail)
+    const payerEmail = isValidEmail(bodyEmail)
       ? bodyEmail
+      : isValidEmail(user.email)
+      ? user.email
       : null;
 
+    // Paynow rejects mobile payments without a valid email. Rather than send a
+    // placeholder it will refuse, ask the app to collect one.
     if (!payerEmail) {
       return res.status(400).json({
         code: "EMAIL_REQUIRED",
@@ -605,21 +588,15 @@ router.post("/pay/ecocash", requireMobileAuth, async (req, res) => {
       });
     }
 
-    // If the account had no email and the user provided one, save it for
-    // receipts and future email sign-in (non-fatal if it clashes).
+    // If they gave a real email and the account had none, save it for receipts
+    // and future email sign-in.
     if (isValidEmail(bodyEmail) && !isValidEmail(user.email)) {
       try {
-        await User.updateOne(
-          { _id: user._id, email: { $in: [null, undefined, ""] } },
-          { $set: { email: bodyEmail } }
-        );
+        await User.updateOne({ _id: user._id, email: { $in: [null, undefined, ""] } }, { $set: { email: bodyEmail } });
       } catch (e) {
-        /* ignore */
+        // non-fatal (e.g. email already taken) — proceed with the payment
       }
     }
-
-    const selected = PAY_PLANS[plan];
-    const reference = `PN-${crypto.randomUUID()}`;
 
     const paymentRequest = paynow.createPayment(reference, payerEmail);
     paymentRequest.add(`${selected.name} Plan - Monthly`, selected.amount);
@@ -722,8 +699,8 @@ router.get("/knowledge-map", requireMobileAuth, async (req, res) => {
   try {
     const parent = req.mobileUser;
     const childId = String(req.query.childId || "");
-    const child = await resolveLearner(parent, childId);
-    if (!child) return res.status(404).json({ error: "Learner not found." });
+    const child = await User.findOne({ _id: childId, parentUserId: parent._id }).lean();
+    if (!child) return res.status(404).json({ error: "Child not found." });
     if (!child.grade) {
       return res.json({ child: { _id: String(child._id), displayName: child.displayName }, maps: {}, note: "Set the child's grade to see their knowledge map." });
     }
