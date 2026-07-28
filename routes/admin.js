@@ -369,7 +369,7 @@ router.get("/users", ensureAuth, ensureAdmin, async (req, res) => {
       };
     });
 
-    return safeRender(req, res, "admin/users", { title: "Admin · Users", users, q });
+    return safeRender(req, res, "admin/users", { title: "Admin · Users", users, q, layout: false });
   } catch (err) {
     console.error("[admin/users] error:", err && (err.stack || err));
     return res.status(500).send("Failed to load users");
@@ -445,7 +445,7 @@ router.get("/mobile-attempts", ensureAuth, ensureAdmin, async (req, res) => {
         : "—"
     }));
 
-    return safeRender(req, res, "admin/mobile_attempts", { title: "Admin · Mobile attempts", rows });
+    return safeRender(req, res, "admin/mobile_attempts", { title: "Admin · Mobile attempts", rows, layout: false });
   } catch (err) {
     console.error("[admin/mobile-attempts]", err && (err.stack || err));
     return res.status(500).send("Failed to load mobile attempts");
