@@ -58,6 +58,25 @@ async function resolveHomeOrg() {
   return Organization.findOne({ slug: "cripfcnt-home" }).lean();
 }
 
+/**
+ * Resolve the learner a request targets. Two cases:
+ *   • parent/teacher acting on a child  → childId must be their student
+ *   • a student acting on themselves    → childId === their own id (or omitted)
+ * Returns the learner User (lean) or null.
+ */
+async function resolveLearner(mobileUser, childId) {
+  // Student self-learner: no childId, or childId is their own id.
+  if (mobileUser.role === "student") {
+    if (!childId || String(childId) === String(mobileUser._id)) {
+      return mobileUser;
+    }
+    return null; // a student can't act on anyone else
+  }
+  // Parent/teacher: the child must belong to them.
+  if (!childId) return null;
+  return User.findOne({ _id: childId, parentUserId: mobileUser._id }).lean();
+}
+
 /** Turn a Question doc into safe app JSON — correctIndex is NOT sent to the app. */
 function publicQuestion(q) {
   return {
@@ -242,8 +261,8 @@ router.get("/quizzes", requireMobileAuth, async (req, res) => {
     if (!mongoose.isValidObjectId(childId)) {
       return res.status(400).json({ error: "Which child?" });
     }
-    const child = await User.findOne({ _id: childId, parentUserId: parent._id }).lean();
-    if (!child) return res.status(404).json({ error: "Child not found." });
+    const child = await resolveLearner(parent, childId);
+    if (!child) return res.status(404).json({ error: "Learner not found." });
 
     const paid = isPaid(parent);
 
@@ -311,8 +330,8 @@ router.get("/quiz", requireMobileAuth, async (req, res) => {
     const examId = req.query.examId ? String(req.query.examId) : null;
     const ruleId = req.query.ruleId ? String(req.query.ruleId) : null;
 
-    const child = await User.findOne({ _id: childId, parentUserId: parent._id }).lean();
-    if (!child) return res.status(404).json({ error: "Child not found." });
+    const child = await resolveLearner(parent, childId);
+    if (!child) return res.status(404).json({ error: "Learner not found." });
 
     let exam = null;
     let title = "Quiz";
@@ -417,8 +436,8 @@ router.post("/quiz/submit", requireMobileAuth, async (req, res) => {
     if (!examId) return res.status(400).json({ error: "Missing examId." });
     if (!answers.length) return res.status(400).json({ error: "No answers submitted." });
 
-    const child = await User.findOne({ _id: childId, parentUserId: parent._id }).lean();
-    if (!child) return res.status(404).json({ error: "Child not found." });
+    const child = await resolveLearner(parent, childId);
+    if (!child) return res.status(404).json({ error: "Learner not found." });
 
     const exam = await ExamInstance.findOne({ examId, userId: child._id });
     if (!exam) return res.status(404).json({ error: "Quiz not found." });
@@ -484,8 +503,8 @@ router.get("/performance", requireMobileAuth, async (req, res) => {
   try {
     const parent = req.mobileUser;
     const childId = String(req.query.childId || "");
-    const child = await User.findOne({ _id: childId, parentUserId: parent._id }).lean();
-    if (!child) return res.status(404).json({ error: "Child not found." });
+    const child = await resolveLearner(parent, childId);
+    if (!child) return res.status(404).json({ error: "Learner not found." });
 
     const finished = await ExamInstance.find({ userId: child._id, status: "finished" })
       .select("quizTitle title module meta updatedAt")
@@ -703,8 +722,8 @@ router.get("/knowledge-map", requireMobileAuth, async (req, res) => {
   try {
     const parent = req.mobileUser;
     const childId = String(req.query.childId || "");
-    const child = await User.findOne({ _id: childId, parentUserId: parent._id }).lean();
-    if (!child) return res.status(404).json({ error: "Child not found." });
+    const child = await resolveLearner(parent, childId);
+    if (!child) return res.status(404).json({ error: "Learner not found." });
     if (!child.grade) {
       return res.json({ child: { _id: String(child._id), displayName: child.displayName }, maps: {}, note: "Set the child's grade to see their knowledge map." });
     }
