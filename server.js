@@ -118,7 +118,6 @@ import configurePassport from "./config/passport.js";
 import authRoutes from "./routes/auth.js";
 import mobileApiRouter from "./routes/mobileApi.js"; // ← mobile app JSON API
 import mobileSchoolRouter from "./routes/mobileSchool.js"; // ← mobile learning platform
-import mobileAdminRouter from "./routes/mobileAdmin.js"; // mobile web admin
 import placementAuditRoutes from "./routes/admin_placement_audits.js";
 import adminOrganizationRoutes from "./routes/admin_organizations.js";
 import orgManagementRoutes from "./routes/org_management.js";
@@ -519,7 +518,6 @@ app.use("/auth", authRoutes);
 // ── MOBILE APP JSON API (additive; does not touch web/session flows) ──
 app.use("/api/mobile", mobileApiRouter);
 app.use("/api/mobile/school", mobileSchoolRouter);
-app.use("/", mobileAdminRouter);
 
 // ADMIN (single mount for admin UI & import routes)
 app.use("/admin", adminRoutes);

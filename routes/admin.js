@@ -330,11 +330,125 @@ router.post("/lms/quizzes/delete-all", ensureAuth, ensureAdmin, async (req, res)
 // other admin routes below (user listing, visits, etc). Keep your existing handlers.
 router.get("/users", ensureAuth, ensureAdmin, async (req, res) => {
   try {
-    const users = await User.find().sort({ createdAt: -1 }).lean();
-    return safeRender(req, res, "admin/users", { title: "Admin · Users", users });
+    const q = (req.query.q || "").trim();
+    const filter = q
+      ? {
+          $or: [
+            { email: new RegExp(q, "i") },
+            { username: new RegExp(q, "i") },
+            { displayName: new RegExp(q, "i") },
+            { firstName: new RegExp(q, "i") },
+            { lastName: new RegExp(q, "i") }
+          ]
+        }
+      : {};
+
+    const raw = await User.find(filter).sort({ createdAt: -1 }).limit(500).lean();
+    const now = new Date();
+
+    // Add derived plan info the template can show + activate.
+    const users = raw.map((u) => {
+      const isTeacher = u.role === "private_teacher" || u.role === "teacher";
+      const planKey = isTeacher
+        ? u.teacherSubscriptionPlan && u.teacherSubscriptionPlan !== "none"
+          ? u.teacherSubscriptionPlan
+          : null
+        : u.subscriptionPlan && u.subscriptionPlan !== "none"
+        ? u.subscriptionPlan
+        : null;
+      const active = u.subscriptionExpiresAt && new Date(u.subscriptionExpiresAt) > now;
+      return {
+        ...u,
+        roleLabel: isTeacher ? "teacher" : u.role,
+        isTeacher,
+        isParentOrTeacher: u.role === "parent" || isTeacher,
+        isStudent: u.role === "student",
+        planLabel: planKey || null,
+        planActive: !!active,
+        planExpiry: active ? new Date(u.subscriptionExpiresAt).toLocaleDateString() : null
+      };
+    });
+
+    return safeRender(req, res, "admin/users", { title: "Admin · Users", users, q });
   } catch (err) {
     console.error("[admin/users] error:", err && (err.stack || err));
     return res.status(500).send("Failed to load users");
+  }
+});
+
+/* ── Manually activate a subscription (no payment). Mirrors payments.js PLANS. ── */
+const MOBILE_ACTIVATE_PLANS = {
+  silver: { role: "parent", plan: "silver", maxChildren: 2, durationDays: 30 },
+  gold: { role: "parent", plan: "gold", maxChildren: 5, durationDays: 30 },
+  teacher_starter: { role: "teacher", plan: "starter", maxChildren: 15, aiQuizCredits: 20, durationDays: 30 },
+  teacher_professional: { role: "teacher", plan: "professional", maxChildren: 40, aiQuizCredits: 50, durationDays: 30 }
+};
+
+router.post("/users/:id/activate", ensureAuth, ensureAdmin, async (req, res) => {
+  try {
+    const cfg = MOBILE_ACTIVATE_PLANS[String(req.body?.plan || "")];
+    if (!cfg) return res.status(400).send("Invalid plan");
+
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).send("User not found");
+
+    const now = new Date();
+    const base =
+      user.subscriptionExpiresAt && new Date(user.subscriptionExpiresAt) > now
+        ? new Date(user.subscriptionExpiresAt)
+        : now;
+    const expiresAt = new Date(base.getTime() + cfg.durationDays * 24 * 60 * 60 * 1000);
+
+    if (cfg.role === "teacher") {
+      user.teacherSubscriptionPlan = cfg.plan;
+      user.teacherSubscriptionStatus = "active";
+      user.maxChildren = cfg.maxChildren;
+      if (cfg.aiQuizCredits) user.aiQuizCredits = (user.aiQuizCredits || 0) + cfg.aiQuizCredits;
+    } else {
+      user.subscriptionPlan = cfg.plan;
+      user.maxChildren = cfg.maxChildren;
+    }
+    user.subscriptionExpiresAt = expiresAt;
+    await user.save();
+
+    return res.redirect("/admin/users");
+  } catch (err) {
+    console.error("[admin/users/activate]", err && (err.stack || err));
+    return res.status(500).send("Failed to activate plan");
+  }
+});
+
+/* ── Mobile quiz attempts (all, or ?userId=). ── */
+router.get("/mobile-attempts", ensureAuth, ensureAdmin, async (req, res) => {
+  try {
+    const userId = (req.query.userId || "").trim();
+    const filter = { "meta.source": "mobile-app" };
+    if (userId) filter.userId = userId;
+
+    const attempts = await ExamInstance.find(filter).sort({ updatedAt: -1 }).limit(400).lean();
+    const ids = [...new Set(attempts.map((a) => String(a.userId)).filter(Boolean))];
+    const people = await User.find({ _id: { $in: ids } })
+      .select("displayName firstName lastName username")
+      .lean();
+    const nameById = {};
+    for (const p of people)
+      nameById[String(p._id)] =
+        p.displayName || [p.firstName, p.lastName].filter(Boolean).join(" ") || p.username;
+
+    const rows = attempts.map((a) => ({
+      student: nameById[String(a.userId)] || String(a.userId),
+      title: a.quizTitle || a.title || a.module || "Quiz",
+      status: a.status,
+      percentage: a.meta?.percentage ?? null,
+      when: a.meta?.finishedAt || a.updatedAt
+        ? new Date(a.meta?.finishedAt || a.updatedAt).toLocaleString()
+        : "—"
+    }));
+
+    return safeRender(req, res, "admin/mobile_attempts", { title: "Admin · Mobile attempts", rows });
+  } catch (err) {
+    console.error("[admin/mobile-attempts]", err && (err.stack || err));
+    return res.status(500).send("Failed to load mobile attempts");
   }
 });
 

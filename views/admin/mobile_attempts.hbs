@@ -212,122 +212,46 @@
 
       <a href="/audit">📘 SCOI Audit</a>
       <a href="/auth/logout" style="color:#ffdede">🚪 Logout</a>
-    </nav>
-  </div>
 
   <!-- MAIN -->
-  <main class="main">
-    <div class="topbar">
-      <div style="flex:1">
-        <h1>{{title}}</h1>
-        <div class="muted">Manage Google users who signed into the system</div>
+  <div class="main">
+    <div class="header">
+      <div>
+        <h1>Mobile Attempts</h1>
+        <div class="muted">Quiz attempts made in the mobile app.</div>
       </div>
-
-      <div class="meta">Total: <strong>{{total}}</strong> users</div>
+      <div class="controls">
+        <a class="btn secondary" href="/admin/users">← Back to Users</a>
+      </div>
     </div>
 
-    <section class="card">
-      <div class="controls">
-        <form method="get" action="/admin/users" style="align-items:center">
-          <input type="text" name="q" placeholder="Search name or email" value="{{q}}" />
-          <button class="btn" type="submit">Search</button>
-
-          <a class="btn secondary" href="/admin/users?format=csv{{#if q}}&q={{q}}{{/if}}" style="display:inline-flex;align-items:center">⬇ Download CSV</a>
-        </form>
-      </div>
-
-      <div class="table-wrap">
-        <table>
-          <thead>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:26%">Student</th>
+            <th style="width:34%">Quiz</th>
+            <th style="width:12%">Status</th>
+            <th style="width:10%">Score</th>
+            <th style="width:18%">When</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{#each rows}}
             <tr>
-              <th style="width:20%">Name</th>
-              <th style="width:18%">Email</th>
-              <th style="width:9%">Role</th>
-              <th style="width:14%">Plan</th>
-              <th style="width:9%">Created</th>
-              <th style="width:30%">Actions</th>
+              <td>{{student}}</td>
+              <td>{{title}}</td>
+              <td><span class="role-pill">{{status}}</span></td>
+              <td>{{#if percentage}}<strong>{{percentage}}%</strong>{{else}}—{{/if}}</td>
+              <td class="muted">{{when}}</td>
             </tr>
-          </thead>
-          <tbody>
-            {{#each users}}
-              <tr>
-                <td>
-                  {{#if displayName}}
-                    {{displayName}}
-                  {{else}}
-                    {{firstName}} {{lastName}}
-                  {{/if}}
-                  {{#if username}}<br><span class="muted monospace">@{{username}}</span>{{/if}}
-                </td>
+          {{else}}
+            <tr><td colspan="5" class="muted">No mobile attempts yet.</td></tr>
+          {{/each}}
+        </tbody>
+      </table>
+    </div>
+  </div>
 
-                <td class="muted">{{email}}</td>
-                <td><span class="role-pill">{{roleLabel}}</span></td>
-                <td>
-                  {{#if planLabel}}
-                    <span class="plan-pill">{{planLabel}}</span>
-                    {{#if planExpiry}}<br><span class="muted" style="font-size:11px">until {{planExpiry}}</span>{{/if}}
-                  {{else}}
-                    <span class="muted">free</span>
-                  {{/if}}
-                </td>
-
-                <td class="muted">{{#if createdAt}}{{createdAt}}{{else}}-{{/if}}</td>
-
-                <td class="actions">
-                  {{#if isParentOrTeacher}}
-                    <form method="post" action="/admin/users/{{_id}}/activate" style="display:inline-flex;gap:6px;align-items:center;margin-right:6px">
-                      {{#if isTeacher}}
-                        <select name="plan" class="mini-select">
-                          <option value="teacher_starter">Teacher Starter</option>
-                          <option value="teacher_professional">Teacher Professional</option>
-                        </select>
-                      {{else}}
-                        <select name="plan" class="mini-select">
-                          <option value="silver">Silver</option>
-                          <option value="gold">Gold</option>
-                        </select>
-                      {{/if}}
-                      <button type="submit" class="activate-btn" title="Activate plan">Activate</button>
-                    </form>
-                  {{/if}}
-                  {{#if isStudent}}
-                    <a class="attempts-btn" href="/admin/mobile-attempts?userId={{_id}}">Attempts</a>
-                  {{/if}}
-                  <form method="post" action="/admin/users/{{_id}}/delete" style="display:inline" onsubmit="return confirmDelete(this);">
-                    <button type="submit" class="delete-btn" title="Delete user">Delete</button>
-                  </form>
-                </td>
-              </tr>
-            {{/each}}
-          </tbody>
-        </table>
-      </div>
-
-      <div class="pager">
-        <div>
-          {{#if prev}}
-            <a href="/admin/users?page={{prev}}{{#if q}}&q={{q}}{{/if}}">← Prev</a>
-          {{/if}}
-
-          {{#if next}}
-            {{#if prev}} &nbsp; | &nbsp; {{/if}}
-            <a href="/admin/users?page={{next}}{{#if q}}&q={{q}}{{/if}}">Next →</a>
-          {{/if}}
-        </div>
-
-        <div style="margin-left:auto" class="muted">Page {{page}} / {{pages}}</div>
-      </div>
-
-    </section>
-  </main>
-
-  <script>
-    function confirmDelete(form) {
-      const row = form.closest('tr');
-      const emailCell = row ? row.querySelector('td:nth-child(2)') : null;
-      const email = emailCell ? emailCell.textContent.trim() : '';
-      return confirm('Permanently delete user ' + (email || '') + '? This action cannot be undone.');
-    }
-  </script>
 </body>
 </html>
