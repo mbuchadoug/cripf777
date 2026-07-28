@@ -30,6 +30,16 @@ const router = Router();
 
 const PASS_THRESHOLD = parseInt(process.env.QUIZ_PASS_THRESHOLD || "60", 10);
 
+/** Fisher-Yates shuffle — returns a new shuffled array. */
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
 /* Plan → how many children/learners the account may register. Mirrors parent.js. */
 const PLAN_LIMITS = {
   none: 0,
@@ -58,8 +68,7 @@ async function resolveHomeOrg() {
   return Organization.findOne({ slug: "cripfcnt-home" }).lean();
 }
 
-/** Turn a Question doc into safe app JSON — correctIndex is NOT sent to the app. */
-function publicQuestion(q) {
+/** Turn a Question doc into safe app JSON — correctIndex is NOT sent to the app. */function publicQuestion(q) {
   return {
     _id: String(q._id),
     text: q.text,
@@ -323,6 +332,41 @@ router.get("/quiz", requireMobileAuth, async (req, res) => {
       if (!exam) return res.status(404).json({ error: "Quiz not found." });
       title = exam.quizTitle || exam.title || exam.module || "Quiz";
       moduleKey = exam.module || null;
+
+      // ── ROTATE QUESTIONS ──
+      // If this quiz was already finished, or has few/no stored questions,
+      // draw a FRESH random set from the same grade/subject so re-takes don't
+      // repeat the same questions in the same order (matches the web).
+      const org = await resolveHomeOrg();
+      const subject = exam.module || null;
+      const grade = child.grade || null;
+      const desired = (exam.questionIds || []).length || 10;
+
+      if (exam.status === "finished" || !(exam.questionIds || []).length) {
+        const fresh = await Question.aggregate([
+          {
+            $match: {
+              $and: [
+                { $or: [{ organization: org?._id }, { organization: null }] },
+                grade ? { grade } : {},
+                subject ? { subject } : {}
+              ]
+            }
+          },
+          { $sample: { size: desired } }
+        ]);
+        if (fresh.length) {
+          const newIds = fresh.map((q) => String(q._id));
+          await ExamInstance.updateOne(
+            { examId: exam.examId },
+            { $set: { questionIds: newIds, status: "pending", meta: { ...(exam.meta || {}), reshuffledAt: new Date().toISOString() } } }
+          );
+          exam.questionIds = newIds;
+        }
+      } else {
+        // Even on the first take, shuffle the stored order so it's not fixed.
+        exam.questionIds = shuffle([...(exam.questionIds || [])]);
+      }
     } else if (ruleId) {
       // Building from catalogue requires a subscription.
       if (!isPaid(parent)) {
