@@ -84,6 +84,151 @@ function publicQuestion(q) {
   };
 }
 
+/**
+ * Resolve a learner that belongs to this parent/teacher. Used by submit.
+ * (Previously referenced but never defined — that made submit throw.)
+ */
+async function resolveLearner(parent, childId) {
+  if (!mongoose.isValidObjectId(childId)) return null;
+  return User.findOne({
+    _id: childId,
+    parentUserId: parent._id,
+    role: "student"
+  }).lean();
+}
+
+/**
+ * Expand an ORDERED token list into a flat, ordered, passage-grouped list of
+ * app-ready questions.
+ *
+ * A token is either:
+ *   • "parent:<objectId>"  → a comprehension parent (one Test = a passage + its
+ *                            own ordered child questions). Expanded into children.
+ *   • "<objectId>"         → a plain question, OR a comprehension parent stored
+ *                            without the prefix, OR a child of some parent.
+ *
+ * Every emitted question carries:
+ *   • passage    — the passage TEXT it belongs under (null for standalone)
+ *   • passageId  — a stable id for the passage GROUP, so the app can pin the
+ *                  passage and page the questions beneath it. Questions that
+ *                  share a passageId share one pinned passage.
+ *
+ * This is the same model the web /api/lms/quiz uses. Crucially it does NOT
+ * sample random questions by grade/subject — that global sampling is what mixed
+ * unrelated tests (Grade 2, Grade 9, Age 5…) into a single "Grade 3" quiz.
+ *
+ * @param {string[]} tokens
+ * @param {{ limit?: number|null }} opts  cap children of a SINGLE-parent quiz
+ * @returns {{ questions: object[] }}
+ */
+async function buildQuestionSeries(tokens, { limit = null } = {}) {
+  const parentIds = [];
+  const directIds = [];
+  for (const t of tokens) {
+    const s = String(t);
+    if (s.startsWith("parent:")) {
+      const pid = s.slice(7);
+      if (mongoose.isValidObjectId(pid)) parentIds.push(pid);
+    } else if (mongoose.isValidObjectId(s)) {
+      directIds.push(s);
+    }
+  }
+
+  const toObjId = (id) => new mongoose.Types.ObjectId(id);
+
+  // First pass: load parents + any direct docs.
+  const firstIds = [...new Set([...parentIds, ...directIds])].map(toObjId);
+  const firstPass = firstIds.length
+    ? await Question.find({ _id: { $in: firstIds } }).lean()
+    : [];
+  const byId = {};
+  for (const d of firstPass) byId[String(d._id)] = d;
+
+  // Which child docs do we still need to fetch?
+  const childIdsNeeded = new Set();
+  const collectChildren = (doc) => {
+    if (doc?.type === "comprehension" && Array.isArray(doc.questionIds)) {
+      for (const cid of doc.questionIds.map(String)) {
+        if (!byId[cid]) childIdsNeeded.add(cid);
+      }
+    }
+  };
+  for (const pid of parentIds) collectChildren(byId[pid]);
+  for (const did of directIds) collectChildren(byId[did]);
+
+  // For orphan direct children (a child id whose parent wasn't in the list),
+  // find the owning parent so the child still gets its passage.
+  const orphanDirect = directIds.filter((id) => byId[id] && byId[id].type !== "comprehension");
+  const passageByChild = {};
+  if (orphanDirect.length) {
+    const parents = await Question.find({
+      type: "comprehension",
+      questionIds: { $in: orphanDirect.map(toObjId) }
+    })
+      .select("passage text questionIds")
+      .lean();
+    for (const p of parents) {
+      for (const cid of (p.questionIds || []).map(String)) {
+        if (!passageByChild[cid]) {
+          passageByChild[cid] = { passage: p.passage || p.text || null, passageId: String(p._id) };
+        }
+      }
+    }
+  }
+
+  // Fetch the child docs we referenced but didn't already have.
+  if (childIdsNeeded.size) {
+    const extra = await Question.find({
+      _id: { $in: [...childIdsNeeded].filter(mongoose.isValidObjectId).map(toObjId) }
+    }).lean();
+    for (const d of extra) byId[String(d._id)] = d;
+  }
+
+  const out = [];
+  const emitted = new Set();
+
+  const pushChild = (childDoc, passage, passageId) => {
+    if (!childDoc) return;
+    const cid = String(childDoc._id);
+    if (emitted.has(cid)) return;
+    if (childDoc.type === "comprehension") return; // never show a parent as a question
+    const pub = publicQuestion(childDoc);
+    pub.passage = passage || null;
+    pub.passageId = passageId || null;
+    out.push(pub);
+    emitted.add(cid);
+  };
+
+  const expandParent = (parentDoc, parentId) => {
+    let childIds = (parentDoc.questionIds || []).map(String);
+    // Per-attempt variety: shuffle the order, then cap to the requested size.
+    // The passage stays whole; only the questions under it vary.
+    childIds = shuffle(childIds);
+    if (limit && childIds.length > limit) childIds = childIds.slice(0, limit);
+    const passage = parentDoc.passage || parentDoc.text || null;
+    for (const cid of childIds) pushChild(byId[cid], passage, parentId);
+  };
+
+  for (const t of tokens) {
+    const s = String(t);
+    if (s.startsWith("parent:")) {
+      const pid = s.slice(7);
+      if (byId[pid]) expandParent(byId[pid], pid);
+    } else if (mongoose.isValidObjectId(s)) {
+      const d = byId[s];
+      if (!d) continue;
+      if (d.type === "comprehension") {
+        expandParent(d, s);
+      } else {
+        const meta = passageByChild[s] || {};
+        pushChild(d, meta.passage || null, meta.passageId || null);
+      }
+    }
+  }
+
+  return { questions: out };
+}
+
 /* ══════════════════════════════════════════════════════════════════
    CATALOG — what grades/subjects exist for this account's org.
    ════════════════════════════════════════════════════════════════════ */
@@ -326,176 +471,111 @@ router.get("/quiz", requireMobileAuth, async (req, res) => {
     const child = await User.findOne({ _id: childId, parentUserId: parent._id }).lean();
     if (!child) return res.status(404).json({ error: "Child not found." });
 
+    const org = await resolveHomeOrg();
+
     let exam = null;
     let title = "Quiz";
     let moduleKey = null;
+    let subjectKey = null;
+    let sourceRule = null; // the QuizRule this quiz comes from — the source of truth
 
     if (examId) {
       exam = await ExamInstance.findOne({ examId, userId: child._id }).lean();
       if (!exam) return res.status(404).json({ error: "Quiz not found." });
       title = exam.quizTitle || exam.title || exam.module || "Quiz";
       moduleKey = exam.module || null;
-
-      // ── ROTATE QUESTIONS ──
-      // If this quiz was already finished, or has few/no stored questions,
-      // draw a FRESH random set from the same grade/subject so re-takes don't
-      // repeat the same questions in the same order (matches the web).
-      const org = await resolveHomeOrg();
-      const subject = exam.module || null;
-      const grade = child.grade || null;
-      const desired = (exam.questionIds || []).length || 10;
-
-      if (exam.status === "finished" || !(exam.questionIds || []).length) {
-        const fresh = await Question.aggregate([
-          {
-            $match: {
-              $and: [
-                { $or: [{ organization: org?._id }, { organization: null }] },
-                grade ? { grade } : {},
-                subject ? { subject } : {}
-              ]
-            }
-          },
-          { $sample: { size: desired } }
-        ]);
-        if (fresh.length) {
-          const newIds = fresh.map((q) => String(q._id));
-          await ExamInstance.updateOne(
-            { examId: exam.examId },
-            { $set: { questionIds: newIds, status: "pending", meta: { ...(exam.meta || {}), reshuffledAt: new Date().toISOString() } } }
-          );
-          exam.questionIds = newIds;
-        }
-      } else {
-        // Even on the first take, shuffle the stored order so it's not fixed.
-        exam.questionIds = shuffle([...(exam.questionIds || [])]);
+      subjectKey = exam.meta?.subject || null;
+      // If this exam was built from a rule, that rule points at the SPECIFIC quiz
+      // (one comprehension parent). We prefer it so re-takes stay on the same test.
+      if (exam.ruleId) {
+        sourceRule = await QuizRule.findById(exam.ruleId).lean();
       }
     } else if (ruleId) {
-      // Building from catalogue requires a subscription.
+      // Building from the catalogue requires a subscription.
       if (!isPaid(parent)) {
         return res.status(402).json({ code: "UPGRADE_REQUIRED", error: "Subscribe to unlock this quiz." });
       }
-      const rule = await QuizRule.findById(ruleId).lean();
-      if (!rule) return res.status(404).json({ error: "Quiz not found." });
-
-      const org = await resolveHomeOrg();
-      const count = rule.questionCount || 10;
-      const picked = await Question.aggregate([
-        {
-          $match: {
-            $and: [
-              { $or: [{ organization: org?._id }, { organization: null }] },
-              rule.grade ? { grade: rule.grade } : {},
-              rule.subject ? { subject: rule.subject } : {}
-            ]
-          }
-        },
-        { $sample: { size: count } }
-      ]);
-
-      if (!picked.length) return res.status(404).json({ error: "No questions available yet." });
-
-      exam = await ExamInstance.create({
-        examId: crypto.randomUUID(),
-        org: org?._id,
-        userId: child._id,
-        targetRole: "student",
-        module: rule.module || rule.subject || "quiz",
-        quizTitle: rule.title || `${rule.subject} · Grade ${rule.grade}`,
-        status: "pending",
-        questionIds: picked.map((q) => String(q._id)),
-        choicesOrder: picked.map((q) => Array.from({ length: (q.choices || []).length }, (_, i) => i)),
-        createdAt: new Date()
-      });
-      exam = exam.toObject();
-      title = exam.quizTitle;
-      moduleKey = exam.module;
+      sourceRule = await QuizRule.findById(ruleId).lean();
+      if (!sourceRule) return res.status(404).json({ error: "Quiz not found." });
     } else {
       return res.status(400).json({ error: "Nothing to load." });
     }
 
-    // Resolve the DB questions (mobile serves DB-question quizzes only).
-    const ids = (exam.questionIds || [])
-      .map(String)
-      .filter((id) => mongoose.isValidObjectId(id));
-    const docs = await Question.find({ _id: { $in: ids } }).lean();
-    const byId = {};
-    for (const d of docs) byId[String(d._id)] = d;
-
-    // ── COMPREHENSION SUPPORT ──
-    // English (and similar) quizzes use "comprehension" parent questions that
-    // hold a passage + child questionIds. A stored id may be:
-    //   • a normal question            → show as-is
-    //   • a comprehension PARENT        → expand into its children, each carrying the passage
-    //   • a comprehension CHILD         → look up its parent's passage and attach it
-    // First, find any parents referenced by the stored ids OR that own them.
-    const parentDocs = docs.filter((d) => d.type === "comprehension");
-    // Map childId → passage (from parents we already loaded).
-    const passageByChild = {};
-    const childIdsNeeded = [];
-    for (const p of parentDocs) {
-      for (const cid of (p.questionIds || []).map(String)) {
-        passageByChild[cid] = p.passage || p.text || null;
-        if (!byId[cid]) childIdsNeeded.push(cid);
-      }
-    }
-    // Some stored ids may be children whose parent isn't in the list — find parents.
-    const orphanChildIds = ids.filter((id) => !byId[id] || byId[id].type !== "comprehension");
-    if (orphanChildIds.length) {
-      const parents = await Question.find({
-        type: "comprehension",
-        questionIds: { $in: orphanChildIds.map((id) => (mongoose.isValidObjectId(id) ? new mongoose.Types.ObjectId(id) : id)) }
-      }).select("passage text questionIds").lean();
-      for (const p of parents) {
-        for (const cid of (p.questionIds || []).map(String)) {
-          if (!passageByChild[cid]) passageByChild[cid] = p.passage || p.text || null;
-        }
-      }
-    }
-    // Fetch any child docs we referenced but didn't already load.
-    if (childIdsNeeded.length) {
-      const extra = await Question.find({ _id: { $in: childIdsNeeded.filter((id) => mongoose.isValidObjectId(id)) } }).lean();
-      for (const d of extra) byId[String(d._id)] = d;
+    // ──────────────────────────────────────────────────────────────────
+    // CANONICAL QUESTION RESOLUTION
+    // Serve the SPECIFIC quiz — never a random sample by grade/subject.
+    //   1. rule.quizQuestionId → a comprehension parent (one Test: passage +
+    //      its own ordered child questions). This is the source of truth.
+    //   2. else the exam's stored questionIds (onboarding/trial assignments).
+    // This is what stops unrelated tests (Grade 2 / Grade 9 / Age 5) leaking
+    // into one quiz, and guarantees a single quiz has a single passage.
+    // ──────────────────────────────────────────────────────────────────
+    let tokens = [];
+    if (sourceRule?.quizQuestionId) {
+      tokens = [`parent:${String(sourceRule.quizQuestionId)}`];
+      title = sourceRule.quizTitle || sourceRule.title || title;
+      moduleKey = sourceRule.module || moduleKey;
+      subjectKey = sourceRule.subject || subjectKey;
+    } else if (exam && Array.isArray(exam.questionIds) && exam.questionIds.length) {
+      tokens = exam.questionIds.map(String);
     }
 
-    // Build the final ordered question list, expanding parents into children.
-    const questions = [];
-    for (const id of ids) {
-      const q = byId[id];
-      if (!q) continue;
-      if (q.type === "comprehension") {
-        // expand into children, each carrying the passage
-        for (const cid of (q.questionIds || []).map(String)) {
-          const c = byId[cid];
-          if (c) {
-            const pub = publicQuestion(c);
-            pub.passage = q.passage || q.text || null;
-            questions.push(pub);
-          }
-        }
-      } else {
-        const pub = publicQuestion(q);
-        if (!pub.passage && passageByChild[id]) pub.passage = passageByChild[id];
-        questions.push(pub);
-      }
+    if (!tokens.length) {
+      return res.status(404).json({ error: "No questions available yet." });
     }
+
+    // Cap ONLY a single-parent quiz to the rule's size (flexible sizing +
+    // per-attempt reshuffle). Multi-part / assigned quizzes keep their full set.
+    const singleParent = tokens.length === 1 && tokens[0].startsWith("parent:");
+    const limit = singleParent ? (sourceRule?.questionCount || 10) : null;
+
+    const { questions } = await buildQuestionSeries(tokens, { limit });
 
     if (!questions.length) {
       return res.status(422).json({ error: "This quiz can't be taken on mobile yet." });
     }
 
-    // Mark started.
-    await ExamInstance.updateOne(
-      { examId: exam.examId },
-      { $set: { status: "started", startedAt: new Date() } }
-    );
+    // Lock the resolved question set onto the ExamInstance so submit scores the
+    // exact same questions the learner saw.
+    const resolvedIds = questions.map((q) => q._id);
+
+    if (!exam) {
+      // ruleId path: create a fresh ExamInstance bound to this rule + questions.
+      const created = await ExamInstance.create({
+        examId: crypto.randomUUID(),
+        ruleId: sourceRule?._id || null,
+        org: org?._id || child.organization || null,
+        userId: child._id,
+        targetRole: "student",
+        module: moduleKey || subjectKey || "quiz",
+        quizTitle: title,
+        status: "started",
+        startedAt: new Date(),
+        questionIds: resolvedIds,
+        meta: { subject: subjectKey || null }
+      });
+      exam = created.toObject();
+    } else {
+      await ExamInstance.updateOne(
+        { examId: exam.examId },
+        {
+          $set: {
+            questionIds: resolvedIds,
+            status: "started",
+            startedAt: new Date(),
+            meta: { ...(exam.meta || {}), subject: subjectKey || exam.meta?.subject || null }
+          }
+        }
+      );
+    }
 
     return res.json({
       examId: exam.examId,
       title,
       module: moduleKey,
+      subject: subjectKey,
       childId: String(child._id),
-      questions // no correctIndex — scoring happens on submit, server-side
+      questions // each carries passage + passageId; scoring stays server-side
     });
   } catch (err) {
     console.error("[mobile school/quiz]", err);
@@ -585,7 +665,10 @@ router.post("/quiz/submit", requireMobileAuth, async (req, res) => {
     //    the web/admin attempts pages read. Without it, the knowledge map stays
     //    empty and attempts don't show. Mirrors lms_api.js submit.
     try {
-      const subject = subjectHint || exam.module || null;
+      // Prefer a real subject: a question's own subject → the exam's stored
+      // subject (set from the rule) → the module. This keeps knowledge-map
+      // buckets meaningful ("math", not "general").
+      const subject = subjectHint || exam.meta?.subject || exam.module || null;
       // The mastery tracker only runs for the cripfcnt-home org, so make sure
       // the attempt is tagged with it (fall back to resolving it fresh).
       let orgId = exam.org || child.organization || null;

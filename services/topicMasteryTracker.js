@@ -85,14 +85,34 @@ export async function updateTopicMasteryFromAttempt(attemptId) {
         continue; // Skip essays and other non-MCQ types
       }
 
-      // Get topic, subject, grade - use child's grade if question doesn't have one
-      const topic = question.topic;
-      const subject = question.subject;
-      
-      // ✅ FIX: Use attempt user's grade if question doesn't have grade field
+      // Get topic, subject, grade — with sensible fallbacks so quizzes built
+      // from imported (untagged) question banks still produce a knowledge map.
+      //
+      // Most bulk-imported questions have topic/subject = null. Without these
+      // fallbacks EVERY question was skipped, so no TopicMastery records were
+      // ever written and the map showed "not enough data". The fallbacks only
+      // engage when the finer-grained field is absent, so fully-tagged adaptive
+      // questions behave exactly as before.
+      const moduleAsTopic =
+        question.module && question.module !== "general" ? question.module : null;
+
+      const subject =
+        question.subject ||
+        attempt.subject ||
+        moduleAsTopic ||
+        attempt.module ||
+        null;
+
+      const topic =
+        question.topic ||
+        (Array.isArray(question.topics) && question.topics[0]) ||
+        moduleAsTopic ||
+        subject ||
+        null;
+
+      // ✅ Use attempt user's grade if the question doesn't carry one.
       let grade = question.grade;
       if (!grade) {
-        // Try to get user's grade from attempt
         try {
           const User = mongoose.model('User');
           const user = await User.findById(attempt.userId).select('grade').lean();
@@ -103,6 +123,7 @@ export async function updateTopicMasteryFromAttempt(attemptId) {
           console.log(`[TopicMastery] Could not get user grade: ${e.message}`);
         }
       }
+      if (!grade) grade = attempt.grade || null;
 
       if (!topic || !subject || !grade) {
         console.log(`[TopicMastery] Skipping question ${qid} - missing required fields (topic: ${!!topic}, subject: ${!!subject}, grade: ${!!grade})`);
