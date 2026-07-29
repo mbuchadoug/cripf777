@@ -32,7 +32,7 @@ const router = Router();
 
 const PASS_THRESHOLD = parseInt(process.env.QUIZ_PASS_THRESHOLD || "60", 10);
 
-/** Fisher-Yates shuffle — returns a new shuffled array. */
+/** Fisher-Yates shuffle - returns a new shuffled array. */
 function shuffle(arr) {
   const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) {
@@ -70,7 +70,7 @@ async function resolveHomeOrg() {
   return Organization.findOne({ slug: "cripfcnt-home" }).lean();
 }
 
-/** Turn a Question doc into safe app JSON — correctIndex is NOT sent to the app. */
+/** Turn a Question doc into safe app JSON - correctIndex is NOT sent to the app. */
 function publicQuestion(q) {
   return {
     _id: String(q._id),
@@ -86,7 +86,7 @@ function publicQuestion(q) {
 
 /**
  * Resolve a learner that belongs to this parent/teacher. Used by submit.
- * (Previously referenced but never defined — that made submit throw.)
+ * (Previously referenced but never defined - that made submit throw.)
  */
 async function resolveLearner(parent, childId) {
   if (!mongoose.isValidObjectId(childId)) return null;
@@ -108,13 +108,13 @@ async function resolveLearner(parent, childId) {
  *                            without the prefix, OR a child of some parent.
  *
  * Every emitted question carries:
- *   • passage    — the passage TEXT it belongs under (null for standalone)
- *   • passageId  — a stable id for the passage GROUP, so the app can pin the
+ *   • passage    - the passage TEXT it belongs under (null for standalone)
+ *   • passageId  - a stable id for the passage GROUP, so the app can pin the
  *                  passage and page the questions beneath it. Questions that
  *                  share a passageId share one pinned passage.
  *
  * This is the same model the web /api/lms/quiz uses. Crucially it does NOT
- * sample random questions by grade/subject — that global sampling is what mixed
+ * sample random questions by grade/subject - that global sampling is what mixed
  * unrelated tests (Grade 2, Grade 9, Age 5…) into a single "Grade 3" quiz.
  *
  * @param {string[]} tokens
@@ -230,7 +230,7 @@ async function buildQuestionSeries(tokens, { limit = null } = {}) {
 }
 
 /* ══════════════════════════════════════════════════════════════════
-   CATALOG — what grades/subjects exist for this account's org.
+   CATALOG - what grades/subjects exist for this account's org.
    ════════════════════════════════════════════════════════════════════ */
 
 router.get("/catalog", requireMobileAuth, async (req, res) => {
@@ -262,7 +262,7 @@ router.get("/catalog", requireMobileAuth, async (req, res) => {
 });
 
 /* ══════════════════════════════════════════════════════════════════
-   CHILDREN / LEARNERS — list, with progress, and register new ones.
+   CHILDREN / LEARNERS - list, with progress, and register new ones.
    ════════════════════════════════════════════════════════════════════ */
 
 router.get("/children", requireMobileAuth, async (req, res) => {
@@ -389,7 +389,7 @@ router.post("/children", requireMobileAuth, async (req, res) => {
 });
 
 /* ══════════════════════════════════════════════════════════════════
-   QUIZZES — list available/assigned quizzes for a child, with lock flags.
+   QUIZZES - list available/assigned quizzes for a child, with lock flags.
    ════════════════════════════════════════════════════════════════════ */
 
 router.get("/quizzes", requireMobileAuth, async (req, res) => {
@@ -455,7 +455,7 @@ router.get("/quizzes", requireMobileAuth, async (req, res) => {
 });
 
 /* ══════════════════════════════════════════════════════════════════
-   QUIZ WITH QUESTIONS — the server resolves questions once; the app caches
+   QUIZ WITH QUESTIONS - the server resolves questions once; the app caches
    this JSON and can run the quiz offline. Two entry points:
      • examId  → an already-assigned ExamInstance
      • ruleId  → build a fresh quiz from a QuizRule (subscribers only)
@@ -477,7 +477,7 @@ router.get("/quiz", requireMobileAuth, async (req, res) => {
     let title = "Quiz";
     let moduleKey = null;
     let subjectKey = null;
-    let sourceRule = null; // the QuizRule this quiz comes from — the source of truth
+    let sourceRule = null; // the QuizRule this quiz comes from - the source of truth
 
     if (examId) {
       exam = await ExamInstance.findOne({ examId, userId: child._id }).lean();
@@ -503,7 +503,7 @@ router.get("/quiz", requireMobileAuth, async (req, res) => {
 
     // ──────────────────────────────────────────────────────────────────
     // CANONICAL QUESTION RESOLUTION
-    // Serve the SPECIFIC quiz — never a random sample by grade/subject.
+    // Serve the SPECIFIC quiz - never a random sample by grade/subject.
     //   1. rule.quizQuestionId → a comprehension parent (one Test: passage +
     //      its own ordered child questions). This is the source of truth.
     //   2. else the exam's stored questionIds (onboarding/trial assignments).
@@ -584,7 +584,7 @@ router.get("/quiz", requireMobileAuth, async (req, res) => {
 });
 
 /* ══════════════════════════════════════════════════════════════════
-   SUBMIT — score against Question.correctIndex, store the ExamInstance.
+   SUBMIT - score against Question.correctIndex, store the ExamInstance.
    Idempotent-ish: re-submitting the same examId updates the same record.
    Mirrors lms_api.js /quiz/submit scoring.
    ════════════════════════════════════════════════════════════════════ */
@@ -661,7 +661,7 @@ router.post("/quiz/submit", requireMobileAuth, async (req, res) => {
     exam.markModified("meta");
     await exam.save();
 
-    // 2) Write an Attempt record — THIS is what the knowledge-map tracker and
+    // 2) Write an Attempt record - THIS is what the knowledge-map tracker and
     //    the web/admin attempts pages read. Without it, the knowledge map stays
     //    empty and attempts don't show. Mirrors lms_api.js submit.
     try {
@@ -706,7 +706,7 @@ router.post("/quiz/submit", requireMobileAuth, async (req, res) => {
       );
 
       // 3) Update topic mastery so the knowledge map populates. Fire-and-forget,
-      //    exactly like lms_api.js — never blocks or fails the submit.
+      //    exactly like lms_api.js - never blocks or fails the submit.
       if (savedAttempt && savedAttempt._id) {
         updateTopicMasteryFromAttempt(savedAttempt._id)
           .then((r) => console.log("[mobile submit] topic mastery:", r))
@@ -733,7 +733,7 @@ router.post("/quiz/submit", requireMobileAuth, async (req, res) => {
 });
 
 /* ══════════════════════════════════════════════════════════════════
-   PERFORMANCE — a student's results over time for the performance page.
+   PERFORMANCE - a student's results over time for the performance page.
    ════════════════════════════════════════════════════════════════════ */
 
 router.get("/performance", requireMobileAuth, async (req, res) => {
@@ -793,7 +793,7 @@ router.get("/performance", requireMobileAuth, async (req, res) => {
 });
 
 /* ══════════════════════════════════════════════════════════════════
-   ECOCASH PAYMENT (Paynow mobile) — native, in-app.
+   ECOCASH PAYMENT (Paynow mobile) - native, in-app.
    Enter phone → USSD push → poll until paid → plan activates.
    Mirrors routes/payments.js but authed with the mobile JWT.
    ════════════════════════════════════════════════════════════════════ */
@@ -850,7 +850,7 @@ router.post("/pay/ecocash", requireMobileAuth, async (req, res) => {
       try {
         await User.updateOne({ _id: user._id, email: { $in: [null, undefined, ""] } }, { $set: { email: bodyEmail } });
       } catch (e) {
-        // non-fatal (e.g. email already taken) — proceed with the payment
+        // non-fatal (e.g. email already taken) - proceed with the payment
       }
     }
 
@@ -947,7 +947,7 @@ router.get("/pay/poll/:reference", requireMobileAuth, async (req, res) => {
 });
 
 /* ══════════════════════════════════════════════════════════════════
-   KNOWLEDGE MAP — per-subject topic mastery: strengths and areas to
+   KNOWLEDGE MAP - per-subject topic mastery: strengths and areas to
    improve. Reuses services/topicMasteryTracker.js so it matches the web.
    ════════════════════════════════════════════════════════════════════ */
 

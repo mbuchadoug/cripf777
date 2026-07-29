@@ -8,7 +8,7 @@
 // in principle register the same scheme. A one-time code that expires in five
 // minutes and dies on first use is worth the extra round trip.
 //
-// The TTL index means Mongo cleans these up itself — nothing to maintain.
+// The TTL index means Mongo cleans these up itself - nothing to maintain.
 
 import mongoose from "mongoose";
 

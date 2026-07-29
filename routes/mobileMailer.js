@@ -1,6 +1,6 @@
 // services/mobileMailer.js
 // One small mailer, reusing the SMTP_* env you already use in org_management.js.
-// Nothing here is app-specific — the web can use it too.
+// Nothing here is app-specific - the web can use it too.
 
 import nodemailer from "nodemailer";
 

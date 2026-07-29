@@ -3,7 +3,7 @@
 //  Shared "record a document / expense / payout" service for the /office portal.
 //  Mirrors the WhatsApp bot exactly (numbering, records, notifications, PDF) so
 //  anything recorded on the web is identical to a WhatsApp entry. The bot code
-//  itself is NOT modified — this is additive.
+//  itself is NOT modified - this is additive.
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function liveBusiness(biz) {
@@ -68,7 +68,7 @@ async function _createDoc({
       const { PACKAGES } = await import("./packages.js");
       const limit = PACKAGES?.trial?.monthlyDocs;
       if (limit && (bizDoc.documentCountMonth || 0) >= limit) {
-        const e = new Error(`Trial limit reached — ${limit} documents this month. Upgrade to record more.`);
+        const e = new Error(`Trial limit reached - ${limit} documents this month. Upgrade to record more.`);
         e.code = "TRIAL_LIMIT"; throw e;
       }
     }

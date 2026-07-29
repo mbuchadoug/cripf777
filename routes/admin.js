@@ -443,7 +443,7 @@ router.get("/mobile-attempts", ensureAuth, ensureAdmin, async (req, res) => {
       percentage: a.percentage ?? a.scorePct ?? null,
       when: a.finishedAt || a.updatedAt
         ? new Date(a.finishedAt || a.updatedAt).toLocaleString()
-        : "—"
+        : "-"
     }));
 
     return safeRender(req, res, "admin/mobile_attempts", { title: "Admin · Mobile attempts", rows, layout: false });

@@ -31,7 +31,7 @@ function ensureAdminEmails(req, res, next) {
   next();
 }
 
-/* Plan configs — mirror routes/payments.js PLANS. */
+/* Plan configs - mirror routes/payments.js PLANS. */
 const PLANS = {
   silver: { name: "Silver", role: "parent", plan: "silver", maxChildren: 2, durationDays: 30 },
   gold: { name: "Gold", role: "parent", plan: "gold", maxChildren: 5, durationDays: 30 },
@@ -45,7 +45,7 @@ const esc = (s) =>
   );
 
 /* ══════════════════════════════════════════════════════════════════
-   GET /admin/mobile/users — list mobile users (parents, teachers, students)
+   GET /admin/mobile/users - list mobile users (parents, teachers, students)
    ════════════════════════════════════════════════════════════════════ */
 router.get("/admin/mobile/users", ensureAuth, ensureAdminEmails, async (req, res) => {
   try {
@@ -78,10 +78,10 @@ router.get("/admin/mobile/users", ensureAuth, ensureAdminEmails, async (req, res
           u.role === "private_teacher"
             ? u.teacherSubscriptionPlan && u.teacherSubscriptionPlan !== "none"
               ? `teacher_${u.teacherSubscriptionPlan}`
-              : "—"
+              : "-"
             : u.subscriptionPlan && u.subscriptionPlan !== "none"
             ? u.subscriptionPlan
-            : "—";
+            : "-";
         const active =
           u.subscriptionExpiresAt && new Date(u.subscriptionExpiresAt) > new Date();
         const roleLabel = u.role === "private_teacher" ? "teacher" : u.role;
@@ -99,9 +99,9 @@ router.get("/admin/mobile/users", ensureAuth, ensureAdminEmails, async (req, res
           <span class="muted">${esc(u.email || "no email")} · @${esc(u.username || "")}</span>
         </td>
         <td><span class="pill">${esc(roleLabel)}</span></td>
-        <td>${u.role === "student" ? `Grade ${esc(u.grade || "—")}` : "—"}</td>
+        <td>${u.role === "student" ? `Grade ${esc(u.grade || "-")}` : "-"}</td>
         <td>
-          ${plan === "—" ? '<span class="muted">free</span>' : `<span class="pill green">${esc(plan)}</span>`}
+          ${plan === "-" ? '<span class="muted">free</span>' : `<span class="pill green">${esc(plan)}</span>`}
           ${active ? `<br><span class="muted">until ${new Date(u.subscriptionExpiresAt).toLocaleDateString()}</span>` : ""}
         </td>
         <td class="nowrap">
@@ -144,7 +144,7 @@ router.get("/admin/mobile/users", ensureAuth, ensureAdminEmails, async (req, res
 });
 
 /* ══════════════════════════════════════════════════════════════════
-   POST /admin/mobile/users/:id/activate — manually activate a plan
+   POST /admin/mobile/users/:id/activate - manually activate a plan
    ════════════════════════════════════════════════════════════════════ */
 router.post("/admin/mobile/users/:id/activate", ensureAuth, ensureAdminEmails, async (req, res) => {
   try {
@@ -183,7 +183,7 @@ router.post("/admin/mobile/users/:id/activate", ensureAuth, ensureAdminEmails, a
 });
 
 /* ══════════════════════════════════════════════════════════════════
-   GET /admin/mobile/attempts — mobile quiz attempts (all, or by user)
+   GET /admin/mobile/attempts - mobile quiz attempts (all, or by user)
    ════════════════════════════════════════════════════════════════════ */
 router.get("/admin/mobile/attempts", ensureAuth, ensureAdminEmails, async (req, res) => {
   try {
@@ -211,8 +211,8 @@ router.get("/admin/mobile/attempts", ensureAuth, ensureAdminEmails, async (req, 
         <td>${esc(nameById[String(a.userId)] || a.userId)}</td>
         <td>${esc(a.quizTitle || a.title || a.module || "Quiz")}</td>
         <td><span class="pill">${esc(a.status)}</span></td>
-        <td>${pct != null ? `<strong>${pct}%</strong>` : "—"}</td>
-        <td class="muted">${when ? new Date(when).toLocaleString() : "—"}</td>
+        <td>${pct != null ? `<strong>${pct}%</strong>` : "-"}</td>
+        <td class="muted">${when ? new Date(when).toLocaleString() : "-"}</td>
       </tr>`;
       })
       .join("");

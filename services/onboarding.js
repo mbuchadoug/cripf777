@@ -3,7 +3,7 @@
 // Gives a brand-new learner a small, grade-appropriate set of REAL trial
 // quizzes. Each quiz is ONE comprehension "parent" (a single Test = a passage
 // plus its own child questions), assigned with the same parent-token structure
-// as assignQuizFromRule — so the mobile/web players show one coherent test with
+// as assignQuizFromRule - so the mobile/web players show one coherent test with
 // one passage, never a random mix of unrelated tests.
 //
 // This replaces the old behaviour, which sampled 5 random questions from the
@@ -83,7 +83,7 @@ export async function assignOnboardingQuizzes({ orgId, userId, maxQuizzes = 3 })
     // Canonical structure: parent marker + children (matches assignQuizFromRule).
     const questionIds = [`parent:${String(parentQuestion._id)}`, ...childIds];
 
-    // choicesOrder aligned to questionIds — placeholder [] for the parent marker,
+    // choicesOrder aligned to questionIds - placeholder [] for the parent marker,
     // then an identity order per child.
     const choicesOrder = [[]];
     for (const cid of childIds) {

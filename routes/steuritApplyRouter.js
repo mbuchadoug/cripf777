@@ -1,6 +1,6 @@
 // routes/steuritApplyRouter.js
 // ─────────────────────────────────────────────────────────────────────────────
-// ST EURIT INTERNATIONAL SCHOOL — WEBSITE APPLICATION ENDPOINT
+// ST EURIT INTERNATIONAL SCHOOL - WEBSITE APPLICATION ENDPOINT
 //
 // Receives JSON application submissions from the school's static website
 // (https://steuritinternationalschool.org.zw → apply.html) cross-origin,
@@ -129,13 +129,13 @@ async function emailApplication(data, applicantPhone) {
   </div>
   <div style="padding:24px">
     <p style="color:#64748b;font-size:14px;margin:0 0 16px">
-      A new application was submitted on the <strong>St Eurit website</strong> (no documents uploaded — parent brings them on assessment day).
+      A new application was submitted on the <strong>St Eurit website</strong> (no documents uploaded - parent brings them on assessment day).
     </p>
     <table style="width:100%;border-collapse:collapse;font-size:14px">${tableRows}</table>
     <div style="margin-top:20px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:14px;font-size:14px">
       <strong style="color:#16a34a">Next step:</strong>
       contact the parent on WhatsApp to book the free assessment (Mon–Fri, 0900–1500hrs)
-      ${applicantPhone ? `— <a href="https://wa.me/${esc(applicantPhone)}" style="color:#16a34a;font-weight:700">wa.me/${esc(applicantPhone)}</a>` : ""}.
+      ${applicantPhone ? `- <a href="https://wa.me/${esc(applicantPhone)}" style="color:#16a34a;font-weight:700">wa.me/${esc(applicantPhone)}</a>` : ""}.
     </div>
   </div>
 </div>
@@ -145,7 +145,7 @@ async function emailApplication(data, applicantPhone) {
     from: FROM_DISPLAY,
     to: NOTIFY_EMAIL,
     replyTo: REPLY_TO,
-    subject: `📥 St Eurit Application — ${data.studentName} (${data.grade}, ${data.intakeYear})`,
+    subject: `📥 St Eurit Application - ${data.studentName} (${data.grade}, ${data.intakeYear})`,
     html
   });
   console.log(`[STEURIT APPLY] ✅ email sent to ${NOTIFY_EMAIL} id=${info.messageId}`);
@@ -257,7 +257,7 @@ router.post("/apply/steurit/web-form", async (req, res) => {
   try {
     const b = req.body || {};
 
-    // Honeypot — pretend success for bots.
+    // Honeypot - pretend success for bots.
     if (String(b.website || "").trim() !== "") {
       console.warn("[STEURIT APPLY] 🍯 honeypot tripped (form) - dropping");
       return res.redirect(303, back + "?submitted=1#apply-form");
@@ -271,11 +271,11 @@ router.post("/apply/steurit/web-form", async (req, res) => {
     const normP = data.parentPhone.replace(/\D/g, "");
     const fullP = normP.startsWith("0") ? "263" + normP.slice(1) : normP;
 
-    await emailApplication(data, fullP);          // primary email — awaited
+    await emailApplication(data, fullP);          // primary email - awaited
     res.redirect(303, back + "?submitted=1&student=" +
       encodeURIComponent(data.studentName.split(" ")[0] || "") + "#apply-form");
 
-    runBackgroundNotifications(data, fullP);      // the slow chain — background
+    runBackgroundNotifications(data, fullP);      // the slow chain - background
   } catch (err) {
     console.error("[STEURIT APPLY FORM] ❌", err.message);
     res.redirect(303, back + "?error=failed#apply-form");
@@ -296,7 +296,7 @@ router.post(
       try { b = JSON.parse(b); } catch { b = {}; }
     }
 
-    // Honeypot — bots fill the hidden "website" field; pretend success.
+    // Honeypot - bots fill the hidden "website" field; pretend success.
     if (String(b.website || "").trim() !== "") {
       console.warn("[STEURIT APPLY] 🍯 honeypot tripped - dropping submission");
       return res.json({ ok: true });
@@ -315,11 +315,11 @@ router.post(
     const normP = data.parentPhone.replace(/\D/g, "");
     const fullP = normP.startsWith("0") ? "263" + normP.slice(1) : normP;
 
-    // 1. Email to info@zimqoute.co.zw (the primary requirement — awaited)
+    // 1. Email to info@zimqoute.co.zw (the primary requirement - awaited)
     await emailApplication(data, fullP);
 
     // 2. Respond to the browser NOW. The remaining work (lead capture,
-    //    school email copy, WhatsApp alerts) runs in the background — a
+    //    school email copy, WhatsApp alerts) runs in the background - a
     //    second SMTP send plus Meta Graph API calls can take 15-30s, and
     //    keeping the HTTP response open that long makes proxies/browsers
     //    give up and report a network error even when everything succeeds.

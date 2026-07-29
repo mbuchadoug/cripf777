@@ -9,7 +9,7 @@ import crypto from "crypto";
 const MobileVerificationSchema = new mongoose.Schema({
   email: { type: String, required: true, lowercase: true, trim: true, index: true },
 
-  // sha256 of the 6-digit code — we never store the code itself
+  // sha256 of the 6-digit code - we never store the code itself
   codeHash: { type: String, required: true },
 
   // what this code authorises

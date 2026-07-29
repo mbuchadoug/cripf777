@@ -85,7 +85,7 @@ export async function updateTopicMasteryFromAttempt(attemptId) {
         continue; // Skip essays and other non-MCQ types
       }
 
-      // Get topic, subject, grade — with sensible fallbacks so quizzes built
+      // Get topic, subject, grade - with sensible fallbacks so quizzes built
       // from imported (untagged) question banks still produce a knowledge map.
       //
       // Most bulk-imported questions have topic/subject = null. Without these
