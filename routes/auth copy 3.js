@@ -252,7 +252,7 @@ router.get(
 // ─────────────────────────────────────────────────────────────────────
 
 router.get("/student", (req, res) => {
-  res.render("auth/student_login", { layout: false });
+  res.render("auth/student_login");
 });
 
 router.post("/student", async (req, res) => {
@@ -282,7 +282,7 @@ router.post("/student", async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────
 
 router.get("/school", (req, res) => {
-  res.render("auth/school_login", { layout: false, error: null });
+  res.render("auth/school_login", { error: null });
 });
 
 router.post("/school", async (req, res) => {
@@ -290,7 +290,7 @@ router.post("/school", async (req, res) => {
     const { loginId, password } = req.body;
 
     if (!loginId || !password) {
-      return res.render("auth/school_login", { layout: false, error: "Please enter your ID/username and password" });
+      return res.render("auth/school_login", { error: "Please enter your ID/username and password" });
     }
 
     // Match any of: username, studentId, teacherId, adminId, email
@@ -305,12 +305,12 @@ router.post("/school", async (req, res) => {
     });
 
     if (!user) {
-      return res.render("auth/school_login", { layout: false, error: "Invalid username/ID or password" });
+      return res.render("auth/school_login", { error: "Invalid username/ID or password" });
     }
 
     const ok = await user.verifyPassword(password);
     if (!ok) {
-      return res.render("auth/school_login", { layout: false, error: "Invalid username/ID or password" });
+      return res.render("auth/school_login", { error: "Invalid username/ID or password" });
     }
 
     user.lastLogin = new Date();
@@ -319,11 +319,11 @@ router.post("/school", async (req, res) => {
     req.login(user, async err => {
       if (err) {
         console.error(err);
-        return res.render("auth/school_login", { layout: false, error: "Login failed" });
+        return res.render("auth/school_login", { error: "Login failed" });
       }
       const membership = await OrgMembership.findOne({ user: user._id }).populate("org").lean();
      if (!membership || !membership.org?.slug) {
-  return res.render("auth/school_login", { layout: false, error: "No school assigned to this account" });
+  return res.render("auth/school_login", { error: "No school assigned to this account" });
 }
 if (user.role === "student") {
   console.log("[/auth/school] student login -> /student/dashboard", {
@@ -365,7 +365,7 @@ return res.redirect(`/org/${membership.org.slug}/dashboard`);
     });
   } catch (e) {
     console.error("[school login]", e);
-    res.render("auth/school_login", { layout: false, error: "Unexpected error occurred" });
+    res.render("auth/school_login", { error: "Unexpected error occurred" });
   }
 });
 
