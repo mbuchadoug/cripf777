@@ -22,9 +22,11 @@ import Organization from "../models/organization.js";
 import QuizRule from "../models/quizRule.js";
 import Question from "../models/question.js";
 import ExamInstance from "../models/examInstance.js";
+import Attempt from "../models/attempt.js";
 import Payment from "../models/payment.js";
 import paynow from "../services/paynow.js";
 import { getStudentKnowledgeMap } from "../services/topicMasteryTracker.js";
+import { updateTopicMasteryFromAttempt } from "../services/topicMasteryTracker.js";
 
 const router = Router();
 
@@ -68,7 +70,8 @@ async function resolveHomeOrg() {
   return Organization.findOne({ slug: "cripfcnt-home" }).lean();
 }
 
-/** Turn a Question doc into safe app JSON — correctIndex is NOT sent to the app. */function publicQuestion(q) {
+/** Turn a Question doc into safe app JSON — correctIndex is NOT sent to the app. */
+function publicQuestion(q) {
   return {
     _id: String(q._id),
     text: q.text,
@@ -419,8 +422,63 @@ router.get("/quiz", requireMobileAuth, async (req, res) => {
     const byId = {};
     for (const d of docs) byId[String(d._id)] = d;
 
-    // Preserve the stored order.
-    const questions = ids.map((id) => byId[id]).filter(Boolean).map(publicQuestion);
+    // ── COMPREHENSION SUPPORT ──
+    // English (and similar) quizzes use "comprehension" parent questions that
+    // hold a passage + child questionIds. A stored id may be:
+    //   • a normal question            → show as-is
+    //   • a comprehension PARENT        → expand into its children, each carrying the passage
+    //   • a comprehension CHILD         → look up its parent's passage and attach it
+    // First, find any parents referenced by the stored ids OR that own them.
+    const parentDocs = docs.filter((d) => d.type === "comprehension");
+    // Map childId → passage (from parents we already loaded).
+    const passageByChild = {};
+    const childIdsNeeded = [];
+    for (const p of parentDocs) {
+      for (const cid of (p.questionIds || []).map(String)) {
+        passageByChild[cid] = p.passage || p.text || null;
+        if (!byId[cid]) childIdsNeeded.push(cid);
+      }
+    }
+    // Some stored ids may be children whose parent isn't in the list — find parents.
+    const orphanChildIds = ids.filter((id) => !byId[id] || byId[id].type !== "comprehension");
+    if (orphanChildIds.length) {
+      const parents = await Question.find({
+        type: "comprehension",
+        questionIds: { $in: orphanChildIds.map((id) => (mongoose.isValidObjectId(id) ? new mongoose.Types.ObjectId(id) : id)) }
+      }).select("passage text questionIds").lean();
+      for (const p of parents) {
+        for (const cid of (p.questionIds || []).map(String)) {
+          if (!passageByChild[cid]) passageByChild[cid] = p.passage || p.text || null;
+        }
+      }
+    }
+    // Fetch any child docs we referenced but didn't already load.
+    if (childIdsNeeded.length) {
+      const extra = await Question.find({ _id: { $in: childIdsNeeded.filter((id) => mongoose.isValidObjectId(id)) } }).lean();
+      for (const d of extra) byId[String(d._id)] = d;
+    }
+
+    // Build the final ordered question list, expanding parents into children.
+    const questions = [];
+    for (const id of ids) {
+      const q = byId[id];
+      if (!q) continue;
+      if (q.type === "comprehension") {
+        // expand into children, each carrying the passage
+        for (const cid of (q.questionIds || []).map(String)) {
+          const c = byId[cid];
+          if (c) {
+            const pub = publicQuestion(c);
+            pub.passage = q.passage || q.text || null;
+            questions.push(pub);
+          }
+        }
+      } else {
+        const pub = publicQuestion(q);
+        if (!pub.passage && passageByChild[id]) pub.passage = passageByChild[id];
+        questions.push(pub);
+      }
+    }
 
     if (!questions.length) {
       return res.status(422).json({ error: "This quiz can't be taken on mobile yet." });
@@ -461,34 +519,54 @@ router.post("/quiz/submit", requireMobileAuth, async (req, res) => {
     if (!examId) return res.status(400).json({ error: "Missing examId." });
     if (!answers.length) return res.status(400).json({ error: "No answers submitted." });
 
-    const child = await User.findOne({ _id: childId, parentUserId: parent._id }).lean();
-    if (!child) return res.status(404).json({ error: "Child not found." });
+    const child = await resolveLearner(parent, childId);
+    if (!child) return res.status(404).json({ error: "Learner not found." });
 
     const exam = await ExamInstance.findOne({ examId, userId: child._id });
     if (!exam) return res.status(404).json({ error: "Quiz not found." });
 
-    // Load the answer key.
+    // Load full question docs (need correctIndex, subject, choices, text).
     const qIds = answers.map((a) => String(a.questionId)).filter(Boolean);
     const docs = await Question.find({ _id: { $in: qIds } })
-      .select("correctIndex")
+      .select("correctIndex subject grade module choices text")
       .lean();
-    const key = {};
-    for (const d of docs) key[String(d._id)] = d.correctIndex;
+    const byId = {};
+    for (const d of docs) byId[String(d._id)] = d;
 
     let correct = 0;
-    const saved = [];
+    const saved = [];        // for ExamInstance.meta (compact)
+    const attemptAnswers = []; // for Attempt (rich, what the tracker reads)
+    let subjectHint = null;
     for (const a of answers) {
       const qid = String(a.questionId);
-      const ci = key[qid];
+      const q = byId[qid] || {};
+      const ci = q.correctIndex;
       const isCorrect = typeof ci === "number" && ci === a.choiceIndex;
       if (isCorrect) correct++;
+      if (!subjectHint && q.subject) subjectHint = q.subject;
+
+      const selectedText =
+        Array.isArray(q.choices) && q.choices[a.choiceIndex]
+          ? q.choices[a.choiceIndex].text || ""
+          : "";
+
       saved.push({ questionId: qid, choiceIndex: a.choiceIndex, correctIndex: ci, correct: isCorrect });
+      attemptAnswers.push({
+        questionId: mongoose.isValidObjectId(qid) ? new mongoose.Types.ObjectId(qid) : qid,
+        choiceIndex: a.choiceIndex,
+        shownIndex: a.choiceIndex,
+        selectedText,
+        correctIndex: typeof ci === "number" ? ci : null,
+        correct: isCorrect
+      });
     }
 
     const total = answers.length;
     const percentage = Math.round((correct / Math.max(1, total)) * 100);
     const passed = percentage >= PASS_THRESHOLD;
+    const now = new Date();
 
+    // 1) Update the ExamInstance (keeps the app's existing reads working).
     exam.status = "finished";
     exam.meta = {
       ...(exam.meta || {}),
@@ -497,12 +575,64 @@ router.post("/quiz/submit", requireMobileAuth, async (req, res) => {
       percentage,
       passed,
       answers: saved,
-      finishedAt: new Date().toISOString(), // stored in meta; ExamInstance has no finishedAt field
+      finishedAt: now.toISOString(),
       source: "mobile-app"
     };
-    exam.markModified("meta"); // Mixed fields need this to persist
-    // ExamInstance uses timestamps, so updatedAt reflects completion too.
+    exam.markModified("meta");
     await exam.save();
+
+    // 2) Write an Attempt record — THIS is what the knowledge-map tracker and
+    //    the web/admin attempts pages read. Without it, the knowledge map stays
+    //    empty and attempts don't show. Mirrors lms_api.js submit.
+    try {
+      const subject = subjectHint || exam.module || null;
+      // The mastery tracker only runs for the cripfcnt-home org, so make sure
+      // the attempt is tagged with it (fall back to resolving it fresh).
+      let orgId = exam.org || child.organization || null;
+      if (!orgId) {
+        const home = await resolveHomeOrg();
+        orgId = home?._id || null;
+      }
+
+      const savedAttempt = await Attempt.findOneAndUpdate(
+        { examId, userId: child._id },
+        {
+          $set: {
+            examId,
+            userId: child._id,
+            organization: orgId,
+            module: exam.module || subject || null,
+            subject,
+            grade: child.grade || null,
+            quizTitle: exam.quizTitle || exam.title || "Quiz",
+            questionIds: exam.questionIds || qIds,
+            answers: attemptAnswers,
+            score: correct,
+            correctCount: correct,
+            maxScore: total,
+            scorePct: percentage,
+            percentage,
+            passed,
+            status: "finished",
+            source: "mobile-app",
+            finishedAt: now
+          },
+          $setOnInsert: { startedAt: exam.startedAt || now }
+        },
+        { upsert: true, new: true }
+      );
+
+      // 3) Update topic mastery so the knowledge map populates. Fire-and-forget,
+      //    exactly like lms_api.js — never blocks or fails the submit.
+      if (savedAttempt && savedAttempt._id) {
+        updateTopicMasteryFromAttempt(savedAttempt._id)
+          .then((r) => console.log("[mobile submit] topic mastery:", r))
+          .catch((e) => console.error("[mobile submit] mastery update failed:", e.message));
+      }
+    } catch (attErr) {
+      console.error("[mobile submit] Attempt write failed:", attErr.message);
+      // Non-fatal: the ExamInstance is still saved.
+    }
 
     return res.json({
       examId,
@@ -511,7 +641,6 @@ router.post("/quiz/submit", requireMobileAuth, async (req, res) => {
       percentage,
       passed,
       passThreshold: PASS_THRESHOLD,
-      // send the key back so the app can show which were right, now that it's scored
       answerKey: saved.map((s) => ({ questionId: s.questionId, correctIndex: s.correctIndex, correct: s.correct }))
     });
   } catch (err) {

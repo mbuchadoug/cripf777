@@ -422,10 +422,11 @@ router.post("/users/:id/activate", ensureAuth, ensureAdmin, async (req, res) => 
 router.get("/mobile-attempts", ensureAuth, ensureAdmin, async (req, res) => {
   try {
     const userId = (req.query.userId || "").trim();
-    const filter = { "meta.source": "mobile-app" };
+    const filter = { source: "mobile-app" };
     if (userId) filter.userId = userId;
 
-    const attempts = await ExamInstance.find(filter).sort({ updatedAt: -1 }).limit(400).lean();
+    // Mobile attempts are recorded in the Attempt collection (same as web).
+    const attempts = await Attempt.find(filter).sort({ finishedAt: -1, updatedAt: -1 }).limit(400).lean();
     const ids = [...new Set(attempts.map((a) => String(a.userId)).filter(Boolean))];
     const people = await User.find({ _id: { $in: ids } })
       .select("displayName firstName lastName username")
@@ -437,11 +438,11 @@ router.get("/mobile-attempts", ensureAuth, ensureAdmin, async (req, res) => {
 
     const rows = attempts.map((a) => ({
       student: nameById[String(a.userId)] || String(a.userId),
-      title: a.quizTitle || a.title || a.module || "Quiz",
+      title: a.quizTitle || a.module || "Quiz",
       status: a.status,
-      percentage: a.meta?.percentage ?? null,
-      when: a.meta?.finishedAt || a.updatedAt
-        ? new Date(a.meta?.finishedAt || a.updatedAt).toLocaleString()
+      percentage: a.percentage ?? a.scorePct ?? null,
+      when: a.finishedAt || a.updatedAt
+        ? new Date(a.finishedAt || a.updatedAt).toLocaleString()
         : "—"
     }));
 
