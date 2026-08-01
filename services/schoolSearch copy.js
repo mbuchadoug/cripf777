@@ -392,46 +392,6 @@ export async function runSchoolShortcodeSearch({ from, text, biz, saveBiz }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// FREE-TEXT SCHOOL SEARCH
-// Called when a user typed free text while inside the parent school-search funnel
-// (biz state school_search_city / school_search_results, or the non-biz marker).
-// Handles BOTH structured phrases ("primary borrowdale") AND a bare school NAME
-// ("hellenic academy"). This is what stops a typed school search from being
-// hijacked into the ⚡ Request Sellers marketplace flow.
-// Returns the send promise, or false if the text is too short to act on.
-// ─────────────────────────────────────────────────────────────────────────────
-export async function handleSchoolFreeTextSearch({ from, text, biz, saveBiz }) {
-  const raw = String(text || "").trim();
-  if (raw.length < 2) return false;
-
-  // Try a structured filter parse first (city / type / fees / curriculum / etc.).
-  const parsed = _parseSchoolShortcodeSearch(raw);
-  const search = (parsed && parsed.hasFilters)
-    ? parsed.search
-    : { keyword: raw, page: 0 };   // otherwise treat the whole input as a NAME
-
-  if (biz) {
-    biz.sessionState = "school_search_results";
-    biz.sessionData  = { ...(biz.sessionData || {}), schoolSearch: search };
-    await saveBiz(biz);
-  } else {
-    // Consume the one-shot non-biz marker and stash the search for pagination.
-    try {
-      const { default: UserSession } = await import("../models/userSession.js");
-      const phone = from.replace(/\D+/g, "");
-      await UserSession.findOneAndUpdate(
-        { phone },
-        { $set:   { "tempData.schoolSearch": search },
-          $unset: { "tempData.schoolSearchActive": "" } },
-        { upsert: true }
-      );
-    } catch (_) {}
-  }
-
-  return _runSchoolSearch(from, search);
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // ZQ DEEP-LINK HANDLER
 // Intercepts payloads fired by the ZQ Link landing page via wa.me deep-link.
 // Payload format: "ZQ:SCHOOL:<mongoId>"  or  "ZQ:SUPPLIER:<mongoId>"
@@ -667,19 +627,6 @@ export async function startSchoolSearch(from, biz, saveBiz) {
     biz.sessionState = "school_search_city";
     biz.sessionData  = { ...(biz.sessionData || {}), schoolSearch: {} };
     await saveBiz(biz);
-  } else {
-    // Non-biz parents have no biz.sessionState. Set a one-shot marker so that a
-    // typed school name is routed to school search, NOT the Request Sellers flow.
-    // It is consumed when the free-text search runs or when results are rendered.
-    try {
-      const { default: UserSession } = await import("../models/userSession.js");
-      const phone = from.replace(/\D+/g, "");
-      await UserSession.findOneAndUpdate(
-        { phone },
-        { $set: { "tempData.schoolSearchActive": true, "tempData.schoolSearch": {} } },
-        { upsert: true }
-      );
-    } catch (_) {}
   }
 
  // WhatsApp limit: 10 rows. Show first 8 cities + More + All Cities.
@@ -1272,37 +1219,9 @@ async function _runSchoolSearch(from, search = {}) {
   const page      = search.page || 0;
   const skip      = page * PAGE_SIZE;
 
-  // Results are being shown - consume any lingering non-biz school-search marker
-  // so later unrelated messages are not misrouted back into school search.
-  try {
-    const { default: UserSession } = await import("../models/userSession.js");
-    await UserSession.updateOne(
-      { phone: from.replace(/\D+/g, "") },
-      { $unset: { "tempData.schoolSearchActive": "" } }
-    );
-  } catch (_) {}
-
 const query = { active: true };
 if (search.city)     query.city    = new RegExp(`^${search.city}$`, "i");
 if (search.suburb)   query.suburb  = new RegExp(search.suburb, "i");
-
-// ── Free-text NAME / keyword search ─────────────────────────────────────────
-// Lets a parent type a school name ("hellenic", "st georges") or a loose phrase.
-// We pull any city out of the keyword, then match the remaining significant words
-// against schoolName (ANY word matches). Slight over-matching is fine - results
-// are ranked, and the zero-match fallback shows available schools anyway.
-if (search.keyword) {
-  const _kwNorm = _normSchoolText(String(search.keyword));
-  const _kwCity = _findSchoolCity(_kwNorm);
-  if (_kwCity && !query.city) query.city = new RegExp(`^${_kwCity}$`, "i");
-  const _stop = new Set(["school","schools","the","and","for","in","near","at","a","an","of","to","please","need","want","find","looking","me"]);
-  const _cityLc = (_kwCity || "").toLowerCase();
-  const _esc = w => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const _words = _kwNorm.split(/\s+/).filter(w => w.length >= 3 && !_stop.has(w) && w !== _cityLc);
-  if (_words.length) {
-    query.schoolName = { $in: _words.map(w => new RegExp(_esc(w), "i")) };
-  }
-}
 if (search.type) {
   // "combined" schools span ECD–Form 6, so they must appear in ALL type searches
   if (search.type === "ecd") {
@@ -1398,34 +1317,13 @@ if (typeof search.admissionsOpen === "boolean") {
       if (schools.length) fallbackLabel = `No exact match - here are schools in *${search.city}* you might like:`;
     }
 
-    // Step 3b: name/keyword search with no location match - retry name-only
-    // across ALL cities so "hellenic" finds it wherever it is.
-    if (!schools.length && search.keyword && query.schoolName) {
-      schools = await SchoolProfile.find({ active: true, schoolName: query.schoolName })
-        .sort({ tier: -1, rating: -1, qualityScore: -1 })
-        .limit(PAGE_SIZE)
-        .lean();
-      if (schools.length) fallbackLabel = `Showing name matches across all cities:`;
-    }
-
-    // Step 4: no match at all - show the schools we DO have (featured / top rated).
-    if (!schools.length) {
-      schools = await SchoolProfile.find({ active: true })
-        .sort({ tier: -1, rating: -1, qualityScore: -1 })
-        .limit(PAGE_SIZE)
-        .lean();
-      if (schools.length) {
-        fallbackLabel = `We couldn't find an exact match - here are schools on ZimQuote you can explore:`;
-      }
-    }
-
-    // Step 5: the platform truly has zero active schools listed.
+    // Step 4: truly no schools registered in this area at all
     if (!schools.length) {
       const filterSummary = _buildFilterSummary(search);
       await sendText(from,
-`🏫 *No schools listed yet*
+`🏫 *No schools found*
 
-We don't have any schools on ZimQuote for that search yet.
+We don't have any schools listed for that search yet.
 _Filters tried: ${filterSummary}_
 
 📣 *Know a school we should add?* Ask them to register on ZimQuote - it's free.

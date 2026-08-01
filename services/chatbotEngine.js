@@ -137,6 +137,7 @@ import {
   handleSchoolSearchActions,
   handleSchoolAdminStates,
   runSchoolShortcodeSearch,
+  handleSchoolFreeTextSearch,
   handleZqDeepLink,
   handleSchoolSlugSearch,
   handleSmartCardMenu,
@@ -4675,6 +4676,38 @@ try {
       saveBiz: biz ? saveBizSafe : async () => {}
     });
     if (handled !== false) return handled;
+  }
+
+  // ── School search FREE-TEXT (typed school name / city inside the funnel) ─────
+  // If the user is in the parent school-search funnel and types free text instead
+  // of tapping a city button, route it to SCHOOL search - not the Request Sellers
+  // flow. Covers biz-owners (sessionState) AND non-biz parents (one-shot marker).
+  // Runs AFTER the "find ..." shortcode block and BEFORE the Request Sellers
+  // catch-all further down, so a typed school name is never hijacked. A bare name
+  // like "hellenic academy" is handled as a NAME search inside the handler.
+  if (!isMetaAction && !isSchoolShortcodeQuery && text.trim().length > 1) {
+    const _navTok = /^(0|00|menu|main menu|back|cancel|exit|home|hi|hie|hey|hello|start)$/i.test(text.trim());
+    if (!_navTok) {
+      let _inSchoolSearch =
+        !!biz && (biz.sessionState === "school_search_city" || biz.sessionState === "school_search_results");
+
+      if (!_inSchoolSearch && !biz) {
+        try {
+          const _ssCheck = await UserSession.findOne({ phone }).lean();
+          _inSchoolSearch =
+            !!_ssCheck?.tempData?.schoolSearchActive &&
+            !_ssCheck?.tempData?.buyerRequestState &&
+            !_ssCheck?.tempData?.orderState;
+        } catch (_) {}
+      }
+
+      if (_inSchoolSearch) {
+        const handled = await handleSchoolFreeTextSearch({
+          from, text, biz, saveBiz: biz ? saveBizSafe : async () => {}
+        });
+        if (handled !== false) return handled;
+      }
+    }
   }
 
   // AUTO-RESET: If a real (non-ghost) supplier's biz is stuck in a registration
@@ -19794,6 +19827,12 @@ if (!isMetaAction && text && text.trim().length > 1) {
     "supplier_order_product", "supplier_order_address",
     "supplier_order_enter_price", "supplier_order_confirm_price",
     "supplier_order_picking",
+    // ── FIX: parent school-search states ─────────────────────────────────────
+    // A biz-owner searching for a school sits in one of these states. Their typed
+    // text (a city or a school NAME) has a dedicated handler ABOVE this catch-all
+    // (the school free-text block). Without registering them here, that typed text
+    // was hijacked into ⚡ Request Sellers instead of searching schools.
+    "school_search_city", "school_search_results",
     // Stock Control multi-step states
     "stock_add_name", "stock_add_unit", "stock_add_opening", "stock_add_cost",
     "stock_add_sell", "stock_add_reorder", "stock_add_aliases", "stock_add_pick", "stock_add_qty",
