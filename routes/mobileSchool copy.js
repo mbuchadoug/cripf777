@@ -98,41 +98,6 @@ async function resolveLearner(parent, childId) {
 }
 
 /**
- * Resolve the learner a request is acting on, for BOTH callers:
- *   • parent / teacher → the child they own (childId must belong to them)
- *   • student          → themselves (they ARE the learner; childId, if sent,
- *                        must match their own id)
- * This is what lets a student sign in on their own phone and use the exact
- * same quiz/performance/knowledge-map endpoints their parent uses.
- */
-async function resolveChild(req, childId) {
-  const u = req.mobileUser;
-  if (u.role === "student") {
-    if (childId && String(childId) !== String(u._id)) return null;
-    return User.findById(u._id).lean();
-  }
-  if (!mongoose.isValidObjectId(childId)) return null;
-  return User.findOne({ _id: childId, parentUserId: u._id }).lean();
-}
-
-/**
- * Effective paid status. A managed student has no subscription of their own —
- * their access is inherited from the parent who pays. So a student is "paid"
- * whenever their parent is. Parents/teachers just use their own status.
- * The moment the parent pays, every child (on their own phones) is unlocked.
- */
-async function isPaidEffective(user) {
-  if (isPaid(user)) return true;
-  if (user.role === "student" && user.parentUserId) {
-    const parent = await User.findById(user.parentUserId)
-      .select("role subscriptionPlan teacherSubscriptionPlan")
-      .lean();
-    if (parent && isPaid(parent)) return true;
-  }
-  return false;
-}
-
-/**
  * Expand an ORDERED token list into a flat, ordered, passage-grouped list of
  * app-ready questions.
  *
@@ -304,7 +269,7 @@ router.get("/children", requireMobileAuth, async (req, res) => {
   try {
     const parent = req.mobileUser;
     const kids = await User.find({ parentUserId: parent._id, role: "student" })
-      .select("displayName firstName lastName grade studentId username passwordHash createdAt")
+      .select("displayName firstName lastName grade studentId createdAt")
       .lean();
 
     const children = [];
@@ -329,8 +294,6 @@ router.get("/children", requireMobileAuth, async (req, res) => {
         firstName: c.firstName,
         lastName: c.lastName,
         grade: c.grade ?? null,
-        username: c.username || null,
-        hasLogin: !!c.passwordHash, // can the child sign in on their own phone yet?
         completedCount: finished.length,
         pendingCount: pending,
         avgScore: avg
@@ -355,9 +318,6 @@ router.get("/children", requireMobileAuth, async (req, res) => {
 router.post("/children", requireMobileAuth, async (req, res) => {
   try {
     const parent = req.mobileUser;
-    if (!["parent", "private_teacher"].includes(parent.role)) {
-      return res.status(403).json({ error: "Only a parent or teacher can add a child." });
-    }
     const firstName = String(req.body?.firstName || "").trim();
     const lastName = String(req.body?.lastName || "").trim();
     const grade = req.body?.grade != null ? Number(req.body.grade) : null;
@@ -416,9 +376,7 @@ router.post("/children", requireMobileAuth, async (req, res) => {
       child: {
         _id: String(child._id),
         displayName: child.displayName,
-        grade: child.grade,
-        username: child.username || null,
-        hasLogin: false // no password yet — parent sets one to enable their phone
+        grade: child.grade
       }
     });
   } catch (err) {
@@ -431,65 +389,20 @@ router.post("/children", requireMobileAuth, async (req, res) => {
 });
 
 /* ══════════════════════════════════════════════════════════════════
-   SET / RESET A CHILD'S LOGIN PASSWORD
-   The parent creates the password so the child can sign in on their OWN phone.
-   Managed children already have a username (generated at creation); this gives
-   them a password to go with it. Returns the username to share with the child.
-   ════════════════════════════════════════════════════════════════════ */
-router.post("/children/:childId/password", requireMobileAuth, async (req, res) => {
-  try {
-    const parent = req.mobileUser;
-    if (!["parent", "private_teacher"].includes(parent.role)) {
-      return res.status(403).json({ error: "Only a parent or teacher can set a child's login." });
-    }
-
-    const { childId } = req.params;
-    if (!mongoose.isValidObjectId(childId)) {
-      return res.status(400).json({ error: "Invalid child." });
-    }
-
-    // Must be a real Mongoose doc (not lean) to use setPassword().
-    const child = await User.findOne({
-      _id: childId,
-      parentUserId: parent._id,
-      role: "student"
-    });
-    if (!child) return res.status(404).json({ error: "Child not found." });
-
-    const password = String(req.body?.password || "");
-    if (password.length < 6) {
-      return res.status(400).json({ error: "Use at least 6 characters." });
-    }
-
-    // Older records may predate username generation — make sure there is one.
-    if (!child.username) {
-      child.username = await User.createUniqueUsername(child.firstName, child.lastName);
-    }
-
-    await child.setPassword(password); // sets passwordHash, clears needsPasswordSetup
-    await child.save();
-
-    return res.json({ ok: true, username: child.username });
-  } catch (err) {
-    if (err?.code === 11000) {
-      return res.status(409).json({ error: "Please try again." });
-    }
-    console.error("[mobile school/children password]", err);
-    return res.status(500).json({ error: "Could not set the login." });
-  }
-});
-
-/* ══════════════════════════════════════════════════════════════════
    QUIZZES - list available/assigned quizzes for a child, with lock flags.
    ════════════════════════════════════════════════════════════════════ */
 
 router.get("/quizzes", requireMobileAuth, async (req, res) => {
   try {
+    const parent = req.mobileUser;
     const childId = String(req.query.childId || "");
-    const child = await resolveChild(req, childId);
+    if (!mongoose.isValidObjectId(childId)) {
+      return res.status(400).json({ error: "Which child?" });
+    }
+    const child = await User.findOne({ _id: childId, parentUserId: parent._id }).lean();
     if (!child) return res.status(404).json({ error: "Child not found." });
 
-    const paid = await isPaidEffective(req.mobileUser);
+    const paid = isPaid(parent);
 
     // 1) Assigned exams that already exist for this child (trial + onboarding).
     const assigned = await ExamInstance.find({
@@ -550,11 +463,12 @@ router.get("/quizzes", requireMobileAuth, async (req, res) => {
 
 router.get("/quiz", requireMobileAuth, async (req, res) => {
   try {
+    const parent = req.mobileUser;
     const childId = String(req.query.childId || "");
     const examId = req.query.examId ? String(req.query.examId) : null;
     const ruleId = req.query.ruleId ? String(req.query.ruleId) : null;
 
-    const child = await resolveChild(req, childId);
+    const child = await User.findOne({ _id: childId, parentUserId: parent._id }).lean();
     if (!child) return res.status(404).json({ error: "Child not found." });
 
     const org = await resolveHomeOrg();
@@ -577,8 +491,8 @@ router.get("/quiz", requireMobileAuth, async (req, res) => {
         sourceRule = await QuizRule.findById(exam.ruleId).lean();
       }
     } else if (ruleId) {
-      // Building from the catalogue requires a subscription (parent's, inherited).
-      if (!(await isPaidEffective(req.mobileUser))) {
+      // Building from the catalogue requires a subscription.
+      if (!isPaid(parent)) {
         return res.status(402).json({ code: "UPGRADE_REQUIRED", error: "Subscribe to unlock this quiz." });
       }
       sourceRule = await QuizRule.findById(ruleId).lean();
@@ -685,7 +599,7 @@ router.post("/quiz/submit", requireMobileAuth, async (req, res) => {
     if (!examId) return res.status(400).json({ error: "Missing examId." });
     if (!answers.length) return res.status(400).json({ error: "No answers submitted." });
 
-    const child = await resolveChild(req, childId);
+    const child = await resolveLearner(parent, childId);
     if (!child) return res.status(404).json({ error: "Learner not found." });
 
     const exam = await ExamInstance.findOne({ examId, userId: child._id });
@@ -826,7 +740,7 @@ router.get("/performance", requireMobileAuth, async (req, res) => {
   try {
     const parent = req.mobileUser;
     const childId = String(req.query.childId || "");
-    const child = await resolveChild(req, childId);
+    const child = await User.findOne({ _id: childId, parentUserId: parent._id }).lean();
     if (!child) return res.status(404).json({ error: "Child not found." });
 
     const finished = await ExamInstance.find({ userId: child._id, status: "finished" })
@@ -1041,7 +955,7 @@ router.get("/knowledge-map", requireMobileAuth, async (req, res) => {
   try {
     const parent = req.mobileUser;
     const childId = String(req.query.childId || "");
-    const child = await resolveChild(req, childId);
+    const child = await User.findOne({ _id: childId, parentUserId: parent._id }).lean();
     if (!child) return res.status(404).json({ error: "Child not found." });
     if (!child.grade) {
       return res.json({ child: { _id: String(child._id), displayName: child.displayName }, maps: {}, note: "Set the child's grade to see their knowledge map." });
