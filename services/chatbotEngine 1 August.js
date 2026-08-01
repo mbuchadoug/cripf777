@@ -183,17 +183,6 @@ function msDays(ms) { return ms / (1000 * 60 * 60 * 24); }
 function clamp(n, min, max) { return Math.max(min, Math.min(max, n)); }
 function round2(n) { return Math.round(n * 100) / 100; }
 
-// Display a Zimbabwean phone nicely, e.g. "263773123456" → "+263 77 312 3456".
-// Used when revealing buyer/visitor phone numbers to permitted sellers.
-function _zqFmtPhone(raw = "") {
-  let d = String(raw).replace(/\D+/g, "");
-  if (d.startsWith("0") && d.length === 10) d = "263" + d.slice(1);
-  if (d.startsWith("263") && d.length >= 12) {
-    return `+263 ${d.slice(3, 5)} ${d.slice(5, 8)} ${d.slice(8)}`;
-  }
-  return d ? `+${d}` : "";
-}
-
 // ── findSupplierByPhone ───────────────────────────────────────────────────────
 // Checks all 3 phone formats: "263773...", "+263773...", "0773..."
 async function findSupplierByPhone(rawPhone) {
@@ -2838,22 +2827,11 @@ if (!requestKey) {
           ? `📍 ${request.area}${request.city ? `, ${request.city}` : ""}`
           : request.city ? `📍 ${request.city}` : "📍 Zimbabwe";
 
-        // ── VIP buyer phone reveal ─────────────────────────────────────────────
-        // Sellers granted the phone-reveal permission (revealBuyerPhone OR the
-        // profile-viewer permission revealVisitorPhone) see the buyer's number right
-        // on this in-session card, so it works even when the v1 template is used.
-        const _step2RevealPhone =
-          (supplier?.revealBuyerPhone === true || supplier?.revealVisitorPhone === true) && !!request.buyerPhone;
-        const _step2BuyerLine = _step2RevealPhone
-          ? `📞 Buyer contact: ${_zqFmtPhone(request.buyerPhone)}\n`
-          : "";
-
         await sendButtons(_normalizedSupplierPhone, {
           text:
             `🔔 *New ${_step2IsService ? "Service" : "Product"} Request - ${ref}*\n\n` +
             `${_step2Location}\n` +
-            `${_step2Delivery}\n` +
-            `${_step2BuyerLine}\n` +
+            `${_step2Delivery}\n\n` +
             `📦 *${(request.items || []).length} item${(request.items || []).length === 1 ? "" : "s"} needed:*\n` +
             `${_step2ItemLines}\n\n` +
             `─────────────────\n` +
@@ -5297,22 +5275,33 @@ if (_introRequest.status === "closed") {
       const _introItems     = (_introRequest.items || []);
       const _introIsService = _introSupplier?.profileType === "service";
 
-      // ── NOTIFICATION CONTACT: allowed to quote on behalf of the business ──────
-      // A notification contact is an extra number on the SAME supplier profile
-      // (supplier.notificationContacts). Previously we hard-blocked these numbers
-      // from the quote flow, so they received the request + photo but could never
-      // act on it ("can't quote or view request"). We now let them view & quote:
-      // the response is attributed to the business (_introSupplier, resolved above
-      // via the notificationContacts lookup), and confirm-time de-duplication by
-      // supplierId prevents the same business quoting twice. No state is cleared here.
+      // ── NOTIFICATION CONTACT GUARD ─────────────────────────────────────
+      // If this phone is a notification contact (not the primary supplier),
+      // do NOT show the quote flow. They received the notification for awareness
+      // only. Only the primary supplier phone can quote.
+      // Check by looking at the sellerPendingRequests map role field.
       try {
         const _ncCheckSess = await UserSession.findOne({ phone }).lean();
         const _ncCheckMap  = _ncCheckSess?.tempData?.sellerPendingRequests || {};
         const _ncCheckIds  = Object.keys(_ncCheckMap).filter(Boolean);
         const _allNotifOnly = _ncCheckIds.length > 0 &&
           _ncCheckIds.every(id => _ncCheckMap[id]?.role === "notification_only");
-        if (_allNotifOnly) {
-          console.log(`[OFFER INTRO] ${phone} is a notification contact for ${_introSupplier?.businessName || "the business"} - allowing view & quote`);
+        if (_allNotifOnly && !_isBuyerReqAction) {
+          // This phone only got request notifications as a watcher - don't intercept
+          console.log(`[OFFER INTRO] ${phone} is notification_only contact - skipping quote flow`);
+          // Clear the stale session state so this never fires again for this phone
+          await UserSession.findOneAndUpdate(
+            { phone },
+            { $unset: {
+                "tempData.sellerRequestReplyState": "",
+                "tempData.sellerRequestId":          "",
+                "tempData.sellerPendingRequests":    ""
+            }},
+            { upsert: true }
+          );
+          // Fall through to normal command processing (menu, biz tools, etc.)
+        } else {
+          // Not a pure notification_only - proceed to quote flow below
         }
       } catch (_ncErr) { /* non-fatal */ }
 
@@ -5406,14 +5395,11 @@ if (_introRequest.status === "closed") {
       // Uses a separate sendImage call - template messages cannot carry images.
       if (_introRequest.imageUrl && _introRequest.imageStatus === "approved") {
         try {
-          const _capNames = _introItems
-            .map(it => it.product || it.service)
-            .filter(Boolean).slice(0, 3).join(", ");
           await sendImage(from, {
             imageUrl: _introRequest.imageUrl,
             caption:  _introRequest.imageCaption
-              ? `📸 ${_introRef} · ${_capNames || "buyer photo"}\n${_introRequest.imageCaption}`
-              : `📸 ${_introRef} · Buyer photo for: ${_capNames || "the requested item"}`
+              ? `📸 Photo from buyer: ${_introRequest.imageCaption}`
+              : `📸 Photo attached by buyer for request ${_introRef}`
           });
         } catch (imgErr) {
           console.warn(`[OFFER INTRO] Failed to send buyer image to ${from}:`, imgErr.message);
@@ -5463,14 +5449,9 @@ if (_introRequest.status === "closed") {
           ? `📍 ${_introRequest.area}, ${_introRequest.city || ""}`
           : _introRequest.city ? `📍 ${_introRequest.city}` : "";
         const _introIsServiceA = _introRequest.isServiceRequest || _buyerRequestIsService(_introRequest.items || []);
-        // Reveal the buyer's phone on the quote card for permitted sellers (either
-        // revealBuyerPhone or the profile-viewer permission revealVisitorPhone).
-        const _directBuyerReveal =
-          (_introSupplier?.revealBuyerPhone === true || _introSupplier?.revealVisitorPhone === true) && !!_introRequest.buyerPhone;
-        const _directDelivery = (_introIsServiceA
+        const _directDelivery = _introIsServiceA
           ? (_introRequest.serviceAddress ? `📍 Service at: ${_introRequest.serviceAddress}` : "📍 Client will share address")
-          : _introRequest.deliveryRequired ? "🚚 Delivery needed" : "🏠 Collection / flexible")
-          + (_directBuyerReveal ? `\n📞 Buyer contact: ${_zqFmtPhone(_introRequest.buyerPhone)}` : "");
+          : _introRequest.deliveryRequired ? "🚚 Delivery needed" : "🏠 Collection / flexible";
 
         // ── Case 1: All items auto-priced ────────────────────────────────────
         if (_draft.responseItems.length === _introItems.length && _introItems.length > 0 && !_draft.missingItems.length) {
@@ -13892,97 +13873,6 @@ if (!isMetaAction && text.trim().toLowerCase().startsWith("admin group")) {
   if (_adminPhone && phone === _adminPhone) {
     const _handled = await handleGroupAdminCommand({ from, text: text.trim() });
     if (_handled) return;
-  }
-}
-
-// ── Admin phone-reveal toggle (from ZQ admin WhatsApp number) ──────────────────
-// Grants a seller permission to see buyer / visitor phone numbers, straight from
-// WhatsApp - no need to open the /zq-admin panel. Mirrors the web VIP toggle.
-//
-//   admin revealphone 263773xxxxxx on        → enable BOTH (buyer + visitor)
-//   admin revealphone 263773xxxxxx off       → disable both
-//   admin revealphone 263773xxxxxx buyer on  → only buyer-on-requests
-//   admin revealphone 263773xxxxxx visitor on→ only visitor-on-smartlink
-//   admin revealphone 263773xxxxxx           → show current status
-//
-// Note: revealVisitorPhone (profile-viewer permission) also unlocks the buyer
-// phone on requests - the two are treated as one permission tier in notifications.
-if (!isMetaAction && /^admin\s+reveal ?phone\b/i.test(text.trim())) {
-  const _adminPhone = (process.env.ZQ_ADMIN_PHONE || process.env.ADMIN_WHATSAPP_PHONE || "").replace(/\D/g, "");
-  if (_adminPhone && phone === _adminPhone) {
-    try {
-      // tokens after the command word: [targetPhone] [scope? on|off] [on|off?]
-      const _tok = text.trim().replace(/^admin\s+reveal ?phone\b/i, "").trim().split(/\s+/).filter(Boolean);
-      const _rawTarget = _tok[0] || "";
-      let _tgt = _rawTarget.replace(/\D+/g, "");
-      if (_tgt.startsWith("0") && _tgt.length === 10) _tgt = "263" + _tgt.slice(1);
-
-      if (!_tgt || _tgt.length < 9) {
-        await sendText(from,
-          `📱 *Phone reveal - usage*\n\n` +
-          `• \`admin revealphone <number> on\` - enable buyer + visitor\n` +
-          `• \`admin revealphone <number> off\` - disable both\n` +
-          `• \`admin revealphone <number> buyer on\` - buyer only\n` +
-          `• \`admin revealphone <number> visitor on\` - visitor only\n` +
-          `• \`admin revealphone <number>\` - show status`
-        );
-        return;
-      }
-
-      // Parse optional scope (buyer|visitor|both) and state (on|off)
-      const _rest  = _tok.slice(1).map(t => t.toLowerCase());
-      const _scope = _rest.find(t => ["buyer", "visitor", "both"].includes(t)) || "both";
-      const _state = _rest.find(t => ["on", "off", "enable", "disable", "true", "false"].includes(t));
-
-      // Match seller by primary phone OR notification contact, any format.
-      const _alt = _tgt.startsWith("263") ? "0" + _tgt.slice(3) : _tgt;
-      const _sup = await SupplierProfile.findOne({
-        $or: [
-          { phone:                { $in: [_tgt, _alt, "+" + _tgt] } },
-          { notificationContacts: { $in: [_tgt, _alt, "+" + _tgt] } }
-        ]
-      });
-
-      if (!_sup) {
-        await sendText(from, `⚠️ No seller found for *${_tgt}*.\n\nCheck the number and try again.`);
-        return;
-      }
-
-      // No state word → report current status.
-      if (!_state) {
-        await sendText(from,
-          `🔒 *Phone reveal status*\n\n` +
-          `🏪 ${_sup.businessName}\n` +
-          `📱 ${_sup.phone}\n\n` +
-          `• Buyer phone on requests: ${_sup.revealBuyerPhone ? "🟢 ON" : "⚪ off"}\n` +
-          `• Visitor phone on smart link: ${_sup.revealVisitorPhone ? "🟢 ON" : "⚪ off"}\n\n` +
-          `_Add \`on\` or \`off\` to change._`
-        );
-        return;
-      }
-
-      const _enable = ["on", "enable", "true"].includes(_state);
-      if (_scope === "buyer")   _sup.revealBuyerPhone   = _enable;
-      else if (_scope === "visitor") _sup.revealVisitorPhone = _enable;
-      else { _sup.revealBuyerPhone = _enable; _sup.revealVisitorPhone = _enable; }
-      await _sup.save();
-
-      const _lbl = _scope === "buyer" ? "Buyer phone on requests"
-                 : _scope === "visitor" ? "Visitor phone on smart link"
-                 : "Buyer + visitor phone reveal";
-      console.log(`[ADMIN REVEALPHONE] ${_sup.phone} → ${_scope} ${_enable ? "ON" : "OFF"} by ${phone}`);
-      await sendText(from,
-        `✅ *${_lbl} ${_enable ? "enabled" : "disabled"}*\n\n` +
-        `🏪 ${_sup.businessName} (${_sup.phone})\n\n` +
-        `• Buyer phone on requests: ${_sup.revealBuyerPhone ? "🟢 ON" : "⚪ off"}\n` +
-        `• Visitor phone on smart link: ${_sup.revealVisitorPhone ? "🟢 ON" : "⚪ off"}`
-      );
-      return;
-    } catch (_rpErr) {
-      console.warn("[ADMIN REVEALPHONE] failed:", _rpErr.message);
-      await sendText(from, `⚠️ Could not update phone-reveal setting: ${_rpErr.message}`);
-      return;
-    }
   }
 }
 

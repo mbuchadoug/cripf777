@@ -198,11 +198,8 @@ export async function notifySupplierNewRequestTemplate({
   const _extra  = Array.isArray(notificationContacts) ? notificationContacts : [];
   const _phones = [...new Set([supplierPhone, ..._extra])].filter(Boolean).map(_normalizeZimPhone);
 
-  // Determine if this supplier gets the VIP (with-phone) template.
-  // UNIFIED PERMISSION: a seller who is allowed to see the phone numbers of people
-  // who open their profile (revealVisitorPhone) is ALSO allowed to see the phone
-  // number of the buyer who made a request. Either flag unlocks the buyer phone.
-  const _isVip = (supplier?.revealBuyerPhone === true || supplier?.revealVisitorPhone === true) && !!buyerPhone;
+  // Determine if this supplier gets the VIP (with-phone) template
+  const _isVip = supplier?.revealBuyerPhone === true && !!buyerPhone;
 
   await Promise.allSettled(_phones.map(phone => _sendNewRequestToPhone({
     phone, requestId, ref, locationText, itemCount, itemSummary,
@@ -219,29 +216,12 @@ async function _sendNewRequestToPhone({
   isVip = false, buyerPhone = null
 }) {
   const _itemCount   = Number(itemCount) || 1;
-
-  // ── Build a clean, single-line list of the actual item / service names ────────
-  // itemSummary arrives as numbered lines like "1. oil squirter (1)\n2. brake pad (2)".
-  // We strip the leading numbering and the trailing "(qty ...)" so the seller sees
-  // the real product/service names - NOT a useless "1 item requested" count.
-  const _itemNames = String(itemSummary || "")
-    .split("\n")
-    .map(l => l
-      .replace(/^\s*\d+\.\s*/, "")          // drop "1. "
-      .replace(/\s*\([^)]*\)\s*$/, "")      // drop trailing "(qty unit)"
-      .trim())
-    .filter(Boolean);
-  const _firstItem = _itemNames[0] || "item";
-
-  // Compact names summary used in BOTH v2 body {{1}} and v1 body {{3}} - single line.
-  const _namesList = _itemNames.length
-    ? `${_itemNames.slice(0, 3).join(", ")}${_itemCount > 3 ? ` +${_itemCount - 3} more` : ""}`
-    : _firstItem;
-
-  // Human "N item(s): names" label for the v2 "Items" variable.
+  const _singleItem  = itemSummary
+    ? String(itemSummary).split("\n")[0].replace(/^\d+\.\s*/, "").trim()
+    : "item";
   const _itemSummary = _itemCount === 1
-    ? `1 item: ${_firstItem}`
-    : `${_itemCount} items: ${_namesList}`;
+    ? `1 item: ${_singleItem}`
+    : `${_itemCount} items: ${_singleItem}${_itemCount > 1 ? " + more" : ""}`;
 
   // ── STEP 1: Send a template to open the Meta session ─────────────────────
   // Templates always deliver regardless of the 24-hour session window.
@@ -282,14 +262,10 @@ async function _sendNewRequestToPhone({
   // ── Step 1b: v1 plain-text template - no buttons but opens the session ────
   if (!_templateSent) {
     try {
-      // {{3}} = the actual item/service names (single line). Previously this was a
-      // bare "1 item requested" count, so sellers never saw WHAT was wanted.
       await _sendTemplate(normalizedPhone, "supplier_new_buyer_request", [
         ref,
         locationText,
-        _itemCount === 1
-          ? _firstItem
-          : `${_itemCount} items: ${_namesList}`,
+        `${_itemCount} item${_itemCount === 1 ? "" : "s"} requested`,
         deliveryLine
       ]);
       console.log(`[BUY REQ TPL v1] supplier_new_buyer_request → ${normalizedPhone} (${ref})`);

@@ -7908,48 +7908,17 @@ router.post("/requests/:id/approve-photo", requireSupplierAdmin, async (req, res
 
         const _ref = `REQ-${String(r._id).slice(-6).toUpperCase()}`;
 
-        // Real item/service names so the seller sees WHAT the photo is for.
-        const _capNames = (r.items || [])
-          .map(it => it.product || it.service)
-          .filter(Boolean).slice(0, 3).join(", ");
-
-        const _fmtPhone = (raw = "") => {
-          let d = String(raw).replace(/\D+/g, "");
-          if (d.startsWith("0") && d.length === 10) d = "263" + d.slice(1);
-          if (d.startsWith("263") && d.length >= 12) return `+263 ${d.slice(3, 5)} ${d.slice(5, 8)} ${d.slice(8)}`;
-          return d ? `+${d}` : "";
-        };
-
         for (const _sess of _sessionsForReq) {
           const _supplierPhone = _sess.phone;
           if (!_supplierPhone) continue;
           const _wa = _supplierPhone.startsWith("0") ? "263" + _supplierPhone.slice(1) : _supplierPhone;
-
-          // VIP buyer phone reveal: does the supplier that owns this number
-          // (primary OR notification contact) have phone-reveal permission?
-          let _buyerLine = "";
           try {
-            const _altWa = _wa.startsWith("263") ? "0" + _wa.slice(3) : _wa;
-            const _sup = await SupplierProfile.findOne({
-              $or: [
-                { phone:                { $in: [_wa, _altWa, "+" + _wa] } },
-                { notificationContacts: { $in: [_wa, _altWa, "+" + _wa] } }
-              ]
-            }).lean();
-            if (_sup && (_sup.revealBuyerPhone === true || _sup.revealVisitorPhone === true) && r.buyerPhone) {
-              _buyerLine = `\n📞 Buyer contact: ${_fmtPhone(r.buyerPhone)}`;
-            }
-          } catch (_) { /* non-fatal */ }
-
-          const _caption =
-            (r.imageCaption
-              ? `📸 ${_ref} · ${_capNames || "buyer photo"}\n${r.imageCaption}`
-              : `📸 ${_ref} · Buyer photo for: ${_capNames || "the requested item"}`)
-            + _buyerLine
-            + `\n\n💬 Reply here to open this request and send your quote.`;
-
-          try {
-            await sendImage(_wa, { imageUrl: r.imageUrl, caption: _caption });
+            await sendImage(_wa, {
+              imageUrl: r.imageUrl,
+              caption:  r.imageCaption
+                ? `📸 Buyer photo for ${_ref}: ${r.imageCaption}`
+                : `📸 Buyer attached a photo for request ${_ref}`
+            });
             console.log(`[ADMIN APPROVE] Image sent to ${_wa} for ${_ref}`);
           } catch (_imgErr) {
             console.warn(`[ADMIN APPROVE] Could not send image to ${_wa}: ${_imgErr.message}`);
