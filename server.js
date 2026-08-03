@@ -854,7 +854,7 @@ app.get("/start", (req, res) => {
 
 // privacy & deletion pages
 app.get("/privacy-policy", (req, res) => {
-  res.render("privacy_policy", {
+  res.render("privacy-policy", {
     title: "Privacy Policy- Cripfcnt",
     description: "Privacy policy for Cripfcnt - how we collect and handle data."
   });
