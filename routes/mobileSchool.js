@@ -116,7 +116,7 @@ async function resolveChild(req, childId) {
 }
 
 /**
- * Effective paid status. A managed student has no subscription of their own —
+ * Effective paid status. A managed student has no subscription of their own -
  * their access is inherited from the parent who pays. So a student is "paid"
  * whenever their parent is. Parents/teachers just use their own status.
  * The moment the parent pays, every child (on their own phones) is unlocked.
@@ -418,7 +418,7 @@ router.post("/children", requireMobileAuth, async (req, res) => {
         displayName: child.displayName,
         grade: child.grade,
         username: child.username || null,
-        hasLogin: false // no password yet — parent sets one to enable their phone
+        hasLogin: false // no password yet - parent sets one to enable their phone
       }
     });
   } catch (err) {
@@ -461,7 +461,7 @@ router.post("/children/:childId/password", requireMobileAuth, async (req, res) =
       return res.status(400).json({ error: "Use at least 6 characters." });
     }
 
-    // Older records may predate username generation — make sure there is one.
+    // Older records may predate username generation - make sure there is one.
     if (!child.username) {
       child.username = await User.createUniqueUsername(child.firstName, child.lastName);
     }
