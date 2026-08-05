@@ -41,6 +41,17 @@ const RecurringTenantSchema = new mongoose.Schema({
   endDate:     { type: Date, default: null },
   isActive:    { type: Boolean, default: true, index: true },
 
+  // ── Move-out / vacated ───────────────────────────────────────────────────────
+  // A tenant who has LEFT but may still owe money. Vacating sets isActive=false
+  // (so they are NEVER auto-invoiced again) AND vacated=true (so they remain
+  // visible as a FORMER tenant with arrears - collectable and reportable - rather
+  // than just a plain inactive record). Reinstating clears both. A vacated tenant
+  // whose balance reaches zero quietly drops off the "owing" lists but keeps their
+  // full statement history. This is additive: existing tenants default to
+  // vacated=false and behave exactly as before.
+  vacated:   { type: Boolean, default: false, index: true },
+  vacatedAt: { type: Date,    default: null },
+
   // ── Self-service access ──────────────────────────────────────────────────────
   // When true, the tenant can WhatsApp the chatbot number and see their own
   // balance, invoices, and statements.  Toggled by the business owner/admin.

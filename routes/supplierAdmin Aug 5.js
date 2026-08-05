@@ -12205,17 +12205,11 @@ router.get("/suppliers/:id/recurring/:acctId/tenant", requireSupplierAdmin, asyn
             ${t.openingBalanceDate ? `<div style="font-weight:400;color:var(--muted);font-size:10px">as at ${new Date(t.openingBalanceDate).toLocaleDateString("en-GB")}</div>` : ""}
           </td>
           <td>${t.canSelfServe ? badge("Self-serve","green") : badge("Staff only","gray")}</td>
-        <td>${t.vacated ? badge("Moved out","gray") : t.isActive ? badge("Active","green") : badge("Inactive","red")}</td>
+        <td>${t.isActive ? badge("Active","green") : badge("Inactive","red")}</td>
         <td style="display:flex;gap:6px;flex-wrap:wrap">
           <form method="POST" action="/zq-admin/suppliers/${supplier._id}/recurring/${acct._id}/tenant/${t._id}/toggle">
             <button style="background:#fef3c7;color:#92400e;border:none;padding:4px 10px;border-radius:6px;font-size:12px;cursor:pointer">
               ${t.isActive ? "⏸ Deactivate" : "▶ Activate"}
-            </button>
-          </form>
-          <form method="POST" action="/zq-admin/suppliers/${supplier._id}/recurring/${acct._id}/tenant/${t._id}/${t.vacated ? "reinstate" : "vacate"}"
-                ${t.vacated ? "" : `onsubmit="return confirm('Mark ${esc(t.name)} as moved out? They stop being invoiced, but any outstanding balance stays collectable and on reports.')"`}>
-            <button style="background:${t.vacated ? "#dcfce7" : "#fee2e2"};color:${t.vacated ? "#166534" : "#b91c1c"};border:none;padding:4px 10px;border-radius:6px;font-size:12px;cursor:pointer">
-              ${t.vacated ? "↩ Reinstate" : "🚪 Move Out"}
             </button>
           </form>
           <form method="POST" action="/zq-admin/suppliers/${supplier._id}/recurring/${acct._id}/tenant/${t._id}/toggle-selfserve">
@@ -12471,39 +12465,6 @@ router.post("/suppliers/:id/recurring/:acctId/tenant/:tid/toggle-selfserve", req
     const t = await RecurringTenant.findById(req.params.tid);
     if (t) { t.canSelfServe = !t.canSelfServe; await t.save(); }
     res.redirect(`/zq-admin/suppliers/${req.params.id}/recurring/${req.params.acctId}/tenant?success=Self-serve+updated`);
-  } catch (e) {
-    res.redirect(`/zq-admin/suppliers/${req.params.id}/recurring/${req.params.acctId}/tenant?error=${encodeURIComponent(e.message)}`);
-  }
-});
-
-// ── POST vacate tenant (move-out, keep arrears collectable) ───────────────────
-router.post("/suppliers/:id/recurring/:acctId/tenant/:tid/vacate", requireSupplierAdmin, async (req, res) => {
-  try {
-    const supplier = await SupplierProfile.findById(req.params.id).lean();
-    const Business = (await import("../models/business.js")).default;
-    const biz = supplier?.businessId ? await Business.findById(supplier.businessId).lean() : null;
-    if (!biz) return res.redirect(`/zq-admin/suppliers/${req.params.id}/recurring/${req.params.acctId}/tenant`);
-    const { vacateTenant } = await import("../services/recurringBilling.js");
-    const { tenant, balance } = await vacateTenant({ businessId: biz._id, tenantId: req.params.tid });
-    const note = balance > 0
-      ? `${tenant.name} moved out - outstanding ${balance.toFixed(2)} still collectable`
-      : `${tenant.name} moved out - fully settled`;
-    res.redirect(`/zq-admin/suppliers/${req.params.id}/recurring/${req.params.acctId}/tenant?success=${encodeURIComponent(note)}`);
-  } catch (e) {
-    res.redirect(`/zq-admin/suppliers/${req.params.id}/recurring/${req.params.acctId}/tenant?error=${encodeURIComponent(e.message)}`);
-  }
-});
-
-// ── POST reinstate tenant (undo move-out) ─────────────────────────────────────
-router.post("/suppliers/:id/recurring/:acctId/tenant/:tid/reinstate", requireSupplierAdmin, async (req, res) => {
-  try {
-    const supplier = await SupplierProfile.findById(req.params.id).lean();
-    const Business = (await import("../models/business.js")).default;
-    const biz = supplier?.businessId ? await Business.findById(supplier.businessId).lean() : null;
-    if (!biz) return res.redirect(`/zq-admin/suppliers/${req.params.id}/recurring/${req.params.acctId}/tenant`);
-    const { reinstateTenant } = await import("../services/recurringBilling.js");
-    const { tenant } = await reinstateTenant({ businessId: biz._id, tenantId: req.params.tid });
-    res.redirect(`/zq-admin/suppliers/${req.params.id}/recurring/${req.params.acctId}/tenant?success=${encodeURIComponent(`${tenant.name} reinstated`)}`);
   } catch (e) {
     res.redirect(`/zq-admin/suppliers/${req.params.id}/recurring/${req.params.acctId}/tenant?error=${encodeURIComponent(e.message)}`);
   }

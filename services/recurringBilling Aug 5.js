@@ -855,15 +855,7 @@ export async function generateRecurringInvoicePDF({ biz, invoice, account, tenan
 export async function broadcastPaymentReminders({ biz, branchId = null }) {
   const { RecurringTenant, RecurringAccount } = await getModels();
 
-  // Include current tenants AND former (moved-out) tenants who still owe, so
-  // arrears keep being chased after someone leaves. A merely-deactivated tenant
-  // (isActive:false, vacated:false) is intentionally NOT reminded.
-  const q = {
-    businessId: biz._id,
-    notificationsEnabled: true,
-    phone: { $ne: "" },
-    $or: [{ isActive: true }, { vacated: true }]
-  };
+  const q = { businessId: biz._id, isActive: true, notificationsEnabled: true, phone: { $ne: "" } };
   const tenants = await RecurringTenant.find(q).lean();
 
   let sent = 0, skipped = 0;
@@ -873,7 +865,6 @@ export async function broadcastPaymentReminders({ biz, branchId = null }) {
     try {
       const account = await RecurringAccount.findById(tenant.accountId).lean();
       if (!account) { skipped++; continue; }
-      if (branchId && String(account.branchId || "") !== String(branchId)) { skipped++; continue; }
 
       // Each tenant's OWN balance - not the account total, which would
       // include every other tenant sharing that unit/building.
@@ -881,12 +872,11 @@ export async function broadcastPaymentReminders({ biz, branchId = null }) {
       if (balance <= 0) { skipped++; continue; }
 
       const cur = account.currency || biz.currency || "USD";
-      const formerNote = tenant.vacated ? "\n_(Our records show you have moved out - this is an outstanding balance.)_" : "";
       const msg =
 `🏠 *Payment Reminder - ${biz.name}*
 
 Dear ${account.name} ${tenant.name},
-You have an outstanding balance of *${fmtMoney(balance, cur)}*.${formerNote}
+You have an outstanding balance of *${fmtMoney(balance, cur)}*.
 
 Please make payment at your earliest convenience.
 
@@ -971,9 +961,9 @@ export async function listAccountsForChatbot(businessId, branchId = null) {
 // tenants) gets one row representing the account itself. This is what fixes
 // "only one tenant shows" for good - nothing here ever collapses multiple
 // tenants down to one, because each tenant is a separate, independent row.
-export async function listBillablesForChatbot(businessId, branchId = null, { includeVacated = false } = {}) {
+export async function listBillablesForChatbot(businessId, branchId = null) {
   const accounts = await listAccountsForChatbot(businessId, branchId);
-  const { RecurringAccount, RecurringTenant } = await getModels();
+  const { RecurringAccount } = await getModels();
   const rows = [];
   for (const acct of accounts) {
     if (!acct._tenants.length) {
@@ -996,64 +986,5 @@ export async function listBillablesForChatbot(businessId, branchId = null, { inc
       });
     }
   }
-
-  // ── Former (moved-out) tenants who STILL OWE ────────────────────────────────
-  // Opt-in (includeVacated) so they appear in the "record payment" and "tenant
-  // statement" pickers - a clerk must still be able to collect and record their
-  // arrears after they leave - WITHOUT ever appearing in the invoice picker
-  // (they must never be billed again). They drop off automatically once settled.
-  if (includeVacated) {
-    const formers = await RecurringTenant
-      .find({ businessId, vacated: true, isActive: false })
-      .sort({ name: 1 }).lean();
-    for (const t of formers) {
-      const balance = await recomputeTenantBalance(businessId, t._id);
-      if (balance <= 0) continue;                       // settled - hide
-      const acct = await RecurringAccount.findById(t.accountId).lean();
-      if (!acct) continue;
-      if (branchId && String(acct.branchId || "") !== String(branchId)) continue; // branch scope
-      rows.push({
-        accountId: acct._id, tenantId: t._id,
-        accountName: acct.name, tenantName: t.name,
-        balance, currency: acct.currency || "USD",
-        former: true,
-        label: `${acct.name} - ${t.name} (moved out)`
-      });
-    }
-  }
-
   return rows;
-}
-
-// ── Move a tenant OUT (vacate) ────────────────────────────────────────────────
-// Stops all future auto-invoicing (isActive=false) but keeps the tenant on the
-// books as a FORMER tenant (vacated=true) so any outstanding balance remains
-// collectable and reportable. Their invoices, payments and statement history are
-// untouched. Returns the tenant and their freshly-recomputed balance so the
-// caller can tell the clerk exactly how much is still owed.
-export async function vacateTenant({ businessId, tenantId }) {
-  const { RecurringTenant } = await getModels();
-  const t = await RecurringTenant.findOne({ _id: tenantId, businessId });
-  if (!t) throw new Error("Tenant not found");
-  t.isActive  = false;
-  t.vacated   = true;
-  t.vacatedAt = new Date();
-  await t.save();
-  const balance = await recomputeTenantBalance(businessId, tenantId);
-  return { tenant: t, balance };
-}
-
-// ── Reinstate a tenant who moved out (undo vacate) ────────────────────────────
-// Brings a former tenant back to active so they resume normal billing. Clears
-// the vacated flag. History and balance are preserved.
-export async function reinstateTenant({ businessId, tenantId }) {
-  const { RecurringTenant } = await getModels();
-  const t = await RecurringTenant.findOne({ _id: tenantId, businessId });
-  if (!t) throw new Error("Tenant not found");
-  t.isActive  = true;
-  t.vacated   = false;
-  t.vacatedAt = null;
-  await t.save();
-  const balance = await recomputeTenantBalance(businessId, tenantId);
-  return { tenant: t, balance };
 }

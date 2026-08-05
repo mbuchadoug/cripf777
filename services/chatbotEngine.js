@@ -10881,7 +10881,7 @@ Type *done* to save`,
     const { listBillablesForChatbot } = await import("./recurringBilling.js");
     const { sendNumberedPicker } = await import("./metaMenus.js");
     const branchId = caller?.role !== "owner" ? caller?.branchId || null : null;
-    const billables = await listBillablesForChatbot(biz._id, branchId);
+    const billables = await listBillablesForChatbot(biz._id, branchId, { includeVacated: true });
     if (!billables.length) {
       await sendText(from, "❌ No active accounts found. Add units via the admin portal first.");
       return sendRecurringBillingMenu(from);
@@ -10924,7 +10924,7 @@ Type *done* to save`,
     const { listBillablesForChatbot } = await import("./recurringBilling.js");
     const { sendNumberedPicker } = await import("./metaMenus.js");
     const branchId = caller?.role !== "owner" ? caller?.branchId || null : null;
-    const billables = (await listBillablesForChatbot(biz._id, branchId)).filter(b => b.tenantId);
+    const billables = (await listBillablesForChatbot(biz._id, branchId, { includeVacated: true })).filter(b => b.tenantId);
     if (!billables.length) {
       await sendText(from, "❌ No tenants found. Add tenants via the admin portal first.");
       return sendRecurringBillingMenu(from);
