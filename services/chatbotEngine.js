@@ -3817,6 +3817,8 @@ a.startsWith("sup_load_preset_") ||
       a === "recurring_billing_menu" ||
       a === "rb_accounts" ||
       a === "rb_record_payment" ||
+      a === "rb_pay_tenant" ||
+      a === "rb_pay_income" ||
       a === "rb_generate_invoices" ||
       a === "rb_account_stmt" ||
       a === "rb_tenant_stmt" ||
@@ -10877,8 +10879,25 @@ Type *done* to save`,
     return sendRecurringBillingMenu(from);
   }
 
-  // ── Record payment - numbered picker over EVERY tenant + vacant account ────
+  // ── Record payment - first ask: tenant payment or other (non-tenant) income ─
+  // The Other Income option used to be the last row of a long numbered tenant
+  // list, so on big portfolios it was buried below the fold (and could be cut
+  // off entirely). Presenting an explicit two-way choice keeps it always visible
+  // in one tap.
   if (a === "rb_record_payment") {
+    if (!biz) return sendMainMenu(from);
+    return sendButtons(from, {
+      text: "💰 *Record Payment*\n\nWhat are you recording?",
+      buttons: [
+        { id: "rb_pay_tenant",          title: "👤 Tenant Payment" },
+        { id: "rb_pay_income",          title: "💵 Other Income"   },
+        { id: "recurring_billing_menu", title: "⬅ Cancel"          }
+      ]
+    });
+  }
+
+  // ── Tenant payment → numbered picker over EVERY tenant + vacant account ─────
+  if (a === "rb_pay_tenant") {
     if (!biz) return sendMainMenu(from);
     const { listBillablesForChatbot } = await import("./recurringBilling.js");
     const { sendNumberedPicker } = await import("./metaMenus.js");
@@ -10896,22 +10915,23 @@ Type *done* to save`,
         currency: b.currency, label: b.label
       }))
     };
-    // Extra option (always last) - record money that is NOT a tenant rent
-    // payment (deposit, penalty, application fee, misc). Handled by the
-    // rb_income_* flow, which posts to RecurringIncome, not a rent invoice.
-    const _rbCur = biz.currency || "USD";
-    biz.sessionData.rbBillables.push({
-      otherIncome: true, accountId: null, tenantId: null,
-      accountName: null, tenantName: null, balance: 0, currency: _rbCur,
-      label: "💵 Other income (not a tenant)"
-    });
     await saveBizSafe(biz);
-    const _rbPickerRows = billables.map(b => ({ id: b.label, label: `${b.label} - Bal: ${b.balance.toFixed(2)} ${b.currency}` }));
-    _rbPickerRows.push({ id: "other_income", label: "💵 Other income (not a tenant / rent)" });
-    return sendNumberedPicker(from, "💰 *Record Payment* - who is this for?",
-      _rbPickerRows,
+    return sendNumberedPicker(from, "💰 *Tenant Payment* - who is this for?",
+      billables.map(b => ({ id: b.label, label: `${b.label} - Bal: ${b.balance.toFixed(2)} ${b.currency}` })),
       { allowBatch: true }
     );
+  }
+
+  // ── Other income (not a tenant) → straight into the income entry flow ──────
+  if (a === "rb_pay_income") {
+    if (!biz) return sendMainMenu(from);
+    biz.sessionState = "rb_income_enter_details";
+    biz.sessionData  = { rbIncomeCurrency: biz.currency || "USD" };
+    await saveBizSafe(biz);
+    return sendButtons(from, {
+      text: `💵 *Other Income* (not a tenant payment)\n\nType a short description and the amount on one line:\n*Deposit - Flat 3A 150*\n*Application fee 20*\n*Late-rent penalty 15*`,
+      buttons: [{ id: "recurring_billing_menu", title: "⬅ Cancel" }]
+    });
   }
 
   // ── Account statement - numbered picker over accounts ──────────────────────
