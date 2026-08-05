@@ -504,10 +504,6 @@ const restrictedStateMap = {
     rb_billing_stmt_custom_date: "reports",
     rb_expense_pick_account:     "payments",
     rb_expense_enter_details:    "payments",
-    rb_income_enter_details:     "payments",
-    rb_income_confirm:           "payments",
-    rb_vacate_pick:              "payments",
-    rb_vacate_confirm:           "payments",
     // Stock Control report states use the known-valid "reports" section; the
     // add/stock-in/adjust states are intentionally NOT mapped here - they're
     // only reachable via the already role-gated Stock Control menu, and an
@@ -3763,19 +3759,6 @@ _This handover is logged and will appear in today's report._`
 
     if (sel.type === "single") {
       const row = list[sel.index - 1];
-
-      // "Other income (not a tenant)" sentinel → branch into the income flow.
-      if (row.otherIncome) {
-        biz.sessionState = "rb_income_enter_details";
-        biz.sessionData.rbIncomeCurrency = row.currency || biz.currency || "USD";
-        await saveBizSafe(biz);
-        await sendButtons(from, {
-          text: `💵 *Other Income* (not a tenant payment)\n\nType a short description and the amount on one line:\n*Deposit - Flat 3A 150*\n*Application fee 20*\n*Late-rent penalty 15*`,
-          buttons: [{ id: "recurring_billing_menu", title: "⬅ Cancel" }]
-        });
-        return true;
-      }
-
       biz.sessionState = "rb_payment_enter_amount";
       biz.sessionData.rbAccountId   = row.accountId;
       biz.sessionData.rbTenantId    = row.tenantId;
@@ -3791,11 +3774,7 @@ _This handover is logged and will appear in today's report._`
     }
 
     if (sel.type === "batch") {
-      const lines = sel.items.map(it => ({ ...list[it.index - 1], amount: it.amount })).filter(l => !l.otherIncome);
-      if (!lines.length) {
-        await sendText(from, "❌ *Other income* can't be part of a batch. Pick it on its own (a single number), or batch the tenant rows only.");
-        return true;
-      }
+      const lines = sel.items.map(it => ({ ...list[it.index - 1], amount: it.amount }));
       const total = lines.reduce((s, l) => s + l.amount, 0);
       const cur   = lines[0]?.currency || biz.currency || "USD";
 
@@ -4504,120 +4483,6 @@ Sales of this product will now reduce its stock automatically.`);
       await sendText(from, `❌ Failed to save expense: ${e.message}`);
     }
 
-    const { sendRecurringBillingMenu } = await import("./metaMenus.js");
-    return sendRecurringBillingMenu(from);
-  }
-
-  // ── Other income: details entered → pick how it was received ──────────────
-  if (state === "rb_income_enter_details") {
-    const match = trimmed.match(/^(.+?)\s+(\d+(?:\.\d{1,2})?)$/);
-    if (!match) {
-      await sendPromptWithMenu(from, "❌ Format: *description amount* e.g. *Deposit Flat 3A 150* or *Application fee 20*:");
-      return true;
-    }
-    biz.sessionData.rbIncomeDescription = match[1].trim();
-    biz.sessionData.rbIncomeAmount      = parseFloat(match[2]);
-    biz.sessionState = "rb_income_confirm";
-    await saveBizSafe(biz);
-    const cur = biz.sessionData.rbIncomeCurrency || biz.currency || "USD";
-    await sendList(from, `💵 Confirm *${biz.sessionData.rbIncomeAmount} ${cur}* - ${biz.sessionData.rbIncomeDescription}?\n\nHow was it received?`, [
-      { id: "rb_pay_method_cash",     title: "💵 Cash"          },
-      { id: "rb_pay_method_ecocash",  title: "📱 EcoCash"       },
-      { id: "rb_pay_method_bank",     title: "🏦 Bank Transfer"  },
-      { id: "rb_pay_method_innbucks", title: "💳 InnBucks"       },
-      { id: "rb_pay_method_zipit",    title: "🔄 ZipIt"         },
-      { id: "rb_pay_method_other",    title: "🔄 Other"         },
-      { id: "recurring_billing_menu", title: "⬅ Cancel"         }
-    ]);
-    return true;
-  }
-
-  // ── Other income: method chosen → save (posts to RecurringIncome) ─────────
-  if (state === "rb_income_confirm" && a?.startsWith("rb_pay_method_")) {
-    const method = a.replace("rb_pay_method_", "");
-    const { rbIncomeAmount, rbIncomeDescription, rbIncomeCurrency } = biz.sessionData;
-    const branchId = caller?.role !== "owner" ? caller?.branchId || null : null;
-    biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
-    const cur = rbIncomeCurrency || biz.currency || "USD";
-    const today = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
-    try {
-      const { recordOtherIncome } = await import("./recurringBilling.js");
-      await recordOtherIncome({
-        businessId: biz._id, branchId,
-        amount: rbIncomeAmount, description: rbIncomeDescription,
-        category: "Other Income", method, clerkPhone: phone, date: new Date()
-      });
-      await sendText(from,
-`✅ *Other Income Recorded*
-
-💵 Amount: *${rbIncomeAmount} ${cur}*
-📝 ${rbIncomeDescription}
-💳 Method: ${method}
-📅 ${today}
-
-_Shows on the Billing Statement as other (non-rent) income._`);
-    } catch (e) {
-      await sendText(from, `❌ Failed to save income: ${e.message}`);
-    }
-    const { sendRecurringBillingMenu } = await import("./metaMenus.js");
-    return sendRecurringBillingMenu(from);
-  }
-
-  // ── Move out: tenant picked → confirm ─────────────────────────────────────
-  if (state === "rb_vacate_pick") {
-    const list = biz.sessionData?.rbVacateList;
-    if (!list || !list.length) {
-      await sendText(from, "❌ Session expired. Please start again.");
-      biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
-      const { sendRecurringBillingMenu } = await import("./metaMenus.js");
-      return sendRecurringBillingMenu(from);
-    }
-    const sel = parsePickerSelection(trimmed, list.length);
-    if (sel.type === "cancel") {
-      biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
-      const { sendRecurringBillingMenu } = await import("./metaMenus.js");
-      await sendText(from, "❌ Cancelled.");
-      return sendRecurringBillingMenu(from);
-    }
-    if (sel.type !== "single") {
-      await sendText(from, "❌ Please reply with a single number from the list (e.g. *2*).");
-      return true;
-    }
-    const row = list[sel.index - 1];
-    biz.sessionState = "rb_vacate_confirm";
-    biz.sessionData.rbVacateTenantId = row.tenantId;
-    biz.sessionData.rbVacateLabel    = row.label;
-    biz.sessionData.rbVacateBalance  = row.balance;
-    biz.sessionData.rbVacateCurrency = row.currency;
-    await saveBizSafe(biz);
-    const owes = row.balance > 0
-      ? `They still owe *${row.balance.toFixed(2)} ${row.currency}* - this stays collectable after move-out.`
-      : `Their balance is clear.`;
-    await sendButtons(from, {
-      text: `🚪 *Move Out - ${row.label}*\n\n${owes}\n\nThey will stop being invoiced. Confirm move-out?`,
-      buttons: [
-        { id: "rb_vacate_yes",          title: "✅ Confirm Move Out" },
-        { id: "recurring_billing_menu", title: "⬅ Cancel"          }
-      ]
-    });
-    return true;
-  }
-
-  // ── Move out: confirmed → vacate the tenant ───────────────────────────────
-  if (state === "rb_vacate_confirm" && a === "rb_vacate_yes") {
-    const { rbVacateTenantId, rbVacateLabel } = biz.sessionData;
-    biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
-    try {
-      const { vacateTenant } = await import("./recurringBilling.js");
-      const { balance } = await vacateTenant({ businessId: biz._id, tenantId: rbVacateTenantId });
-      const cur = biz.currency || "USD";
-      const tail = balance > 0
-        ? `\n\n⚠️ Outstanding *${balance.toFixed(2)} ${cur}* is still owed. Collect it any time via *Record Payment* - they now appear tagged *(moved out)*.`
-        : `\n\n✅ Nothing outstanding.`;
-      await sendText(from, `🚪 *${rbVacateLabel} moved out.*${tail}`);
-    } catch (e) {
-      await sendText(from, `❌ Failed to move out tenant: ${e.message}`);
-    }
     const { sendRecurringBillingMenu } = await import("./metaMenus.js");
     return sendRecurringBillingMenu(from);
   }

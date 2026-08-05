@@ -59,7 +59,6 @@ const getModels = async () => ({
   RecurringInvoice: (await import("../models/recurringInvoice.js")).default,
   RecurringPayment: (await import("../models/recurringPayment.js")).default,
   RecurringExpense: (await import("../models/recurringExpense.js")).default,
-  RecurringIncome:  (await import("../models/recurringIncome.js")).default,
 });
 
 // ── Small shared helpers ──────────────────────────────────────────────────────
@@ -131,12 +130,12 @@ function recorderName(map, phone) {
  * buildClerkStatement expects: { at, typeLabel, description, credit, debit }.
  */
 export async function fetchClerkRecurringRows({ businessId, clerkPhone, branchId = null, start, end }) {
-  const { RecurringPayment, RecurringExpense, RecurringAccount, RecurringTenant, RecurringIncome } = await getModels();
+  const { RecurringPayment, RecurringExpense, RecurringAccount, RecurringTenant } = await getModels();
 
   const accountIds = await accountIdsForBranch(businessId, branchId);
   const scope      = acctScope(accountIds);
 
-  const [payments, expenses, incomes] = await Promise.all([
+  const [payments, expenses] = await Promise.all([
     RecurringPayment.find({
       businessId, createdBy: clerkPhone,
       date: { $gte: start, $lte: end }, ...scope
@@ -144,14 +143,10 @@ export async function fetchClerkRecurringRows({ businessId, clerkPhone, branchId
     RecurringExpense.find({
       businessId, createdBy: clerkPhone,
       date: { $gte: start, $lte: end }, ...scope
-    }).sort({ date: 1 }).lean(),
-    RecurringIncome.find({
-      businessId, createdBy: clerkPhone,
-      date: { $gte: start, $lte: end }, ...(branchId ? { branchId } : {})
     }).sort({ date: 1 }).lean()
   ]);
 
-  if (!payments.length && !expenses.length && !incomes.length) return { paymentRows: [], expenseRows: [] };
+  if (!payments.length && !expenses.length) return { paymentRows: [], expenseRows: [] };
 
   // Batch-resolve every account and tenant referenced (no N+1 queries)
   const acctIds   = [...new Set([...payments, ...expenses].map(r => String(r.accountId)).filter(Boolean))];
@@ -190,16 +185,7 @@ export async function fetchClerkRecurringRows({ businessId, clerkPhone, branchId
     };
   });
 
-  // Other income the clerk took in = cash custody, same side as a payment.
-  const incomeRows = incomes.map(inc => ({
-    at: new Date(inc.date || inc.createdAt),
-    typeLabel: "Other Income",
-    description: `${inc.description || inc.category || "Other income"}${inc.method && inc.method !== "cash" ? " (" + inc.method + ")" : ""}`,
-    credit: inc.amount || 0, debit: 0,
-    _rb: { kind: "income", incomeId: inc._id }
-  }));
-
-  return { paymentRows: [...paymentRows, ...incomeRows], expenseRows };
+  return { paymentRows, expenseRows };
 }
 
 /**
@@ -210,12 +196,12 @@ export async function fetchClerkRecurringRows({ businessId, clerkPhone, branchId
  */
 export async function fetchClerkRecurringTotals({ businessId, clerkPhone, branchId = null, before }) {
   try {
-    const { RecurringPayment, RecurringExpense, RecurringIncome } = await getModels();
+    const { RecurringPayment, RecurringExpense } = await getModels();
     const accountIds = await accountIdsForBranch(businessId, branchId);
     const scope      = acctScope(accountIds);
     const beforeDate = new Date(before); beforeDate.setHours(0, 0, 0, 0);
 
-    const [pays, exps, incs] = await Promise.all([
+    const [pays, exps] = await Promise.all([
       RecurringPayment.aggregate([
         { $match: { businessId: oid(businessId), createdBy: clerkPhone, date: { $lt: beforeDate }, ...(accountIds ? { accountId: { $in: accountIds } } : {}) } },
         { $group: { _id: null, t: { $sum: "$amount" } } }
@@ -223,14 +209,10 @@ export async function fetchClerkRecurringTotals({ businessId, clerkPhone, branch
       RecurringExpense.aggregate([
         { $match: { businessId: oid(businessId), createdBy: clerkPhone, date: { $lt: beforeDate }, ...(accountIds ? { accountId: { $in: accountIds } } : {}) } },
         { $group: { _id: null, t: { $sum: "$amount" } } }
-      ]).catch(() => []),
-      RecurringIncome.aggregate([
-        { $match: { businessId: oid(businessId), createdBy: clerkPhone, date: { $lt: beforeDate }, ...(branchId ? { branchId: oid(branchId) } : {}) } },
-        { $group: { _id: null, t: { $sum: "$amount" } } }
       ]).catch(() => [])
     ]);
 
-    return { in: (pays[0]?.t || 0) + (incs[0]?.t || 0), out: exps[0]?.t || 0 };
+    return { in: pays[0]?.t || 0, out: exps[0]?.t || 0 };
   } catch (_) {
     return { in: 0, out: 0 };
   }
@@ -260,7 +242,7 @@ export async function fetchClerkRecurringTotals({ businessId, clerkPhone, branch
  * buildAccountStatement / buildTenantStatement maths.
  */
 export async function buildRecurringLedger({ biz, branchId = null, periodStart, periodEnd }) {
-  const { RecurringInvoice, RecurringPayment, RecurringExpense, RecurringAccount, RecurringTenant, RecurringIncome } = await getModels();
+  const { RecurringInvoice, RecurringPayment, RecurringExpense, RecurringAccount, RecurringTenant } = await getModels();
   const businessId = biz._id;
   const cur = biz.currency || "USD";
 
@@ -268,12 +250,8 @@ export async function buildRecurringLedger({ biz, branchId = null, periodStart, 
   const scope      = acctScope(accountIds);
   const invScope   = accountIds ? { accountId: { $in: accountIds } } : {};
 
-  // Other income is branch-scopable directly (it carries its own branchId),
-  // unlike payments/expenses which are scoped through their account.
-  const incScope = branchId ? { branchId } : {};
-
   // ── Opening CASH balance (cumulative carry-forward) ─────────────────────────
-  const [prevPaid, prevSpent, prevIncome] = await Promise.all([
+  const [prevPaid, prevSpent] = await Promise.all([
     RecurringPayment.aggregate([
       { $match: { businessId: oid(businessId), date: { $lt: periodStart }, ...(accountIds ? { accountId: { $in: accountIds } } : {}) } },
       { $group: { _id: null, t: { $sum: "$amount" } } }
@@ -281,16 +259,12 @@ export async function buildRecurringLedger({ biz, branchId = null, periodStart, 
     RecurringExpense.aggregate([
       { $match: { businessId: oid(businessId), date: { $lt: periodStart }, ...(accountIds ? { accountId: { $in: accountIds } } : {}) } },
       { $group: { _id: null, t: { $sum: "$amount" } } }
-    ]).catch(() => []),
-    RecurringIncome.aggregate([
-      { $match: { businessId: oid(businessId), date: { $lt: periodStart }, ...(branchId ? { branchId: oid(branchId) } : {}) } },
-      { $group: { _id: null, t: { $sum: "$amount" } } }
     ]).catch(() => [])
   ]);
-  const openingCash = (prevPaid[0]?.t || 0) + (prevIncome[0]?.t || 0) - (prevSpent[0]?.t || 0);
+  const openingCash = (prevPaid[0]?.t || 0) - (prevSpent[0]?.t || 0);
 
   // ── This period's rows ───────────────────────────────────────────────────────
-  const [invoices, payments, expenses, incomes] = await Promise.all([
+  const [invoices, payments, expenses] = await Promise.all([
     RecurringInvoice.find({
       businessId, status: { $ne: "cancelled" },
       periodStart: { $gte: periodStart }, periodEnd: { $lte: periodEnd }, ...invScope
@@ -300,9 +274,6 @@ export async function buildRecurringLedger({ biz, branchId = null, periodStart, 
     }).sort({ date: 1 }).lean(),
     RecurringExpense.find({
       businessId, date: { $gte: periodStart, $lte: periodEnd }, ...scope
-    }).sort({ date: 1 }).lean(),
-    RecurringIncome.find({
-      businessId, date: { $gte: periodStart, $lte: periodEnd }, ...incScope
     }).sort({ date: 1 }).lean()
   ]);
 
@@ -404,21 +375,6 @@ export async function buildRecurringLedger({ biz, branchId = null, periodStart, 
       cashIn: 0, cashOut: exp.amount || 0, entityDelta: +(exp.amount || 0)
     });
   }
-  for (const inc of incomes) {
-    // Other income is cash-IN that does NOT belong to any tenant's rent balance,
-    // so entityDelta is 0 and (when business-wide) it carries no A/C balance.
-    const incHasAcct = inc.accountId && acctMap[String(inc.accountId)];
-    rows.push({
-      at: new Date(inc.date),
-      type: "INCOME", typeLabel: `Other Income${inc.category ? " · " + inc.category : ""}`,
-      entity: incHasAcct ? entityName(inc) : "— (other income)",
-      entityK: incHasAcct ? `A:${String(inc.accountId)}` : "CASH",
-      description: `${inc.description || "Other income"}${inc.method && inc.method !== "cash" ? " · " + inc.method : ""}${inc.reference ? " · " + inc.reference : ""}`,
-      recorder: recorderName(staffMap, inc.createdBy),
-      cashIn: inc.amount || 0, cashOut: 0, entityDelta: 0,
-      noEntity: !incHasAcct
-    });
-  }
 
   rows.sort((a, b) => a.at - b.at);
 
@@ -428,7 +384,6 @@ export async function buildRecurringLedger({ biz, branchId = null, periodStart, 
     cash += (row.cashIn || 0) - (row.cashOut || 0);
     row.cashBalance = cash;
 
-    if (row.noEntity) { row.entityBalance = null; continue; }
     const k = row.entityK;
     if (entityBal[k] === undefined) entityBal[k] = 0;
     entityBal[k] += row.entityDelta;
@@ -436,10 +391,9 @@ export async function buildRecurringLedger({ biz, branchId = null, periodStart, 
   }
 
   // ── Totals + receivables snapshot ────────────────────────────────────────────
-  const totalCharged     = rows.filter(r => r.type === "CHARGE").reduce((s, r) => s + r.entityDelta, 0);
-  const totalCollected   = rows.filter(r => r.type === "PAYMENT").reduce((s, r) => s + (r.cashIn  || 0), 0);
-  const totalOtherIncome = rows.filter(r => r.type === "INCOME").reduce((s, r) => s + (r.cashIn  || 0), 0);
-  const totalExpenses    = rows.reduce((s, r) => s + (r.cashOut || 0), 0);
+  const totalCharged   = rows.filter(r => r.type === "CHARGE").reduce((s, r) => s + r.entityDelta, 0);
+  const totalCollected = rows.reduce((s, r) => s + (r.cashIn  || 0), 0);
+  const totalExpenses  = rows.reduce((s, r) => s + (r.cashOut || 0), 0);
 
   // Outstanding receivables right now (cached account balances - whole scope)
   const recvAgg = await RecurringAccount.aggregate([
@@ -453,10 +407,10 @@ export async function buildRecurringLedger({ biz, branchId = null, periodStart, 
     periodStart, periodEnd,
     openingCash,
     closingCash: cash,
-    totalCharged, totalCollected, totalOtherIncome, totalExpenses,
+    totalCharged, totalCollected, totalExpenses,
     outstandingReceivables,
     rows,
-    counts: { charges: invoices.length, payments: payments.length, expenses: expenses.length, incomes: incomes.length }
+    counts: { charges: invoices.length, payments: payments.length, expenses: expenses.length }
   };
 }
 
@@ -560,7 +514,7 @@ export async function generateRecurringLedgerPDF({ biz, stmt, periodLabel: pl, b
     rows.forEach((row, i) => {
       const stripe   = i % 2 === 1 ? ' style="background:#f8fafc"' : "";
       const timeStr  = new Date(row.at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
-      const typeCol  = (row.type === "PAYMENT" || row.type === "INCOME") ? "credit" : row.type === "EXPENSE" ? "debit" : "muted";
+      const typeCol  = row.type === "PAYMENT" ? "credit" : row.type === "EXPENSE" ? "debit" : "muted";
       bodyHtml += `
       <tr${stripe}>
         <td class="muted" style="white-space:nowrap">${timeStr}</td>
@@ -571,7 +525,7 @@ export async function generateRecurringLedgerPDF({ biz, stmt, periodLabel: pl, b
         <td class="r credit">${row.cashIn  > 0 ? fmtMoney(row.cashIn,  cur) : ""}</td>
         <td class="r debit">${row.cashOut > 0 ? fmtMoney(row.cashOut, cur) : ""}</td>
         <td class="r bold">${fmtMoney(row.cashBalance, cur)}</td>
-        <td class="r bold ${row.entityBalance > 0 ? "debit" : "credit"}">${row.entityBalance == null ? "" : fmtMoney(row.entityBalance, cur)}</td>
+        <td class="r bold ${row.entityBalance > 0 ? "debit" : "credit"}">${fmtMoney(row.entityBalance, cur)}</td>
       </tr>`;
     });
 
@@ -613,9 +567,6 @@ export async function generateRecurringLedgerPDF({ biz, stmt, periodLabel: pl, b
       <div class="kpi"><div class="kpi-label">Collected</div>
         <div class="kpi-val green">+${fmtMoney(stmt.totalCollected, cur)}</div>
         <div class="kpi-sub">${stmt.counts.payments} payment(s)${collectionRate !== null ? " · " + collectionRate + "% of charges" : ""}</div></div>
-      <div class="kpi"><div class="kpi-label">Other Income</div>
-        <div class="kpi-val green">+${fmtMoney(stmt.totalOtherIncome || 0, cur)}</div>
-        <div class="kpi-sub">${stmt.counts.incomes || 0} entr${(stmt.counts.incomes || 0) === 1 ? "y" : "ies"} · non-rent</div></div>
       <div class="kpi"><div class="kpi-label">Unit Expenses</div>
         <div class="kpi-val red">&minus;${fmtMoney(stmt.totalExpenses, cur)}</div>
         <div class="kpi-sub">${stmt.counts.expenses} expense(s)</div></div>

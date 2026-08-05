@@ -3823,8 +3823,6 @@ a.startsWith("sup_load_preset_") ||
       a === "rb_billing_stmt" ||
       a === "rb_reminders" ||
       a === "rb_add_expense" ||
-      a === "rb_vacate" ||
-      a === "rb_vacate_yes" ||
       a.startsWith("rb_acct_") ||
       a.startsWith("rb_tenant_") ||
       a.startsWith("rb_period_") ||
@@ -10896,20 +10894,9 @@ Type *done* to save`,
         currency: b.currency, label: b.label
       }))
     };
-    // Extra option (always last) - record money that is NOT a tenant rent
-    // payment (deposit, penalty, application fee, misc). Handled by the
-    // rb_income_* flow, which posts to RecurringIncome, not a rent invoice.
-    const _rbCur = biz.currency || "USD";
-    biz.sessionData.rbBillables.push({
-      otherIncome: true, accountId: null, tenantId: null,
-      accountName: null, tenantName: null, balance: 0, currency: _rbCur,
-      label: "💵 Other income (not a tenant)"
-    });
     await saveBizSafe(biz);
-    const _rbPickerRows = billables.map(b => ({ id: b.label, label: `${b.label} - Bal: ${b.balance.toFixed(2)} ${b.currency}` }));
-    _rbPickerRows.push({ id: "other_income", label: "💵 Other income (not a tenant / rent)" });
     return sendNumberedPicker(from, "💰 *Record Payment* - who is this for?",
-      _rbPickerRows,
+      billables.map(b => ({ id: b.label, label: `${b.label} - Bal: ${b.balance.toFixed(2)} ${b.currency}` })),
       { allowBatch: true }
     );
   }
@@ -10990,31 +10977,6 @@ Type *done* to save`,
     await saveBizSafe(biz);
     return sendNumberedPicker(from, "🔧 *Add Unit Expense* - select an account",
       accounts.map(a2 => ({ id: a2._id.toString(), label: `${a2.name}${a2.ref ? " (" + a2.ref + ")" : ""}` }))
-    );
-  }
-
-  // ── Move Out Tenant - pick an ACTIVE tenant to vacate (keeps arrears) ─────────
-  if (a === "rb_vacate") {
-    if (!biz) return sendMainMenu(from);
-    const { listBillablesForChatbot } = await import("./recurringBilling.js");
-    const { sendNumberedPicker } = await import("./metaMenus.js");
-    const branchId = caller?.role !== "owner" ? caller?.branchId || null : null;
-    // Active tenants only - you can only move OUT someone currently in.
-    const tenants = (await listBillablesForChatbot(biz._id, branchId)).filter(b => b.tenantId && !b.former);
-    if (!tenants.length) {
-      await sendText(from, "❌ No active tenants to move out.");
-      return sendRecurringBillingMenu(from);
-    }
-    biz.sessionState = "rb_vacate_pick";
-    biz.sessionData  = {
-      rbVacateList: tenants.map(t => ({
-        tenantId: t.tenantId.toString(), accountId: t.accountId.toString(),
-        label: t.label, balance: t.balance, currency: t.currency
-      }))
-    };
-    await saveBizSafe(biz);
-    return sendNumberedPicker(from, "🚪 *Move Out Tenant* - who has left?",
-      tenants.map(t => ({ id: t.tenantId.toString(), label: `${t.label} - Bal: ${t.balance.toFixed(2)} ${t.currency}` }))
     );
   }
 

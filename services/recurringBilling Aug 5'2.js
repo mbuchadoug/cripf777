@@ -28,7 +28,6 @@ const getModels = async () => ({
   RecurringInvoice: (await import("../models/recurringInvoice.js")).default,
   RecurringPayment: (await import("../models/recurringPayment.js")).default,
   RecurringExpense: (await import("../models/recurringExpense.js")).default,
-  RecurringIncome:  (await import("../models/recurringIncome.js")).default,
 });
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -1057,33 +1056,4 @@ export async function reinstateTenant({ businessId, tenantId }) {
   await t.save();
   const balance = await recomputeTenantBalance(businessId, tenantId);
   return { tenant: t, balance };
-}
-
-// ── Record OTHER INCOME (not a tenant rent payment) ───────────────────────────
-// Pure cash-in that shows on the business-wide billing ledger and totals but
-// NEVER changes any tenant's/account's rent balance (that is what keeps arrears
-// maths correct). accountId/tenantId are optional tags; the chatbot "other
-// income (not a tenant)" flow leaves them null (business-wide income).
-export async function recordOtherIncome({
-  businessId, branchId = null, accountId = null, tenantId = null,
-  amount, description = "", category = "Other Income", method = "cash",
-  reference = "", clerkPhone = null, date = new Date()
-}) {
-  const { RecurringIncome } = await getModels();
-  const inc = await RecurringIncome.create({
-    businessId,
-    branchId:  branchId  || null,
-    accountId: accountId || null,
-    tenantId:  tenantId  || null,
-    amount:    Number(amount) || 0,
-    description: String(description || "").trim() || category,
-    category,
-    method,
-    reference,
-    currency:  "USD",
-    date,
-    period:    periodLabel(date),
-    createdBy: clerkPhone
-  });
-  return inc;
 }

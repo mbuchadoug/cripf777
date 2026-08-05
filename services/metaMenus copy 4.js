@@ -1248,7 +1248,6 @@ export async function sendRecurringBillingMenu(to) {
     { id: "rb_billing_stmt",      title: "📊 Billing Statement"  },
     { id: "rb_reminders",         title: "📢 Send Reminders"     },
     { id: "rb_add_expense",       title: "🔧 Add Unit Expense"   },
-    { id: "rb_vacate",            title: "🚪 Move Out Tenant"    },
     { id: ACTIONS.BACK,           title: "⬅ Back"                }
   ]);
 }
