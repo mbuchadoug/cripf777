@@ -228,14 +228,8 @@ export async function sendMainMenu(to) {
 
   // ── Case 1: Active paid supplier ─────────────────────────────────────────
   if (supplier?.active) {
-    // Registered business with tools (not on trial) → business HOME menu, so
-    // Sales / Payments / Reports are one tap from "hi". Marketplace options
-    // live inside the "Marketplace" row of that menu.
-    if (!isTrial && biz) {
-      return sendBusinessHomeMenu(to, biz, { isOwner: true });
-    }
-    // Trial supplier (no invoicing tools yet) → keep marketplace-first menu.
     return sendList(to, MENU_MSG, [
+      ...(!isTrial ? [{ id: "biz_tools_menu",      title: "📊 Business Tools" }] : []),
       { id: "sup_request_sellers", title: "⚡ Request Sellers" },
       { id: "find_supplier",       title: "🔍 Browse & Shop" },
       { id: "my_orders",           title: "📋 My Orders" },
@@ -259,8 +253,15 @@ export async function sendMainMenu(to) {
 
   // ── Case 3: Staff member (clerk/manager/owner) with a real business ───────
   if (hasStaffRole && isRealBiz) {
-    // Business HOME menu - tools first, marketplace tucked into one row.
-    return sendBusinessHomeMenu(to, biz, { isOwner });
+    const items = [
+      { id: "biz_tools_menu",      title: "📊 Business Tools" },
+      { id: "sup_request_sellers", title: "⚡ Request Sellers" },
+      { id: "find_supplier",       title: "🔍 Browse & Shop" },
+      { id: "my_orders",           title: "📋 My Orders" },
+      { id: "find_school",         title: "🏫 Find a School" }
+    ];
+    if (isOwner) items.push({ id: "my_supplier_account", title: "🏪 My Store" });
+    return sendList(to, MENU_MSG, items);
   }
 
   // ── Case 4: Has a biz but it's a pending registration OR has no staff role
@@ -320,77 +321,6 @@ export async function sendBusinessToolsMenu(to, biz) {
   }
 
   return sendList(to, "📊 *Business Tools*", filtered);
-}
-
-/* =============================================================================
-   BUSINESS HOME MENU  (shown on "hi" once a business is registered)
-   ---------------------------------------------------------------------------
-   Clients complained that reaching daily tools took too many steps:
-   old flow was  hi → Business Tools → Sales.  This makes the business tools
-   THE main menu, so Sales / Payments / Reports are one tap from "hi". The
-   marketplace options (Request Sellers, Browse & Shop, My Orders, Find a
-   School, My Store) are tucked into a single "Marketplace" row so nothing is
-   lost. Only registered businesses see this - new/unpaid users keep the
-   original marketplace-first menu (see sendMainMenu).
-============================================================================= */
-export async function sendBusinessHomeMenu(to, biz, { isOwner = false } = {}) {
-  const pkg = biz?.package || "trial";
-  const isMultiBranch = ["silver", "gold", "enterprise"].includes(pkg);
-
-  const items = [
-    { id: ACTIONS.SALES_MENU,       title: "🧾 Sales" },
-    { id: ACTIONS.PAYMENTS_MENU,    title: "💰 Payments" },
-    { id: ACTIONS.CLIENTS_MENU,     title: "👥 Clients" },
-    { id: ACTIONS.PRODUCTS_MENU,    title: "📦 Products & Services" },
-    { id: "stock_menu",             title: "📊 Stock Control" },
-    { id: ACTIONS.REPORTS_MENU,     title: "📈 Reports" },
-    { id: "recurring_billing_menu", title: "🏠 Recurring Billing" },
-    { id: ACTIONS.SETTINGS_MENU,    title: "⚙ Settings" },
-    ...(isMultiBranch
-      ? [
-          { id: ACTIONS.BRANCHES_MENU, title: "🏬 Branches", section: "branches" },
-          { id: ACTIONS.USERS_MENU,    title: "👥 Users",    section: "users" }
-        ]
-      : []),
-    { id: "marketplace_menu",       title: "🛍️ Marketplace" }
-  ];
-
-  let filtered = await filterMenuByRole({ from: to, biz, items });
-
-  // WhatsApp interactive lists are capped at 10 rows. Same fold pattern as
-  // Business Tools: collapse Branches + Users into one row when we overflow.
-  if (filtered.length > 10) {
-    const bIdx = filtered.findIndex(i => i.id === ACTIONS.BRANCHES_MENU);
-    const hasUsers = filtered.some(i => i.id === ACTIONS.USERS_MENU);
-    if (bIdx !== -1 && hasUsers) {
-      filtered = filtered.filter(i => i.id !== ACTIONS.BRANCHES_MENU && i.id !== ACTIONS.USERS_MENU);
-      filtered.splice(bIdx, 0, { id: "branches_users_menu", title: "🏬 Branches & Users" });
-    }
-  }
-  // Hard safety: never send more than 10 rows, but always keep Marketplace.
-  if (filtered.length > 10) {
-    const mp = filtered.find(i => i.id === "marketplace_menu");
-    filtered = filtered.filter(i => i.id !== "marketplace_menu").slice(0, 9);
-    if (mp) filtered.push(mp);
-  }
-
-  const name = biz?.name && !biz.name.startsWith("pending_supplier_") ? biz.name : "Your Business";
-  return sendList(to, `👋 *${name}*\nWhat would you like to do?`, filtered);
-}
-
-/* =============================================================================
-   MARKETPLACE MENU  (the ZimQuote marketplace options, moved off the home menu)
-============================================================================= */
-export async function sendMarketplaceMenu(to, biz, { isOwner = false } = {}) {
-  const items = [
-    { id: "sup_request_sellers", title: "⚡ Request Sellers" },
-    { id: "find_supplier",       title: "🔍 Browse & Shop" },
-    { id: "my_orders",           title: "📋 My Orders" },
-    { id: "find_school",         title: "🏫 Find a School" },
-    ...(isOwner ? [{ id: "my_supplier_account", title: "🏪 My Store" }] : []),
-    { id: "main_menu_back",      title: "⬅ Back" }
-  ];
-  return sendList(to, "🛍️ *ZimQuote Marketplace*", items);
 }
 /* =============================================================================
    SALES MENU

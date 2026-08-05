@@ -3611,7 +3611,6 @@ a.startsWith("sup_load_preset_") ||
         a === "main_menu_back" ||
       a.startsWith("payinv_full_") ||
       a === "biz_tools_menu" ||
-      a === "marketplace_menu" ||
        a.startsWith("inv_cat_page_") ||
 
 
@@ -7698,7 +7697,6 @@ a === "sup_search_next_page" ||
   a === "main_menu_back" ||
       a.startsWith("payinv_full_") ||
     a === "biz_tools_menu" ||
-    a === "marketplace_menu" ||
 
 
       a === "sup_request_quote_search" ||
@@ -14654,15 +14652,6 @@ if (a === "biz_tools_menu") {
   }
   const { sendBusinessToolsMenu } = await import("./metaMenus.js");
   return sendBusinessToolsMenu(from, biz);
-}
-
-// Marketplace submenu - the ZimQuote marketplace options that used to sit on
-// the main menu. Reached from the "🛍️ Marketplace" row of the business home menu.
-if (a === "marketplace_menu") {
-  const { sendMarketplaceMenu } = await import("./metaMenus.js");
-  let _hasStore = false;
-  try { _hasStore = !!(await SupplierProfile.findOne({ phone }).lean()); } catch (_) {}
-  return sendMarketplaceMenu(from, biz, { isOwner: _hasStore });
 }
 
 
