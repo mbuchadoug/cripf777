@@ -4508,19 +4508,42 @@ Sales of this product will now reduce its stock automatically.`);
     return sendRecurringBillingMenu(from);
   }
 
-  // ── Other income: details entered → pick how it was received ──────────────
+  // ── Other income: one OR several (comma-separated) → review + method ──────
   if (state === "rb_income_enter_details") {
-    const match = trimmed.match(/^(.+?)\s+(\d+(?:\.\d{1,2})?)$/);
-    if (!match) {
-      await sendPromptWithMenu(from, "❌ Format: *description amount* e.g. *Deposit Flat 3A 150* or *Application fee 20*:");
+    // Each entry is "description amount". Several can be sent at once,
+    // separated by commas: "Deposit Flat 3A 150, Application fee 20".
+    const segments = trimmed.split(",").map(s => s.trim()).filter(Boolean);
+    const lines = [];
+    const bad   = [];
+    for (const seg of segments) {
+      const m = seg.match(/^(.+?)\s+(\d+(?:\.\d{1,2})?)$/);
+      if (m && parseFloat(m[2]) > 0) lines.push({ description: m[1].trim(), amount: parseFloat(m[2]) });
+      else bad.push(seg);
+    }
+    if (!lines.length || bad.length) {
+      let em = "❌ Each entry must be *description amount*.\n";
+      if (bad.length) em += `\nCouldn't read: ${bad.map(b => `"${b}"`).join(", ")}\n`;
+      em += "\nTry again - one entry, or several separated by commas:\n" +
+            "• *Application fee 20*\n" +
+            "• *Deposit Flat 3A 150, Water recovery 12, Late-rent penalty 15*";
+      await sendPromptWithMenu(from, em);
       return true;
     }
-    biz.sessionData.rbIncomeDescription = match[1].trim();
-    biz.sessionData.rbIncomeAmount      = parseFloat(match[2]);
+    biz.sessionData.rbIncomeLines = lines;
     biz.sessionState = "rb_income_confirm";
     await saveBizSafe(biz);
-    const cur = biz.sessionData.rbIncomeCurrency || biz.currency || "USD";
-    await sendList(from, `💵 Confirm *${biz.sessionData.rbIncomeAmount} ${cur}* - ${biz.sessionData.rbIncomeDescription}?\n\nHow was it received?`, [
+
+    const cur   = biz.sessionData.rbIncomeCurrency || biz.currency || "USD";
+    const total = lines.reduce((s, l) => s + l.amount, 0);
+    let review;
+    if (lines.length === 1) {
+      review = `💵 Confirm *${lines[0].amount} ${cur}* - ${lines[0].description}\n\nHow was it received?`;
+    } else {
+      review = `💵 Confirm *${lines.length} income entries* - total *${total.toFixed(2)} ${cur}*:\n`;
+      lines.forEach((l, i) => { review += `\n*${i + 1}.* ${l.description} - ${l.amount.toFixed(2)} ${cur}`; });
+      review += `\n\nHow were they received?`;
+    }
+    await sendList(from, review, [
       { id: "rb_pay_method_cash",     title: "💵 Cash"          },
       { id: "rb_pay_method_ecocash",  title: "📱 EcoCash"       },
       { id: "rb_pay_method_bank",     title: "🏦 Bank Transfer"  },
@@ -4532,26 +4555,45 @@ Sales of this product will now reduce its stock automatically.`);
     return true;
   }
 
-  // ── Other income: method chosen → save (posts to RecurringIncome) ─────────
+  // ── Other income: method chosen → save all entries (posts to RecurringIncome)
   if (state === "rb_income_confirm" && a?.startsWith("rb_pay_method_")) {
     const method = a.replace("rb_pay_method_", "");
-    const { rbIncomeAmount, rbIncomeDescription, rbIncomeCurrency } = biz.sessionData;
+    const lines  = biz.sessionData?.rbIncomeLines || [];
+    const rbIncomeCurrency = biz.sessionData?.rbIncomeCurrency;
     const branchId = caller?.role !== "owner" ? caller?.branchId || null : null;
     biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
     const cur = rbIncomeCurrency || biz.currency || "USD";
     const today = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+
+    if (!lines.length) {
+      await sendText(from, "❌ Nothing to save.");
+      const { sendRecurringBillingMenu } = await import("./metaMenus.js");
+      return sendRecurringBillingMenu(from);
+    }
+
+    let saved = 0, total = 0;
+    const receipt = [];
     try {
       const { recordOtherIncome } = await import("./recurringBilling.js");
-      await recordOtherIncome({
-        businessId: biz._id, branchId,
-        amount: rbIncomeAmount, description: rbIncomeDescription,
-        category: "Other Income", method, clerkPhone: phone, date: new Date()
-      });
+      for (const line of lines) {
+        try {
+          await recordOtherIncome({
+            businessId: biz._id, branchId,
+            amount: line.amount, description: line.description,
+            category: "Other Income", method, clerkPhone: phone, date: new Date()
+          });
+          saved++; total += line.amount;
+          receipt.push(`✅ ${line.description} - ${line.amount.toFixed(2)} ${cur}`);
+        } catch (e) {
+          receipt.push(`❌ ${line.description} - FAILED (${e.message})`);
+        }
+      }
       await sendText(from,
-`✅ *Other Income Recorded*
-
-💵 Amount: *${rbIncomeAmount} ${cur}*
-📝 ${rbIncomeDescription}
+`✅ *Other Income Recorded* (${saved}/${lines.length})
+${"─".repeat(22)}
+${receipt.join("\n")}
+${"─".repeat(22)}
+*TOTAL: ${total.toFixed(2)} ${cur}*
 💳 Method: ${method}
 📅 ${today}
 

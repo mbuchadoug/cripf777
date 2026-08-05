@@ -10929,7 +10929,13 @@ Type *done* to save`,
     biz.sessionData  = { rbIncomeCurrency: biz.currency || "USD" };
     await saveBizSafe(biz);
     return sendButtons(from, {
-      text: `💵 *Other Income* (not a tenant payment)\n\nType a short description and the amount on one line:\n*Deposit - Flat 3A 150*\n*Application fee 20*\n*Late-rent penalty 15*`,
+      text: `💵 *Other Income* (not a tenant payment)\n\n` +
+            `Type each entry as *description amount*.\n` +
+            `To add several at once, separate them with commas.\n\n` +
+            `*One entry:*\n` +
+            `Application fee 20\n\n` +
+            `*Several at once:*\n` +
+            `Deposit Flat 3A 150, Water recovery 12, Late-rent penalty 15`,
       buttons: [{ id: "recurring_billing_menu", title: "⬅ Cancel" }]
     });
   }
