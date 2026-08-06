@@ -2773,10 +2773,13 @@ if (!requestKey) {
         buyerPhone:    request.buyerPhone || null       // shown only to VIP sellers
       });
 
-      // Step 2: Immediately send interactive buttons after the template ping.
-      // The template opens the Meta session, so this sendButtons is deliverable
-      // right after. Sellers see the item list + action buttons without needing
-      // to type anything first.
+      // Step 2: Try to send interactive buttons after the template ping.
+      // REALITY: a business-initiated template does NOT open the 24-hour window -
+      // only a message FROM the seller does. So this sendButtons DELIVERS only to a
+      // seller who has messaged in the last 24h (warm session). For a COLD seller it
+      // is rejected by WhatsApp (logged below, non-fatal) and they instead act by
+      // REPLYING to the template, which opens the window and triggers the same
+      // interactive card via the awaiting_offer_intro handler.
       const _supplierPhone = String(supplier.phone).replace(/\D+/g, "");
       const _normalizedSupplierPhone = _supplierPhone.startsWith("0") && _supplierPhone.length === 10
         ? "263" + _supplierPhone.slice(1) : _supplierPhone;
@@ -2819,10 +2822,11 @@ if (!requestKey) {
       await _setSellerRequestSession(_normalizedSupplierPhone);
       console.log(`[BUYER REQ] Session set to awaiting_offer_intro for ${_normalizedSupplierPhone} (req ${_reqId})`);
 
-      // ── Step 2b: Send interactive buttons immediately after template ────────────
-      // Template opens the Meta session; this follow-up is always deliverable.
-      // Seller gets tappable View & Quote / Not Available buttons without needing
-      // to type anything first (previous behaviour required a "hi" to trigger them).
+      // ── Step 2b: Try interactive buttons (delivers to WARM sessions only) ───────
+      // Warm seller (messaged in last 24h): buttons arrive instantly. Cold seller:
+      // WhatsApp rejects this (caught below) and the seller replies to the template
+      // instead, which opens the window and shows the same card. VIP sellers also
+      // get the buyer phone in the card and (now) in the v1 template itself.
       try {
         const _step2IsService = request.isServiceRequest || _buyerRequestIsService(request.items || []);
         const _step2ItemLines = (request.items || []).map((item, i) => {

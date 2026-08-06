@@ -243,17 +243,17 @@ async function _sendNewRequestToPhone({
     ? `1 item: ${_firstItem}`
     : `${_itemCount} items: ${_namesList}`;
 
-  // ── STEP 1: Send a template (delivers regardless of the 24-hour window) ──────
-  // IMPORTANT (WhatsApp reality): a business-initiated template does NOT open the
-  // 24-hour customer-service window - only a message FROM the seller does. So the
-  // only way to put a TAPPABLE button in the notification itself is the v2 template
-  // (quick-reply buttons are part of the approved template). Strategy:
-  //   a) Try v2 (built-in View & Quote buttons - best UX, works outside the window)
-  //   b) If v2 is unavailable (404 / not approved), fall back to v1 plain text.
-  //      v1 has no buttons: the seller taps nothing, they REPLY, and that reply
-  //      opens the window + triggers the interactive card (handled in chatbotEngine).
-  //   c) For VIP sellers, fold the buyer's phone into v1 so it shows immediately
-  //      (v1 has no phone slot, and the in-session card never reaches a cold seller).
+  // ── STEP 1: Send a template to open the Meta session ─────────────────────
+  // Templates always deliver regardless of the 24-hour session window.
+  // Strategy:
+  //   a) Try v2 template first (has built-in quick reply buttons - best UX)
+  //   b) If v2 fails (404 / quality pending), fall back to v1 plain text
+  //   c) v1 plain text opens the session so step 2 sendButtons lands
+  //
+  // STEP 2: After ANY successful template, send sendButtons as a second message
+  // with View & Quote / Not Available. The template opened the session so this
+  // always delivers. Even if both templates fail, try sendButtons in case a
+  // session already exists (e.g. seller messaged the bot recently).
 
   let _templateSent = false;
 
@@ -275,42 +275,33 @@ async function _sendNewRequestToPhone({
       // v2 has buttons built in - return now, no need for step 2
       return;
     } catch (err) {
-      console.warn(`[BUY REQ TPL v2] failed for ${normalizedPhone}: ${err.message}. Falling back to v1.`);
+      console.warn(`[BUY REQ TPL v2] failed for ${normalizedPhone}: ${err.message}. Trying v1 to open session.`);
     }
   }
 
-  // ── Step 1b: v1 plain-text template - no buttons; seller replies to act ───
+  // ── Step 1b: v1 plain-text template - no buttons but opens the session ────
   if (!_templateSent) {
     try {
       // {{3}} = the actual item/service names (single line). Previously this was a
       // bare "1 item requested" count, so sellers never saw WHAT was wanted.
-      const _v1Items = _itemCount === 1 ? _firstItem : `${_itemCount} items: ${_namesList}`;
-
-      // VIP sellers see the buyer's phone right in the notification. v1 has no
-      // dedicated phone variable, so we fold it into {{4}} (the delivery line) as a
-      // single line (Meta body variables can't contain line breaks).
-      const _v1Delivery = (isVip && buyerPhone)
-        ? `${deliveryLine} · 📞 Buyer: ${_formatPhoneDisplay(buyerPhone)}`
-        : deliveryLine;
-
       await _sendTemplate(normalizedPhone, "supplier_new_buyer_request", [
         ref,
         locationText,
-        _v1Items,
-        _v1Delivery
+        _itemCount === 1
+          ? _firstItem
+          : `${_itemCount} items: ${_namesList}`,
+        deliveryLine
       ]);
-      console.log(`[BUY REQ TPL v1] supplier_new_buyer_request → ${normalizedPhone} (${ref})${isVip && buyerPhone ? " [+buyer phone]" : ""}`);
+      console.log(`[BUY REQ TPL v1] supplier_new_buyer_request → ${normalizedPhone} (${ref})`);
       _templateSent = true;
     } catch (err) {
       console.warn(`[BUY REQ TPL v1] failed for ${normalizedPhone}: ${err.message}`);
     }
   }
 
-  // NOTE: The interactive "View & Quote / Not Available" buttons are sent by
-  // chatbotEngine.js. For a seller with an OPEN session (messaged in the last 24h)
-  // they arrive immediately; for a COLD seller they are rejected by WhatsApp and
-  // the seller instead acts by REPLYING to this template, which opens the window
-  // and triggers the same interactive card. Do NOT send sendButtons here.
+  // NOTE: sendButtons with View & Quote / Not Available is sent by chatbotEngine.js
+  // AFTER _setSellerRequestSession() so the session is guaranteed to be set before
+  // the seller can tap the button. Do NOT send sendButtons here.
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
