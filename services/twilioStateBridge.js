@@ -504,6 +504,7 @@ const restrictedStateMap = {
     rb_billing_stmt_custom_date: "reports",
     rb_expense_pick_account:     "payments",
     rb_expense_enter_details:    "payments",
+    rb_expense_confirm:          "payments",
     rb_income_enter_details:     "payments",
     rb_income_confirm:           "payments",
     rb_vacate_pick:              "payments",
@@ -4465,45 +4466,100 @@ Sales of this product will now reduce its stock automatically.`);
     await saveBizSafe(biz);
 
     await sendButtons(from, {
-      text: `🔧 *Add Expense - ${acct.name}*\n\nType description and amount on one line:\n*Plumber call-out 25*\n*Light bulb 3.50*\n*Zesa prepaid 40*`,
+      text: `🔧 *Add Expense - ${acct.name}*\n\n` +
+            `Type each expense as *description amount*.\n` +
+            `Add several at once by separating with commas.\n\n` +
+            `*One:*\nPlumber call-out 25\n\n` +
+            `*Several:*\nPlumber 25, Light bulb 3.50, Zesa prepaid 40`,
       buttons: [{ id: "recurring_billing_menu", title: "⬅ Cancel" }]
     });
     return true;
   }
 
-  // ── Unit expense: details entered → save ──────────────────────────────────
+  // ── Unit expense: one OR several (comma-separated) → PREVIEW before saving ─
   if (state === "rb_expense_enter_details") {
-    const match = trimmed.match(/^(.+?)\s+(\d+(?:\.\d{1,2})?)$/);
-    if (!match) {
-      await sendPromptWithMenu(from, "❌ Format: *description amount* e.g. *Plumber 25* or *Zesa prepaid 40*:");
+    const segments = trimmed.split(",").map(s => s.trim()).filter(Boolean);
+    const lines = [];
+    const bad   = [];
+    for (const seg of segments) {
+      const m = seg.match(/^(.+?)\s+(\d+(?:\.\d{1,2})?)$/);
+      if (m && parseFloat(m[2]) > 0) lines.push({ description: m[1].trim(), amount: parseFloat(m[2]) });
+      else bad.push(seg);
+    }
+    if (!lines.length || bad.length) {
+      let em = "❌ Each expense must be *description amount*.\n";
+      if (bad.length) em += `\nCouldn't read: ${bad.map(b => `"${b}"`).join(", ")}\n`;
+      em += "\nTry again - one, or several separated by commas:\n" +
+            "• *Plumber call-out 25*\n" +
+            "• *Plumber 25, Light bulb 3.50, Zesa prepaid 40*";
+      await sendPromptWithMenu(from, em);
       return true;
     }
-    const description = match[1].trim();
-    const amount      = parseFloat(match[2]);
+
+    biz.sessionData.rbExpenseLines = lines;
+    biz.sessionState = "rb_expense_confirm";
+    await saveBizSafe(biz);
+
+    const cur   = biz.currency || "USD";
+    const total = lines.reduce((s, l) => s + l.amount, 0);
+    let preview = `🔎 *Preview - ${biz.sessionData.rbAccountName}*\n${"─".repeat(22)}`;
+    lines.forEach((l, i) => { preview += `\n*${i + 1}.* ${l.description} - ${l.amount.toFixed(2)} ${cur}`; });
+    preview += `\n${"─".repeat(22)}\n*TOTAL: ${total.toFixed(2)} ${cur}*\n\n` +
+               `Save ${lines.length === 1 ? "this expense" : `these ${lines.length} expenses`}?`;
+    await sendButtons(from, {
+      text: preview,
+      buttons: [
+        { id: "rb_expense_save",        title: "✅ Save" },
+        { id: "recurring_billing_menu", title: "⬅ Cancel" }
+      ]
+    });
+    return true;
+  }
+
+  // ── Unit expense: preview confirmed → save all ────────────────────────────
+  if (state === "rb_expense_confirm" && a === "rb_expense_save") {
+    const lines = biz.sessionData?.rbExpenseLines || [];
     const { rbAccountId, rbAccountName } = biz.sessionData;
+    const cur = biz.currency || "USD";
     biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
 
+    if (!lines.length) {
+      await sendText(from, "❌ Nothing to save.");
+      const { sendRecurringBillingMenu } = await import("./metaMenus.js");
+      return sendRecurringBillingMenu(from);
+    }
+
+    let saved = 0, total = 0;
+    const receipt = [];
     try {
       const RecurringExpense = (await import("../models/recurringExpense.js")).default;
       const now = new Date();
-      await RecurringExpense.create({
-        businessId:  biz._id,
-        accountId:   rbAccountId,
-        description,
-        category:    "Maintenance",
-        amount,
-        currency:    biz.currency || "USD",
-        date:        now,
-        period:      now.toLocaleDateString("en-GB", { month: "long", year: "numeric" }),
-        createdBy:   phone
-      });
+      const period = now.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+      for (const line of lines) {
+        try {
+          await RecurringExpense.create({
+            businessId: biz._id, accountId: rbAccountId,
+            description: line.description, category: "Maintenance",
+            amount: line.amount, currency: cur, date: now, period, createdBy: phone
+          });
+          saved++; total += line.amount;
+          receipt.push(`✅ ${line.description} - ${line.amount.toFixed(2)} ${cur}`);
+        } catch (e) {
+          receipt.push(`❌ ${line.description} - FAILED (${e.message})`);
+        }
+      }
       await sendText(from,
-        `✅ *Expense Recorded*\n\n🏠 Unit: ${rbAccountName}\n📝 ${description}\n💵 ${amount} ${biz.currency || "USD"}\n\n_Expense will appear on the unit statement._`
-      );
-    } catch (e) {
-      await sendText(from, `❌ Failed to save expense: ${e.message}`);
-    }
+`✅ *Expenses Recorded* (${saved}/${lines.length})
+🏠 Unit: ${rbAccountName}
+${"─".repeat(22)}
+${receipt.join("\n")}
+${"─".repeat(22)}
+*TOTAL: ${total.toFixed(2)} ${cur}*
 
+_Expenses appear on the unit statement._`);
+    } catch (e) {
+      await sendText(from, `❌ Failed to save expenses: ${e.message}`);
+    }
     const { sendRecurringBillingMenu } = await import("./metaMenus.js");
     return sendRecurringBillingMenu(from);
   }

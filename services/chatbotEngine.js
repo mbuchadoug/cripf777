@@ -12114,6 +12114,13 @@ const shortcodeBlockedStates = [
   "rb_tenant_stmt_pick_account",
   "rb_expense_pick_account",
   "rb_expense_enter_details",
+  // Move-out (vacate) + other-income states: without these, the numbered pick or
+  // typed entry hits the shortcode search and triggers the "Which city?" prompt.
+  "rb_vacate_pick",
+  "rb_vacate_confirm",
+  "rb_income_enter_details",
+  "rb_income_confirm",
+  "rb_expense_confirm",
   "rb_invoice_pick_account",
   "rb_invoice_review",
   "rb_acct_stmt_custom_date",
@@ -19894,6 +19901,9 @@ if (!isMetaAction && text && text.trim().length > 1) {
     "rb_tenant_stmt_pick_account", "rb_tenant_stmt_pick_tenant", "rb_tenant_stmt_pick_period",
     "rb_billing_stmt_pick_period", "rb_billing_stmt_custom_date",
     "rb_expense_pick_account", "rb_expense_enter_details",
+    "rb_expense_confirm",
+    "rb_vacate_pick", "rb_vacate_confirm",
+    "rb_income_enter_details", "rb_income_confirm",
     // ── FIX: Browse & Shop + buyer order typed-input states ──────────────────
     // These states have dedicated typed-text handlers BELOW this catch-all
     // (supplier_search_product at the "Buyer: free-text product search" block,
@@ -20796,6 +20806,8 @@ if (biz) {
       a?.startsWith("rb_tenant_")  ||
       a?.startsWith("rb_period_")  ||
       a?.startsWith("rb_pay_method_") ||
+      a === "rb_vacate_yes"           ||
+      a === "rb_expense_save"         ||
       a === "rb_period_all"        ||
       a === "rb_period_custom"     ||
       a?.startsWith("rb_more_")     ||
