@@ -1190,25 +1190,34 @@ if (!school.active) {
   `🏫 *${school.schoolName}*${verifiedBadge}\n` +
   `${statusIcon} Active · ${tierLabel}\n` +
   `📍 ${school.suburb || ""}, ${school.city}\n` +
-  `📚 ${curriculumText}\n` +
   `📝 Admissions: ${admissionsLabel}\n` +
-  `🏊 Facilities: ${facilityCount}\n` +
-  `⭐ ${(school.rating || 0).toFixed(1)} (${school.reviewCount || 0} reviews)\n` +
-  `🗓 Renews: ${renewDate}\n` +
-  `👀 Views: ${school.monthlyViews || 0} · 📬 Inquiries: ${school.inquiries || 0}`,
+  `👀 ${school.monthlyViews || 0} views · 📬 ${school.inquiries || 0} enquiries this month\n` +
+  `🗓 Renews: ${renewDate}`,
   [
-    { id: "school_my_profile",       title: "📋 My School Profile" },
-    { id: "school_my_facilities",    title: "🏊 Manage Facilities" },
-    { id: "school_my_fees",          title: "💵 Update Fees" },
-    { id: "sup_request_sellers",     title: "⚡ Request Sellers" },
-    { id: "find_supplier",           title: "🔍 Browse & Shop" },
-    { id: "find_school",             title: "🏫 Find a School" },
-    { id: "school_my_reviews",       title: "⭐ My Reviews" },
-    { id: "school_my_inquiries",     title: "📬 Parent Inquiries" },
-    { id: "school_more_options",     title: "⚙️ More Options" },
-    { id: "main_menu_back",          title: "⬅ Main Menu" }
+    { id: "school_my_profile",  title: "📋 Profile & Details" },
+    { id: "school_applications", title: "📝 Applications" },
+    { id: "school_enquiries",   title: "📬 Enquiries" },
+    { id: "school_contacts",    title: "👀 Who Viewed Me" },
+    { id: "school_my_fees",     title: "💵 Update Fees" },
+    { id: "school_my_facilities", title: "🏊 Facilities" },
+    { id: "school_share_link",  title: "📣 Share & Grow" },
+    { id: "school_more_options", title: "⚙️ Settings" },
+    { id: "school_marketplace", title: "🛍️ Buy Supplies" },
+    { id: "main_menu_back",     title: "⬅ Main Menu" }
   ]
 );
+}
+
+// ── School marketplace submenu (buy supplies / get quotes) ────────────────────
+// Keeps the school's home menu focused on running the school, while still giving
+// them one tap to the marketplace to source uniforms, stationery, books, etc.
+export async function sendSchoolMarketplaceMenu(to) {
+  return sendList(to, "🛍️ *Buy Supplies & More*\nSource uniforms, stationery, books, furniture and services from ZimQuote sellers.", [
+    { id: "sup_request_sellers", title: "⚡ Request Quotes" },
+    { id: "find_supplier",       title: "🔍 Browse & Shop" },
+    { id: "find_school",         title: "🏫 Find a School" },
+    { id: "school_account",      title: "⬅ Back to School" }
+  ]);
 }
 
 // ── School "More Options" menu ────────────────────────────────────────────────
@@ -1227,6 +1236,7 @@ export async function sendSchoolMoreOptionsMenu(to, schoolDoc) {
     { id: "school_update_reg_link",    title: `🔗 Registration Form Link (${regStatus})` },
     { id: "school_update_email",       title: "📧 Update Email" },
     { id: "school_update_website",     title: "🌐 Update Website" },
+    { id: "school_my_reviews",         title: "⭐ My Reviews" },
     { id: "school_pay_plan",           title: "⬆️ Upgrade / Renew Plan" },
     { id: "school_account",            title: "⬅ Back" }
   ]);

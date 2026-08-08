@@ -195,6 +195,53 @@ function _zqFmtPhone(raw = "") {
   return d ? `+${d}` : "";
 }
 
+// ── School contact-list renderer (Applications / Enquiries / Who Viewed) ──────
+// One helper powers all three school-admin lists. They all read from the same
+// SchoolContact store, filtered by intent. Parent phone numbers are revealed only
+// when the school has the contact-viewer enabled (canViewContacts, admin-granted);
+// otherwise counts, names and dates still show so the tool stays useful, with a
+// clear prompt to unlock direct contact. Read-only: no text state, so it can never
+// hit the "which city?" search hijack. Always returns to the school menu.
+async function _renderSchoolContactList(from, phone, { filter = "all", title, emptyMsg }) {
+  const SchoolProfile = (await import("../models/schoolProfile.js")).default;
+  const { sendSchoolAccountMenu } = await import("./metaMenus.js");
+  const school = await SchoolProfile.findOne({ phone }).lean();
+  if (!school) return sendMainMenu(from);
+
+  let SchoolContact;
+  try { SchoolContact = (await import("../models/schoolContact.js")).default; }
+  catch (_) { await sendText(from, emptyMsg); return sendSchoolAccountMenu(from, school); }
+
+  const q = { schoolId: school._id };
+  if (filter === "applications")  q.$or = [{ converted: true }, { source: "apply" }];
+  else if (filter === "enquiries") q.source = "enquiry";
+
+  const total = await SchoolContact.countDocuments(q);
+  if (!total) { await sendText(from, emptyMsg); return sendSchoolAccountMenu(from, school); }
+
+  const rows = await SchoolContact.find(q).sort({ lastSeen: -1 }).limit(15).lean();
+  const canSeePhone = school.canViewContacts === true;
+  const srcLabel = { profile: "Profile", apply: "Apply", enquiry: "Enquiry", brochure: "Brochure" };
+
+  const lines = rows.map((c, i) => {
+    const d    = new Date(c.lastSeen || c.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+    const name = c.parentName || c.name || "Parent";
+    const ph   = canSeePhone
+      ? (String(c.phone).startsWith("263") ? "0" + String(c.phone).slice(3) : c.phone)
+      : "🔒";
+    return `${i + 1}. ${name} · ${ph} · ${srcLabel[c.source] || c.source} · ${d}${c.converted ? " ✅" : ""}`;
+  }).join("\n");
+
+  let msg = `${title} (${total})\n${"─".repeat(20)}\n${lines}`;
+  if (!canSeePhone) {
+    msg += `\n\n🔒 Parent phone numbers are hidden on your plan.\nContact ZimQuote to unlock the contact viewer and follow up with parents directly.`;
+  } else if (total > 15) {
+    msg += `\n\n_Showing the latest 15 of ${total}._`;
+  }
+  await sendText(from, msg);
+  return sendSchoolAccountMenu(from, school);
+}
+
 // ── findSupplierByPhone ───────────────────────────────────────────────────────
 // Checks all 3 phone formats: "263773...", "+263773...", "0773..."
 async function findSupplierByPhone(rawPhone) {
@@ -3737,6 +3784,11 @@ a.startsWith("sup_load_preset_") ||
       a === "school_my_reviews" ||
       a === "school_my_inquiries" ||
       a === "school_more_options" ||
+      a === "school_applications" ||
+      a === "school_enquiries" ||
+      a === "school_contacts" ||
+      a === "school_marketplace" ||
+      a === "school_share_link" ||
  a === "school_update_reg_link" ||
       a === "school_update_email" ||
       a === "school_update_website" ||
@@ -7754,6 +7806,11 @@ a === "sup_search_next_page" ||
   a === "school_my_reviews" ||
   a === "school_my_inquiries" ||
   a === "school_more_options" ||
+  a === "school_applications" ||
+  a === "school_enquiries" ||
+  a === "school_contacts" ||
+  a === "school_marketplace" ||
+  a === "school_share_link" ||
   a === "school_update_reg_link" ||
   a === "school_update_email" ||
   a === "school_update_website" ||
@@ -14533,6 +14590,71 @@ Every time a parent taps "Contact School", "Apply Online", or "Download Profile"
   return sendSchoolAccountMenu(from, school);
 }
 
+// ── Applications (parents who applied to THIS school) ─────────────────────────
+if (a === "school_applications") {
+  return _renderSchoolContactList(from, phone, {
+    filter: "applications",
+    title: "📝 *Applications*",
+    emptyMsg: `📝 *Applications*\n\nNo applications yet.\n\n💡 Add your online application link (⚙️ Settings → Registration Form Link) and keep admissions 🟢 Open so parents can apply instantly from your listing.`
+  });
+}
+
+// ── Enquiries (parent questions / leads) ──────────────────────────────────────
+if (a === "school_enquiries") {
+  return _renderSchoolContactList(from, phone, {
+    filter: "enquiries",
+    title: "📬 *Enquiries*",
+    emptyMsg: `📬 *Enquiries*\n\nNo enquiries yet.\n\n💡 Share your smart link (📣 Share & Grow) on WhatsApp and Facebook so parents can reach you.`
+  });
+}
+
+// ── Who viewed my profile (visitor contacts) ─────────────────────────────────
+if (a === "school_contacts") {
+  return _renderSchoolContactList(from, phone, {
+    filter: "all",
+    title: "👀 *Who Viewed My Profile*",
+    emptyMsg: `👀 *Who Viewed My Profile*\n\nNo one has opened your profile yet.\n\n💡 Share your smart link (📣 Share & Grow) to start capturing parent contacts.`
+  });
+}
+
+// ── Buy supplies (marketplace submenu) ────────────────────────────────────────
+if (a === "school_marketplace") {
+  const { sendSchoolMarketplaceMenu } = await import("./metaMenus.js");
+  return sendSchoolMarketplaceMenu(from);
+}
+
+// ── Share & Grow (smart link + where to share + growth tips) ─────────────────
+if (a === "school_share_link") {
+  const school = await SchoolProfile.findOne({ phone });
+  if (!school) return sendMainMenu(from);
+  const { sendSchoolAccountMenu } = await import("./metaMenus.js");
+  const slug = school.zqSlug ? String(school.zqSlug) : "";
+  const link = slug
+    ? `https://wa.me/263771143904?text=${encodeURIComponent("ZQ:SCHOOL:" + slug)}`
+    : "";
+  const linkBlock = link
+    ? `🔗 *Your smart link:*\n${link}\n\nWhen a parent taps it, your profile opens on WhatsApp and their contact is captured for you (see 👀 Who Viewed Me).`
+    : `🔗 Your smart link isn't set up yet - contact ZimQuote to activate it.`;
+  await sendText(from,
+`📣 *Share & Grow - ${school.schoolName}*
+
+${linkBlock}
+
+*Where to share it:*
+• Facebook page & WhatsApp Status
+• School gate banner / flyer (as a QR code)
+• Parent WhatsApp groups
+• SMS to prospective parents
+
+💡 *Get more applications:*
+• Keep admissions 🟢 Open
+• Add your online application link (⚙️ Settings)
+• Complete your fees & facilities - parents filter by these
+• Ask happy parents to leave a review`
+  );
+  return sendSchoolAccountMenu(from, school);
+}
+
 // ── More options menu ─────────────────────────────────────────────────────────
 if (a === "school_more_options") {
   const school = await SchoolProfile.findOne({ phone });
@@ -19922,6 +20044,13 @@ if (!isMetaAction && text && text.trim().length > 1) {
     // (the school free-text block). Without registering them here, that typed text
     // was hijacked into ⚡ Request Sellers instead of searching schools.
     "school_search_city", "school_search_results",
+    // ── School-admin text-input states ───────────────────────────────────────
+    // When a school owner/clerk types their fees, email, website, reg link, etc.,
+    // biz.sessionState is one of these. Without registering them here, that typed
+    // text was hijacked by the Request Sellers catch-all → the "Which city?" prompt.
+    "school_admin_update_fees", "school_admin_update_reg_link",
+    "school_admin_update_email", "school_admin_update_website",
+    "school_admin_awaiting_brochure", "school_parent_enquiry",
     // Stock Control multi-step states
     "stock_add_name", "stock_add_unit", "stock_add_opening", "stock_add_cost",
     "stock_add_sell", "stock_add_reorder", "stock_add_aliases", "stock_add_pick", "stock_add_qty",
