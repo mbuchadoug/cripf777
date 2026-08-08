@@ -3565,18 +3565,12 @@ export async function handleIncomingMessage({ from, action, hasImage = false, im
   }
 
   // ── NEW CONTACT TRACKING ─────────────────────────────────────────────────
-  // Upsert on first contact. { new: false } returns the PRIOR doc, so a null
-  // result means this is the user's very first message ever - used further down
-  // to welcome brand-new users with the menu instead of dropping them mid-flow.
-  let _isFirstEverMessage = false;
-  try {
-    const _priorContact = await PhoneContact.findOneAndUpdate(
-      { phone },
-      { $setOnInsert: { phone, firstMessage: String(action || "").slice(0, 200), channel: "whatsapp" } },
-      { upsert: true, new: false }
-    );
-    _isFirstEverMessage = !_priorContact;
-  } catch (err) { console.error("[PHONE CONTACT TRACK]", err.message); }
+  // Fire-and-forget: only writes on first contact, never overwrites.
+  PhoneContact.findOneAndUpdate(
+    { phone },
+    { $setOnInsert: { phone, firstMessage: String(action || "").slice(0, 200), channel: "whatsapp" } },
+    { upsert: true, new: false }
+  ).catch(err => console.error("[PHONE CONTACT TRACK]", err.message));
   // ─────────────────────────────────────────────────────────────────────────
 
   const text = typeof action === "string" ? action.trim() : "";
@@ -6520,30 +6514,6 @@ await UserSession.findOneAndUpdate(
 
 if (al === "my requests" || al === "buyer_my_requests") {
     return handleIncomingMessage({ from, action: "buyer_my_requests" });
-  }
-
-  // ── FIRST-EVER MESSAGE: welcome + menu, not the "which city?" prompt ────────
-  // A brand-new user (no business yet) whose first-ever message is a real request
-  // - "electrician", "I'm looking for a school", etc. - used to be funneled
-  // straight into the buyer-request location step ("Where do you need these
-  // items?") with zero context, which reads like an error. Orient them instead
-  // with a short welcome and the navigable main menu. Escape words, help, deep
-  // links (zq:/apply:/zqg_) and button actions are handled above/earlier and
-  // never reach here; returning users are unaffected (_isFirstEverMessage is
-  // only ever true on the very first message a phone sends).
-  if (_isFirstEverMessage && !biz && !isMetaAction &&
-      text.length > 1 &&
-      !/^(zq:|apply:|zqg_|zqsg_|view_and_quote)/i.test(text)) {
-    await sendText(from,
-      `👋 *Welcome to ZimQuote!*\n\n` +
-      `Zimbabwe's WhatsApp marketplace. Here's what I can help with:\n` +
-      `• 🔍 Find products & services - electricians, plumbers, suppliers…\n` +
-      `• 🏫 Find a school\n` +
-      `• ⚡ Request quotes from sellers\n` +
-      `• 🏪 List your own business\n\n` +
-      `Pick an option below to get started 👇`
-    );
-    return sendMainMenu(from);
   }
 
   const requestMode = flowSess?.tempData?.buyerRequestMode || pendingBuyerRequest?.requestType || "simple";
