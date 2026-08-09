@@ -2,27 +2,11 @@ import { Router } from "express";
 import { ensureAuth } from "../middleware/authGuard.js";
 import OrgMembership from "../models/orgMembership.js";
 import Organization from "../models/organization.js";
-import User from "../models/user.js";
 import { buildStudentDashboardData } from "../services/studentDashboardData.js";
 import { getStudentKnowledgeMap } from "../services/topicMasteryTracker.js";
 
 const router = Router();
 const HOME_ORG_SLUG = "cripfcnt-home";
-
-// Time-aware active-subscription check. Identical to parent.js so a student's
-// unlock state on the web matches exactly what the parent sees for that child
-// (and what the mobile app enforces).
-function isSubscriptionActive(user) {
-  if (!user) return false;
-  if (user.role === "private_teacher") {
-    if (user.teacherSubscriptionStatus !== "paid") return false;
-    if (!user.teacherSubscriptionExpiresAt) return false;
-    return new Date() < new Date(user.teacherSubscriptionExpiresAt);
-  }
-  if (user.subscriptionStatus !== "paid") return false;
-  if (!user.subscriptionExpiresAt) return false;
-  return new Date() < new Date(user.subscriptionExpiresAt);
-}
 
 // routes/student.js
 router.get("/student/dashboard", ensureAuth, async (req, res) => {
@@ -50,30 +34,12 @@ if (!data.quizzesBySubject || Object.keys(data.quizzesBySubject).length === 0) {
   console.warn("[StudentDashboard] No subject grouping found for student", req.user._id);
 }
 
-  // Inherit paid status from the parent who pays. Managed students have no
-  // subscription of their own, so their unlock state comes from the parent -
-  // exactly like the mobile app and the parent-viewing-child route. A self-
-  // study student (no parentUserId) falls back to their own subscription.
-  let parentIsPaid = false;
-  try {
-    if (req.user.parentUserId) {
-      const payer = await User.findById(req.user.parentUserId)
-        .select("role subscriptionStatus subscriptionPlan subscriptionExpiresAt teacherSubscriptionStatus teacherSubscriptionPlan teacherSubscriptionExpiresAt")
-        .lean();
-      parentIsPaid = payer ? isSubscriptionActive(payer) : false;
-    } else {
-      parentIsPaid = isSubscriptionActive(req.user);
-    }
-  } catch (e) {
-    console.warn("[StudentDashboard] paid-status resolve failed:", e.message);
-  }
-
   return res.render("parent/child_quizzes", {
     user: req.user,
     child: req.user,
     org,
     ...data,
-    parentIsPaid,
+    parentIsPaid: true,
     isStudentView: true
   });
 });
@@ -327,4 +293,4 @@ router.get("/student/live-class/:id/join", ensureAuth, async (req, res) => {
   }
 });
 
-export default router;s
+export default router;
