@@ -294,13 +294,20 @@ router.post("/school", async (req, res) => {
     }
 
     // Match any of: username, studentId, teacherId, adminId, email
+    const raw   = String(loginId).trim();
+    const lower = raw.toLowerCase();
+
+    // Match any of: username | email (both stored lowercase) OR studentId |
+    // teacherId | adminId (case-sensitive). This is the SAME identifier set the
+    // mobile app matches, so a username + password created on the phone - whether
+    // for a parent OR a child - signs in here unchanged.
     const user = await User.findOne({
       $or: [
-        { username:  loginId },
-        { studentId: loginId },
-        { teacherId: loginId },
-        { adminId:   loginId },
-        { email:     loginId.toLowerCase() }
+        { username:  lower },
+        { email:     lower },
+        { studentId: raw },
+        { teacherId: raw },
+        { adminId:   raw }
       ]
     });
 
@@ -321,47 +328,83 @@ router.post("/school", async (req, res) => {
         console.error(err);
         return res.render("auth/school_login", { layout: false, error: "Login failed" });
       }
+      // ---- Route by ROLE first ----
+      // Home-learning accounts created on the mobile app (a parent and the
+      // children they add) may have NO OrgMembership row, so we must not gate
+      // every login on one. Only real school staff need an org to land in.
+
+      // STUDENT - school-enrolled OR a home-learning child created on mobile.
+      if (user.role === "student") {
+        // Self-heal: mobile-created children have `organization` set but no
+        // OrgMembership row (web-created children get one in parent.js). Create
+        // it now so the student dashboard + quiz flows behave identically for
+        // both. Wrapped so a failure here can never block a valid login.
+        try {
+          const has = await OrgMembership.findOne({ user: user._id }).lean();
+          if (!has) {
+            let orgId = user.organization || null;
+            if (!orgId) {
+              const homeOrg = await Organization.findOne({ slug: "cripfcnt-home" }).lean();
+              orgId = homeOrg?._id || null;
+            }
+            if (orgId) {
+              await OrgMembership.create({
+                org: orgId,
+                user: user._id,
+                role: "student",
+                joinedAt: new Date()
+              });
+              console.log("[/auth/school] self-healed membership for mobile student", String(user._id));
+            }
+          }
+        } catch (e) {
+          console.warn("[/auth/school] student membership self-heal failed:", e.message);
+        }
+
+        console.log("[/auth/school] student login -> /student/dashboard", {
+          userId: String(user._id),
+          username: user.username
+        });
+        return res.redirect("/student/dashboard");
+      }
+
+      // PARENT - home-learning. Always the parent dashboard, never an org page.
+      if (user.role === "parent") {
+        console.log("[/auth/school] parent login -> /parent/dashboard", {
+          userId: String(user._id),
+          username: user.username
+        });
+        return res.redirect("/parent/dashboard");
+      }
+
+      // PRIVATE TEACHER - home-learning. Setup first if the profile is incomplete.
+      if (user.role === "private_teacher") {
+        const td = await User.findById(user._id)
+          .select("needsProfileSetup schoolLevelsEnabled")
+          .lean();
+
+        if (td?.needsProfileSetup || !td?.schoolLevelsEnabled?.length) {
+          console.log("[/auth/school] private teacher -> /teacher/setup");
+          return res.redirect("/teacher/setup");
+        }
+        console.log("[/auth/school] private teacher -> /teacher/dashboard");
+        return res.redirect("/teacher/dashboard");
+      }
+
+      // SCHOOL STAFF - employee / org_admin / super_admin / readonly_admin.
+      // These roles DO need an organization to land in.
       const membership = await OrgMembership.findOne({ user: user._id }).populate("org").lean();
-     if (!membership || !membership.org?.slug) {
-  return res.render("auth/school_login", { layout: false, error: "No school assigned to this account" });
-}
-if (user.role === "student") {
-  console.log("[/auth/school] student login -> /student/dashboard", {
-    userId: String(user._id),
-    username: user.username
-  });
-  return res.redirect("/student/dashboard");
-}
+      if (!membership || !membership.org?.slug) {
+        return res.render("auth/school_login", { layout: false, error: "No school assigned to this account" });
+      }
 
-if (user.role === "private_teacher") {
-  const td = await User.findById(user._id)
-    .select("needsProfileSetup schoolLevelsEnabled")
-    .lean();
-
-  console.log("[/auth/school] private teacher login", {
-    userId: String(user._id),
-    username: user.username,
-    needsProfileSetup: !!td?.needsProfileSetup,
-    schoolLevelsEnabled: td?.schoolLevelsEnabled || []
-  });
-
-  if (td?.needsProfileSetup || !td?.schoolLevelsEnabled?.length) {
-    console.log("[/auth/school] redirect -> /teacher/setup");
-    return res.redirect("/teacher/setup");
-  }
-
-  console.log("[/auth/school] redirect -> /teacher/dashboard");
-  return res.redirect("/teacher/dashboard");
-}
-
-console.log("[/auth/school] fallback org redirect", {
-  userId: String(user._id),
-  username: user.username,
-  role: user.role,
-  orgSlug: membership.org.slug
-});
-
-return res.redirect(`/org/${membership.org.slug}/dashboard`);
+      console.log("[/auth/school] staff org redirect", {
+        userId: String(user._id),
+        username: user.username,
+        role: user.role,
+        orgSlug: membership.org.slug
+      });
+      return res.redirect(`/org/${membership.org.slug}/dashboard`);
     });
   } catch (e) {
     console.error("[school login]", e);
