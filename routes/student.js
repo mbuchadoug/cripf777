@@ -327,4 +327,4 @@ router.get("/student/live-class/:id/join", ensureAuth, async (req, res) => {
   }
 });
 
-export default router;s
+export default router;
