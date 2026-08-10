@@ -401,11 +401,18 @@ router.post("/users/:id/activate", ensureAuth, ensureAdmin, async (req, res) => 
 
     if (cfg.role === "teacher") {
       user.teacherSubscriptionPlan = cfg.plan;
-      user.teacherSubscriptionStatus = "active";
+      user.teacherSubscriptionStatus = "paid"; // was "active" - not a valid enum value (trial|paid)
+      user.teacherSubscriptionExpiresAt = expiresAt;
+      user.teacherPaidAt = now;
       user.maxChildren = cfg.maxChildren;
       if (cfg.aiQuizCredits) user.aiQuizCredits = (user.aiQuizCredits || 0) + cfg.aiQuizCredits;
     } else {
+      // Flip trial -> paid. Web gates access on subscriptionStatus === "paid";
+      // setting only the plan (as before) left the account looking paid on
+      // mobile but unpaid on the web, so quizzes stayed locked.
+      user.subscriptionStatus = "paid";
       user.subscriptionPlan = cfg.plan;
+      user.paidAt = now;
       user.maxChildren = cfg.maxChildren;
     }
     user.subscriptionExpiresAt = expiresAt;
