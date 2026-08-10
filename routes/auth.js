@@ -323,6 +323,36 @@ router.post("/school", async (req, res) => {
     user.lastLogin = new Date();
     await user.save();
 
+    // ---- DIAGNOSTIC (temporary) ----
+    // Shows exactly which account matched the typed credentials, and - when it
+    // is a parent/teacher - the child usernames that DO reach the student dash.
+    // Remove this block once the correct child username is confirmed.
+    try {
+      console.log("[/auth/school] MATCHED ACCOUNT", {
+        typed: raw,
+        _id: String(user._id),
+        role: user.role,
+        username: user.username || null,
+        parentUserId: user.parentUserId ? String(user.parentUserId) : null,
+        hasPassword: !!user.passwordHash
+      });
+      if (user.role === "parent" || user.role === "private_teacher") {
+        const kids = await User.find({ parentUserId: user._id, role: "student" })
+          .select("firstName lastName username grade passwordHash")
+          .lean();
+        console.log(`[/auth/school] ^ this is a ${user.role}; ${kids.length} child login(s):`);
+        for (const k of kids) {
+          console.log("   child:", [k.firstName, k.lastName].filter(Boolean).join(" "),
+            "| username:", k.username || "(none)",
+            "| canWebLogin:", !!k.passwordHash,
+            "| grade:", k.grade == null ? "-" : k.grade);
+        }
+        console.log("   >> To reach the STUDENT dashboard, log in with a child username above that shows canWebLogin:true (NOT this parent account).");
+      }
+    } catch (e) {
+      console.warn("[/auth/school] diagnostic failed:", e.message);
+    }
+
     req.login(user, async err => {
       if (err) {
         console.error(err);
