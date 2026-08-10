@@ -66,6 +66,12 @@ function decodeState(state) {
 
 router.get("/parent", async (req, res) => {
   if (req.user) {
+    // NEVER convert a managed student/child into a parent. A signed-in student
+    // who lands here (e.g. clicks a "Parent" link) goes to their own dashboard;
+    // their role is left untouched.
+    if (req.user.role === "student" || req.user.parentUserId) {
+      return res.redirect("/student/dashboard");
+    }
     if (!["parent", "private_teacher"].includes(req.user.role)) {
       await User.updateOne(
         { _id: req.user._id },
@@ -82,6 +88,11 @@ router.get("/parent", async (req, res) => {
 
 router.get("/teacher", async (req, res) => {
   if (req.user) {
+    // NEVER convert a managed student/child into a private teacher. Send a
+    // signed-in student to their own dashboard instead of overwriting the role.
+    if (req.user.role === "student" || req.user.parentUserId) {
+      return res.redirect("/student/dashboard");
+    }
     if (req.user.role !== "private_teacher") {
       await User.updateOne(
         { _id: req.user._id },
@@ -190,7 +201,12 @@ router.get(
       } else {
         const memberships = await OrgMembership.find({ user: req.user._id }).populate("org").lean();
 
-        if (signupSource === "private_teacher" && req.user.role !== "private_teacher") {
+        const isManagedStudent = req.user.role === "student" || !!req.user.parentUserId;
+
+        if (isManagedStudent) {
+          // A student/child is never re-roled by a signup source.
+          redirectPath = "/student/dashboard";
+        } else if (signupSource === "private_teacher" && req.user.role !== "private_teacher") {
           await User.updateOne({ _id: req.user._id }, { $set: { role: "private_teacher", needsProfileSetup: true, consumerEnabled: true } });
           req.user.role = "private_teacher";
           redirectPath = "/teacher/setup";
