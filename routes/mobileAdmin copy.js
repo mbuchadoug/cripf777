@@ -165,18 +165,11 @@ router.post("/admin/mobile/users/:id/activate", ensureAuth, ensureAdminEmails, a
 
     if (cfg.role === "teacher") {
       user.teacherSubscriptionPlan = cfg.plan; // starter | professional
-      user.teacherSubscriptionStatus = "paid"; // was "active" - NOT a valid enum value (trial|paid)
-      user.teacherSubscriptionExpiresAt = expiresAt;
-      user.teacherPaidAt = now;
+      user.teacherSubscriptionStatus = "active";
       user.maxChildren = cfg.maxChildren;
       if (cfg.aiQuizCredits) user.aiQuizCredits = (user.aiQuizCredits || 0) + cfg.aiQuizCredits;
     } else {
-      // The missing flip. Web gates access on subscriptionStatus === "paid";
-      // without this the account looks paid on mobile (which keys off the plan)
-      // but unpaid on the web. Set both so the two platforms agree.
-      user.subscriptionStatus = "paid";
       user.subscriptionPlan = cfg.plan; // silver | gold
-      user.paidAt = now;
       user.maxChildren = cfg.maxChildren;
     }
     user.subscriptionExpiresAt = expiresAt;
