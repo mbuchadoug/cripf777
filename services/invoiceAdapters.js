@@ -18,6 +18,15 @@ import Client      from "../models/client.js";
 import { sendList, sendText } from "./metaSender.js";
 import { preserveSessionCore, sendAddItemPrompt } from "./invoiceHelpers.js";
 
+// ─── Guard: WhatsApp list-row titles must be ≤ 24 characters ──────────────────
+// A saved client whose name is longer than 24 chars would make Meta reject the
+// entire list message with HTTP 400. Clamp so long names never break selection.
+function clampRowTitle(title, max = 24) {
+  const str   = String(title == null ? "" : title);
+  const chars = Array.from(str);
+  return chars.length <= max ? str : chars.slice(0, max - 1).join("") + "…";
+}
+
 // ─── Internal: walk-in / generic client ──────────────────────────────────────
 
 async function getOrCreateGenericClient(businessId) {
@@ -100,7 +109,7 @@ export async function handleChooseSavedClient(to) {
   return sendList(
     to,
     "Select client",
-    clients.map(c => ({ id: `client_${c._id}`, title: c.name || c.phone }))
+    clients.map(c => ({ id: `client_${c._id}`, title: clampRowTitle(c.name || c.phone) }))
   );
 }
 
@@ -119,6 +128,7 @@ export async function handleNewClientFromInvoice(to) {
   const core = preserveSessionCore(biz);
   biz.sessionState = "creating_invoice_new_client";
   biz.sessionData  = { ...core };
+  biz.markModified("sessionData");
   await biz.save();
 
   return sendText(to, "Enter client name:");

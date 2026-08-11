@@ -273,13 +273,24 @@ export function preserveSessionCore(biz) {
   };
 }
 
+// ─── 10a. Guard: WhatsApp reply-button titles must be ≤ 20 characters ─────────
+// Meta rejects the ENTIRE message with HTTP 400 if any reply-button title is
+// longer than 20 characters (emoji included). Clamp defensively so an over-long
+// title can never break a document flow again. Array.from() splits by code
+// point, so emoji (surrogate pairs) stay intact instead of being cut in half.
+export function clampButtonTitle(title, max = 20) {
+  const str   = String(title == null ? "" : title);
+  const chars = Array.from(str);
+  return chars.length <= max ? str : chars.slice(0, max).join("");
+}
+
 // ─── 10. Send "add item" prompt ───────────────────────────────────────────────
 export async function sendAddItemPrompt(to, biz) {
   return sendButtons(to, {
     text: buildQuickAddHelpText(biz, biz?.sessionData?.docType),
     buttons: [
-      { id: "inv_item_catalogue", title: "📦 Pick from catalogue" },
-      { id: "inv_cancel",         title: "❌ Cancel" }
+      { id: "inv_item_catalogue", title: clampButtonTitle("📦 Catalogue") },
+      { id: "inv_cancel",         title: clampButtonTitle("❌ Cancel") }
     ]
   });
 }
