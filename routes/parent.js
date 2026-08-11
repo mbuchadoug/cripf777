@@ -21,6 +21,16 @@ const router = Router();
 
 const HOME_ORG_SLUG = "cripfcnt-home";
 
+// Normalise grade: accepts a number or numeric string; returns null only when
+// truly unset. Prevents a stored "3" or a stray 0 from reading as "not set".
+function resolveGrade(u) {
+  if (!u) return null;
+  const g = u.grade;
+  if (g == null || g === "") return null;
+  const n = Number(g);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
 // ==============================
 // 💳 PLAN CONFIG
 // ==============================
@@ -885,13 +895,15 @@ router.get(
         return res.status(404).send("Knowledge map only available for home school students");
       }
 
-      if (!child.grade) {
+      const grade = resolveGrade(child);
+      if (grade == null) {
         return res.render("parent/knowledge_map", {
           user: viewer,
           child,
           error: viewer.role === "student"
-            ? "Grade not set. Please contact your teacher."
-            : "Child grade not set. Please update child profile.",
+            ? "Your grade hasn't been set yet. Please ask your parent or teacher to add it to your profile."
+            : "This child's grade isn't set yet. Add it and the knowledge map will appear.",
+          fixUrl: viewer.role === "student" ? null : `/parent/children/${child._id}/edit`,
           backUrl: viewer.role === "student"
             ? "/student/dashboard"
             : `/parent/children/${child._id}/quizzes`,
@@ -904,7 +916,7 @@ router.get(
       const knowledgeMaps = {};
       for (const subject of subjects) {
         try {
-          const map = await getStudentKnowledgeMap(child._id, subject, child.grade);
+          const map = await getStudentKnowledgeMap(child._id, subject, grade);
           if (map?.stats?.totalTopics > 0) knowledgeMaps[subject] = map;
         } catch (err) {
           console.error(`[KnowledgeMap] Error getting ${subject}:`, err);
@@ -928,5 +940,22 @@ router.get(
     }
   }
 );
+
+// ────────────────────────────────────────────────────────────
+// ADMIN: list students missing a grade (read-only) so you can fix them fast.
+// GET /admin/students-missing-grade
+// ────────────────────────────────────────────────────────────
+router.get("/admin/students-missing-grade", ensureAuth, async (req, res) => {
+  const admins = (process.env.ADMIN_EMAILS || "").split(",").map(e => e.trim().toLowerCase()).filter(Boolean);
+  if (!admins.includes((req.user.email || "").toLowerCase())) return res.status(403).send("Admins only");
+  const missing = await User.find({
+    role: "student",
+    $or: [{ grade: { $exists: false } }, { grade: null }, { grade: "" }, { grade: 0 }]
+  }).select("firstName lastName studentId parentUserId grade").lean();
+  const rows = missing.map(s =>
+    `${[s.firstName, s.lastName].filter(Boolean).join(" ")} | ${s._id} | studentId:${s.studentId || "-"} | parent:${s.parentUserId || "-"}`
+  ).join("\n");
+  res.type("text/plain").send(`Students missing grade: ${missing.length}\n\n${rows}`);
+});
 
 export default router;

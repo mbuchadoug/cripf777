@@ -64,6 +64,23 @@ function decodeState(state) {
 // PARENT / TEACHER / ARENA signup (unchanged)
 // ─────────────────────────────────────────────────────────────────────
 
+// ────────────────────────────────────────────────────────────
+// PARENT LOGIN PAGE  ← homepage "Parents & Guardians" points here (/auth/login)
+// Renders the chooser page (email / code / Google) instead of auto-Google.
+// ────────────────────────────────────────────────────────────
+router.get("/login", async (req, res) => {
+  if (req.user) {
+    if (req.user.role === "student" || req.user.parentUserId) return res.redirect("/student/dashboard");
+    if (req.user.role === "private_teacher") {
+      const td = await User.findById(req.user._id).select("needsProfileSetup schoolLevelsEnabled").lean();
+      return res.redirect((td?.needsProfileSetup || !td?.schoolLevelsEnabled?.length) ? "/teacher/setup" : "/teacher/dashboard");
+    }
+    return res.redirect("/parent/dashboard");
+  }
+  // If your view lives elsewhere, change this render path to match.
+  return res.render("auth/parent_login", { layout: false });
+});
+
 router.get("/parent", async (req, res) => {
   if (req.user) {
     // NEVER convert a managed student/child into a parent. A signed-in student
@@ -81,6 +98,12 @@ router.get("/parent", async (req, res) => {
     }
     return res.redirect("/parent/dashboard");
   }
+
+  // ✅ Only launch Google when the page's "Continue with Google" button asks for it
+  //    (href="/auth/parent?google=1"). A plain visit shows the parent login page.
+  const wantsGoogle = req.query.google === "1" || req.query.provider === "google";
+  if (!wantsGoogle) return res.render("auth/parent_login", { layout: false });
+
   req.session.signupSource = "parent";
   req.session.returnTo = "/parent/dashboard";
   req.session.save(() => res.redirect("/auth/google"));
@@ -604,6 +627,115 @@ router.post("/admin/create-parent", ensureAuth, async (req, res) => {
     role: "parent", accountType: "parent", consumerEnabled: true, createdAt: new Date()
   });
   return res.json({ success: true, parentId: parent._id });
+});
+
+// ────────────────────────────────────────────────────────────
+// EMAIL LOGIN API  (used by the auth/parent_login page)
+// Session-based one-time codes - no new models. Wire sendLoginCode() to your real
+// mailer; until then non-prod returns the code as devCode (the page displays it).
+// ────────────────────────────────────────────────────────────
+function genCode() { return String(Math.floor(100000 + Math.random() * 900000)); }
+
+async function sendLoginCode(email, code, purpose) {
+  console.log(`[auth/email] code for ${email} (${purpose}): ${code}`);
+  const isProd = process.env.NODE_ENV === "production";
+  return { devCode: isProd ? undefined : code }; // TODO: replace with SMTP/Gmail send
+}
+
+function redirectForUser(user) {
+  if (user.role === "student" || user.parentUserId) return "/student/dashboard";
+  if (user.role === "private_teacher") return "/teacher/dashboard";
+  return "/parent/dashboard";
+}
+
+function readEmailAuth(req) {
+  const s = req.session?.emailAuth;
+  if (!s || !s.expiresAt || Date.now() > s.expiresAt) return null;
+  return s;
+}
+
+router.post("/email/check", async (req, res) => {
+  try {
+    const email = String(req.body?.email || "").trim().toLowerCase();
+    if (!email) return res.status(400).json({ error: "Email required" });
+    const user = await User.findOne({ email }).select("passwordHash").lean();
+    return res.json({ exists: !!user, hasPassword: !!user?.passwordHash });
+  } catch (e) { console.error("[auth/email/check]", e); return res.status(500).json({ error: "Something went wrong" }); }
+});
+
+router.post("/email/login-password", async (req, res) => {
+  try {
+    const email = String(req.body?.email || "").trim().toLowerCase();
+    const password = String(req.body?.password || "");
+    if (!email || !password) return res.status(400).json({ error: "Email and password required" });
+    const user = await User.findOne({ email });
+    if (!user || !user.passwordHash) return res.status(401).json({ error: "Wrong email or password" });
+    if (!(await user.verifyPassword(password))) return res.status(401).json({ error: "Wrong email or password" });
+    user.lastLogin = new Date(); await user.save();
+    req.login(user, (err) => err ? res.status(500).json({ error: "Login failed" }) : res.json({ redirect: redirectForUser(user) }));
+  } catch (e) { console.error("[auth/email/login-password]", e); return res.status(500).json({ error: "Login failed" }); }
+});
+
+router.post("/email/request-code", async (req, res) => {
+  try {
+    const email = String(req.body?.email || "").trim().toLowerCase();
+    const purpose = req.body?.purpose === "set_password" ? "set_password" : "signin";
+    if (!email) return res.status(400).json({ error: "Email required" });
+    const user = await User.findOne({ email }).select("_id").lean();
+    if (!user) return res.status(404).json({ error: "We couldn't find an account with that email." });
+    const code = genCode();
+    req.session.emailAuth = { email, code, purpose, userId: String(user._id), expiresAt: Date.now() + 10 * 60 * 1000 };
+    const { devCode } = await sendLoginCode(email, code, purpose);
+    req.session.save(() => res.json({ ok: true, ...(devCode ? { devCode } : {}) }));
+  } catch (e) { console.error("[auth/email/request-code]", e); return res.status(500).json({ error: "Could not send a code" }); }
+});
+
+router.post("/email/verify-code", async (req, res) => {
+  try {
+    const email = String(req.body?.email || "").trim().toLowerCase();
+    const code = String(req.body?.code || "").trim();
+    const s = readEmailAuth(req);
+    if (!s || s.email !== email) return res.status(400).json({ error: "Your code has expired. Request a new one." });
+    if (s.code !== code) return res.status(400).json({ error: "That code is not right." });
+    const user = await User.findById(s.userId);
+    if (!user) return res.status(404).json({ error: "Account not found" });
+    user.lastLogin = new Date(); await user.save();
+    req.login(user, (err) => {
+      if (err) return res.status(500).json({ error: "Login failed" });
+      if (!user.passwordHash) { req.session.emailAuth = { ...s, verified: true }; return res.json({ needsPassword: true }); }
+      delete req.session.emailAuth;
+      return res.json({ redirect: redirectForUser(user) });
+    });
+  } catch (e) { console.error("[auth/email/verify-code]", e); return res.status(500).json({ error: "Could not verify code" }); }
+});
+
+router.post("/email/set-password", ensureAuth, async (req, res) => {
+  try {
+    const password = String(req.body?.password || "");
+    if (password.length < 6) return res.status(400).json({ error: "Use at least 6 characters" });
+    const user = await User.findById(req.user._id);
+    if (!user) return res.status(404).json({ error: "User not found" });
+    await user.setPassword(password); await user.save();
+    if (req.session?.emailAuth) delete req.session.emailAuth;
+    return res.json({ redirect: redirectForUser(user) });
+  } catch (e) { console.error("[auth/email/set-password]", e); return res.status(500).json({ error: "Could not save your password" }); }
+});
+
+router.post("/email/reset-password", async (req, res) => {
+  try {
+    const email = String(req.body?.email || "").trim().toLowerCase();
+    const code = String(req.body?.code || "").trim();
+    const password = String(req.body?.password || "");
+    if (password.length < 6) return res.status(400).json({ error: "Use at least 6 characters" });
+    const s = readEmailAuth(req);
+    if (!s || s.email !== email) return res.status(400).json({ error: "Your code has expired. Request a new one." });
+    if (s.code !== code) return res.status(400).json({ error: "That code is not right." });
+    const user = await User.findById(s.userId);
+    if (!user) return res.status(404).json({ error: "Account not found" });
+    await user.setPassword(password); user.lastLogin = new Date(); await user.save();
+    delete req.session.emailAuth;
+    req.login(user, (err) => err ? res.status(500).json({ error: "Login failed" }) : res.json({ redirect: redirectForUser(user) }));
+  } catch (e) { console.error("[auth/email/reset-password]", e); return res.status(500).json({ error: "Could not reset your password" }); }
 });
 
 export default router;

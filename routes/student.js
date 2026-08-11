@@ -9,6 +9,16 @@ import { getStudentKnowledgeMap } from "../services/topicMasteryTracker.js";
 const router = Router();
 const HOME_ORG_SLUG = "cripfcnt-home";
 
+// Normalise grade: accepts a number or numeric string; returns null only when
+// truly unset. Prevents a stored "3" or a stray 0 from reading as "not set".
+function resolveGrade(u) {
+  if (!u) return null;
+  const g = u.grade;
+  if (g == null || g === "") return null;
+  const n = Number(g);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
 // Time-aware active-subscription check. Identical to parent.js so a student's
 // unlock state on the web matches exactly what the parent sees for that child
 // (and what the mobile app enforces).
@@ -100,11 +110,13 @@ router.get("/student/knowledge-map", ensureAuth, async (req, res) => {
       return res.status(404).send("Knowledge map only available for home school students");
     }
 
-    if (!req.user.grade) {
+    const grade = resolveGrade(req.user);
+    if (grade == null) {
       return res.render("parent/knowledge_map", {
         user: req.user,
         child: req.user,
-        error: "Grade not set. Please contact your teacher.",
+        error: "Your grade hasn't been set yet. Please ask your parent or teacher to add it to your profile.",
+        fixUrl: null,
         backUrl: "/student/dashboard",
         isStudentView: true
       });
@@ -115,7 +127,7 @@ router.get("/student/knowledge-map", ensureAuth, async (req, res) => {
     const knowledgeMaps = {};
     for (const subject of subjects) {
       try {
-        const map = await getStudentKnowledgeMap(req.user._id, subject, req.user.grade);
+        const map = await getStudentKnowledgeMap(req.user._id, subject, grade);
         if (map?.stats?.totalTopics > 0) knowledgeMaps[subject] = map;
       } catch (err) {
         console.error(`[StudentKnowledgeMap] Error getting ${subject}:`, err);
