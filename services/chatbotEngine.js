@@ -9690,10 +9690,10 @@ Page ${page + 1} of ${totalPages} · ${allProducts.length} item${allProducts.len
 ${numbered}
 
 ─────────────────
-*Quick-pick: type number × quantity*
-_One item:_  3x2
-_Multiple:_  3x2, 7x1, 12x5
-_Add all prices automatically_`
+*Pick by number - just type the number(s):*
+_One each:_  3, 7, 12
+_With quantity:_  3x2  (item 3, qty 2)
+_Prices are added automatically_`
     );
 
     // Navigation + action buttons
@@ -10265,7 +10265,7 @@ if (a === "expense_generate_receipt") {
     biz.sessionData.expectingQty      = false;
     biz.sessionData.pendingCustomNames = [];
     await saveBizSafe(biz);
-    return sendAddItemPrompt(from);
+    return sendAddItemPrompt(from, biz);
   }
 
   if (a === "inv_custom_confirm") {

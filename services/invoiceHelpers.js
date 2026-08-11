@@ -119,12 +119,12 @@ export function parsePickEntries(text, catalogue) {
   const errors = [];
 
   for (const entry of entries) {
-    // Accepts: "3x2" | "3 x 2" | "3x2 hours" | "3 x 2 jobs"
-    const match = entry.match(/^(\d+)\s*[xX×]\s*(\d+(?:\.\d+)?)(?:\s+(\w+))?$/);
-    if (!match) { errors.push(`"${entry}" - use _NxQTY_ format`); continue; }
+    // Accepts: "3" (qty 1) | "3x2" | "3 x 2" | "3x2 hours" | "3 x 2 jobs"
+    const match = entry.match(/^(\d+)(?:\s*[xX×]\s*(\d+(?:\.\d+)?))?(?:\s+(\w+))?$/);
+    if (!match) { errors.push(`"${entry}" - use a number like _3_ or _3x2_`); continue; }
 
     const itemNum   = parseInt(match[1], 10);
-    const qty       = parseFloat(match[2]);
+    const qty       = match[2] !== undefined ? parseFloat(match[2]) : 1;
     const rateLabel = match[3] ? match[3].toLowerCase() : null;
 
     if (itemNum < 1 || itemNum > catalogue.length) {
@@ -274,12 +274,12 @@ export function preserveSessionCore(biz) {
 }
 
 // ─── 10. Send "add item" prompt ───────────────────────────────────────────────
-export async function sendAddItemPrompt(to) {
+export async function sendAddItemPrompt(to, biz) {
   return sendButtons(to, {
-    text: "➕ *How would you like to add an item?*",
+    text: buildQuickAddHelpText(biz, biz?.sessionData?.docType),
     buttons: [
-      { id: "inv_item_catalogue", title: "📦 Catalogue" },
-      { id: "inv_item_custom",    title: "✍️ Custom item" }
+      { id: "inv_item_catalogue", title: "📦 Pick from catalogue" },
+      { id: "inv_cancel",         title: "❌ Cancel" }
     ]
   });
 }
@@ -449,5 +449,95 @@ export function buildFastAddHelpText(biz) {
     `• No *x qty*? It defaults to 1.\n` +
     `• Service rate: *plumbing @ 50/hour x 3*\n\n` +
     `_Amounts are in ${cur}. Type *cancel* to stop._`
+  );
+}
+
+// ─── 16. Quick item parser (intuitive "name qty x price" grammar) ─────────────
+/**
+ * The simplified, average-person format. Items are separated by COMMAS (or new
+ * lines / ";"). Each item is read as:
+ *
+ *     name  qty x price            e.g. "Cement 10 x 12"      → 10 @ 12
+ *     name  price                  e.g. "Transport 20"        → 1  @ 20
+ *     name  qty x price/unit       e.g. "Labour 3 x 50/hour"  → service, 3 units
+ *     name  price/unit             e.g. "Consulting 200/day"  → service, 1 unit
+ *     name  x price                e.g. "Sofa x 350"          → 1  @ 350
+ *     name                         e.g. "Delivery"            → unpriced (ask later)
+ *
+ * Rule of thumb: the LAST number is the price; a "x" before it makes the number
+ * before it the quantity. Everything else is the item name (so "2x4 timber 30 x 9"
+ * still reads name="2x4 timber", qty=30, price=9).
+ *
+ * Returns { items, errors }, items shaped like parseFastItemLines output.
+ */
+export function parseQuickItems(text) {
+  const raw   = String(text || "");
+  const parts = /[\n;]/.test(raw) ? raw.split(/[\n;]+/) : raw.split(",");
+  const items  = [];
+  const errors = [];
+
+  for (const part of parts) {
+    const seg = part.trim().replace(/[,;]+$/, "").trim();
+    if (!seg) continue;
+
+    let name = seg, qty = 1, unit = 0, rateUnit = null, hadPrice = false, m;
+
+    if ((m = seg.match(/^(.+?)\s+(\d+(?:\.\d+)?)\s*[x×*]\s*(\d+(?:\.\d+)?)\s*\/\s*([a-zA-Z]+)\s*$/i))) {
+      // name qty x price/unit  (service with quantity)
+      name = m[1]; qty = parseFloat(m[2]); unit = parseFloat(m[3]); rateUnit = m[4].toLowerCase(); hadPrice = true;
+    } else if ((m = seg.match(/^(.+?)\s+(\d+(?:\.\d+)?)\s*[x×*]\s*(\d+(?:\.\d+)?)\s*$/i))) {
+      // name qty x price  (product)
+      name = m[1]; qty = parseFloat(m[2]); unit = parseFloat(m[3]); hadPrice = true;
+    } else if ((m = seg.match(/^(.+?)\s+(\d+(?:\.\d+)?)\s*\/\s*([a-zA-Z]+)\s*$/i))) {
+      // name price/unit  (service, qty 1)
+      name = m[1]; qty = 1; unit = parseFloat(m[2]); rateUnit = m[3].toLowerCase(); hadPrice = true;
+    } else if ((m = seg.match(/^(.+?)\s+[x×*]\s*(\d+(?:\.\d+)?)\s*$/i))) {
+      // name x price  (qty 1)
+      name = m[1]; qty = 1; unit = parseFloat(m[2]); hadPrice = true;
+    } else if ((m = seg.match(/^(.+?)\s+(\d+(?:\.\d+)?)\s*$/))) {
+      // name price  (qty 1)
+      name = m[1]; qty = 1; unit = parseFloat(m[2]); hadPrice = true;
+    } else {
+      // name only → unpriced, qty 1
+      name = seg; qty = 1; unit = 0; hadPrice = false;
+    }
+
+    name = name.replace(/\s+/g, " ").trim();
+    if (name.length < 2) { errors.push(`"${seg}" - name too short`); continue; }
+    if (hadPrice && (isNaN(unit) || unit < 0)) { unit = 0; hadPrice = false; }
+    if (isNaN(qty) || qty <= 0) qty = 1;
+
+    items.push({
+      item:      name,
+      qty,
+      unit:      hadPrice ? unit : 0,
+      rateUnit:  rateUnit || null,
+      isService: !!rateUnit,
+      hadPrice,
+      source:    "custom"
+    });
+  }
+
+  return { items, errors };
+}
+
+// ─── 17. Quick-add help text (simple, with product + service examples) ────────
+export function buildQuickAddHelpText(biz, docType) {
+  const cur   = (biz && biz.currency) || "USD";
+  const label = docType === "quote" ? "quotation" : docType === "receipt" ? "receipt" : "invoice";
+  return (
+    `🧾 *Add items to your ${label}*\n\n` +
+    `Type each item as *name qty x price*, and separate items with *commas*.\n\n` +
+    `🛒 *Products:*\n` +
+    `Cement 10 x 12, Roofing sheets 30 x 9\n\n` +
+    `🔧 *Service or one-off (qty is 1):*\n` +
+    `Plumbing repair 80, Transport 20\n\n` +
+    `⏱ *By rate:*\n` +
+    `Labour 3 x 50/hour, Consulting 2 x 200/day\n\n` +
+    `• *x* means "times"  —  qty x price\n` +
+    `• One number = the price (qty is 1)\n` +
+    `• No price yet? Just type the name - we'll ask.\n` +
+    `• Add as many as you like, separated by commas.\n\n` +
+    `_Prices are in ${cur}. Or tap Catalogue to pick saved items. Type *cancel* to stop._`
   );
 }

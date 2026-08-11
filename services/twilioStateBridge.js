@@ -25,7 +25,9 @@ import {
   preserveSessionCore,
   sendAddItemPrompt,
   parseFastItemLines,
-  buildFastAddHelpText
+  buildFastAddHelpText,
+  parseQuickItems,
+  buildQuickAddHelpText
 } from "./invoiceHelpers.js";
 
 
@@ -318,27 +320,40 @@ function escapeRegExp(s) {
   return String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-// True when the message clearly uses the fast one-line format and should skip
-// the older name → confirm → qty → price sequence. Plain comma name lists
-// (no "@", no spaced qty, no line breaks) still use the legacy path.
+// True when the message looks like typed line-items and should skip the older
+// name -> confirm -> qty -> price sequence. Covers the intuitive formats:
+//   "Cement 10 x 12, Sand 5 x 8"   (commas + qty x price)
+//   "Plumbing 80, Transport 20"    (commas + single prices)
+//   "Cement 10 x 12"               (single qty x price)
+//   "Transport 20"                 (single name + price)
+//   "cement x 100 @ 12"            (legacy @ grammar / newlines)
 function looksStructuredItemInput(raw) {
   const s = String(raw || "");
   const hasPrice = /@\s*\d/.test(s);
   const hasLines = /[\n;]/.test(s);
   const hasQty   = /(?:^|\s)[x×*]\s*\d/i.test(s);
   const hasComma = /,/.test(s);
-  return hasPrice || hasLines || (hasQty && !hasComma);
+  const hasDigit = /\d/.test(s);
+  // name followed by a trailing number (a priced single item), e.g. "Transport 20"
+  const namePlusNumber = /^\D.*\s\d+(?:\.\d+)?(?:\s*\/\s*[a-zA-Z]+)?\s*$/.test(s.trim());
+  return hasPrice || hasLines || hasQty || hasComma || namePlusNumber;
 }
 
 // Parse fast lines, back-fill prices from the saved catalogue where possible,
 // push the items, then route to bulk price entry (if anything is unpriced) or
 // straight to the document preview.
 async function handleFastItemEntry({ from, biz, caller, trimmed }) {
-  const { items: parsed, errors } = parseFastItemLines(trimmed);
+  // Prefer the intuitive "name qty x price" grammar; fall back to the older
+  // "name x qty @ price" parser so any legacy-format input still works.
+  let { items: parsed, errors } = parseQuickItems(trimmed);
+  if (!parsed.length) {
+    const legacy = parseFastItemLines(trimmed);
+    parsed = legacy.items; errors = legacy.errors;
+  }
 
   if (!parsed.length) {
     return sendButtons(from, {
-      text: "❌ *Couldn\u2019t read any items.*\n\n" + buildFastAddHelpText(biz),
+      text: "❌ *Couldn\u2019t read any items.*\n\n" + buildQuickAddHelpText(biz, biz.sessionData?.docType),
       buttons: [{ id: "inv_cancel", title: "❌ Cancel" }]
     });
   }
@@ -1920,7 +1935,7 @@ ${invoice.status === "paid" ? "Fully paid ✅" : `Balance: ${formatMoney(invoice
     };
     biz.sessionState = "creating_invoice_add_items";
     await saveBizSafe(biz);
-    return sendAddItemPrompt(from);
+    return sendAddItemPrompt(from, biz);
   }
 
   /* ===========================
@@ -2017,7 +2032,7 @@ ${invoice.status === "paid" ? "Fully paid ✅" : `Balance: ${formatMoney(invoice
       biz.sessionState = "creating_invoice_add_items";
       await saveBizSafe(biz);
       await sendText(from, "⚠️ Product/Service name missing. Try again.");
-      return sendAddItemPrompt(from);
+      return sendAddItemPrompt(from, biz);
     }
 
     const effectiveBranchId = getEffectiveBranchId(caller, biz.sessionData);
@@ -2056,11 +2071,10 @@ if (state === "creating_invoice_pick_product") {
 
   if (!picked.length) {
     await sendText(from,
-`❌ Couldn't read that. Use *number × quantity*
+`❌ Couldn't read that. Type the *item number(s)* you want:
 
-Examples:
-_3x2_ → item 3, qty 2
-_3x2, 7x1, 12x5_ → multiple items
+_One each:_  3, 7, 12
+_With quantity:_  3x2  (item 3, qty 2)
 
 Type *cancel* to go back.`
     );
@@ -2134,7 +2148,7 @@ if (state === "creating_invoice_enter_catalogue_prices") {
     if (biz.sessionData.itemMode === null && !biz.sessionData.lastItem && !biz.sessionData.expectingQty) {
       biz.sessionData.itemMode = "choose";
       await saveBizSafe(biz);
-      return sendAddItemPrompt(from);
+      return sendAddItemPrompt(from, biz);
     }
 
     // ── CUSTOM BULK MODE: waiting for quantities block ────────────────────────
@@ -2302,7 +2316,7 @@ if (state === "creating_invoice_enter_catalogue_prices") {
 
     // Fallback: unexpected text in add_items mode
     await saveBizSafe(biz);
-    return sendAddItemPrompt(from);
+    return sendAddItemPrompt(from, biz);
   }
 
 
@@ -2364,7 +2378,7 @@ if (state === "creating_invoice_enter_catalogue_prices") {
       biz.sessionData.itemMode = null;
       biz.sessionState = "creating_invoice_add_items";
       await saveBizSafe(biz);
-      return sendAddItemPrompt(from);
+      return sendAddItemPrompt(from, biz);
     }
 
     if (isEdit) {

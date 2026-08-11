@@ -63,7 +63,7 @@ export async function handleSkipClient(to) {
   biz.markModified("sessionData");
   await biz.save();
 
-  return sendAddItemPrompt(to);
+  return sendAddItemPrompt(to, biz);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -153,5 +153,5 @@ export async function handleClientPicked(to, clientId) {
   biz.markModified("sessionData");
   await biz.save();
 
-  return sendAddItemPrompt(to);
+  return sendAddItemPrompt(to, biz);
 }
