@@ -28,6 +28,7 @@ import Question from "../models/question.js";
 import { ensureAuth } from "../middleware/authGuard.js";
 import User from "../models/user.js";
 import { mobileGoogleReturn } from "./mobileApi.js"; // mobile app return hook
+import { sendVerificationCode } from "../services/mobileMailer.js"; // shared SMTP mailer
 
 const router = Router();
 
@@ -631,15 +632,24 @@ router.post("/admin/create-parent", ensureAuth, async (req, res) => {
 
 // ────────────────────────────────────────────────────────────
 // EMAIL LOGIN API  (used by the auth/parent_login page)
-// Session-based one-time codes - no new models. Wire sendLoginCode() to your real
-// mailer; until then non-prod returns the code as devCode (the page displays it).
+// Session-based one-time codes - no new models. The code is emailed via the shared
+// SMTP mailer and is NEVER returned to the browser (except when AUTH_DEBUG_CODES=1
+// is set locally, which is refused in production).
 // ────────────────────────────────────────────────────────────
 function genCode() { return String(Math.floor(100000 + Math.random() * 900000)); }
 
 async function sendLoginCode(email, code, purpose) {
-  console.log(`[auth/email] code for ${email} (${purpose}): ${code}`);
-  const isProd = process.env.NODE_ENV === "production";
-  return { devCode: isProd ? undefined : code }; // TODO: replace with SMTP/Gmail send
+  const reason = purpose === "set_password" ? "reset your password" : "verify your email";
+  let delivered = false;
+  try {
+    delivered = await sendVerificationCode(email, code, reason);
+  } catch (e) {
+    console.error("[auth/email] sendVerificationCode failed:", e?.message);
+  }
+  // Only ever surface the code when explicitly debugging locally - never in prod,
+  // and never by default, so it stays secret to the recipient's inbox.
+  const debug = process.env.AUTH_DEBUG_CODES === "1" && process.env.NODE_ENV !== "production";
+  return { delivered, devCode: debug ? code : undefined };
 }
 
 function redirectForUser(user) {
@@ -684,8 +694,11 @@ router.post("/email/request-code", async (req, res) => {
     const user = await User.findOne({ email }).select("_id").lean();
     if (!user) return res.status(404).json({ error: "We couldn't find an account with that email." });
     const code = genCode();
+    const { delivered, devCode } = await sendLoginCode(email, code, purpose);
+    if (!delivered && !devCode) {
+      return res.status(500).json({ error: "We couldn't send the code right now. Please try again shortly." });
+    }
     req.session.emailAuth = { email, code, purpose, userId: String(user._id), expiresAt: Date.now() + 10 * 60 * 1000 };
-    const { devCode } = await sendLoginCode(email, code, purpose);
     req.session.save(() => res.json({ ok: true, ...(devCode ? { devCode } : {}) }));
   } catch (e) { console.error("[auth/email/request-code]", e); return res.status(500).json({ error: "Could not send a code" }); }
 });
