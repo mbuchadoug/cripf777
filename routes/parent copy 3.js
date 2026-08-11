@@ -704,12 +704,7 @@ router.get(
     const { childId, attemptId } = req.params;
     if (!mongoose.isValidObjectId(attemptId)) return res.status(400).send("Invalid attempt id");
 
-    // Ownership: a parent reviews their child; a STUDENT reviews their OWN
-    // attempt. canActAsParent already guarantees a student only reaches here
-    // for themselves (childId === their own id), so resolve accordingly.
-    const child = req.user.role === "student"
-      ? await User.findById(req.user._id).lean()
-      : await User.findOne({ _id: childId, parentUserId: req.user._id, role: "student" }).lean();
+    const child = await User.findOne({ _id: childId, parentUserId: req.user._id, role: "student" }).lean();
     if (!child) return res.status(403).send("Not allowed");
 
     const attempt = await Attempt.findOne({ _id: attemptId, userId: child._id }).lean();

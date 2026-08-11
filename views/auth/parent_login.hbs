@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in · CRIPFCnt</title>
+  <style>
+    :root{
+      --navy:#07203a; --navy2:#1E3A5F; --gold:#D4AF37; --gold2:#b58f2a;
+      --ink:#07203a; --muted:#6b7280; --line:#e6ecf3; --bg:#f4f7fb; --white:#fff;
+      --err:#c0392b; --ok:#0b7a52;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+      background:radial-gradient(1200px 600px at 50% -10%,#eaf1fb,transparent),var(--bg);
+      color:var(--ink);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+    .card{width:100%;max-width:420px;background:var(--white);border:1px solid var(--line);
+      border-radius:18px;box-shadow:0 18px 50px rgba(7,32,58,.10);padding:30px 28px}
+    .brand{display:flex;align-items:center;gap:11px;margin-bottom:22px}
+    .brand .mark{width:42px;height:42px;border-radius:10px;display:flex;align-items:center;justify-content:center;
+      background:linear-gradient(135deg,var(--gold),var(--gold2));color:#000;font-weight:900;font-size:20px}
+    .brand b{font-size:17px;letter-spacing:.3px}
+    .brand span{display:block;font-size:11.5px;color:var(--muted);font-weight:600;margin-top:1px}
+    h1{font-size:20px;margin:0 0 5px}
+    p.sub{margin:0 0 20px;color:var(--muted);font-size:13.5px;line-height:1.5}
+    label{display:block;font-size:12.5px;font-weight:700;margin:0 0 6px;color:var(--navy2)}
+    input{width:100%;padding:12px 13px;border:1.5px solid var(--line);border-radius:10px;font-size:15px;
+      color:var(--ink);background:#fbfdff;outline:none;transition:border-color .15s}
+    input:focus{border-color:var(--gold)}
+    input.code{letter-spacing:8px;text-align:center;font-size:20px;font-weight:700}
+    .btn{width:100%;margin-top:16px;padding:12px 14px;border:none;border-radius:10px;font-size:14.5px;font-weight:800;
+      cursor:pointer;background:var(--navy);color:#fff;transition:filter .15s}
+    .btn:hover{filter:brightness(1.12)}
+    .btn:disabled{opacity:.6;cursor:default}
+    .btn.gold{background:linear-gradient(135deg,var(--gold),var(--gold2));color:#000}
+    .link{background:none;border:none;color:#0b63d6;font-weight:700;font-size:13px;cursor:pointer;padding:0}
+    .row{display:flex;justify-content:space-between;align-items:center;margin-top:12px;gap:10px;flex-wrap:wrap}
+    .msg{margin-top:14px;font-size:13px;padding:10px 12px;border-radius:9px;display:none}
+    .msg.err{display:block;background:#fdecea;color:var(--err);border:1px solid #f5c6c0}
+    .msg.ok{display:block;background:#e9f7f0;color:var(--ok);border:1px solid #bfe6d4}
+    .step{display:none}
+    .step.active{display:block;animation:fade .18s ease}
+    @keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+    .who{font-weight:800;color:var(--navy)}
+    .divider{display:flex;align-items:center;gap:12px;margin:20px 0 6px;color:var(--muted);font-size:12px}
+    .divider::before,.divider::after{content:"";flex:1;height:1px;background:var(--line)}
+    .ghost{width:100%;margin-top:12px;padding:11px 14px;border:1.5px solid var(--line);border-radius:10px;
+      background:#fff;color:var(--ink);font-weight:700;font-size:14px;cursor:pointer;text-align:center;text-decoration:none;display:block}
+    .back{margin-top:16px}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="brand">
+      <div class="mark">C</div>
+      <div><b>CRIPFCnt</b><span>Parent &amp; Learning portal</span></div>
+    </div>
+
+    <div id="msg" class="msg"></div>
+
+    <!-- STEP 1: email -->
+    <section id="step-email" class="step active">
+      <h1>Sign in</h1>
+      <p class="sub">Enter the email you used to create your account.</p>
+      <label for="email">Email address</label>
+      <input id="email" type="email" autocomplete="email" placeholder="you@example.com" inputmode="email">
+      <button id="btn-email" class="btn">Continue</button>
+
+      <div class="divider">or</div>
+      <a class="ghost" href="/auth/google">Continue with Google</a>
+    </section>
+
+    <!-- STEP 2a: password -->
+    <section id="step-password" class="step">
+      <h1>Enter your password</h1>
+      <p class="sub">Signing in as <span id="who1" class="who"></span>.</p>
+      <label for="password">Password</label>
+      <input id="password" type="password" autocomplete="current-password" placeholder="Your password">
+      <button id="btn-password" class="btn">Sign in</button>
+      <div class="row">
+        <button class="link" id="to-code">Email me a code instead</button>
+        <button class="link" id="to-forgot">Forgot password?</button>
+      </div>
+      <button class="link back" id="back-1a">&larr; Use a different email</button>
+    </section>
+
+    <!-- STEP 2b: code -->
+    <section id="step-code" class="step">
+      <h1>Enter your code</h1>
+      <p class="sub">We sent a 6-digit code to <span id="who2" class="who"></span>. It expires in 10 minutes.</p>
+      <label for="code">6-digit code</label>
+      <input id="code" class="code" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="••••••">
+      <button id="btn-code" class="btn">Verify &amp; sign in</button>
+      <div class="row">
+        <button class="link" id="resend">Resend code</button>
+        <button class="link back" id="back-1b">&larr; Use a different email</button>
+      </div>
+    </section>
+
+    <!-- STEP 3: set a password after a code login -->
+    <section id="step-setpw" class="step">
+      <h1>Create a password</h1>
+      <p class="sub">Set a password so you can sign in faster next time. You can skip this.</p>
+      <label for="newpw">New password</label>
+      <input id="newpw" type="password" autocomplete="new-password" placeholder="At least 6 characters">
+      <label for="newpw2" style="margin-top:12px">Confirm password</label>
+      <input id="newpw2" type="password" autocomplete="new-password" placeholder="Type it again">
+      <button id="btn-setpw" class="btn gold">Save password</button>
+      <button class="link back" id="skip-setpw">Skip for now</button>
+    </section>
+
+    <!-- STEP 4: forgot / reset -->
+    <section id="step-reset" class="step">
+      <h1>Reset your password</h1>
+      <p class="sub">Enter the code we sent to <span id="who3" class="who"></span> and choose a new password.</p>
+      <label for="rcode">6-digit code</label>
+      <input id="rcode" class="code" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="••••••">
+      <label for="rpw" style="margin-top:12px">New password</label>
+      <input id="rpw" type="password" autocomplete="new-password" placeholder="At least 6 characters">
+      <button id="btn-reset" class="btn gold">Set password &amp; sign in</button>
+      <div class="row">
+        <button class="link" id="resend-reset">Resend code</button>
+        <button class="link back" id="back-1c">&larr; Use a different email</button>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    (function(){
+      var state = { email: "" };
+      var $ = function(id){ return document.getElementById(id); };
+      var steps = ["step-email","step-password","step-code","step-setpw","step-reset"];
+      function show(id){
+        steps.forEach(function(s){ $(s).classList.toggle("active", s === id); });
+        clearMsg();
+      }
+      var msg = $("msg");
+      function showErr(t){ msg.textContent = t; msg.className = "msg err"; }
+      function showOk(t){ msg.textContent = t; msg.className = "msg ok"; }
+      function clearMsg(){ msg.textContent = ""; msg.className = "msg"; }
+
+      async function post(url, body){
+        var r = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body || {})
+        });
+        var data = {};
+        try { data = await r.json(); } catch(e){}
+        return { ok: r.ok, status: r.status, data: data };
+      }
+      function busy(btn, on, label){
+        btn.disabled = on;
+        if (on){ btn.dataset._t = btn.textContent; btn.textContent = label || "Please wait…"; }
+        else if (btn.dataset._t){ btn.textContent = btn.dataset._t; }
+      }
+      function setWho(){ ["who1","who2","who3"].forEach(function(id){ $(id).textContent = state.email; }); }
+
+      // STEP 1 - check email
+      $("btn-email").addEventListener("click", async function(){
+        var email = $("email").value.trim().toLowerCase();
+        if (!email){ showErr("Enter your email."); return; }
+        busy(this, true, "Checking…");
+        var res = await post("/auth/email/check", { email: email });
+        busy(this, false);
+        if (!res.ok){ showErr((res.data && res.data.error) || "Something went wrong."); return; }
+        if (!res.data.exists){ showErr("We couldn't find an account with that email."); return; }
+        state.email = email; setWho();
+        if (res.data.hasPassword){ show("step-password"); $("password").focus(); }
+        else { await requestCode("signin"); }
+      });
+      $("email").addEventListener("keydown", function(e){ if (e.key === "Enter") $("btn-email").click(); });
+
+      // STEP 2a - password login
+      $("btn-password").addEventListener("click", async function(){
+        var pw = $("password").value;
+        if (!pw){ showErr("Enter your password."); return; }
+        busy(this, true, "Signing in…");
+        var res = await post("/auth/email/login-password", { email: state.email, password: pw });
+        busy(this, false);
+        if (!res.ok){ showErr((res.data && res.data.error) || "Wrong email or password."); return; }
+        window.location.href = res.data.redirect || "/parent/dashboard";
+      });
+      $("password").addEventListener("keydown", function(e){ if (e.key === "Enter") $("btn-password").click(); });
+
+      // request a code (signin or set_password)
+      async function requestCode(purpose){
+        var res = await post("/auth/email/request-code", { email: state.email, purpose: purpose });
+        if (!res.ok){ showErr((res.data && res.data.error) || "Could not send a code."); return false; }
+        if (purpose === "set_password"){ show("step-reset"); $("rcode").focus(); }
+        else { show("step-code"); $("code").focus(); }
+        if (res.data.devCode){ showOk("Dev code: " + res.data.devCode); }
+        return true;
+      }
+
+      $("to-code").addEventListener("click", function(){ requestCode("signin"); });
+      $("to-forgot").addEventListener("click", function(){ requestCode("set_password"); });
+      $("resend").addEventListener("click", async function(){ if (await requestCode("signin")) showOk("A new code is on its way."); });
+      $("resend-reset").addEventListener("click", async function(){ if (await requestCode("set_password")) showOk("A new code is on its way."); });
+
+      // STEP 2b - verify code
+      $("btn-code").addEventListener("click", async function(){
+        var code = $("code").value.trim();
+        if (code.length < 6){ showErr("Enter the 6-digit code."); return; }
+        busy(this, true, "Verifying…");
+        var res = await post("/auth/email/verify-code", { email: state.email, code: code });
+        busy(this, false);
+        if (!res.ok){ showErr((res.data && res.data.error) || "That code is not right."); return; }
+        if (res.data.needsPassword){ show("step-setpw"); $("newpw").focus(); }
+        else { window.location.href = res.data.redirect || "/parent/dashboard"; }
+      });
+      $("code").addEventListener("keydown", function(e){ if (e.key === "Enter") $("btn-code").click(); });
+
+      // STEP 3 - set password after code login
+      $("btn-setpw").addEventListener("click", async function(){
+        var a = $("newpw").value, b = $("newpw2").value;
+        if (a.length < 6){ showErr("Use at least 6 characters."); return; }
+        if (a !== b){ showErr("The two passwords don't match."); return; }
+        busy(this, true, "Saving…");
+        var res = await post("/auth/email/set-password", { password: a });
+        busy(this, false);
+        if (!res.ok){ showErr((res.data && res.data.error) || "Could not save your password."); return; }
+        window.location.href = res.data.redirect || "/parent/dashboard";
+      });
+      $("skip-setpw").addEventListener("click", function(){ window.location.href = "/parent/dashboard"; });
+
+      // STEP 4 - reset password
+      $("btn-reset").addEventListener("click", async function(){
+        var code = $("rcode").value.trim(), pw = $("rpw").value;
+        if (code.length < 6){ showErr("Enter the 6-digit code."); return; }
+        if (pw.length < 6){ showErr("Use at least 6 characters."); return; }
+        busy(this, true, "Saving…");
+        var res = await post("/auth/email/reset-password", { email: state.email, code: code, password: pw });
+        busy(this, false);
+        if (!res.ok){ showErr((res.data && res.data.error) || "Could not reset your password."); return; }
+        window.location.href = res.data.redirect || "/parent/dashboard";
+      });
+
+      // back to email
+      ["back-1a","back-1b","back-1c"].forEach(function(id){
+        $(id).addEventListener("click", function(){ show("step-email"); $("email").focus(); });
+      });
+    })();
+  </script>
+</body>
+</html>
