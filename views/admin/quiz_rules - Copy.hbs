@@ -1,0 +1,35 @@
+<h2>Trial Quiz Rules- {{org.name}}</h2>
+
+<form method="POST">
+  <label>Grade</label>
+  <input name="grade" type="number" required>
+
+  <label>Subject</label>
+  <select name="subject">
+    <option value="math">Math</option>
+    <option value="english">English</option>
+    <option value="science">Science</option>
+    <option value="computerstudies">Computer Studies</option>
+    <option value="generalknowledge">General Knowledge</option>
+     <option value="history">History</option>
+      <option value="geography">Geography</option>
+       <option value="environmentalstudies">Environmental Studies</option>
+        <option value="biology">Biology</option>
+        <option value="businessstudies">Business Studies</option>
+  </select>
+
+  <label>Quiz Title</label>
+  <input name="title" required>
+
+  <button>Create Trial Quiz</button>
+</form>
+
+<hr>
+
+<ul>
+  {{#each rules}}
+    <li>
+      Grade {{grade}}- {{subject}}- {{title}}
+    </li>
+  {{/each}}
+</ul>

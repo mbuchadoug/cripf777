@@ -132,9 +132,7 @@ if (quizzesFound.length !== quizIds.length) {
 // 🏠 PART 1: cripfcnt-home rules (MULTI-QUIZ FIX)
 // ----------------------------------
 if (org.slug === "cripfcnt-home") {
-  // Grade 0 (ECD) is valid, so check for empty/undefined explicitly - not falsy.
-  const gradeMissing = grade === undefined || grade === null || String(grade).trim() === "";
-  if (gradeMissing || !subject) {
+  if (!grade || !subject) {
     return res.status(400).send("Missing fields");
   }
 
@@ -263,59 +261,6 @@ if (org.slug === "cripfcnt-home") {
 
     } catch (err) {
       console.error("[quiz rule create]", err);
-      res.status(500).send("Failed");
-    }
-  }
-);
-
-// ----------------------------------
-// TOGGLE a rule enabled/disabled
-// POST /admin/orgs/:slug/quiz-rules/:ruleId/toggle
-// ----------------------------------
-router.post(
-  "/admin/orgs/:slug/quiz-rules/:ruleId/toggle",
-  ensureAuth,
-  ensureAdminEmails,
-  async (req, res) => {
-    try {
-      const org = await Organization.findOne({ slug: req.params.slug });
-      if (!org) return res.status(404).send("Org not found");
-      const allowed = new Set(["cripfcnt-home", "cripfcnt-school"]);
-      if (!allowed.has(org.slug)) return res.status(403).send("Not allowed");
-
-      const rule = await QuizRule.findOne({ _id: req.params.ruleId, org: org._id });
-      if (!rule) return res.status(404).send("Rule not found");
-      rule.enabled = !rule.enabled;
-      await rule.save();
-
-      return res.redirect(`/admin/orgs/${req.params.slug}/quiz-rules`);
-    } catch (err) {
-      console.error("[quiz rule toggle]", err);
-      res.status(500).send("Failed");
-    }
-  }
-);
-
-// ----------------------------------
-// DELETE a rule
-// POST /admin/orgs/:slug/quiz-rules/:ruleId/delete
-// (Only removes the rule; quizzes already assigned to students are untouched.)
-// ----------------------------------
-router.post(
-  "/admin/orgs/:slug/quiz-rules/:ruleId/delete",
-  ensureAuth,
-  ensureAdminEmails,
-  async (req, res) => {
-    try {
-      const org = await Organization.findOne({ slug: req.params.slug });
-      if (!org) return res.status(404).send("Org not found");
-      const allowed = new Set(["cripfcnt-home", "cripfcnt-school"]);
-      if (!allowed.has(org.slug)) return res.status(403).send("Not allowed");
-
-      await QuizRule.deleteOne({ _id: req.params.ruleId, org: org._id });
-      return res.redirect(`/admin/orgs/${req.params.slug}/quiz-rules`);
-    } catch (err) {
-      console.error("[quiz rule delete]", err);
       res.status(500).send("Failed");
     }
   }
