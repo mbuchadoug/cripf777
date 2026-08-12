@@ -104,6 +104,7 @@ const NAV = [
   { key: "stock",     href: "/office/stock",    icon: "📦", label: "Stock",     roles: ["owner", "admin", "manager", "clerk"] },
   { key: "products",  href: "/office/products", icon: "🏷", label: "Products",  roles: ["owner", "admin", "manager"] },
   { key: "reports",   href: "/office/reports",  icon: "📈", label: "Reports",   roles: ["owner", "admin", "manager", "clerk"] },
+  { key: "recurring", href: "/office/recurring", icon: "🏠", label: "Recurring Billing", roles: ["owner", "admin", "manager", "clerk"] },
   { key: "team",      href: "/office/team",     icon: "👥", label: "Team",      roles: ["owner", "admin"] },
 ];
 
@@ -478,6 +479,7 @@ router.get("/sales", async (req, res) => {
   const branchId = effectiveBranch(office, req);
   try {
     const Invoice = await M.Invoice();
+    const canEdit = office.isOwner || office.isManager;
     const q = { businessId: office.biz._id, type: { $in: ["receipt", "invoice", "quote"] } };
     if (branchId) q.branchId = branchId;
     const docs = await Invoice.find(q).sort({ createdAt: -1 }).limit(80).lean();
@@ -497,15 +499,18 @@ router.get("/sales", async (req, res) => {
       const paid = isReceipt || (Number(d.balance) || 0) <= 0;
       const typeLabel = isReceipt ? "Receipt" : isQuote ? "Quote" : "Invoice";
       const typeCls = isReceipt ? "b-green" : isQuote ? "b-slate" : "b-indigo";
-      return `<tr>
-        <td><b>${esc(d.number || String(d._id).slice(-6))}</b></td>
+      const shownTotal = d.reversed ? (d.originalTotal || 0) : d.total;
+      const canReverse = canEdit && !d.reversed && !isQuote;
+      return `<tr style="${d.reversed ? "opacity:.5" : ""}">
+        <td><b>${esc(d.number || String(d._id).slice(-6))}</b>${d.reversed ? ` <span class="badge b-red">Reversed</span>` : ""}</td>
         <td><span class="badge ${typeCls}">${typeLabel}</span></td>
         <td>${esc(d.clientName || d.customerName || "Walk-in")}</td>
-        <td class="r">${money(d.total, cur)}</td>
-        <td class="r">${isReceipt || isQuote ? "-" : money(d.balance, cur)}</td>
-        <td class="c">${isQuote ? `<span class="badge b-slate">Quote</span>` : `<span class="badge ${paid ? "b-green" : "b-amber"}">${paid ? "Paid" : "Owing"}</span>`}</td>
+        <td class="r">${money(shownTotal, cur)}</td>
+        <td class="r">${d.reversed ? "-" : (isReceipt || isQuote ? "-" : money(d.balance, cur))}</td>
+        <td class="c">${d.reversed ? `<span class="badge b-red">Reversed</span>` : (isQuote ? `<span class="badge b-slate">Quote</span>` : `<span class="badge ${paid ? "b-green" : "b-amber"}">${paid ? "Paid" : "Owing"}</span>`)}</td>
         <td class="small muted">${new Date(d.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</td>
         <td class="c"><a class="btn btn-ghost btn-sm" href="/office/doc/${d._id}/pdf" target="_blank">📄 PDF</a></td>
+        <td class="c">${canReverse ? `<form method="POST" action="/office/sales/${d._id}/reverse" onsubmit="return confirm('Reverse this sale? It will stop counting toward income and balances.')"><button class="btn btn-danger btn-sm">Reverse</button></form>` : ""}</td>
       </tr>`;
     }).join("");
 
@@ -541,6 +546,7 @@ router.get("/sales", async (req, res) => {
               <div class="field"><label>New customer name</label><input class="input" name="customerName" placeholder="e.g. John Moyo"></div>
               <div class="field"><label>Phone (optional)</label><input class="input" name="customerPhone" placeholder="e.g. 0771234567"></div>
             </div>
+            <div class="field"><label>Date</label><input class="input" type="date" name="date" value="${new Date().toISOString().slice(0,10)}"></div>
             <label style="font-size:12.5px;font-weight:700;color:var(--ink);margin:4px 0 6px;display:block">Items</label>
             <div id="saleItems"></div>
             <button type="button" class="btn btn-ghost btn-sm" onclick="addSaleRow()">＋ Add item</button>
@@ -569,7 +575,7 @@ router.get("/sales", async (req, res) => {
           <a class="btn btn-ghost btn-sm" href="#newsale" onclick="var e=document.getElementById('newsale');e.open=true;e.scrollIntoView();return false;">＋ New sale</a>
         </div>
         ${docs.length ? `<div class="tbl-wrap"><table>
-          <thead><tr><th>No.</th><th>Type</th><th>Customer</th><th class="r">Total</th><th class="r">Balance</th><th class="c">Status</th><th>Date</th><th class="c">PDF</th></tr></thead>
+          <thead><tr><th>No.</th><th>Type</th><th>Customer</th><th class="r">Total</th><th class="r">Balance</th><th class="c">Status</th><th>Date</th><th class="c">PDF</th><th class="c">Action</th></tr></thead>
           <tbody>${rows}</tbody></table></div>`
         : `<div class="empty"><div class="e-ic">🧾</div>No sales yet. Record your first sale on WhatsApp - it'll appear here instantly.</div>`}
       </div>`;
@@ -624,6 +630,7 @@ router.get("/expenses", async (req, res) => {
               <div class="field"><label>Description</label><input class="input" name="description" placeholder="What was it for?"></div>
               <div class="field"><label>Paid via</label><select class="input" name="method"><option>Cash</option><option>Bank</option><option>EcoCash</option><option>Other</option></select></div>
             </div>
+            <div class="row"><div class="field"><label>Date</label><input class="input" type="date" name="date" value="${new Date().toISOString().slice(0,10)}"></div><div class="field"></div></div>
             <div style="display:flex;justify-content:flex-end"><button class="btn btn-primary">Record expense</button></div>
           </form>
         </div>
@@ -689,6 +696,7 @@ router.post("/sales/new", async (req, res) => {
       biz: office.biz, branchId, clerkPhone: office.role.phone || "web",
       clientId, customerName, customerPhone: req.body.customerPhone, items, docType,
       discountPercent: req.body.discountPercent, vatPercent: req.body.vatPercent,
+      date: req.body.date,
     });
     const label = { receipt: "Receipt", invoice: "Invoice", quote: "Quotation" }[r.docType] || "Document";
     const note = r.docType === "receipt" ? "Paid" : r.docType === "invoice" ? "Unpaid - adds to what's owed" : "Quotation";
@@ -721,6 +729,7 @@ router.post("/expenses/new", async (req, res) => {
     await recordExpense({
       biz: office.biz, branchId, clerkPhone: office.role.phone || "web",
       amount, description: req.body.description, category: req.body.category, method: req.body.method,
+      date: req.body.date,
     });
     res.redirect(back + sep + "ok=" + encodeURIComponent(`Expense recorded - ${money(amount, office.cur)}`));
   } catch (e) {
@@ -771,6 +780,17 @@ router.post("/expenses/:id/reverse", async (req, res) => {
     await reverseExpense({ biz: office.biz, id: req.params.id, byPhone: office.role.phone || "web" });
     res.redirect("/office/expenses?ok=" + encodeURIComponent("Expense reversed"));
   } catch (e) { res.redirect("/office/expenses?err=" + encodeURIComponent(e.message)); }
+});
+
+// Reverse a sale (owner/manager) - soft reverse, keeps audit history
+router.post("/sales/:id/reverse", async (req, res) => {
+  const { office } = req;
+  if (!(office.isOwner || office.isManager)) return res.redirect("/office/sales?err=" + encodeURIComponent("Not allowed"));
+  try {
+    const { reverseSale } = await import("../services/salesEntry.js");
+    await reverseSale({ biz: office.biz, id: req.params.id, byPhone: office.role.phone || "web" });
+    res.redirect("/office/sales?ok=" + encodeURIComponent("Sale reversed"));
+  } catch (e) { res.redirect("/office/sales?err=" + encodeURIComponent(e.message)); }
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -1352,5 +1372,203 @@ async function setSuspended(req, res, value) {
 }
 router.post("/team/suspend", requireOwner, (req, res) => setSuspended(req, res, true));
 router.post("/team/unsuspend", requireOwner, (req, res) => setSuspended(req, res, false));
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  RECURRING BILLING  (rent / school fees / policies / any scheduled charge)
+//  Owner-facing pages that reuse services/recurringBilling.js + recurringLedger.js
+//  exactly as the WhatsApp bot and /zq-admin do - nothing duplicated.
+// ═════════════════════════════════════════════════════════════════════════════
+function recCanManage(office) { return office.isOwner || office.isManager; }
+
+// ─── Dashboard: accounts, balances, quick record-payment ─────────────────────
+router.get("/recurring", async (req, res) => {
+  const { office } = req; const cur = office.cur;
+  const branchId = effectiveBranch(office, req);
+  try {
+    const { listAccountsForChatbot } = await import("../services/recurringBilling.js");
+    const accounts = await listAccountsForChatbot(office.biz._id, branchId);
+
+    let totalOwed = 0, tenantCount = 0;
+    accounts.forEach(a => { totalOwed += Number(a.currentBalance) || 0; tenantCount += (a._tenants || []).length; });
+
+    const ok  = req.query.ok  ? `<div class="alert ok">${esc(req.query.ok)}</div>`  : "";
+    const err = req.query.err ? `<div class="alert err">${esc(req.query.err)}</div>` : "";
+    const manage = recCanManage(office);
+
+    const cards = accounts.map(a => {
+      const tenants = a._tenants && a._tenants.length ? a._tenants : [{ _id: "", name: "(no tenant)", currentBalance: a.currentBalance }];
+      const tenantOpts = tenants.map(t => `<option value="${esc(t._id)}">${esc(t.name)}${(Number(t.currentBalance)||0) ? " · owes " + money(t.currentBalance, cur) : ""}</option>`).join("");
+      const owed = Number(a.currentBalance) || 0;
+      return `<div class="card" style="margin-bottom:12px"><div class="cb">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+          <div>
+            <div style="font-weight:800;font-size:15px">${esc(a.name)}${a.ref ? ` <span class="muted small">(${esc(a.ref)})</span>` : ""}</div>
+            <div class="small muted">${esc(a.category || "unit")} · ${money(a.billingAmount || 0, cur)}/${esc(a.billingCycle || "monthly")} · ${(a._tenants||[]).length} tenant(s)</div>
+          </div>
+          <div style="text-align:right">
+            <div class="small muted">Balance</div>
+            <div style="font-weight:800" class="${owed > 0 ? "red" : "green"}">${money(owed, cur)}</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+          <a class="btn btn-ghost btn-sm" href="/office/recurring/${a._id}/statement">📄 Statement</a>
+        </div>
+        <form method="POST" action="/office/recurring/pay" class="row" style="margin-top:12px;align-items:flex-end">
+          <input type="hidden" name="accountId" value="${esc(a._id)}">
+          <input type="hidden" name="branch" value="${esc(branchId || "")}">
+          <div class="field" style="margin:0;flex:2"><label>Tenant</label><select class="input" name="tenantId">${tenantOpts}</select></div>
+          <div class="field" style="margin:0;max-width:120px"><label>Amount</label><input class="input" type="number" step="0.01" min="0.01" name="amount" placeholder="0.00" required></div>
+          <div class="field" style="margin:0;max-width:130px"><label>Method</label><select class="input" name="method"><option value="cash">Cash</option><option value="ecocash">EcoCash</option><option value="bank">Bank</option><option value="innbucks">InnBucks</option><option value="zipit">ZIPIT</option><option value="card">Card</option><option value="other">Other</option></select></div>
+          <div class="field" style="margin:0;max-width:150px"><label>Date</label><input class="input" type="date" name="date" value="${new Date().toISOString().slice(0,10)}"></div>
+          <button class="btn btn-primary btn-sm">Record payment</button>
+        </form>
+      </div></div>`;
+    }).join("");
+
+    const body = `
+      ${ok}${err}
+      ${office.isOwner ? branchFilter(await branchesFor(office.biz._id), branchId, "/office/recurring") : ""}
+      <div class="grid kpis" style="margin-bottom:16px">
+        <div class="card kpi"><div class="kl">Active accounts</div><div class="kv">${num(accounts.length)}</div><div class="ks">${num(tenantCount)} tenant(s)</div></div>
+        <div class="card kpi"><div class="kl">Total owed now</div><div class="kv ${totalOwed>0?"red":"green"}">${money(totalOwed, cur)}</div><div class="ks">Across all accounts</div></div>
+      </div>
+      <div class="card" style="margin-bottom:18px"><div class="cb" style="display:flex;gap:8px;flex-wrap:wrap">
+        <a class="btn btn-primary" href="/office/recurring/ledger">📒 Recurring ledger</a>
+        ${manage ? `<form method="POST" action="/office/recurring/bulk-generate" onsubmit="return confirm('Generate invoices for all active accounts this period?')"><input type="hidden" name="branch" value="${esc(branchId || "")}"><button class="btn btn-ghost">🧾 Generate invoices</button></form>` : ""}
+        ${manage ? `<form method="POST" action="/office/recurring/reminders" onsubmit="return confirm('Send WhatsApp payment reminders to tenants who owe?')"><input type="hidden" name="branch" value="${esc(branchId || "")}"><button class="btn btn-ghost">🔔 Send reminders</button></form>` : ""}
+      </div></div>
+      ${accounts.length ? cards : `<div class="empty"><div class="e-ic">🏠</div>No recurring accounts yet. Add them on WhatsApp or the admin portal and they'll appear here.</div>`}`;
+    res.send(shell(office, "recurring", "Recurring Billing", body));
+  } catch (e) {
+    console.error("[office recurring]", e);
+    res.send(shell(office, "recurring", "Recurring Billing", `<div class="alert err">Couldn't load recurring billing: ${esc(e.message)}</div>`));
+  }
+});
+
+// ─── Record a recurring payment ──────────────────────────────────────────────
+router.post("/recurring/pay", async (req, res) => {
+  const { office } = req;
+  const branchId = effectiveBranch(office, req) || null;
+  const back = "/office/recurring" + (branchId ? "?branch=" + branchId : "");
+  const sep = branchId ? "&" : "?";
+  try {
+    const amount = parseFloat(req.body.amount);
+    if (!(amount > 0)) return res.redirect(back + sep + "err=" + encodeURIComponent("Enter a valid amount"));
+    const { recordRecurringPayment } = await import("../services/recurringBilling.js");
+    await recordRecurringPayment({
+      businessId: office.biz._id,
+      accountId: req.body.accountId,
+      tenantId: req.body.tenantId || null,
+      amount, method: req.body.method || "cash",
+      clerkPhone: office.role.phone || "web",
+      date: req.body.date ? new Date(req.body.date) : new Date(),
+    });
+    res.redirect(back + sep + "ok=" + encodeURIComponent(`Payment recorded - ${money(amount, office.cur)}`));
+  } catch (e) { console.error("[office rec pay]", e); res.redirect(back + sep + "err=" + encodeURIComponent(e.message)); }
+});
+
+// ─── Bulk-generate this period's invoices (owner/manager) ────────────────────
+router.post("/recurring/bulk-generate", async (req, res) => {
+  const { office } = req;
+  const branchId = effectiveBranch(office, req) || null;
+  const back = "/office/recurring" + (branchId ? "?branch=" + branchId : "");
+  const sep = branchId ? "&" : "?";
+  if (!recCanManage(office)) return res.redirect(back + sep + "err=" + encodeURIComponent("Not allowed"));
+  try {
+    const { bulkGenerateInvoices } = await import("../services/recurringBilling.js");
+    const r = await bulkGenerateInvoices({ biz: office.biz, branchId, clerkPhone: office.role.phone || "web" });
+    const n = (r && (r.count ?? r.generated ?? (Array.isArray(r) ? r.length : null)));
+    res.redirect(back + sep + "ok=" + encodeURIComponent(n != null ? `Generated ${n} invoice(s)` : "Invoices generated"));
+  } catch (e) { console.error("[office rec bulk]", e); res.redirect(back + sep + "err=" + encodeURIComponent(e.message)); }
+});
+
+// ─── Send payment reminders (owner/manager) ──────────────────────────────────
+router.post("/recurring/reminders", async (req, res) => {
+  const { office } = req;
+  const branchId = effectiveBranch(office, req) || null;
+  const back = "/office/recurring" + (branchId ? "?branch=" + branchId : "");
+  const sep = branchId ? "&" : "?";
+  if (!recCanManage(office)) return res.redirect(back + sep + "err=" + encodeURIComponent("Not allowed"));
+  try {
+    const { broadcastPaymentReminders } = await import("../services/recurringBilling.js");
+    const r = await broadcastPaymentReminders({ biz: office.biz, branchId });
+    const n = (r && (r.sent ?? r.count ?? (Array.isArray(r) ? r.length : null)));
+    res.redirect(back + sep + "ok=" + encodeURIComponent(n != null ? `Sent ${n} reminder(s)` : "Reminders sent"));
+  } catch (e) { console.error("[office rec remind]", e); res.redirect(back + sep + "err=" + encodeURIComponent(e.message)); }
+});
+
+// ─── Account statement ───────────────────────────────────────────────────────
+router.get("/recurring/:acctId/statement", async (req, res) => {
+  const { office } = req; const cur = office.cur;
+  try {
+    const { buildAccountStatement } = await import("../services/recurringBilling.js");
+    const periodEnd = new Date();
+    const periodStart = new Date(periodEnd.getFullYear(), periodEnd.getMonth() - 5, 1);
+    const stmt = await buildAccountStatement({ businessId: office.biz._id, accountId: req.params.acctId, periodStart, periodEnd });
+    const rows = (stmt.rows || []).map(r => `<tr>
+      <td class="small muted">${r.date ? new Date(r.date).toLocaleDateString("en-GB", { day:"numeric", month:"short", year:"numeric" }) : ""}</td>
+      <td>${esc(r.description || r.type || "")}</td>
+      <td class="r">${r.charge ? money(r.charge, cur) : ""}</td>
+      <td class="r">${r.payment ? money(r.payment, cur) : ""}</td>
+      <td class="r"><b>${money(r.balance ?? 0, cur)}</b></td></tr>`).join("");
+    const body = `
+      <a class="btn btn-ghost btn-sm" href="/office/recurring">← Back to recurring</a>
+      <div class="card" style="margin-top:12px"><div class="ch"><h3>📄 ${esc(stmt.account?.name || "Statement")}</h3>
+        <span class="pill">${money(stmt.closingBalance ?? stmt.account?.currentBalance ?? 0, cur)} owed</span></div>
+        <div class="cb">
+          <div class="tbl-wrap"><table>
+            <thead><tr><th>Date</th><th>Detail</th><th class="r">Charge</th><th class="r">Payment</th><th class="r">Balance</th></tr></thead>
+            <tbody>
+              <tr><td colspan="4"><b>Opening balance</b></td><td class="r"><b>${money(stmt.openingBalance ?? 0, cur)}</b></td></tr>
+              ${rows || `<tr><td colspan="5" class="c muted">No activity in the last 6 months</td></tr>`}
+              <tr><td colspan="4"><b>Closing balance</b></td><td class="r"><b>${money(stmt.closingBalance ?? 0, cur)}</b></td></tr>
+            </tbody></table></div>
+        </div></div>`;
+    res.send(shell(office, "recurring", "Statement", body));
+  } catch (e) {
+    console.error("[office rec statement]", e);
+    res.send(shell(office, "recurring", "Statement", `<div class="alert err">Couldn't load statement: ${esc(e.message)}</div>`));
+  }
+});
+
+// ─── Recurring ledger (running balance) ──────────────────────────────────────
+router.get("/recurring/ledger", async (req, res) => {
+  const { office } = req; const cur = office.cur;
+  const branchId = effectiveBranch(office, req);
+  try {
+    const { buildRecurringLedger } = await import("../services/recurringLedger.js");
+    const periodEnd = new Date();
+    const periodStart = new Date(periodEnd.getTime() - 30 * 864e5); periodStart.setHours(0,0,0,0);
+    const S = await buildRecurringLedger({ biz: office.biz, branchId, periodStart, periodEnd });
+    const rows = (S.rows || []).map(r => `<tr>
+      <td class="small muted">${new Date(r.at).toLocaleDateString("en-GB", { day:"numeric", month:"short", year:"numeric" })}</td>
+      <td>${esc(r.typeLabel || "")}<div class="small muted">${esc(r.entity || "")} ${r.description ? "· " + esc(r.description) : ""}</div></td>
+      <td class="r green">${r.cashIn ? "+" + money(r.cashIn, cur) : ""}</td>
+      <td class="r red">${r.cashOut ? "−" + money(r.cashOut, cur) : ""}</td>
+      <td class="r"><b>${money(r.cashBalance ?? 0, cur)}</b></td></tr>`).join("");
+    const body = `
+      <a class="btn btn-ghost btn-sm" href="/office/recurring">← Back to recurring</a>
+      ${office.isOwner ? branchFilter(await branchesFor(office.biz._id), branchId, "/office/recurring/ledger") : ""}
+      <div class="grid kpis" style="margin:12px 0 16px">
+        <div class="card kpi"><div class="kl">Opening cash</div><div class="kv">${money(S.openingCash ?? 0, cur)}</div></div>
+        <div class="card kpi"><div class="kl">Collected</div><div class="kv green">${money(S.totalCollected ?? 0, cur)}</div></div>
+        <div class="card kpi"><div class="kl">Unit expenses</div><div class="kv red">${money(S.totalExpenses ?? 0, cur)}</div></div>
+        <div class="card kpi"><div class="kl">Owed now</div><div class="kv ${(S.outstandingReceivables??0)>0?"red":"green"}">${money(S.outstandingReceivables ?? 0, cur)}</div></div>
+      </div>
+      <div class="card"><div class="ch"><h3>Recurring ledger · last 30 days</h3></div>
+        <div class="tbl-wrap"><table>
+          <thead><tr><th>Date</th><th>Detail</th><th class="r">In</th><th class="r">Out</th><th class="r">Cash bal</th></tr></thead>
+          <tbody>
+            <tr><td colspan="4"><b>Opening cash</b></td><td class="r"><b>${money(S.openingCash ?? 0, cur)}</b></td></tr>
+            ${rows || `<tr><td colspan="5" class="c muted">No recurring activity in the last 30 days</td></tr>`}
+            <tr><td colspan="4"><b>Closing cash</b></td><td class="r"><b>${money(S.closingCash ?? 0, cur)}</b></td></tr>
+          </tbody></table></div>
+      </div>`;
+    res.send(shell(office, "recurring", "Recurring Ledger", body));
+  } catch (e) {
+    console.error("[office rec ledger]", e);
+    res.send(shell(office, "recurring", "Recurring Ledger", `<div class="alert err">Couldn't load ledger: ${esc(e.message)}</div>`));
+  }
+});
 
 export default router;

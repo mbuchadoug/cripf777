@@ -49,6 +49,7 @@ async function _createDoc({
   biz, branchId = null, clerkPhone = null, clientId = null,
   customerName = "Walk-in Customer", customerPhone = null,
   items = [], docType = "receipt", discountPercent = 0, vatPercent = 0,
+  date = null,
 }) {
   const Invoice = (await import("../models/invoice.js")).default;
   const Client  = (await import("../models/client.js")).default;
@@ -113,6 +114,14 @@ async function _createDoc({
     createdBy: clerkPhone || "web",
   });
 
+  // Optional back-dating from the web date picker. Saved with
+  // timestamps:false so updatedAt isn't bumped; makePdf below then
+  // stamps the PDF with the chosen date via inv.createdAt.
+  if (date) {
+    const at = new Date(date);
+    if (!isNaN(at)) { inv.createdAt = at; await inv.save({ timestamps: false }); }
+  }
+
   bizDoc.documentCountMonth = (bizDoc.documentCountMonth || 0) + 1;
   await bizDoc.save();
 
@@ -151,7 +160,7 @@ export async function documentPdf({ biz, invoiceId }) {
 }
 
 // ── EXPENSE ──────────────────────────────────────────────────────────────────
-export async function recordExpense({ biz, branchId = null, clerkPhone = null, amount, description = "", category = "", method = "Cash" }) {
+export async function recordExpense({ biz, branchId = null, clerkPhone = null, amount, description = "", category = "", method = "Cash", date = null }) {
   const Expense = (await import("../models/expense.js")).default;
   const bizDoc  = await liveBusiness(biz);
   if (!bizDoc) throw new Error("Business not found");
@@ -164,6 +173,10 @@ export async function recordExpense({ biz, branchId = null, clerkPhone = null, a
     amount: amt, description: desc, category: cat,
     method: String(method || "Cash"), createdBy: clerkPhone || "web",
   });
+  if (date) {
+    const at = new Date(date);
+    if (!isNaN(at)) { exp.createdAt = at; await exp.save({ timestamps: false }); }
+  }
   try {
     const { notifyExpensesRecorded } = await import("./bizNotifications.js");
     await notifyExpensesRecorded({ biz: bizDoc, expenses: [{ description: desc, amount: amt, category: cat }], clerkPhone, branchName: await branchName(branchId), branchId: branchId || null });
@@ -185,6 +198,43 @@ export async function reverseExpense({ biz, id, byPhone = null }) {
   exp.reversedBy = byPhone || "web";
   await exp.save();
   return exp;
+}
+
+// Soft-reverse a SALE (receipt / invoice / quote). Mirrors reverseExpense:
+// zeroes the money-affecting amounts and stashes the originals, so every
+// live-aggregated total, ledger and report drops it automatically, while the
+// row stays visible for audit. Business counters are left untouched, so
+// numbering stays sequential. For an invoice, any payments recorded against
+// it are reversed too (money-in must fall) and its balance is cleared.
+export async function reverseSale({ biz, id, byPhone = null }) {
+  const Invoice        = (await import("../models/invoice.js")).default;
+  const InvoicePayment = (await import("../models/invoicePayment.js")).default;
+  const bizDoc = await liveBusiness(biz);
+  const inv = await Invoice.findOne({ _id: id, businessId: bizDoc._id });
+  if (!inv) throw new Error("Document not found");
+  if (inv.reversed) throw new Error("Already reversed");
+
+  // Reverse any payments booked against this invoice (removes money-in).
+  const pays = await InvoicePayment.find({ invoiceId: inv._id, businessId: bizDoc._id, reversed: { $ne: true } });
+  for (const p of pays) {
+    p.reversed = true;
+    p.originalAmount = p.amount;
+    p.amount = 0;
+    p.reversedAt = new Date();
+    p.reversedBy = byPhone || "web";
+    await p.save();
+  }
+
+  // Void the document itself (keeps items/number for audit).
+  inv.reversed = true;
+  inv.originalTotal = inv.total;
+  inv.total = 0;
+  inv.amountPaid = 0;
+  inv.balance = 0;
+  inv.reversedAt = new Date();
+  inv.reversedBy = byPhone || "web";
+  await inv.save();
+  return inv;
 }
 
 // ── PAYOUT / DRAWING ───────────────────────────────────────────────────────────
