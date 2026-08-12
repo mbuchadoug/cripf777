@@ -16,7 +16,7 @@ function resolveGrade(u) {
   const g = u.grade;
   if (g == null || g === "") return null;
   const n = Number(g);
-  return Number.isFinite(n) && n > 0 ? n : null;
+  return Number.isFinite(n) && n >= 0 ? n : null; // ✅ Grade 0 (ECD) is valid
 }
 
 // Time-aware active-subscription check. Identical to parent.js so a student's

@@ -28,7 +28,20 @@ function resolveGrade(u) {
   const g = u.grade;
   if (g == null || g === "") return null;
   const n = Number(g);
-  return Number.isFinite(n) && n > 0 ? n : null;
+  return Number.isFinite(n) && n >= 0 ? n : null; // ✅ Grade 0 (ECD) is valid
+}
+
+// True when a grade value was actually provided (accepts the string/number 0).
+function hasGradeInput(v) {
+  return v !== undefined && v !== null && String(v).trim() !== "";
+}
+
+// Human label for a grade, mapping 8-13 to Form 1-6. Handles Grade 0.
+function gradeLabel(g) {
+  const n = resolveGrade({ grade: g });
+  if (n == null) return "Grade not set";
+  const forms = { 8: "Form 1", 9: "Form 2", 10: "Form 3", 11: "Form 4", 12: "Form 5", 13: "Form 6" };
+  return forms[n] || `Grade ${n}`;
 }
 
 // ==============================
@@ -143,6 +156,13 @@ router.get(
       }
     }
 
+    // Display-safe grade label per child (handles Grade 0 and Forms).
+    for (const child of children) {
+      child.gradeLabel = gradeLabel(child.grade);
+      child.hasGrade = resolveGrade(child) != null;
+      child.initial = (child.firstName || "?").charAt(0).toUpperCase();
+    }
+
     const unreadCount = await Notification.countDocuments({
       userId: req.user._id,
       read: false
@@ -185,12 +205,28 @@ router.get(
       }
     }
 
+    const planName = freshUser.subscriptionPlan || "none";
+    const isPaidPlan = ["silver", "gold"].includes(planName);
+    const subExpiryText = freshUser.subscriptionExpiresAt
+      ? new Date(freshUser.subscriptionExpiresAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+      : null;
+    const subscriptionStatusText = isPaid
+      ? "Active"
+      : isExpired
+        ? "Expired"
+        : (freshUser.subscriptionStatus === "paid" ? "Paid · not active" : "Free Trial");
+
     res.render("parent/dashboard", {
       user: freshUser,
       children,
       unreadCount: res.locals?.unreadCount || 0,
       childLimit,
       canAddChild,
+      planName,
+      isPaidPlan,
+      subExpiryText,
+      subscriptionStatusText,
+      studentLoginUrl: "https://cripfcnt.com/auth/student",
       planLabel,
       isExpired,
       isPaid,
@@ -312,7 +348,7 @@ router.post(
       return res.render("parent/trial_limit", { user: freshUser });
     }
 
-    if (!firstName || !grade) {
+    if (!firstName || !hasGradeInput(grade)) {
       return res.status(400).send("Name and grade required");
     }
 
@@ -365,9 +401,13 @@ await child.save();
 
    // return res.redirect("/parent/dashboard");
  return res.render("parent/student_credentials", {
+  mode: "created",
+  childId: String(child._id),
   childName: `${child.firstName} ${child.lastName || ""}`.trim(),
   studentId: child.studentId,
   pin,
+  hasPassword: true,
+  loginUrl: "https://cripfcnt.com/auth/student",
   dashboardUrl: req.user.role === "private_teacher" ? "/teacher/dashboard" : "/parent/dashboard"
 });
 
@@ -392,7 +432,7 @@ router.post("/parent/children", ensureAuth, async (req, res) => {
     return res.status(403).send("Not allowed");
   }
 
-  if (!firstName || !grade) {
+  if (!firstName || !hasGradeInput(grade)) {
     return res.status(400).send("Name and grade required");
   }
 
@@ -480,9 +520,13 @@ await child.save();
 
  // return res.redirect("/parent/dashboard");
 return res.render("parent/student_credentials", {
+  mode: "created",
+  childId: String(child._id),
   childName: `${child.firstName} ${child.lastName || ""}`.trim(),
   studentId: child.studentId,
   pin,
+  hasPassword: true,
+  loginUrl: "https://cripfcnt.com/auth/student",
   dashboardUrl: req.user.role === "private_teacher" ? "/teacher/dashboard" : "/parent/dashboard"
 });
 
@@ -583,12 +627,12 @@ router.post(
     if (!child) return res.status(404).send("Child not found");
 
     const oldGrade = child.grade;
-    const gradeChanged = grade && Number(grade) !== oldGrade;
+    const gradeChanged = hasGradeInput(grade) && Number(grade) !== oldGrade;
 
     // Update basic info
     if (firstName) child.firstName = firstName;
     if (lastName) child.lastName = lastName;
-    if (grade) child.grade = Number(grade);
+    if (hasGradeInput(grade)) child.grade = Number(grade); // ✅ allows Grade 0
 
     // Update PIN if provided
     if (newPin && newPin.length >= 4) {
@@ -671,6 +715,134 @@ router.post(
 
 // ----------------------------------
 // Delete child (with confirmation)
+// ----------------------------------
+// View / manage a child's login credentials
+// GET /parent/children/:childId/credentials
+// ----------------------------------
+router.get(
+  "/parent/children/:childId/credentials",
+  ensureAuth,
+  canActAsParent,
+  async (req, res) => {
+    const parent = await User.findById(req.user._id).lean();
+    const child = await User.findOne({
+      _id: req.params.childId,
+      parentUserId: parent._id,
+      role: "student"
+    }).lean();
+    if (!child) return res.status(404).send("Child not found");
+
+    return res.render("parent/student_credentials", {
+      mode: "view",
+      childId: String(child._id),
+      childName: `${child.firstName} ${child.lastName || ""}`.trim(),
+      studentId: child.studentId,
+      pin: null,
+      hasPassword: !!child.passwordHash,
+      loginUrl: "https://cripfcnt.com/auth/student",
+      dashboardUrl: parent.role === "private_teacher" ? "/teacher/dashboard" : "/parent/dashboard"
+    });
+  }
+);
+
+// ----------------------------------
+// Reset a child's PIN (generates a new one, shown once)
+// POST /parent/children/:childId/reset-pin
+// ----------------------------------
+router.post(
+  "/parent/children/:childId/reset-pin",
+  ensureAuth,
+  canActAsParent,
+  async (req, res) => {
+    const parent = await User.findById(req.user._id).lean();
+    const child = await User.findOne({
+      _id: req.params.childId,
+      parentUserId: parent._id,
+      role: "student"
+    });
+    if (!child) return res.status(404).send("Child not found");
+
+    const pin = generatePin(4);
+    await child.setPassword(pin);
+    if (!child.studentId) child.studentId = await generateUniqueStudentId(User);
+    await child.save();
+
+    return res.render("parent/student_credentials", {
+      mode: "created",
+      childId: String(child._id),
+      childName: `${child.firstName} ${child.lastName || ""}`.trim(),
+      studentId: child.studentId,
+      pin,
+      hasPassword: true,
+      loginUrl: "https://cripfcnt.com/auth/student",
+      dashboardUrl: parent.role === "private_teacher" ? "/teacher/dashboard" : "/parent/dashboard"
+    });
+  }
+);
+
+// ----------------------------------
+// Confirm subscription state (diagnostic)
+// GET /parent/subscription-status  -> JSON
+// ----------------------------------
+router.get(
+  "/parent/subscription-status",
+  ensureAuth,
+  canActAsParent,
+  async (req, res) => {
+    const u = await User.findById(req.user._id)
+      .select("email role subscriptionStatus subscriptionPlan subscriptionExpiresAt paidAt")
+      .lean();
+    const activeNow = isSubscriptionActive(u);
+    const reason = activeNow
+      ? "active"
+      : u.subscriptionStatus !== "paid"
+        ? `subscriptionStatus is "${u.subscriptionStatus}" (needs "paid")`
+        : !u.subscriptionExpiresAt
+          ? "subscriptionExpiresAt is not set"
+          : "subscriptionExpiresAt is in the past";
+    return res.json({
+      email: u.email,
+      role: u.role,
+      subscriptionPlan: u.subscriptionPlan,
+      subscriptionStatus: u.subscriptionStatus,
+      subscriptionExpiresAt: u.subscriptionExpiresAt,
+      paidAt: u.paidAt,
+      isActiveNow: activeNow,
+      reason
+    });
+  }
+);
+
+// ----------------------------------
+// ADMIN: activate / repair a subscription (manual grant)
+// POST /admin/activate-subscription  body: { email, plan?, months? }
+// ----------------------------------
+router.post("/admin/activate-subscription", ensureAuth, async (req, res) => {
+  const admins = (process.env.ADMIN_EMAILS || "").split(",").map(e => e.trim().toLowerCase()).filter(Boolean);
+  if (!admins.includes((req.user.email || "").toLowerCase())) return res.status(403).send("Admins only");
+
+  const email = String(req.body?.email || "").trim().toLowerCase();
+  const plan = ["silver", "gold"].includes(req.body?.plan) ? req.body.plan : "gold";
+  const months = Number(req.body?.months) > 0 ? Number(req.body.months) : 1;
+  if (!email) return res.status(400).json({ error: "email required" });
+
+  const u = await User.findOne({ email });
+  if (!u) return res.status(404).json({ error: "user not found" });
+
+  const now = new Date();
+  const from = (u.subscriptionExpiresAt && new Date(u.subscriptionExpiresAt) > now)
+    ? new Date(u.subscriptionExpiresAt) : now;
+  from.setMonth(from.getMonth() + months);
+
+  u.subscriptionStatus = "paid";
+  u.subscriptionPlan = plan;
+  u.subscriptionExpiresAt = from;
+  u.paidAt = now;
+  await u.save();
+
+  return res.json({ ok: true, email: u.email, plan: u.subscriptionPlan, status: u.subscriptionStatus, expiresAt: u.subscriptionExpiresAt });
+});
+
 // ----------------------------------
 router.post(
   "/parent/children/:childId/delete",

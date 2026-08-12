@@ -1,0 +1,653 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Parent Dashboard</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+
+  <style>
+    :root{
+      --gold:#D4AF37;
+      --silver:#C0C0C0;
+      --bg:#0b0b0b;
+      --panel:#141414;
+      --border:#222;
+      --muted:#9aa3ad;
+      --radius:14px;
+      --green:#1db954;
+      --red:#c0392b;
+    }
+
+    body{
+      margin:0;
+      background:var(--bg);
+      color:#fff;
+      font-family:system-ui,-apple-system,"Segoe UI",Arial;
+    }
+
+    main{
+      max-width:1200px;
+      margin:32px auto;
+      padding:0 20px;
+    }
+
+    h1{ font-size:30px; margin-bottom:6px; }
+    h2{ margin:28px 0 12px; color:var(--gold); font-size:20px; }
+    h3{ margin:18px 0 8px; font-size:17px; }
+
+    .panel{
+      background:var(--panel);
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      padding:18px;
+      margin-bottom:18px;
+    }
+
+    .grid{
+      display:grid;
+      grid-template-columns:repeat(auto-fit,minmax(260px,1fr));
+      gap:16px;
+    }
+
+    .child-card{
+      background:#111;
+      border:1px solid var(--border);
+      border-radius:12px;
+      padding:16px;
+      display:flex;
+      flex-direction:column;
+      justify-content:space-between;
+    }
+
+    .child-name{ font-size:18px; font-weight:800; }
+    .child-meta{ color:var(--muted); font-size:13px; margin-top:2px; }
+
+    .stats{
+      display:grid;
+      grid-template-columns:repeat(3,1fr);
+      gap:10px;
+      margin:14px 0;
+    }
+
+    .stat{
+      background:#0e0e0e;
+      border:1px solid var(--border);
+      border-radius:10px;
+      padding:10px;
+      text-align:center;
+      font-size:13px;
+    }
+
+    .stat strong{ display:block; font-size:18px; margin-bottom:2px; }
+
+    .actions a{
+      display:inline-block;
+      margin-top:8px;
+      margin-right:12px;
+      color:var(--gold);
+      font-weight:700;
+      text-decoration:none;
+      font-size:14px;
+    }
+    .actions a:hover{ text-decoration:underline; }
+
+    .top-actions{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      margin-bottom:20px;
+      flex-wrap:wrap;
+      gap:10px;
+    }
+
+    .btn{
+      background:var(--gold);
+      color:#000;
+      padding:10px 16px;
+      border-radius:10px;
+      font-weight:800;
+      text-decoration:none;
+      border:none;
+      cursor:pointer;
+      font-size:14px;
+    }
+    .btn:hover{ opacity:0.9; }
+    .btn-silver{ background:var(--silver); color:#000; }
+
+    .empty{ color:var(--muted); font-size:15px; margin-top:10px; }
+    .note{ color:var(--muted); font-size:13px; margin-top:6px; }
+
+    /* PLAN CARDS */
+    .plan-grid{
+      display:grid;
+      grid-template-columns:repeat(auto-fit,minmax(260px,1fr));
+      gap:16px;
+      margin-top:12px;
+    }
+
+    .plan-card{
+      background:#111;
+      border:2px solid var(--border);
+      border-radius:14px;
+      padding:24px 20px;
+      text-align:center;
+      transition: border-color 0.2s;
+    }
+
+    .plan-card:hover{ border-color:var(--gold); }
+    .plan-card.silver-border{ border-color:var(--silver); }
+    .plan-card.gold-border{ border-color:var(--gold); }
+
+    .plan-badge{
+      display:inline-block;
+      padding:4px 14px;
+      border-radius:20px;
+      font-size:12px;
+      font-weight:800;
+      text-transform:uppercase;
+      letter-spacing:1px;
+      margin-bottom:10px;
+    }
+
+    .badge-silver{ background:var(--silver); color:#000; }
+    .badge-gold{ background:var(--gold); color:#000; }
+
+    .plan-price{ font-size:36px; font-weight:900; margin:8px 0 4px; }
+    .plan-period{ color:var(--muted); font-size:13px; margin-bottom:14px; }
+
+    .plan-features{
+      list-style:none;
+      padding:0;
+      margin:0 0 18px;
+      text-align:left;
+    }
+
+    .plan-features li{
+      padding:6px 0;
+      font-size:14px;
+      color:#ccc;
+      border-bottom:1px solid #1a1a1a;
+    }
+    .plan-features li:last-child{ border-bottom:none; }
+    .plan-features li::before{ content:"✓ "; color:var(--green); font-weight:700; }
+
+    /* SUBSCRIPTION BAR */
+    .sub-bar{
+      display:flex;
+      align-items:center;
+      gap:12px;
+      padding:14px 18px;
+      border-radius:12px;
+      margin-bottom:18px;
+      flex-wrap:wrap;
+    }
+    .sub-active{ background:#0d2818; border:1px solid #1a5c2e; }
+    .sub-expired{ background:#2d1515; border:1px solid #5c1a1a; }
+    .sub-trial{ background:#1a1a10; border:1px solid #3d3d1a; }
+
+    .sub-label{ font-weight:800; font-size:15px; }
+    .sub-detail{ color:var(--muted); font-size:13px; }
+
+    .payments-link{
+      color:var(--gold);
+      font-size:13px;
+      font-weight:700;
+      text-decoration:none;
+      margin-left:auto;
+    }
+    .payments-link:hover{ text-decoration:underline; }
+
+    /* DEMO PREVIEW */
+    .demo-hero{
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+      border:1px solid #1a3a5c;
+      border-radius:var(--radius);
+      padding:32px 28px;
+      margin-bottom:24px;
+      text-align:center;
+    }
+
+    .demo-hero h2{
+      color:#fff;
+      font-size:26px;
+      margin:0 0 10px;
+    }
+
+    .demo-hero p{
+      color:#a0b4cc;
+      font-size:15px;
+      line-height:1.6;
+      max-width:600px;
+      margin:0 auto 20px;
+    }
+
+    .demo-features{
+      display:grid;
+      grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+      gap:14px;
+      margin:20px 0;
+    }
+
+    .demo-feature{
+      background:rgba(255,255,255,0.05);
+      border:1px solid rgba(255,255,255,0.1);
+      border-radius:12px;
+      padding:16px;
+      text-align:center;
+    }
+
+    .demo-feature .icon{ font-size:28px; margin-bottom:6px; }
+    .demo-feature .label{ font-size:13px; color:#a0b4cc; }
+    .demo-feature .value{ font-size:20px; font-weight:800; color:#fff; }
+
+    /* DEMO MOCKUP */
+    .demo-mockup{
+      background:#111;
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      padding:20px;
+      margin-bottom:24px;
+    }
+
+    .demo-mockup-header{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      margin-bottom:16px;
+    }
+
+    .demo-tag{
+      background:var(--gold);
+      color:#000;
+      padding:3px 10px;
+      border-radius:8px;
+      font-size:11px;
+      font-weight:800;
+      text-transform:uppercase;
+    }
+
+    .mock-bar{
+      background:#0e0e0e;
+      border-radius:8px;
+      height:10px;
+      margin-bottom:10px;
+      overflow:hidden;
+    }
+
+    .mock-fill{
+      height:100%;
+      border-radius:8px;
+    }
+
+    .mock-fill.green{ background:var(--green); }
+    .mock-fill.gold{ background:var(--gold); }
+    .mock-fill.red{ background:var(--red); }
+
+    .mock-label{
+      display:flex;
+      justify-content:space-between;
+      font-size:12px;
+      color:var(--muted);
+      margin-bottom:14px;
+    }
+
+    .mock-subject-row{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      padding:8px 0;
+      border-bottom:1px solid #1a1a1a;
+      font-size:14px;
+    }
+    .mock-subject-row:last-child{ border-bottom:none; }
+
+    .mock-dot{
+      width:8px;
+      height:8px;
+      border-radius:50%;
+      flex-shrink:0;
+    }
+  </style>
+</head>
+
+<body>
+
+<main>
+
+  <!-- HEADER -->
+  <div class="top-actions">
+    <div>
+      <h1>Parent Dashboard</h1>
+      <div class="note">
+        Manage your children's learning, quizzes and certificates.
+      </div>
+    </div>
+
+  <div style="display:flex;gap:10px;flex-wrap:wrap">
+    <a
+      href="/org/cripfcnt-school/dashboard"
+      class="btn"
+      style="background:#1e90ff;color:#fff"
+    >
+       Switch to CRIPFCnt Academy
+    </a>
+  </div>
+</div>
+
+    {{#if isPaid}}
+      {{#if canAddChild}}
+        <a href="/parent/children/new" class="btn">➕ Add Child</a>
+      {{else}}
+        <span class="note">📌 Child limit reached ({{childCount}}/{{childLimit}})</span>
+      {{/if}}
+    {{/if}}
+  </div>
+
+  <!-- ============================== -->
+  <!-- 🆓 TRIAL / DEMO VIEW          -->
+  <!-- ============================== -->
+  {{#unless isPaid}}
+
+    <!-- DEMO HERO -->
+    <div class="demo-hero">
+      <h2>🎓 Welcome to Your Child's Learning Hub</h2>
+      <p>
+        Our platform provides structured quizzes across multiple subjects,
+        tracks your child's progress, and awards certificates on completion.
+        Subscribe to get started!
+      </p>
+
+      {{#if demoData}}
+      <div class="demo-features">
+        <div class="demo-feature">
+          <div class="icon">📚</div>
+          <!--<div class="value">{{demoData.subjects.length}}</div>-->
+          <div class="value">5</div>
+          <div class="label">Subjects Available</div>
+        </div>
+        <div class="demo-feature">
+          <div class="icon">📝</div>
+          <!--<div class="value">{{demoData.totalQuizzes}}</div>-->
+          <div class="value">3000</div>
+          <div class="label">Quizzes Ready</div>
+        </div>
+        <div class="demo-feature">
+          <div class="icon">🎒</div>
+          <div class="value">Grades {{#each demoData.grades}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}</div>
+          <div class="label">Grade Coverage</div>
+        </div>
+        <div class="demo-feature">
+          <div class="icon">🏆</div>
+          <div class="value">Yes</div>
+          <div class="label">Certificates Awarded</div>
+        </div>
+      </div>
+      {{/if}}
+    </div>
+
+    <!-- DEMO MOCKUP: What you'll see -->
+    <div class="demo-mockup">
+      <div class="demo-mockup-header">
+        <h3 style="margin:0;">📊 Preview: Child Progress Dashboard</h3>
+        <span class="demo-tag">Demo</span>
+      </div>
+
+      <div class="mock-label">
+        <span>📐 Mathematics</span>
+        <span>85%</span>
+      </div>
+      <div class="mock-bar">
+        <div class="mock-fill green" style="width:85%"></div>
+      </div>
+
+      <div class="mock-label">
+        <span>🤝 Responsibility</span>
+        <span>78%</span>
+      </div>
+      <div class="mock-bar">
+        <div class="mock-fill gold" style="width:78%"></div>
+      </div>
+
+      <!-- LOCKED SUBJECTS PREVIEW -->
+      <div style="margin-top:18px; padding:14px; background:rgba(212,175,55,0.08); border:1px dashed var(--gold); border-radius:10px;">
+        <div style="font-size:14px; color:var(--gold); font-weight:700; margin-bottom:6px;">
+          🔒 More subjects available with a subscription
+        </div>
+        <div style="color:var(--muted); font-size:13px; line-height:1.5;">
+          Subscribe to unlock <strong style="color:#fff;">English, Science, Social Studies</strong> and more subjects
+          across all grades. Your child will also get full access to our complete quiz library,
+          progress tracking, and certificates.
+        </div>
+      </div>
+
+      <div style="text-align:center; margin-top:16px;">
+        <div class="note">
+          This is a preview of what your dashboard will look like. Subscribe below to get started!
+        </div>
+      </div>
+    </div>
+
+    <!-- 🆓 TRY FREE QUIZ CTA -->
+    {{#unless hasTrialChild}}
+      <div style="text-align:center; margin-bottom:24px;">
+        <a href="/parent/trial/new" class="btn" style="font-size:18px; padding:16px 32px; background:var(--green); color:#fff; display:inline-block;">
+          🎯 Try 2 Free Quizzes
+        </a>
+        <div class="note" style="margin-top:10px;">
+          Add your child and let them try 1 Maths + 1 Responsibility quiz for free.
+        </div>
+      </div>
+    {{else}}
+      <!-- Trial child already exists - show their card -->
+      <div class="panel" style="border-color:var(--green);">
+        <h3 style="color:var(--green); margin-top:0;">🎯 Your Trial Child</h3>
+        {{#each children}}
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+            <div>
+              <strong>{{firstName}} {{lastName}}</strong>
+              <span class="note" style="margin:0;"> · Grade {{grade}}</span>
+            </div>
+            <a href="/parent/children/{{_id}}/quizzes" class="btn" style="font-size:13px; padding:8px 14px;">
+              ▶ View Quizzes
+            </a>
+          </div>
+        {{/each}}
+        <div class="note" style="margin-top:12px;">
+          Your child has 2 free trial quizzes (Maths + Responsibility).
+          Subscribe below to unlock all subjects and add more children.
+        </div>
+      </div>
+    {{/unless}}
+
+    <!-- WHAT'S INCLUDED -->
+    <div class="panel">
+      <h3 style="color:var(--gold); margin-top:0;">✨ What's Included</h3>
+      <div class="mock-subject-row">
+        <div class="mock-dot" style="background:var(--green)"></div>
+        <span>1 free trial quiz per subject so your child can try before you buy</span>
+      </div>
+      <div class="mock-subject-row">
+        <div class="mock-dot" style="background:var(--gold)"></div>
+        <span>Full quiz library unlocked per grade after subscribing</span>
+      </div>
+      <div class="mock-subject-row">
+        <div class="mock-dot" style="background:#6c63ff"></div>
+        <span>Progress tracking, score analytics and performance trends</span>
+      </div>
+      <div class="mock-subject-row">
+        <div class="mock-dot" style="background:var(--red)"></div>
+        <span>Certificates awarded on quiz completion</span>
+      </div>
+    </div>
+
+    <!-- PLAN SELECTION -->
+    <div id="plans">
+      <h2>Choose Your Plan</h2>
+      <div class="plan-grid">
+
+        <!-- SILVER -->
+        <div class="plan-card silver-border">
+          <span class="plan-badge badge-silver">Silver</span>
+          <div class="plan-price">$5</div>
+          <div class="plan-period">per month</div>
+          <ul class="plan-features">
+            <li>Up to 2 children</li>
+            <li>1 trial quiz per subject (free)</li>
+            <li>Full paid quiz library</li>
+            <li>Progress tracking & reports</li>
+            <li>Certificates</li>
+          </ul>
+        <button class="btn btn-silver" onclick="openPayModal('silver', 'Silver Plan', 5)">
+  📱 Get Silver
+</button>
+        </div>
+
+        <!-- GOLD -->
+        <div class="plan-card gold-border">
+          <span class="plan-badge badge-gold">Gold</span>
+          <div class="plan-price">$10</div>
+          <div class="plan-period">per month</div>
+          <ul class="plan-features">
+            <li>Up to 5 children</li>
+            <li>1 trial quiz per subject (free)</li>
+            <li>Full paid quiz library</li>
+            <li>Progress tracking & reports</li>
+            <li>Certificates</li>
+            <li>Priority support</li>
+          </ul>
+  {{#if (eq user.subscriptionPlan "gold")}}
+            <button class="btn" disabled style="opacity:0.6;cursor:not-allowed;width:100%;">
+              ✅ Current Plan
+            </button>
+        {{else if (eq user.subscriptionPlan "silver")}}
+  <button class="btn" style="width:100%;" onclick="openPayModal('gold', 'Gold Plan', 10)">
+    💎 Upgrade to Gold
+  </button>
+          {{else}}
+        <button class="btn" style="width:100%;" onclick="openPayModal('gold', 'Gold Plan', 10)">
+  📱 Get Gold
+</button>
+          {{/if}}
+        </div>
+
+      </div>
+    </div>
+
+  {{/unless}}
+
+  <!-- ============================== -->
+  <!-- 💳 PAID USER VIEW              -->
+  <!-- ============================== -->
+  {{#if isPaid}}
+
+    <!-- SUBSCRIPTION STATUS -->
+ 
+    <!-- ✅ UPGRADE BANNER (Silver → Gold) -->
+  <!-- ✅ UPGRADE BANNER (Compact & Professional) -->
+    {{#if isPaid}}
+      {{#unless isExpired}}
+        {{#if (eq user.subscriptionPlan "silver")}}
+          <div style="background:linear-gradient(135deg,#fffbeb,#fef3c7);border:1px solid #f59e0b;border-left:4px solid #f59e0b;border-radius:8px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+            <div style="display:flex;align-items:center;gap:12px;flex:1;min-width:250px;">
+              <span style="font-size:20px;">💎</span>
+              <div>
+                <div style="font-weight:800;font-size:14px;color:#92400e;margin-bottom:2px;">
+                Upgrade to Gold - Add 5 more children
+                </div>
+                <div style="font-size:12px;color:#78350f;">
+                  <strong>{{daysRemaining}} days</strong> of Silver credited to Gold • Priority support included
+                </div>
+              </div>
+            </div>
+         <div style="flex-shrink:0;">
+  <button 
+    onclick="openPayModal('gold', 'Gold Plan', 10)"
+    style="background:#f59e0b;color:#fff;font-weight:700;padding:8px 16px;border-radius:8px;border:none;cursor:pointer;font-size:13px;white-space:nowrap;">
+    Upgrade ($10/mo) →
+  </button>
+</div>
+          </div>
+        {{/if}}
+      {{/unless}}
+    {{/if}}
+            
+
+    <!-- RENEW IF EXPIRED -->
+    {{#if isExpired}}
+      <div id="plans">
+        <h2>Renew Your Plan</h2>
+        <div class="plan-grid">
+          <div class="plan-card silver-border">
+            <span class="plan-badge badge-silver">Silver</span>
+            <div class="plan-price">$5</div>
+            <div class="plan-period">per month · 2 children</div>
+            <form method="POST" action="/payments/paynow/init">
+              <input type="hidden" name="plan" value="silver">
+              <button class="btn btn-silver" type="submit">💳 Renew Silver</button>
+            </form>
+          </div>
+          <div class="plan-card gold-border">
+            <span class="plan-badge badge-gold">Gold</span>
+            <div class="plan-price">$10</div>
+            <div class="plan-period">per month · 5 children</div>
+            <form method="POST" action="/payments/paynow/init">
+              <input type="hidden" name="plan" value="gold">
+              <button class="btn" type="submit">💳 Renew Gold</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    {{/if}}
+
+    <!-- CHILDREN -->
+    <h2>My Children</h2>
+
+    {{#if children.length}}
+<div class="grid">
+  {{#each children}}
+    <div class="child-card">
+      <div>
+        <div class="child-name">{{firstName}} {{lastName}}</div>
+        <div class="child-meta">Grade {{grade}} • ID: {{studentId}}</div>
+
+        <div class="stats">
+          <div class="stat">
+            <strong>{{pendingCount}}</strong>Pending
+          </div>
+          <div class="stat">
+            <strong>{{completedCount}}</strong>Completed
+          </div>
+          <div class="stat">
+            <strong>{{certificateCount}}</strong>Certificates
+          </div>
+        </div>
+      </div>
+
+      <div class="actions">
+        <a href="/parent/children/{{_id}}/quizzes">▶ Enter Account</a>
+        <a href="/parent/children/{{_id}}/edit">✏️ Edit Details</a>
+      </div>
+    </div>
+  {{/each}}
+</div>
+{{else}}
+      <div class="panel">
+        <div class="empty">No children added yet.</div>
+        <div class="note">Click "Add Child" above to register your learner and assign quizzes.</div>
+      </div>
+    {{/if}}
+
+  {{/if}}
+
+  <!-- TRUST -->
+  <div class="panel">
+    <strong style="color:var(--gold)">🔒 Parent Controlled Access</strong>
+    <div class="note">
+      Only you can view your children's quizzes, results and certificates.
+    </div>
+  </div>
+
+</main>
+  {{> ecocash_modal}}
+</body>
+</html>
