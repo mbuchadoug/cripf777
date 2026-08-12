@@ -152,7 +152,7 @@
     .hdr-badge.other  { background:var(--blue-bg); color:var(--blue-dk); }
 
     /* ═══ PAGE BODY ═══ */
-    .page { padding:28px; display:none; flex-direction:column; gap:22px; overflow-x:hidden; box-sizing:border-box; width:100%; }
+    .page { padding:28px; display:none; flex-direction:column; gap:22px; }
     .page.active { display:flex; }
 
     /* ═══ STAT CARDS ═══ */
@@ -408,202 +408,18 @@
     .mono { font-family:'Courier New',monospace; font-size:11.5px; color:var(--blue); font-weight:600; }
     .sep { height:1px; background:var(--border); margin:4px 0; }
 
-
-
-
-    /* ─── CLOSE BUTTON: hidden on desktop (sidebar always visible there) ─── */
-    #sb-close-btn { display:none; }
-    @media(max-width:768px) {
-      #sb-close-btn { display:flex; }
-    }
-
-    /* ─── DESKTOP SIDEBAR TOGGLE ─── */
-    /* When sidebar is collapsed on desktop */
-    .sidebar-collapsed .sidebar {
-      transform:translateX(-100%);
-      transition:transform .22s cubic-bezier(.4,0,.2,1);
-    }
-    .sidebar-collapsed .main-area {
-      margin-left:0;
-      transition:margin-left .22s cubic-bezier(.4,0,.2,1);
-    }
-    .sidebar { transition:transform .22s cubic-bezier(.4,0,.2,1); }
-    .main-area { transition:margin-left .22s cubic-bezier(.4,0,.2,1); }
-    /* Desktop toggle button in header */
-    #sb-toggle-btn {
-      display:flex; align-items:center; justify-content:center;
-      width:36px; height:36px; flex-shrink:0;
-      border:1.5px solid var(--border); border-radius:8px;
-      background:var(--surface); cursor:pointer;
-      color:var(--ink-soft); font-size:16px;
-      transition:all .14s;
-    }
-    #sb-toggle-btn:hover { border-color:var(--blue); color:var(--blue); background:var(--blue-bg); }
-
-    /* ─── HAMBURGER BUTTON ─── */
-    .mob-hamburger {
-      display:none; flex-direction:column; justify-content:center;
-      align-items:center; gap:5px;
-      width:40px; height:40px; flex-shrink:0;
-      border:none; background:transparent; cursor:pointer; padding:0;
-      border-radius:8px; transition:background .15s;
-    }
-    .mob-hamburger:hover { background:var(--border); }
-    .mob-hamburger span {
-      display:block; width:20px; height:2px;
-      background:var(--ink); border-radius:2px; transition:all .2s;
-    }
-
-    /* ─── SIDEBAR OVERLAY (mobile) ─── */
-    #sb-overlay {
-      display:none; position:fixed; inset:0; z-index:190;
-      background:rgba(15,23,42,.55); backdrop-filter:blur(2px);
-    }
-    #sb-overlay.show { display:block; }
-
-    /* ─── MOBILE BOTTOM NAV ─── */
-    .mob-bottom-nav {
-      display:none; position:fixed; bottom:0; left:0; right:0;
-      z-index:180; background:var(--surface);
-      border-top:1px solid var(--border);
-      box-shadow:0 -4px 20px rgba(0,0,0,.08);
-      padding-bottom:env(safe-area-inset-bottom,0);
-    }
-    .mob-bottom-nav-row {
-      display:flex; align-items:stretch;
-    }
-    .mbn-item {
-      flex:1; display:flex; flex-direction:column; align-items:center;
-      justify-content:center; padding:10px 4px 8px;
-      border:none; background:none; cursor:pointer;
-      font-family:var(--font); font-size:10px; font-weight:600;
-      color:var(--ink-muted); gap:3px; transition:color .12s;
-      -webkit-tap-highlight-color:transparent;
-    }
-    .mbn-item .mbn-ic { font-size:19px; line-height:1; }
-    .mbn-item.active { color:var(--blue); }
-
-    /* ─── RESPONSIVE 1100px ─── */
+    /* ═══ RESPONSIVE ═══ */
     @media(max-width:1100px) {
-      .stats-row { grid-template-columns:repeat(2,1fr); }
+      .stats-row { grid-template-columns:1fr 1fr; }
       .form-grid-3 { grid-template-columns:1fr 1fr; }
     }
-
-    /* ─── RESPONSIVE 768px - tablet/mobile ─── */
     @media(max-width:768px) {
-
-      /* Sidebar: hidden off-screen by default, slides in as drawer */
-      .sidebar {
-        transform:translateX(-100%);
-        transition:transform .26s cubic-bezier(.4,0,.2,1);
-        width:260px;
-        box-shadow:none;
-        z-index:200;
-      }
-      .sidebar.sb-open {
-        transform:translateX(0);
-        box-shadow:8px 0 32px rgba(0,0,0,.25);
-      }
-
-      /* Main area fills full width */
+      :root { --nav-w:0px; }
+      .sidebar { transform:translateX(-240px); transition:transform .22s; }
+      .sidebar.open { transform:translateX(0); width:240px; }
       .main-area { margin-left:0; }
-
-      /* Show hamburger */
-      .mob-hamburger { display:flex; }
-
-      /* Show bottom nav */
-      .mob-bottom-nav { display:block; }
-
-      /* Extra bottom padding so content clears the bottom nav */
-      .page { padding-bottom:80px; }
-
-      /* Header tighter */
-      .top-hdr { padding:0 14px; gap:10px; }
-      .hdr-title { font-size:15px; }
-      .hdr-sub { display:none; }
-      /* Hide badge + header buttons on mobile - space is precious */
-      .hdr-right-items { display:none; }
-
-      /* Stats 2×2 */
-      .stats-row { grid-template-columns:repeat(2,1fr); gap:10px; }
-      .stat-card { padding:14px 14px; gap:10px; }
-      .stat-val { font-size:22px; }
-      .stat-ic { width:38px; height:38px; font-size:17px; }
-
-      /* Page padding smaller */
-      .page { padding:16px 14px; gap:16px; padding-bottom:80px; }
-
-      /* Card padding smaller */
-      .card-hdr { padding:13px 16px; }
-      .card-body { padding:16px; }
-
-      /* Member tabs: scrollable strip */
-      .m-tabs {
-        overflow-x:auto; flex-wrap:nowrap;
-        -webkit-overflow-scrolling:touch;
-        scrollbar-width:none; padding:12px 14px 0;
-      }
-      .m-tabs::-webkit-scrollbar { display:none; }
-      .m-tab { white-space:nowrap; padding:8px 12px; font-size:12px; }
-      .m-search { padding:10px 14px; }
-
-      /* Tables: horizontal scroll */
-      .table-wrap, .scroll-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; }
-
-      /* Hide less-important table columns */
-      .col-hide-sm { display:none !important; }
-
-      /* Form grids collapse */
-      .form-grid-2 { grid-template-columns:1fr; gap:12px; }
-      .form-grid-3 { grid-template-columns:1fr; gap:12px; }
-      .col-full { grid-column:auto; }
-
-      /* Quick-action buttons: 2-column grid */
-      .flex-row.qa { display:grid !important; grid-template-columns:1fr 1fr; gap:8px; }
-      .flex-row.qa .btn { justify-content:flex-start; }
-
-      /* Modals: full-width, slide up from bottom */
-      .modal-overlay { padding:0; align-items:flex-end; }
-      .modal {
-        border-radius:18px 18px 0 0;
-        max-height:88vh; padding:22px 18px 24px;
-      }
-
-      /* Cred info rows */
-      .cred-info-row { flex-wrap:wrap; gap:6px; padding:9px 12px; }
-      .cred-info-row .ci-label { min-width:80px; font-size:10px; }
-      .cred-info-row .ci-val { font-size:13px; }
-
-      /* Dropzone */
-      .dropzone { padding:18px; }
-
-      /* Alert */
-      .alert { font-size:12.5px; }
-    }
-
-    /* ─── RESPONSIVE 480px - small phones ─── */
-    @media(max-width:480px) {
-      .page { padding:12px 10px; gap:12px; padding-bottom:76px; }
-      .stats-row { gap:8px; }
-      .stat-card { padding:12px; gap:8px; }
-      .stat-val { font-size:20px; }
-      .card-hdr { padding:11px 12px; }
-      .card-body { padding:12px; }
-
-      /* On very narrow screens hide ID/Status columns too */
-      .col-hide-xs { display:none !important; }
-
-      /* Action buttons: icon only, no labels */
-      .act-lbl { display:none; }
-      .act-row { gap:3px; }
-
-      .modal { padding:18px 14px 22px; }
-    }
-
-    /* ─── RESPONSIVE 360px - smallest phones ─── */
-    @media(max-width:360px) {
-      .stats-row { grid-template-columns:1fr; }
-      .page { padding:10px 8px; padding-bottom:74px; }
+      .stats-row { grid-template-columns:1fr 1fr; }
+      .form-grid-2 { grid-template-columns:1fr; }
     }
     /* ═══ CREDENTIAL MODAL TABS ═══ */
     .cred-modal-tab.active { color:var(--blue) !important; border-bottom-color:var(--blue) !important; }
@@ -637,331 +453,6 @@
     .cred-info-row .ci-copy:hover { background:#dbeafe; }
     .cred-status-has  { color:var(--emerald); font-weight:600; font-size:12.5px; }
     .cred-status-none { color:var(--ink-faint); font-size:12.5px; }
-
-
-
-    /* ═══════════════════════════════════════════════════
-       CLASSIFICATION MANAGER - Grid-based, zero overflow
-    ═══════════════════════════════════════════════════ */
-
-    /* The classify page: standard page padding */
-    #page-classify {
-      padding:24px;
-      box-sizing:border-box;
-    }
-
-    /* Wrapper card - full width of its flex-column parent */
-    #clf-card {
-      background:var(--surface);
-      border:1px solid var(--border);
-      border-radius:var(--r-lg);
-      box-shadow:var(--sx);
-      overflow:hidden;
-      /* width is 100% because it's a block element in a flex column */
-    }
-
-    /* The two-column shell uses CSS Grid - EXACT sizes, no ambiguity */
-    .clf-shell {
-      display:grid;
-      grid-template-columns:160px 1fr; /* sidebar=fixed, main=ALL remaining */
-      grid-template-rows:1fr;
-      height:72vh;
-      min-height:440px;
-      max-height:820px;
-      overflow:hidden;
-    }
-
-    /* LEFT SIDEBAR: grid cell, exactly 160px, scrolls vertically */
-    .clf-sidebar {
-      grid-column:1;
-      background:var(--surface-2);
-      border-right:1px solid var(--border);
-      overflow-y:auto;
-      overflow-x:hidden;
-    }
-
-    /* RIGHT MAIN: grid cell, gets ALL remaining width, clips content */
-    .clf-main {
-      grid-column:2;
-      display:flex;
-      flex-direction:column;
-      overflow:hidden;
-      min-width:0; /* belt-and-suspenders for any nested flex */
-    }
-
-    /* TOOLBAR: search bar row */
-    .clf-toolbar {
-      flex-shrink:0;
-      display:flex;
-      gap:8px;
-      align-items:center;
-      padding:10px 12px;
-      border-bottom:1px solid var(--border);
-      background:var(--surface);
-      flex-wrap:wrap;
-    }
-    .clf-toolbar input {
-      flex:1;
-      min-width:0;
-      padding:8px 28px 8px 10px;
-      border:1.5px solid var(--border);
-      border-radius:var(--r);
-      font-size:13px;
-      font-family:var(--font);
-      outline:none;
-      transition:border-color .14s;
-    }
-    .clf-toolbar input:focus {
-      border-color:var(--blue);
-      box-shadow:0 0 0 3px var(--blue-ring);
-    }
-
-    /* QUIZ LIST: vertically scrollable, never horizontal */
-    .clf-list {
-      flex:1;
-      overflow-y:auto;
-      overflow-x:hidden;
-      -webkit-overflow-scrolling:touch;
-    }
-
-    /* QUIZ ROW
-       Three children: [chk][info flex:1 min-width:0][actions flex-shrink:0]
-       The info section MUST have min-width:0 - this is what makes text truncate
-       instead of pushing the Edit button off screen. */
-    .clf-row {
-      display:flex;
-      align-items:center;
-      gap:8px;
-      padding:10px 12px;
-      border-bottom:1px solid var(--border-soft);
-      transition:background .1s;
-    }
-    .clf-row:hover    { background:var(--surface-2); }
-    .clf-row.selected { background:var(--blue-bg); }
-
-    /* Checkbox column */
-    .clf-row-chk { flex-shrink:0; }
-
-    /* Info column: MUST have min-width:0 for ellipsis to work in flex */
-    .clf-row-info { flex:1; min-width:0; }
-
-    .clf-row-title {
-      font-size:13px; font-weight:500; color:var(--ink);
-      white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-    }
-    .clf-row-meta {
-      font-size:11px; color:var(--ink-muted);
-      margin-top:2px; display:flex; gap:4px; flex-wrap:wrap; align-items:center;
-    }
-
-    /* Edit button column: NEVER shrinks - always fully visible */
-    .clf-row-actions { flex-shrink:0; }
-
-    .clf-edit-btn {
-      display:inline-flex; align-items:center; gap:3px;
-      padding:5px 11px; border-radius:6px;
-      font-size:11.5px; font-weight:600; font-family:var(--font);
-      border:1.5px solid var(--border); background:var(--surface);
-      color:var(--blue); cursor:pointer; white-space:nowrap;
-      transition:all .12s;
-    }
-    .clf-edit-btn:hover {
-      border-color:var(--blue); background:var(--blue-bg);
-    }
-
-    /* Sidebar section labels */
-    .clf-sb-section {
-      padding:10px 12px 4px;
-      font-size:9.5px;
-      font-weight:700;
-      color:var(--ink-faint);
-      letter-spacing:.06em;
-      text-transform:uppercase;
-    }
-
-    /* Sidebar filter buttons */
-    .clf-filter {
-      display:flex;
-      align-items:center;
-      gap:6px;
-      padding:7px 10px;
-      font-size:11.5px;
-      color:var(--ink-soft);
-      cursor:pointer;
-      border:none;
-      background:none;
-      width:100%;
-      text-align:left;
-      transition:background .1s;
-      box-sizing:border-box;
-      overflow:hidden; /* prevent filter from expanding sidebar */
-    }
-    .clf-filter:hover  { background:rgba(0,0,0,.04); }
-    .clf-filter.active { color:var(--blue); background:var(--blue-bg); font-weight:600; }
-    /* Label text inside filter - truncates if too long */
-    .clf-fi {
-      flex:1;
-      min-width:0;
-      overflow:hidden;
-      text-overflow:ellipsis;
-      white-space:nowrap;
-    }
-    .clf-filter-count  {
-      flex-shrink:0;
-      font-size:10px;
-      font-weight:700;
-      color:var(--ink-faint);
-      background:var(--canvas);
-      padding:1px 5px;
-      border-radius:99px;
-    }
-    .clf-filter.active .clf-filter-count { background:var(--blue-bg); color:var(--blue); }
-
-    /* Pillar colour dot */
-    .clf-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
-
-    /* Badges */
-    .clf-badge {
-      font-size:10px; font-weight:600;
-      padding:1px 6px; border-radius:99px;
-      white-space:nowrap; flex-shrink:0;
-    }
-    .clf-badge-cat  { background:var(--violet-bg); color:var(--violet); }
-    .clf-badge-none { background:var(--canvas); color:var(--ink-faint); border:1px solid var(--border); }
-    .clf-badge-lock { background:var(--amber-bg); color:var(--amber); }
-    .clf-badge-oos  { background:var(--rose-bg); color:var(--rose); }
-    .clf-badge-conf { background:var(--emerald-bg); color:var(--emerald); }
-
-    /* BULK ACTION BAR: fixed at bottom of clf-main */
-    .clf-bulk-bar {
-      display:none;
-      flex-shrink:0;
-      align-items:center;
-      gap:8px;
-      padding:9px 12px;
-      background:var(--blue-bg);
-      border-top:1px solid #bfdbfe;
-      flex-wrap:wrap;
-      width:100%;
-      box-sizing:border-box;
-    }
-    .clf-bulk-bar.visible { display:flex; }
-    .clf-bulk-label {
-      font-size:12px; font-weight:700; color:var(--blue); white-space:nowrap;
-    }
-    .clf-bulk-bar select {
-      font-size:12px; padding:5px 8px;
-      border:1.5px solid var(--border);
-      border-radius:var(--r);
-      font-family:var(--font);
-    }
-
-    /* CLASSIFICATION SLIDE-IN PANEL */
-    .clf-panel-overlay {
-      position:fixed; inset:0;
-      background:rgba(0,0,0,.4);
-      z-index:500; display:none;
-    }
-    .clf-panel-overlay.open { display:block; }
-    .clf-panel {
-      position:fixed; top:0; right:0;
-      width:440px; max-width:100vw; height:100vh;
-      background:var(--surface); box-shadow:var(--slg);
-      z-index:501; display:flex; flex-direction:column;
-      transform:translateX(100%);
-      transition:transform .22s cubic-bezier(.4,0,.2,1);
-    }
-    .clf-panel.open { transform:translateX(0); }
-    .clf-panel-hdr {
-      padding:18px 22px 14px;
-      border-bottom:1px solid var(--border);
-      flex-shrink:0;
-    }
-    .clf-panel-title { font-size:16px; font-weight:700; color:var(--ink); }
-    .clf-panel-sub {
-      font-size:12px; color:var(--ink-muted); margin-top:3px;
-      white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-    }
-    .clf-panel-body { flex:1; overflow-y:auto; padding:18px 22px; }
-    .clf-panel-footer {
-      padding:14px 22px;
-      border-top:1px solid var(--border);
-      display:flex; gap:10px; flex-shrink:0;
-      background:var(--surface-2);
-    }
-
-    /* Pillar → Category buttons in panel */
-    .clf-pillar-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:14px; }
-    .clf-cat-list    { display:grid; grid-template-columns:1fr; gap:5px; margin-bottom:14px; }
-    .clf-cat-btn {
-      padding:8px 11px;
-      border:1.5px solid var(--border); border-radius:var(--r);
-      font-size:12.5px; font-family:var(--font);
-      color:var(--ink-soft); background:var(--surface);
-      text-align:left; cursor:pointer; transition:all .12s;
-    }
-    .clf-cat-btn:hover    { border-color:var(--blue); color:var(--blue); background:var(--blue-bg); }
-    .clf-cat-btn.selected { border-color:var(--blue); color:var(--blue); background:var(--blue-bg); font-weight:600; }
-
-    /* Loading / empty state */
-    .clf-loading {
-      display:flex; align-items:center; justify-content:center;
-      padding:48px 20px; color:var(--ink-muted); font-size:13px;
-      gap:10px; flex-direction:column; text-align:center;
-    }
-
-    /* ─── TABLET / MOBILE ≤ 768px ───────────────────────
-       Grid switches to single column.
-       Sidebar becomes a horizontal scrollable pill strip. */
-    @media (max-width:768px) {
-      #page-classify { padding:12px; }
-
-      .clf-shell {
-        grid-template-columns:1fr;  /* single column */
-        grid-template-rows:auto 1fr;
-        height:auto;
-        max-height:none;
-      }
-      .clf-sidebar {
-        grid-column:1; grid-row:1;
-        display:flex; flex-direction:row;
-        overflow-x:auto; overflow-y:hidden;
-        -webkit-overflow-scrolling:touch;
-        scrollbar-width:none;
-        padding:6px 8px; gap:4px;
-        border-right:none; border-bottom:1px solid var(--border);
-        height:auto;
-      }
-      .clf-sidebar::-webkit-scrollbar { display:none; }
-      .clf-main {
-        grid-column:1; grid-row:2;
-        max-height:60vh;
-      }
-      .clf-sb-section { display:none; }
-      .clf-filter {
-        flex-shrink:0; white-space:nowrap; width:auto;
-        padding:5px 10px; border-radius:99px;
-        border:1.5px solid var(--border); font-size:11px;
-        overflow:visible;
-      }
-      .clf-filter.active { border-color:var(--blue); background:var(--blue-bg); }
-      .clf-fi { white-space:nowrap; }
-      .clf-filter-count { font-size:9.5px; }
-      .clf-list { max-height:52vh; }
-      .clf-row { padding:9px 10px; gap:6px; }
-      .clf-row-title { font-size:12px; }
-      .clf-row-meta { font-size:10px; }
-      .clf-edit-btn { padding:5px 8px; font-size:11px; }
-      .clf-bulk-bar { flex-wrap:wrap; gap:6px; }
-    }
-
-    /* ─── SMALL PHONES ≤ 480px ─────────────────────── */
-    @media (max-width:480px) {
-      #page-classify { padding:8px; }
-      .clf-row-chk { display:none; }
-      .clf-row { padding:8px 8px; gap:5px; }
-      .clf-row-title { font-size:11.5px; }
-    }
   </style>
 </head>
 <body data-org-slug="{{org.slug}}">
@@ -974,18 +465,9 @@
        SIDEBAR
   ══════════════════════════════════════ -->
   <aside class="sidebar" id="sidebar">
-    <div class="sb-brand" style="display:flex;align-items:center;justify-content:space-between;padding:20px 16px 16px">
-      <div>
-        <div class="sb-brand-name">CRIPF<em>Cnt</em></div>
-        <div class="sb-brand-sub">Admin Console</div>
-      </div>
-      <!-- Close button - only visible on mobile -->
-      <button id="sb-close-btn" onclick="closeSidebar()"
-        style="display:flex;align-items:center;justify-content:center;
-               width:32px;height:32px;border:none;border-radius:7px;
-               background:rgba(255,255,255,.1);color:#fff;font-size:18px;
-               cursor:pointer;flex-shrink:0;transition:background .12s"
-        aria-label="Close menu">✕</button>
+    <div class="sb-brand">
+      <div class="sb-brand-name">CRIPF<em>Cnt</em></div>
+      <div class="sb-brand-sub">Admin Console</div>
     </div>
 
     <div class="sb-section">Overview</div>
@@ -1000,7 +482,6 @@
         {{groups.staff.length}}
       </span>
     </button>
-{{#unless isReadOnly}}
     <button class="sb-item" data-page="invites" onclick="gotoPage('invites',this)">
       <span class="sb-ic">✉️</span> Invites
       <span class="sb-badge">{{invites.length}}</span>
@@ -1008,9 +489,7 @@
     <button class="sb-item" data-page="credentials" onclick="gotoPage('credentials',this)">
       <span class="sb-ic">🔑</span> Credentials
     </button>
-    {{/unless}}
 
-   {{#unless isReadOnly}}
     {{#unless isHomeSchool}}
     <div class="sb-section">Assessments</div>
     <button class="sb-item" data-page="assign" onclick="gotoPage('assign',this)">
@@ -1026,7 +505,7 @@
     </button>
     {{/unless}}
 
-  {{#if (eq org.type "school")}}
+    {{#if (eq org.type "school")}}
     <div class="sb-section">Import</div>
     {{#unless isHomeSchool}}
     <button class="sb-item" data-page="import" onclick="gotoPage('import',this)">
@@ -1034,25 +513,14 @@
     </button>
     {{/unless}}
     {{/if}}
-    {{/unless}}
 
-  {{#if (and (or isHomeSchool isCripSchool) (not isReadOnly))}}
+    {{#if (or isHomeSchool isCripSchool)}}
     <div class="sb-section">Rules</div>
     <button class="sb-item" data-page="rules" onclick="gotoPage('rules',this)">
       <span class="sb-ic">⚙️</span> Quiz Rules
       <span class="sb-badge">{{quizRules.length}}</span>
     </button>
     {{/if}}
-
-    {{#if (or isHomeSchool isCripSchool)}}
-    <div class="sb-section">Categories</div>
-    <button class="sb-item" data-page="classify" onclick="gotoPage('classify',this)">
-      <span class="sb-ic">🏷️</span> Classify Quizzes
-      {{#if unclassifiedCount}}<span class="sb-badge" style="background:var(--rose)">{{unclassifiedCount}}</span>{{/if}}
-    </button>
-    {{/if}}
-
-
 
     <div class="sb-section">Reports</div>
     <button class="sb-item" data-page="reports" onclick="gotoPage('reports',this)">
@@ -1074,214 +542,22 @@
   <div class="main-area">
 
     <header class="top-hdr">
-      <!-- Hamburger: only visible on mobile -->
-      <button class="mob-hamburger" id="mob-hamburger-btn"
-              onclick="openSidebar()" aria-label="Open navigation menu">
-        <span></span><span></span><span></span>
-      </button>
-
-      <!-- Desktop sidebar toggle - always visible, collapses/expands the nav -->
-      <button id="sb-toggle-btn" onclick="toggleSidebarDesktop()" title="Toggle navigation" aria-label="Toggle sidebar">
-        ☰
-      </button>
-      <div style="min-width:0;overflow:hidden">
-        <div class="hdr-title" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{org.name}}</div>
+      <div>
+        <div class="hdr-title">{{org.name}}</div>
         <div class="hdr-sub" id="page-sub">Overview</div>
       </div>
       <div class="hdr-sp"></div>
-
-      <!-- These items hide on mobile (via .hdr-right-items) -->
-      <div class="hdr-right-items" style="display:flex;align-items:center;gap:10px">
-        {{#if isCripSchool}}
-          <span class="hdr-badge school">🏫 cripfcnt-school</span>
-        {{else if isHomeSchool}}
-          <span class="hdr-badge home">🏠 cripfcnt-home</span>
-        {{else}}
-          <span class="hdr-badge other">🏢 {{org.slug}}</span>
-        {{/if}}
-        <a href="/admin/orgs/{{org.slug}}/attempts" class="btn btn-o btn-sm">📊 Attempts</a>
-        <a href="/admin/orgs/{{org.slug}}/reports/attempts.csv" class="btn btn-o btn-sm">⬇ CSV</a>
-      </div>
+      {{#if isCripSchool}}
+        <span class="hdr-badge school">🏫 cripfcnt-school</span>
+      {{else if isHomeSchool}}
+        <span class="hdr-badge home">🏠 cripfcnt-home</span>
+      {{else}}
+        <span class="hdr-badge other">🏢 {{org.slug}}</span>
+      {{/if}}
+      <a href="/admin/orgs/{{org.slug}}/attempts" class="btn btn-o btn-sm">📊 View Attempts</a>
+      <a href="/admin/orgs/{{org.slug}}/reports/attempts.csv" class="btn btn-o btn-sm">⬇ CSV</a>
     </header>
 
-
-<!-- ════════════════════════════
-         PAGE: CLASSIFY QUIZZES
-    ════════════════════════════ -->
-    {{#if (or isHomeSchool isCripSchool)}}
-    <section class="page" id="page-classify">
-      <div id="clf-card">
-        <!-- Card header -->
-        <div class="card-hdr">
-          <div style="flex:1;min-width:0">
-            <div class="card-hdr-title">🏷️ Quiz Classification Manager</div>
-            <div class="card-hdr-sub">
-              <span id="clf-status-badge">Assign or reassign quizzes to pillars and categories</span>
-            </div>
-          </div>
-          <button class="btn btn-o btn-sm" onclick="clfReload()">↻ Refresh</button>
-        </div>
-
-        <!-- clf-shell sits directly in card - no card-body padding around it -->
-        <div class="clf-shell">
-
-          <!-- ── LEFT: Pillar filter sidebar (FIXED - never scrolls with list) ── -->
-          <div class="clf-sidebar">
-            <div class="clf-sb-section">Show</div>
-            <button class="clf-filter active" id="clf-f-all" onclick="clfSetFilter('all')">
-              <span class="clf-fi">📋 All</span>
-              <span class="clf-filter-count" id="clf-count-all">-</span>
-            </button>
-            <button class="clf-filter" id="clf-f-unclassified" onclick="clfSetFilter('unclassified')">
-              <span class="clf-fi">⚠️ Unclassified</span>
-              <span class="clf-filter-count" id="clf-count-unclassified" style="background:var(--rose-bg);color:var(--rose)">{{unclassifiedCount}}</span>
-            </button>
-            <button class="clf-filter" id="clf-f-locked" onclick="clfSetFilter('locked')">
-              <span class="clf-fi">🔒 Locked</span>
-              <span class="clf-filter-count" id="clf-count-locked">-</span>
-            </button>
-            <div class="clf-sb-section">Pillar</div>
-            <button class="clf-filter" onclick="clfSetFilter('pillar','consciousness')">
-              <span class="clf-dot" style="background:#7c3aed"></span>
-              <span class="clf-fi">Consciousness</span>
-              <span class="clf-filter-count" id="clf-p-consciousness">-</span>
-            </button>
-            <button class="clf-filter" onclick="clfSetFilter('pillar','responsibility')">
-              <span class="clf-dot" style="background:#0d9488"></span>
-              <span class="clf-fi">Responsibility</span>
-              <span class="clf-filter-count" id="clf-p-responsibility">-</span>
-            </button>
-            <button class="clf-filter" onclick="clfSetFilter('pillar','interpretation')">
-              <span class="clf-dot" style="background:#4f46e5"></span>
-              <span class="clf-fi">Interprete</span>
-              <span class="clf-filter-count" id="clf-p-interpretation">-</span>
-            </button>
-            <button class="clf-filter" onclick="clfSetFilter('pillar','purpose')">
-              <span class="clf-dot" style="background:#d97706"></span>
-              <span class="clf-fi">Purpose</span>
-              <span class="clf-filter-count" id="clf-p-purpose">-</span>
-            </button>
-            <button class="clf-filter" onclick="clfSetFilter('pillar','frequencies')">
-              <span class="clf-dot" style="background:#e11d48"></span>
-              <span class="clf-fi">Frequencies</span>
-              <span class="clf-filter-count" id="clf-p-frequencies">-</span>
-            </button>
-            <button class="clf-filter" onclick="clfSetFilter('pillar','civilization')">
-              <span class="clf-dot" style="background:#059669"></span>
-              <span class="clf-fi">Civilization</span>
-              <span class="clf-filter-count" id="clf-p-civilization">-</span>
-            </button>
-            <button class="clf-filter" onclick="clfSetFilter('pillar','negotiation')">
-              <span class="clf-dot" style="background:#ea580c"></span>
-              <span class="clf-fi">Negotiation</span>
-              <span class="clf-filter-count" id="clf-p-negotiation">-</span>
-            </button>
-            <button class="clf-filter" onclick="clfSetFilter('pillar','technology')">
-              <span class="clf-dot" style="background:#2563eb"></span>
-              <span class="clf-fi">Technology</span>
-              <span class="clf-filter-count" id="clf-p-technology">-</span>
-            </button>
-          </div>
-
-          <!-- ── RIGHT: Toolbar + scrollable list + bulk bar ── -->
-          <div class="clf-main">
-
-            <!-- Toolbar: always visible, never scrolls -->
-            <div class="clf-toolbar">
-              <!-- Search wrapper with inline clear button -->
-              <div style="flex:1;min-width:120px;position:relative;display:flex">
-                <input type="text" id="clf-search"
-                  placeholder="🔍  Search quiz titles…"
-                  oninput="clfSearch(this.value)"
-                  onkeydown="if(event.key==='Enter'){event.preventDefault();clfSearchNow();}">
-                <button id="clf-search-clear" onclick="clfSearchClear()" title="Clear search"
-                  style="display:none;position:absolute;right:8px;top:50%;transform:translateY(-50%);
-                  border:none;background:none;cursor:pointer;font-size:13px;
-                  color:var(--ink-muted);line-height:1;padding:2px 4px">✕</button>
-              </div>
-              <!-- Select-all checkbox -->
-              <label style="display:flex;align-items:center;gap:5px;font-size:12.5px;
-                color:var(--ink-muted);cursor:pointer;white-space:nowrap;flex-shrink:0">
-                <input type="checkbox" id="clf-select-all" onchange="clfToggleAll(this.checked)"
-                  style="accent-color:var(--blue);width:14px;height:14px">
-                All
-              </label>
-              <button class="btn btn-o btn-sm" onclick="clfClearSelection()"
-                id="clf-clear-btn" style="display:none;flex-shrink:0">✕ Clear</button>
-            </div>
-
-            <!-- THE ONLY SCROLLING ELEMENT: quiz list -->
-            <div class="clf-list" id="clf-list">
-              <div class="clf-loading">⏳ Loading quizzes…</div>
-            </div>
-
-            <!-- Bulk action bar: visible only when quizzes are selected -->
-            <div class="clf-bulk-bar" id="clf-bulk-bar">
-              <span class="clf-bulk-label" id="clf-bulk-label">0 selected</span>
-              <select id="clf-bulk-pillar" onchange="clfBulkPillarChange()">
-                <option value="">- Pillar -</option>
-                <option value="consciousness">Consciousness</option>
-                <option value="responsibility">Responsibility</option>
-                <option value="interpretation">Interpretation</option>
-                <option value="purpose">Purpose</option>
-                <option value="frequencies">Frequencies</option>
-                <option value="civilization">Civilization</option>
-                <option value="negotiation">Negotiation</option>
-                <option value="technology">Technology</option>
-              </select>
-              <select id="clf-bulk-category" disabled>
-                <option value="">- Category -</option>
-              </select>
-              <button class="btn btn-p btn-sm" onclick="clfBulkApply()"
-                id="clf-bulk-apply-btn" disabled style="flex-shrink:0">Apply</button>
-              <span id="clf-bulk-result" style="font-size:12px;color:var(--emerald)"></span>
-            </div>
-
-          </div><!-- /clf-main -->
-        </div><!-- /clf-shell -->
-      </div><!-- /card -->
-    </section>
-    {{/if}}
-
-    <!-- ── CLASSIFICATION PANEL (right slide-in) ── -->
-    <div class="clf-panel-overlay" id="clfOverlay" onclick="clfClosePanel()"></div>
-    <div class="clf-panel" id="clfPanel">
-      <div class="clf-panel-hdr">
-        <div class="clf-panel-title">🏷️ Classify Quiz</div>
-        <div class="clf-panel-sub" id="clf-panel-sub">-</div>
-      </div>
-      <div class="clf-panel-body">
-        <input type="hidden" id="clf-panel-quizId">
-        <div class="fld" style="margin-bottom:18px">
-          <label style="font-size:12px;font-weight:700;color:var(--ink-muted);margin-bottom:8px;display:block">1. SELECT PILLAR</label>
-          <div class="clf-pillar-grid" id="clf-pillar-grid"></div>
-        </div>
-        <div class="fld" style="margin-bottom:18px" id="clf-cat-section">
-          <label style="font-size:12px;font-weight:700;color:var(--ink-muted);margin-bottom:8px;display:block">2. SELECT CATEGORY</label>
-          <div class="clf-cat-list" id="clf-cat-list"></div>
-        </div>
-        <div class="fld" id="clf-series-section" style="display:none;margin-bottom:18px">
-          <label style="font-size:12px;font-weight:700;color:var(--ink-muted);margin-bottom:8px;display:block">3. SERIES SLUG <span style="font-weight:400;color:var(--ink-faint)">(optional)</span></label>
-          <input type="text" id="clf-panel-series" placeholder="e.g. governance-foundations" style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:var(--r);font-size:13px;font-family:var(--font)">
-          <div style="font-size:11.5px;color:var(--ink-faint);margin-top:4px">Lowercase slugs only. Leave blank to keep current series.</div>
-        </div>
-        <div style="padding:12px 14px;background:var(--surface-2);border-radius:var(--r);font-size:12.5px;color:var(--ink-muted);border:1px solid var(--border)">
-          <strong style="color:var(--ink)">🔒 Manual Lock</strong><br>
-          Saving will lock this quiz against future AI re-categorisation. Unlock by unchecking below.
-          <label style="display:flex;align-items:center;gap:8px;margin-top:8px;cursor:pointer">
-            <input type="checkbox" id="clf-panel-lock" checked>
-            <span style="font-size:12.5px;font-weight:500">Lock this classification</span>
-          </label>
-        </div>
-        <div id="clf-panel-result" style="margin-top:14px;font-size:13px"></div>
-      </div>
-      <div class="clf-panel-footer">
-        <button class="btn btn-o" onclick="clfClosePanel()">Cancel</button>
-        <button class="btn btn-p" id="clf-panel-save-btn" onclick="clfSave()" disabled>Save Classification</button>
-      </div>
-    </div>
-
-   
     <!-- ════════════════════════════
          PAGE: OVERVIEW
     ════════════════════════════ -->
@@ -1327,16 +603,13 @@
           </div>
         </div>
         <div class="card-body">
-          <div class="flex-row qa">
+          <div class="flex-row">
             <button class="btn btn-p" onclick="gotoPage('invites',document.querySelector('[data-page=invites]'))">✉️ Send Invite</button>
             <button class="btn btn-o" onclick="gotoPage('members',document.querySelector('[data-page=members]'))">👥 View Members</button>
             <button class="btn btn-o" onclick="gotoPage('credentials',document.querySelector('[data-page=credentials]'))">🔑 Issue Credentials</button>
             {{#unless isHomeSchool}}
             <button class="btn btn-o" onclick="gotoPage('assign',document.querySelector('[data-page=assign]'))">📋 Assign Quiz</button>
             {{/unless}}
-            {{#if (or isHomeSchool isCripSchool)}}
-            <button class="btn btn-o" onclick="gotoPage('classify',document.querySelector('[data-page=classify]'))">🏷️ Classify Quizzes</button>
-            {{/if}}
             <a href="/admin/orgs/{{org.slug}}/reports/attempts.csv" class="btn btn-o">⬇ Export CSV</a>
           </div>
         </div>
@@ -1399,35 +672,23 @@
     ════════════════════════════ -->
     <section class="page" id="page-members">
       <div class="card">
-       <div class="card-hdr">
-  <div class="card-hdr-title">All Members</div>
-  <div class="card-hdr-sp"></div>
-
-  <!-- ✅ ADD THIS BUTTON -->
-  <button class="btn btn-p btn-sm" onclick="openCreateUserModal()">
-    ➕ Add User
-  </button>
-</div>
+        <div class="card-hdr">
+          <div class="card-hdr-title">All Members</div>
+          <div class="card-hdr-sp"></div>
+        </div>
         <!-- Tabs -->
-      <div class="m-tabs">
-  {{#if groups.students.length}}
-    <button class="m-tab active" data-mtab="m-students" onclick="switchMTab('m-students',this)">🎓 Students ({{groups.students.length}})</button>
-  {{/if}}
-
-  {{#if groups.teachers.length}}
-    <button class="m-tab {{#unless groups.students.length}}active{{/unless}}" data-mtab="m-teachers" onclick="switchMTab('m-teachers',this)">📖 Teachers ({{groups.teachers.length}})</button>
-  {{/if}}
-
-  {{#if groups.privateTeachers.length}}
-    <button class="m-tab {{#unless (or groups.students.length groups.teachers.length)}}active{{/unless}}" data-mtab="m-private-teachers" onclick="switchMTab('m-private-teachers',this)">👨‍🏫 Private Teachers ({{groups.privateTeachers.length}})</button>
-  {{/if}}
-
-  <button class="m-tab {{#unless (or groups.students.length groups.teachers.length groups.privateTeachers.length)}}active{{/unless}}" data-mtab="m-staff" onclick="switchMTab('m-staff',this)">👤 Staff / Employees ({{groups.staff.length}})</button>
-
-  {{#if groups.admins.length}}
-    <button class="m-tab" data-mtab="m-admins" onclick="switchMTab('m-admins',this)">⭐ Admins ({{groups.admins.length}})</button>
-  {{/if}}
-</div>
+        <div class="m-tabs">
+          {{#if groups.students.length}}
+            <button class="m-tab active" data-mtab="m-students" onclick="switchMTab('m-students',this)">🎓 Students ({{groups.students.length}})</button>
+          {{/if}}
+          {{#if groups.teachers.length}}
+            <button class="m-tab {{#unless groups.students.length}}active{{/unless}}" data-mtab="m-teachers" onclick="switchMTab('m-teachers',this)">📖 Teachers ({{groups.teachers.length}})</button>
+          {{/if}}
+          <button class="m-tab {{#unless (or groups.students.length groups.teachers.length)}}active{{/unless}}" data-mtab="m-staff" onclick="switchMTab('m-staff',this)">👤 Staff / Employees ({{groups.staff.length}})</button>
+          {{#if groups.admins.length}}
+            <button class="m-tab" data-mtab="m-admins" onclick="switchMTab('m-admins',this)">⭐ Admins ({{groups.admins.length}})</button>
+          {{/if}}
+        </div>
         <div class="m-search">
           <input type="text" id="memberSearch" placeholder="Search by name, email, ID…" oninput="filterMembers(this.value)">
         </div>
@@ -1437,7 +698,7 @@
         <div class="m-pane active" id="m-students">
           <div class="scroll-wrap">
             <table class="mem-table">
-              <thead><tr><th>Student</th><th class="col-hide-xs">ID / Grade</th><th class="col-hide-sm">Status</th><th>Actions</th></tr></thead>
+              <thead><tr><th>Student</th><th>ID / Grade</th><th>Status</th><th>Actions</th></tr></thead>
               <tbody>
                 {{#each groups.students}}
                 {{#if this.user}}
@@ -1481,7 +742,7 @@
         <div class="m-pane {{#unless groups.students.length}}active{{/unless}}" id="m-teachers">
           <div class="scroll-wrap">
             <table class="mem-table">
-              <thead><tr><th>Teacher</th><th class="col-hide-xs">ID</th><th class="col-hide-sm">Status</th><th>Actions</th></tr></thead>
+              <thead><tr><th>Teacher</th><th>ID</th><th>Status</th><th>Actions</th></tr></thead>
               <tbody>
                 {{#each groups.teachers}}
                 {{#if this.user}}
@@ -1515,68 +776,11 @@
         </div>
         {{/if}}
 
-        {{#if groups.privateTeachers.length}}
-<div class="m-pane {{#unless (or groups.students.length groups.teachers.length)}}active{{/unless}}" id="m-private-teachers">
-  <div class="scroll-wrap">
-    <table class="mem-table">
-      <thead>
-        <tr>
-          <th>Private Teacher</th>
-          <th class="col-hide-xs">Username</th>
-          <th class="col-hide-sm">Subscription</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        {{#each groups.privateTeachers}}
-        {{#if this.user}}
-        <tr class="mem-row" data-uid="{{this.user._id}}">
-          <td>
-            <div style="display:flex;align-items:center">
-              <div class="avatar" style="background:var(--teal)">{{#if this.user.firstName}}{{substring this.user.firstName 0 1}}{{else}}T{{/if}}</div>
-              <div>
-                <div class="user-name">{{this.user.firstName}} {{this.user.lastName}}</div>
-                <div class="user-email">{{this.user.email}}</div>
-              </div>
-            </div>
-          </td>
-          <td>
-            {{#if this.user.username}}<div class="mono">@{{this.user.username}}</div>{{else}}<span style="color:var(--ink-faint);font-size:12px">None</span>{{/if}}
-            {{#if this.user.passwordHash}}<div style="font-size:10.5px;color:var(--emerald);margin-top:2px">● Has password</div>{{else}}<div style="font-size:10.5px;color:var(--ink-faint);margin-top:2px">○ No password</div>{{/if}}
-          </td>
-          <td>
-            {{#if (eq this.user.teacherSubscriptionStatus "paid")}}
-              <span class="badge badge-paid">✓ Active</span>
-            {{else}}
-              <span class="badge badge-trial">Trial</span>
-            {{/if}}
-          </td>
-          <td>
-            <div class="act-row">
-              {{#if (eq this.user.teacherSubscriptionStatus "trial")}}
-              <button class="btn-activate" onclick="activateTeacher('{{this.user._id}}',this)">✓ Activate</button>
-              {{else}}
-              <span class="btn-activate active">✓ Active</span>
-              {{/if}}
-              <button class="btn btn-xs btn-o" onclick="openCredModal('{{this.user._id}}','{{this.user.firstName}} {{this.user.lastName}}','private_teacher')">🔑 Creds</button>
-              <button class="btn btn-xs btn-o" onclick="openAssignModal('{{this.user._id}}','{{this.user.firstName}} {{this.user.lastName}}')">📋 Assign</button>
-              <button class="btn btn-xs btn-r" onclick="memberAction(this,'{{../org.slug}}','{{this.user._id}}','remove')">✕</button>
-            </div>
-          </td>
-        </tr>
-        {{/if}}
-        {{/each}}
-      </tbody>
-    </table>
-  </div>
-</div>
-{{/if}}
-
         <!-- STAFF / EMPLOYEES -->
         <div class="m-pane {{#unless (or groups.students.length groups.teachers.length)}}active{{/unless}}" id="m-staff">
           <div class="scroll-wrap">
             <table class="mem-table">
-              <thead><tr><th>Employee</th><th class="col-hide-xs">Username</th><th class="col-hide-sm">Subscription</th><th>Actions</th></tr></thead>
+              <thead><tr><th>Employee</th><th>Username</th><th>Subscription</th><th>Actions</th></tr></thead>
               <tbody id="staff-tbody">
                 {{#each groups.staff}}
                 {{#if this.user}}
@@ -1627,7 +831,7 @@
         <div class="m-pane" id="m-admins">
           <div class="scroll-wrap">
             <table class="mem-table">
-              <thead><tr><th>Admin</th><th class="col-hide-xs">Username</th><th class="col-hide-sm">Role</th><th>Actions</th></tr></thead>
+              <thead><tr><th>Admin</th><th>Username</th><th>Role</th><th>Actions</th></tr></thead>
               <tbody>
                 {{#each groups.admins}}
                 {{#if this.user}}
@@ -2391,44 +1595,6 @@ function formToObj(form) {
   return obj;
 }
 
-/* ── Sidebar open / close (mobile) ── */
-function openSidebar() {
-  const sb = document.getElementById('sidebar');
-  const ov = document.getElementById('sb-overlay');
-  if (sb) sb.classList.add('sb-open');
-  if (ov) ov.classList.add('show');
-  document.body.style.overflow = 'hidden';
-}
-
-function closeSidebar() {
-  const sb = document.getElementById('sidebar');
-  const ov = document.getElementById('sb-overlay');
-  if (sb) sb.classList.remove('sb-open');
-  if (ov) ov.classList.remove('show');
-  document.body.style.overflow = '';
-}
-
-/* Desktop sidebar toggle - collapses/expands without overlay */
-function toggleSidebarDesktop() {
-  if (window.innerWidth <= 768) {
-    // On mobile, use the drawer open/close
-    const sb = document.getElementById('sidebar');
-    if (sb && sb.classList.contains('sb-open')) closeSidebar();
-    else openSidebar();
-    return;
-  }
-  // Desktop: toggle collapsed class on shell
-  document.body.classList.toggle('sidebar-collapsed');
-  const btn = document.getElementById('sb-toggle-btn');
-  const isCollapsed = document.body.classList.contains('sidebar-collapsed');
-  if (btn) btn.title = isCollapsed ? 'Show navigation' : 'Hide navigation';
-}
-
-/* Reset drawer when resizing to desktop */
-window.addEventListener('resize', () => {
-  if (window.innerWidth > 768) closeSidebar();
-});
-
 /* ── Page navigation ── */
 function gotoPage(id, btn) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -2437,21 +1603,7 @@ function gotoPage(id, btn) {
   if (el) el.classList.add('active');
   if (btn) btn.classList.add('active');
   const sub = document.getElementById('page-sub');
-  if (sub && btn) sub.textContent = btn.querySelector('.sb-ic')?.nextSibling?.textContent?.trim() || '';
-  // Close sidebar on mobile after navigation
-  if (window.innerWidth <= 768) closeSidebar();
-  // Sync bottom nav active state
-  syncBottomNav(id);
-  // Scroll main area to top
-  const ma = document.querySelector('.main-area');
-  if (ma) ma.scrollTo({ top:0, behavior:'smooth' });
-}
-
-/* ── Bottom nav sync ── */
-function syncBottomNav(pageId) {
-  document.querySelectorAll('.mbn-item').forEach(b => {
-    b.classList.toggle('active', b.dataset.page === pageId);
-  });
+  if (sub && btn) sub.textContent = btn.querySelector('.sb-ic').nextSibling?.textContent?.trim() || '';
 }
 
 /* ── Member tabs ── */
@@ -2507,33 +1659,6 @@ async function memberAction(btn, slug, userId, action, role) {
   }
 }
 
-/* ── Activate private teacher / employee ── */
-async function activateTeacher(userId, btn) {
-  btn.disabled = true;
-  const oldHtml = btn.innerHTML;
-  btn.innerHTML = '⏳ Activating...';
-
-  const r = await api(`/admin/orgs/${ORG}/members/${userId}/activate`, 'POST', {});
-  const fb = document.getElementById('memberFeedback');
-
-  if (r.ok) {
-    btn.outerHTML = '<span class="btn-activate active">✓ Active</span>';
-    if (fb) {
-      fb.innerHTML = '<span style="color:var(--emerald)">✓ Activated successfully</span>';
-      setTimeout(() => fb.innerHTML = '', 3000);
-    }
-  } else {
-    btn.disabled = false;
-    btn.innerHTML = oldHtml;
-    if (fb) {
-      fb.innerHTML = '<span style="color:var(--rose)">✗ ' + (r.data?.error || 'Activation failed') + '</span>';
-      setTimeout(() => fb.innerHTML = '', 5000);
-    } else {
-      alert(r.data?.error || 'Activation failed');
-    }
-  }
-}
-
 /* ── Modal helpers ── */
 function openModal(id) { document.getElementById(id).classList.add('open'); }
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
@@ -2542,75 +1667,6 @@ document.querySelectorAll('.modal-overlay').forEach(ov => {
   ov.addEventListener('click', e => { if (e.target === ov) closeModal(ov.id); });
 });
 
-
-
-/* ── Create User modal ── */
-function openCreateUserModal() {
-  const box = document.getElementById('createUserResult');
-  if (box) {
-    box.style.display = 'none';
-    box.innerHTML = '';
-    box.className = 'result-toast';
-  }
-  openModal('createUserModal');
-}
-
-function closeCreateUserModal() {
-  closeModal('createUserModal');
-}
-
-(function wireCreateUserForm() {
-  const form = document.getElementById('createUserForm');
-  if (!form || form.dataset.wired === '1') return;
-  form.dataset.wired = '1';
-
-  form.addEventListener('submit', async function (e) {
-    e.preventDefault();
-
-    const firstName = (form.firstName?.value || '').trim();
-    const lastName  = (form.lastName?.value  || '').trim();
-    const email     = (form.email?.value     || '').trim();
-    const role      = (form.role?.value      || '').trim();
-
-    const box = document.getElementById('createUserResult');
-
-    if (!firstName || !lastName || !role) {
-      box.className = 'result-toast err';
-      box.style.display = 'block';
-      box.textContent = 'First name, last name, and role are required';
-      return;
-    }
-
-    const r = await api(`/admin/orgs/${ORG}/members/add`, 'POST', {
-      firstName,
-      lastName,
-      email,
-      role
-    });
-
-    if (!r.ok) {
-      box.className = 'result-toast err';
-      box.style.display = 'block';
-      box.textContent = '✗ ' + (r.data?.error || 'Failed to create user');
-      return;
-    }
-
-    box.className = 'result-toast ok';
-    box.style.display = 'block';
-    box.innerHTML = `
-      ✅ User created successfully<br><br>
-      <strong>Username:</strong> ${r.data.username}<br>
-      <strong>Password:</strong> ${r.data.tempPassword}<br>
-      <strong>Login:</strong> ${r.data.loginUrl || '/auth/school'}
-    `;
-
-    form.reset();
-
-    setTimeout(() => {
-      window.location.reload();
-    }, 1200);
-  });
-})();
 /* ── Assign modal ── */
 function openAssignModal(uid, name) {
   document.getElementById('assignModal-uid').value = uid;
@@ -3042,646 +2098,12 @@ function handleFile(inp, dzId) {
   });
 })();
 
-/* ── Set page sub-title on load + init bottom nav ── */
+/* ── Set page sub-title on load ── */
 document.addEventListener('DOMContentLoaded', () => {
   const active = document.querySelector('.sb-item.active');
   const sub = document.getElementById('page-sub');
   if (active && sub) sub.textContent = active.textContent.trim().replace(/^\S+\s*/,'');
-
-  // Set initial active state on bottom nav
-  const initialPage = document.querySelector('.page.active')?.id?.replace('page-','') || 'overview';
-  syncBottomNav(initialPage);
-
-  // Mirror col-hide-* classes from <th> to corresponding <td> cells
-  // so mobile column hiding works without Handlebars each-row duplication
-  document.querySelectorAll('.mem-table').forEach(tbl => {
-    const ths = Array.from(tbl.querySelectorAll('thead th'));
-    ths.forEach((th, i) => {
-      const cls = [];
-      if (th.classList.contains('col-hide-sm')) cls.push('col-hide-sm');
-      if (th.classList.contains('col-hide-xs')) cls.push('col-hide-xs');
-      if (cls.length) {
-        tbl.querySelectorAll('tbody tr').forEach(tr => {
-          const td = tr.cells[i];
-          if (td) td.classList.add(...cls);
-        });
-      }
-    });
-  });
 });
-</script>
-
-<!-- ────────────────────────────────────────────────────
-     MOBILE OVERLAY (backdrop behind open sidebar)
-──────────────────────────────────────────────────── -->
-<div id="sb-overlay" onclick="closeSidebar()"></div>
-
-<!-- ────────────────────────────────────────────────────
-     MOBILE BOTTOM NAV
-     One-thumb access to the 5 most-used sections
-──────────────────────────────────────────────────── -->
-<nav class="mob-bottom-nav" aria-label="Mobile navigation">
-  <div class="mob-bottom-nav-row">
-    <button class="mbn-item active" data-page="overview"
-            onclick="gotoPage('overview', document.querySelector('[data-page=overview]'))">
-      <span class="mbn-ic">🏠</span>Home
-    </button>
-    <button class="mbn-item" data-page="members"
-            onclick="gotoPage('members', document.querySelector('[data-page=members]'))">
-      <span class="mbn-ic">👥</span>Members
-    </button>
-    <button class="mbn-item" data-page="credentials"
-            onclick="gotoPage('credentials', document.querySelector('[data-page=credentials]'))">
-      <span class="mbn-ic">🔑</span>Creds
-    </button>
-    {{#unless isHomeSchool}}
-    <button class="mbn-item" data-page="assign"
-            onclick="gotoPage('assign', document.querySelector('[data-page=assign]'))">
-      <span class="mbn-ic">📋</span>Assign
-    </button>
-    {{/unless}}
-    {{#if (or isHomeSchool isCripSchool)}}
-    <button class="mbn-item" data-page="classify"
-            onclick="gotoPage('classify', document.querySelector('[data-page=classify]'))">
-      <span class="mbn-ic">🏷️</span>Classify
-    </button>
-    {{/if}}
-    <button class="mbn-item" data-page="invites"
-            onclick="gotoPage('invites', document.querySelector('[data-page=invites]'))">
-      <span class="mbn-ic">✉️</span>Invites
-    </button>
-  </div>
-</nav>
-
-<!-- ════════════════════════════
-     CREATE USER MODAL
-════════════════════════════ -->
-<div class="modal-overlay" id="createUserModal">
-  <div class="modal">
-    <div class="modal-title">➕ Create User</div>
-    <div class="modal-sub">Add employee or student and generate login credentials</div>
-
-    <form id="createUserForm">
-      <div class="form-grid form-grid-2">
-
-        <div class="fld">
-          <label>First Name</label>
-          <input type="text" name="firstName" required>
-        </div>
-
-        <div class="fld">
-          <label>Last Name</label>
-          <input type="text" name="lastName" required>
-        </div>
-
-        <div class="fld">
-          <label>Email (optional)</label>
-          <input type="email" name="email">
-        </div>
-
-        <div class="fld">
-          <label>Role</label>
-    <select name="role" required>
-  {{#if isHomeSchool}}
-    <option value="private_teacher">Private Teacher</option>
-    <option value="student">Student</option>
-    <option value="teacher">Teacher</option>
-    <option value="readonly_admin">Read Only Admin</option>
-  {{else}}
-    <option value="employee">Employee</option>
-    <option value="student">Student</option>
-    <option value="teacher">Teacher</option>
-    <option value="readonly_admin">Read Only Admin</option>
-  {{/if}}
-</select>
-        </div>
-
-      </div>
-
-      <div class="modal-actions">
-        <button type="button" class="btn btn-o" onclick="closeCreateUserModal()">Cancel</button>
-        <button type="submit" class="btn btn-p">Create User</button>
-      </div>
-    </form>
-
-    <div id="createUserResult" class="result-toast"></div>
-  </div>
-</div>
-
-
-<script>
-/* ── Swipe right on main area to open sidebar (mobile UX) ── */
-(function () {
-  let startX = 0;
-  const main = document.querySelector('.main-area');
-  if (!main) return;
-  main.addEventListener('touchstart', e => { startX = e.touches[0].clientX; }, { passive:true });
-  main.addEventListener('touchend', e => {
-    const dx = e.changedTouches[0].clientX - startX;
-    if (dx > 60 && startX < 40 && window.innerWidth <= 768) openSidebar();
-  }, { passive:true });
-  // Swipe left on open sidebar to close
-  const sb = document.getElementById('sidebar');
-  if (sb) {
-    sb.addEventListener('touchstart', e => { startX = e.touches[0].clientX; }, { passive:true });
-    sb.addEventListener('touchend', e => {
-      const dx = e.changedTouches[0].clientX - startX;
-      if (dx < -50 && window.innerWidth <= 768) closeSidebar();
-    }, { passive:true });
-  }
-})();
-
-// ═══════════════════════════════════════════════════════════════════
-//  CLASSIFICATION MANAGER
-// ═══════════════════════════════════════════════════════════════════
-(function() {
-  const ORG_SLUG = '{{org.slug}}';
-  const BASE     = `/admin/orgs/${ORG_SLUG}/classify`;
-
-  // Full pillar→category map (mirrors backend + AI script)
-  const PILLARS = {
-    consciousness:  { label:'Consciousness',  color:'#7c3aed', cats:['consciousness-studies','philosophical-inquiry','systems-thinking','critical-thinking','psychology','education','communication'] },
-    responsibility: { label:'Responsibility', color:'#0d9488', cats:['governance','institutional-accountability','public-sector-ethics','rule-of-law','financial-accountability','structural-responsibility','social-contract','administration'] },
-    interpretation: { label:'Interpretation', color:'#4f46e5', cats:['interpretive-frameworks','language-recalibration','media-literacy','strategic-communication','narrative-framing','research-methodology'] },
-    purpose:        { label:'Purpose',        color:'#d97706', cats:['strategic-leadership','change-management','policy-implementation','community-leadership','crisis-management','motivation','organisational-development','human-resources'] },
-    frequencies:    { label:'Frequencies',    color:'#e11d48', cats:['frequencies-and-influence','social-development','institutional-reform','performance-metrics'] },
-    civilization:   { label:'Civilization',   color:'#059669', cats:['civilisation-theory','social-justice','human-rights','economic-justice','environmental-governance','electoral-systems','public-policy','law'] },
-    negotiation:    { label:'Negotiation',    color:'#ea580c', cats:['conflict-resolution','negotiation-dynamics','diplomacy','finance','strategy'] },
-    technology:     { label:'Technology',     color:'#2563eb', cats:['technology-governance','digital-ethics','ai-governance','risk-and-compliance','innovation'] }
-  };
-  const CAT_TO_PILLAR = {};
-  for (const [p, d] of Object.entries(PILLARS)) d.cats.forEach(c => CAT_TO_PILLAR[c] = p);
-  function toLabel(slug) { return slug.replace(/-/g,' ').replace(/\b\w/g,c=>c.toUpperCase()); }
-
-  // ── State ──
-  let _quizzes  = [];        // current list
-  let _totalAll = 0;         // total count from server (unfiltered)
-  let _counts   = {};        // category → count from server
-  let _selected = new Set(); // selected quiz IDs
-  let _filter   = 'all';
-  let _filterVal = null;
-  let _search   = '';
-  let _searchTimer = null;
-
-  // ── Panel state ──
-  let _panelQuizId  = null;
-  let _panelPillar  = null;
-  let _panelCategory = null;
-
-  // ── Init: load when page becomes visible ──
-  const origGotoPage = window.gotoPage;
-  window.gotoPage = function(page, el) {
-    origGotoPage && origGotoPage(page, el);
-    if (page === 'classify') {
-      // Small delay so the section is visible before measuring height
-      setTimeout(() => {
-        clfSetShellHeight();
-        clfReload();
-      }, 30);
-    }
-  };
-
-  // Set clf-shell height to use available viewport height
-  function clfSetShellHeight() {
-    const shell = document.querySelector('.clf-shell');
-    if (!shell) return;
-    if (window.innerWidth <= 768) {
-      shell.style.height = '';
-      return;
-    }
-    const rect = shell.getBoundingClientRect();
-    const available = window.innerHeight - rect.top - 28;
-    const clamped = Math.max(420, Math.min(available, 820));
-    shell.style.height = clamped + 'px';
-  }
-  window.addEventListener('resize', () => {
-    clearTimeout(window._clfResizeTimer);
-    window._clfResizeTimer = setTimeout(clfSetShellHeight, 60);
-  });
-
-  // ── Public API (called by inline onclick) ──
-  window.clfReload        = clfReload;
-  window.clfSetShellHeight = clfSetShellHeight;
-  window.clfSetFilter     = clfSetFilter;
-  window.clfSearch        = clfSearchDebounce;
-  window.clfSearchNow     = clfSearchNow;
-  window.clfSearchClear   = clfSearchClear;
-  window.clfToggleAll     = clfToggleAll;
-  window.clfClearSelection= clfClearSelection;
-  window.clfBulkPillarChange = clfBulkPillarChange;
-  window.clfBulkApply     = clfBulkApply;
-  window.clfOpenPanel     = clfOpenPanel;
-  window.clfClosePanel    = clfClosePanel;
-  window.clfSave          = clfSave;
-  window.clfSelectPillar  = clfSelectPillar;
-  window.clfSelectCat     = clfSelectCat;
-  window.clfToggleRow     = clfToggleRow;
-
-  // ── Load quizzes from server ──
-  async function clfReload() {
-    const params = new URLSearchParams();
-    if (_filter === 'unclassified') params.set('unclassified', '1');
-    else if (_filter === 'pillar')  params.set('pillar', _filterVal);
-    else if (_filter === 'category') params.set('category', _filterVal);
-    if (_search) params.set('q', _search);
-
-    const list = document.getElementById('clf-list');
-    list.innerHTML = '<div class="clf-loading">⏳ Loading…</div>';
-
-    try {
-      const r    = await fetch(`${BASE}/quizzes?${params}`);
-      const data = await r.json();
-      if (!data.ok) throw new Error(data.error);
-
-      _quizzes   = data.quizzes;
-      _totalAll  = data.total;   // full unfiltered count from server
-      _counts    = data.counts;
-      _selected.clear();
-      updateSidebarCounts();
-      renderList();
-      updateBulkBar();
-
-      // Show result count / search feedback
-      const badge = document.getElementById('clf-status-badge');
-      if (badge) {
-        if (_search) {
-          const n = _quizzes.length;
-          badge.style.color = n === 0 ? 'var(--rose)' : n === _totalAll ? 'var(--amber)' : 'var(--emerald)';
-          badge.textContent = n === 0
-            ? `No results for "${_search}"`
-            : n === _totalAll
-            ? `⚠ ${n} results - all quizzes match, search may not be filtering`
-            : `${n} result${n !== 1 ? 's' : ''} for "${_search}"`;
-        } else {
-          badge.style.color = 'var(--ink-muted)';
-          badge.textContent = `${_totalAll} total quiz${_totalAll !== 1 ? 'zes' : ''}`;
-        }
-      }
-    } catch (e) {
-      list.innerHTML = `<div class="clf-loading" style="color:var(--rose)">⚠ ${e.message}</div>`;
-    }
-  }
-
-  function updateSidebarCounts() {
-    // Total - always from server total, not current filtered list
-    document.getElementById('clf-count-all').textContent = _totalAll || _quizzes.length;
-    // Unclassified + locked - derive from server _counts (none key = unclassified)
-    const unclassifiedTotal = (_counts['__none__'] || 0) + (_counts[''] || 0)
-      + (_counts['null'] || 0) + (_counts['out-of-scope'] || 0);
-    document.getElementById('clf-count-unclassified').textContent = unclassifiedTotal || 
-      _quizzes.filter(q => !q.category || q.category === 'out-of-scope').length;
-    document.getElementById('clf-count-locked').textContent =
-      _quizzes.filter(q => q.isLocked).length;
-
-    // Per-pillar counts from server _counts (full corpus, not filtered list)
-    const pillarTotals = {};
-    for (const [cat, count] of Object.entries(_counts)) {
-      const p = CAT_TO_PILLAR[cat];
-      if (p) pillarTotals[p] = (pillarTotals[p] || 0) + count;
-    }
-    for (const p of Object.keys(PILLARS)) {
-      const el = document.getElementById(`clf-p-${p}`);
-      if (el) el.textContent = pillarTotals[p] || 0;
-    }
-  }
-
-  function renderList() {
-    const list = document.getElementById('clf-list');
-    if (!_quizzes.length) {
-      if (_search) {
-        list.innerHTML = `<div class="clf-loading" style="flex-direction:column;gap:8px">
-          <span style="font-size:18px">🔍</span>
-          <span>No quizzes found for <strong>"${escHtml(_search)}"</strong></span>
-          <span style="font-size:12px;color:var(--ink-faint)">Try a shorter search term or part of the title</span>
-          <button class="btn btn-o btn-sm" style="margin-top:4px" onclick="clfSearchClear()">Clear Search</button>
-        </div>`;
-      } else {
-        list.innerHTML = '<div class="clf-loading">No quizzes match this filter.</div>';
-      }
-      return;
-    }
-
-    // Server already applied all filters; client-side only needed for locked
-    // (unclassified is handled server-side via ?unclassified=1)
-    let items = _quizzes;
-    if (_filter === 'locked') items = _quizzes.filter(q => q.isLocked);
-
-    list.innerHTML = items.map(q => {
-      const catBadge = q.category && q.category !== 'out-of-scope'
-        ? `<span class="clf-badge clf-badge-cat">${toLabel(q.category)}</span>`
-        : q.category === 'out-of-scope'
-        ? `<span class="clf-badge clf-badge-oos">Out of scope</span>`
-        : `<span class="clf-badge clf-badge-none">Unclassified</span>`;
-      const lockBadge = q.isLocked ? `<span class="clf-badge clf-badge-lock">🔒</span>` : '';
-      const confBadge = q.confidence != null ? `<span class="clf-badge clf-badge-conf">${(q.confidence*100).toFixed(0)}%</span>` : '';
-      const pillarDot = q.pillar && PILLARS[q.pillar]
-        ? `<span class="clf-dot" style="background:${PILLARS[q.pillar].color};display:inline-block;margin-right:3px"></span>`
-        : '';
-      const isChecked = _selected.has(q.id) ? 'checked' : '';
-
-      return `<div class="clf-row${_selected.has(q.id)?' selected':''}" id="clfrow-${q.id}">
-        <div class="clf-row-chk">
-          <input type="checkbox" ${isChecked} onchange="clfToggleRow('${q.id}',this.checked)"
-            style="accent-color:var(--blue);width:14px;height:14px;cursor:pointer">
-        </div>
-        <div class="clf-row-info">
-          <div class="clf-row-title">${escHtml(q.title)}</div>
-          <div class="clf-row-meta">
-            ${pillarDot}${q.pillar ? `<span style="font-weight:500">${toLabel(q.pillar)}</span>` : ''}
-            ${q.pillar && (q.category || lockBadge) ? '<span style="color:var(--border)">·</span>' : ''}
-            ${catBadge} ${lockBadge}
-            ${q.series ? `<span style="color:var(--ink-faint);font-size:10.5px">· ${escHtml(q.series)}</span>` : ''}
-          </div>
-        </div>
-        <div class="clf-row-actions">
-          <button class="clf-edit-btn"
-            onclick="clfOpenPanel('${q.id}','${escAttr(q.title)}','${q.pillar||''}','${q.category||''}','${q.series||''}')">
-            ✏️ <span class="act-lbl">Edit</span>
-          </button>
-        </div>
-      </div>`;
-    }).join('');
-  }
-
-  // ── Filter controls ──
-  function clfSetFilter(type, val) {
-    _filter   = type;
-    _filterVal = val || null;
-    _selected.clear();
-    document.querySelectorAll('.clf-filter').forEach(b => b.classList.remove('active'));
-    if (type === 'all') document.getElementById('clf-f-all')?.classList.add('active');
-    else if (type === 'unclassified') document.getElementById('clf-f-unclassified')?.classList.add('active');
-    else if (type === 'locked') document.getElementById('clf-f-locked')?.classList.add('active');
-    clfReload();
-  }
-
-  // ── Search ──
-  function clfSearchDebounce(val) {
-    _search = val.trim();
-    // Show/hide clear button
-    const clearBtn = document.getElementById('clf-search-clear');
-    if (clearBtn) clearBtn.style.display = _search ? 'block' : 'none';
-    clearTimeout(_searchTimer);
-    _searchTimer = setTimeout(clfReload, 500); // 500ms debounce - avoids mid-word hits
-  }
-
-  // Immediate search on Enter key
-  function clfSearchNow() {
-    clearTimeout(_searchTimer);
-    const inp = document.getElementById('clf-search');
-    if (inp) _search = inp.value.trim();
-    const clearBtn = document.getElementById('clf-search-clear');
-    if (clearBtn) clearBtn.style.display = _search ? 'block' : 'none';
-    clfReload();
-  }
-
-  // Clear search
-  function clfSearchClear() {
-    const inp = document.getElementById('clf-search');
-    if (inp) inp.value = '';
-    _search = '';
-    const clearBtn = document.getElementById('clf-search-clear');
-    if (clearBtn) clearBtn.style.display = 'none';
-    clfReload();
-  }
-
-  // ── Selection ──
-  function clfToggleRow(id, checked) {
-    if (checked) _selected.add(id); else _selected.delete(id);
-    const row = document.getElementById(`clfrow-${id}`);
-    if (row) row.classList.toggle('selected', checked);
-    updateBulkBar();
-  }
-  function clfToggleAll(checked) {
-    // Server already filtered for unclassified/pillar; client only filters locked
-    let items = _quizzes;
-    if (_filter === 'locked') items = _quizzes.filter(q => q.isLocked);
-    items.forEach(q => {
-      if (checked) _selected.add(q.id); else _selected.delete(q.id);
-      const row = document.getElementById(`clfrow-${q.id}`);
-      if (row) row.classList.toggle('selected', checked);
-      const chk = row?.querySelector('input[type=checkbox]');
-      if (chk) chk.checked = checked;
-    });
-    updateBulkBar();
-  }
-  function clfClearSelection() {
-    _selected.clear();
-    document.querySelectorAll('.clf-row').forEach(r => r.classList.remove('selected'));
-    document.querySelectorAll('.clf-row input[type=checkbox]').forEach(c => c.checked = false);
-    document.getElementById('clf-select-all').checked = false;
-    updateBulkBar();
-  }
-  function updateBulkBar() {
-    const bar = document.getElementById('clf-bulk-bar');
-    const n   = _selected.size;
-    bar.classList.toggle('visible', n > 0);
-    document.getElementById('clf-bulk-label').textContent = `${n} quiz${n !== 1 ? 'zes' : ''} selected`;
-    document.getElementById('clf-clear-btn').style.display = n > 0 ? '' : 'none';
-    document.getElementById('clf-bulk-result').textContent = '';
-  }
-
-  // ── Bulk apply ──
-  function clfBulkPillarChange() {
-    const p = document.getElementById('clf-bulk-pillar').value;
-    const catSel = document.getElementById('clf-bulk-category');
-    catSel.innerHTML = '<option value="">- Select Category -</option>';
-    catSel.disabled  = !p;
-    document.getElementById('clf-bulk-apply-btn').disabled = true;
-    if (p && PILLARS[p]) {
-      PILLARS[p].cats.forEach(c => {
-        const o = document.createElement('option');
-        o.value = c; o.textContent = toLabel(c);
-        catSel.appendChild(o);
-      });
-    }
-    catSel.onchange = () => {
-      document.getElementById('clf-bulk-apply-btn').disabled = !catSel.value;
-    };
-  }
-
-  async function clfBulkApply() {
-    const category = document.getElementById('clf-bulk-category').value;
-    if (!category || !_selected.size) return;
-    const btn = document.getElementById('clf-bulk-apply-btn');
-    const res = document.getElementById('clf-bulk-result');
-    btn.disabled = true; btn.textContent = 'Saving…';
-    try {
-      const r = await fetch(`${BASE}/bulk`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ quizIds: [..._selected], category })
-      });
-      const data = await r.json();
-      if (!data.ok) throw new Error(data.error);
-      res.style.color = 'var(--emerald)';
-      res.textContent = `✓ ${data.modified} quiz${data.modified !== 1 ? 'zes' : ''} → ${toLabel(category)}`;
-      clfClearSelection();
-      await clfReload();
-    } catch (e) {
-      res.style.color = 'var(--rose)';
-      res.textContent = `✗ ${e.message}`;
-    } finally {
-      btn.disabled = false; btn.textContent = 'Apply to Selected';
-    }
-  }
-
-  // ── Classification Panel ──
-  function clfOpenPanel(id, title, pillar, category, series) {
-    _panelQuizId   = id;
-    _panelPillar   = pillar || null;
-    _panelCategory = category || null;
-
-    document.getElementById('clf-panel-quizId').value = id;
-    document.getElementById('clf-panel-sub').textContent = title;
-    document.getElementById('clf-panel-series').value = series || '';
-    document.getElementById('clf-panel-result').innerHTML = '';
-
-    // Render pillar grid
-    const grid = document.getElementById('clf-pillar-grid');
-    grid.innerHTML = Object.entries(PILLARS).map(([slug, d]) =>
-      `<button class="clf-cat-btn${pillar===slug?' selected':''}" onclick="clfSelectPillar('${slug}')"
-        style="${pillar===slug?`border-color:${d.color};color:${d.color};background:${d.color}15`:''}"
-      ><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${d.color};margin-right:6px"></span>${d.label}</button>`
-    ).join('');
-
-    // Pre-select category if existing
-    if (pillar && PILLARS[pillar]) {
-      _renderCatList(pillar, category);
-      document.getElementById('clf-cat-section').style.display = '';
-      document.getElementById('clf-series-section').style.display = '';
-    } else {
-      document.getElementById('clf-cat-section').style.display = 'none';
-      document.getElementById('clf-series-section').style.display = 'none';
-    }
-
-    // Save button state
-    document.getElementById('clf-panel-save-btn').disabled = !(pillar && category);
-
-    document.getElementById('clfOverlay').classList.add('open');
-    document.getElementById('clfPanel').classList.add('open');
-  }
-
-  function clfClosePanel() {
-    document.getElementById('clfOverlay').classList.remove('open');
-    document.getElementById('clfPanel').classList.remove('open');
-  }
-
-  function clfSelectPillar(slug) {
-    _panelPillar   = slug;
-    _panelCategory = null;
-    // Highlight selected pillar button
-    document.querySelectorAll('#clf-pillar-grid .clf-cat-btn').forEach(b => {
-      const isSel = b.textContent.trim().toLowerCase().startsWith(PILLARS[slug].label.toLowerCase());
-      b.classList.toggle('selected', b.onclick?.toString().includes(`'${slug}'`));
-    });
-    // Re-render grid with highlight
-    const grid = document.getElementById('clf-pillar-grid');
-    grid.innerHTML = Object.entries(PILLARS).map(([s, d]) =>
-      `<button class="clf-cat-btn${slug===s?' selected':''}" onclick="clfSelectPillar('${s}')"
-        style="${slug===s?`border-color:${d.color};color:${d.color};background:${d.color}15`:''}"
-      ><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${d.color};margin-right:6px"></span>${d.label}</button>`
-    ).join('');
-    _renderCatList(slug, null);
-    document.getElementById('clf-cat-section').style.display = '';
-    document.getElementById('clf-series-section').style.display = '';
-    document.getElementById('clf-panel-save-btn').disabled = true;
-  }
-
-  function _renderCatList(pillar, selectedCat) {
-    const catList = document.getElementById('clf-cat-list');
-    const color   = PILLARS[pillar]?.color || 'var(--blue)';
-    catList.innerHTML = (PILLARS[pillar]?.cats || []).map(cat =>
-      `<button class="clf-cat-btn${cat===selectedCat?' selected':''}" onclick="clfSelectCat('${cat}')"
-        style="${cat===selectedCat?`border-color:${color};color:${color};background:${color}15`:''}"
-      >${toLabel(cat)}</button>`
-    ).join('');
-  }
-
-  function clfSelectCat(cat) {
-    _panelCategory = cat;
-    _renderCatList(_panelPillar, cat);
-    document.getElementById('clf-panel-save-btn').disabled = false;
-  }
-
-  async function clfSave() {
-    if (!_panelQuizId || !_panelCategory) return;
-    const btn    = document.getElementById('clf-panel-save-btn');
-    const result = document.getElementById('clf-panel-result');
-    const series = document.getElementById('clf-panel-series').value.trim().toLowerCase().replace(/\s+/g,'-') || undefined;
-    const lock   = document.getElementById('clf-panel-lock').checked;
-
-    btn.disabled = true; btn.textContent = 'Saving…';
-    result.innerHTML = '';
-
-    try {
-      const r = await fetch(`${BASE}/quiz/${_panelQuizId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ category: _panelCategory, series, lock })
-      });
-      const data = await r.json();
-      if (!data.ok) throw new Error(data.error);
-
-      result.innerHTML = `<span style="color:var(--emerald);font-weight:600">✓ Saved → ${toLabel(data.pillar)} / ${toLabel(data.category)}</span>`;
-      setTimeout(() => { clfClosePanel(); clfReload(); }, 800);
-    } catch (e) {
-      result.innerHTML = `<span style="color:var(--rose)">✗ ${e.message}</span>`;
-    } finally {
-      btn.disabled = false; btn.textContent = 'Save Classification';
-    }
-  }
-
-  // ── Utilities ──
-  function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-  function escAttr(s) { return String(s||'').replace(/'/g,"\\'"); }
-
-
-  function openCreateUserModal() {
-  document.getElementById('createUserModal').classList.add('open');
-}
-
-function closeCreateUserModal() {
-  document.getElementById('createUserModal').classList.remove('open');
-}
-
-document.getElementById('createUserForm').addEventListener('submit', async function(e) {
-  e.preventDefault();
-
-  const form = new FormData(this);
-  const data = Object.fromEntries(form.entries());
-
-  const orgSlug = document.body.dataset.orgSlug;
-
-  const res = await fetch(`/admin/orgs/${orgSlug}/members/add`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data)
-  });
-
-  const result = await res.json();
-
-  const box = document.getElementById('createUserResult');
-
-  if (result.ok) {
-    box.className = 'result-toast ok';
-    box.style.display = 'block';
-
-    box.innerHTML = `
-      ✅ User Created<br><br>
-      Username: <strong>${result.username}</strong><br>
-      Password: <strong>${result.tempPassword}</strong><br>
-      Login: /auth/school
-    `;
-
-    this.reset();
-  } else {
-    box.className = 'result-toast err';
-    box.style.display = 'block';
-    box.textContent = result.error || 'Failed to create user';
-  }
-});
-})();
 </script>
 
 <!-- ══ BACKEND ROUTE NEEDED: POST /admin/orgs/:slug/members/:userId/activate ══
@@ -3714,8 +2136,6 @@ router.post(
   }
 );
 ══ END BACKEND NOTE ══ -->
-
-
 
 </body>
 </html>
