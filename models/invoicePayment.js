@@ -40,7 +40,17 @@ clientId: {
 
   createdBy: { type: String, default: null }, // WhatsApp number etc.
 
-  createdAt: { type: Date, default: Date.now, index: true }
+  createdAt: { type: Date, default: Date.now, index: true },
+
+  // ── Reversal trail (soft-reverse, keeps audit history) ─────────────────────
+  // Reversing a payment zeroes its amount (stashing the original) so the
+  // ledger + daily recompute drop it, and the reverse route also restores the
+  // linked invoice's balance - same net effect as the existing delete route,
+  // but the row stays on the statement marked REVERSED.
+  reversed:       { type: Boolean, default: false, index: true },
+  originalAmount: { type: Number,  default: null },
+  reversedAt:     { type: Date,    default: null },
+  reversedBy:     { type: String,  default: null }
 });
 
 // IMPORTANT: force a unique model name + collection name

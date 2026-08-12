@@ -66,7 +66,18 @@ type: {
   vatAmount: Number,
   total: Number,
 
-  createdBy: String
+  createdBy: String,
+
+  // ── Reversal trail (soft-reverse, keeps audit history) ─────────────────────
+  // Mirrors Expense/CashIncome. Reversing a sale (receipt/invoice) zeroes its
+  // contributing amount (total) and stashes the original, so EVERY
+  // summation-based reader - the daily recompute, buildLedger, the finance
+  // feed - excludes it automatically, exactly like a reversed expense, while
+  // the row stays visible for audit.
+  reversed:      { type: Boolean, default: false, index: true },
+  originalTotal: { type: Number,  default: null },
+  reversedAt:    { type: Date,    default: null },
+  reversedBy:    { type: String,  default: null }
 }, { timestamps: true });
 
 export default mongoose.model("Invoice", InvoiceSchema);

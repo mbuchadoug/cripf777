@@ -40,6 +40,7 @@ import express from "express";
 import { requireSupplierAdmin } from "../middleware/supplierAdminAuth.js";
 import SupplierProfile from "../models/supplierProfile.js";
 import { layout, esc } from "./supplierAdmin.js";
+import { financeNav, recurringQuickCard } from "./financeNav.js";
 
 const router = express.Router({ mergeParams: true });
 
@@ -345,6 +346,7 @@ router.get("/all", requireSupplierAdmin, async (req, res) => {
 
     res.send(layout("All Financial Records", `
       <a href="/zq-admin/suppliers/${supplier._id}/finance" class="back-link">← Back to Clerk Picker</a>
+      ${financeNav(supplier._id, "finance")}
       <div class="panel-head" style="margin-top:10px"><h3>🏢 All Records - ${esc(supplier.businessName)}</h3></div>
 
       <form method="GET" style="display:flex;gap:10px;align-items:center;margin:14px 0 22px">
@@ -384,6 +386,20 @@ router.get("/", requireSupplierAdmin, async (req, res) => {
 
     const staff    = await listStaff(biz._id);
     const branches = await listBranches(biz._id);
+    // Lightweight recurring-billing summary for the quick-access card
+    let rbSummary = {};
+    try {
+      const RecurringAccount = (await import("../models/recurringAccount.js")).default;
+      const RecurringTenant  = (await import("../models/recurringTenant.js")).default;
+      const [acctAgg, tenantCount] = await Promise.all([
+        RecurringAccount.aggregate([
+          { $match: { businessId: biz._id, isActive: true } },
+          { $group: { _id: null, n: { $sum: 1 }, owed: { $sum: "$currentBalance" } } }
+        ]).catch(() => []),
+        RecurringTenant.countDocuments({ businessId: biz._id, isActive: true }).catch(() => 0)
+      ]);
+      rbSummary = { accounts: acctAgg[0]?.n || 0, tenants: tenantCount || 0, outstanding: acctAgg[0]?.owed || 0, currency: biz.currency || "USD" };
+    } catch (_) { rbSummary = {}; }
     const branchById = Object.fromEntries(branches.map(b => [String(b._id), b.name]));
 
     const cards = staff.length ? staff.map(s => `
@@ -406,6 +422,8 @@ router.get("/", requireSupplierAdmin, async (req, res) => {
 
     res.send(layout("Financial Records", `
       <a href="/zq-admin/suppliers/${supplier._id}" class="back-link">← Back to Profile</a>
+      ${financeNav(supplier._id, "finance")}
+      ${recurringQuickCard(supplier._id, rbSummary)}
 
       <div class="panel-head" style="margin-top:10px">
         <h3>💰 Financial Records - ${esc(supplier.businessName)}</h3>
@@ -606,6 +624,7 @@ router.get("/:phone", requireSupplierAdmin, async (req, res) => {
     // ── Render page ──────────────────────────────────────────────────────────
     res.send(layout(`Acting as ${person.name || phone}`, `
       <a href="/zq-admin/suppliers/${supplier._id}/finance" class="back-link">← Choose a different staff member</a>
+      ${financeNav(supplier._id, "finance")}
       ${alertBlock(req)}
 
       <style>
