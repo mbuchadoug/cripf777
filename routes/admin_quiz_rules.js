@@ -63,13 +63,27 @@ router.get(
 
     // You may need a different view later for school,
     // but for now we pass flags so your template can hide grade/subject for school.
+    // Real counts for the on-page process/status panel
+    const questionsCount = await Question.countDocuments({
+      $or: [
+        { organization: org._id },
+        { organization: { $exists: false } },
+        { organization: null }
+      ]
+    });
+
     res.render("admin/quiz_rules", {
       org,
       rules,
       quizzes,
       user: req.user,
       isHomeSchool: org.slug === "cripfcnt-home",
-      isCripSchool: org.slug === "cripfcnt-school"
+      isCripSchool: org.slug === "cripfcnt-school",
+      stats: {
+        questions: questionsCount,
+        passages: quizzes.length,
+        rules: rules.length
+      }
     });
   }
 );

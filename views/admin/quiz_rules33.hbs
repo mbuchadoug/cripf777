@@ -1,0 +1,218 @@
+<div class="qr-wrap">
+  <style>
+    .qr-wrap{--qr-bg:#f6f7fb;--qr-card:#fff;--qr-line:#e6e8ef;--qr-ink:#1f2430;--qr-muted:#6b7280;--qr-brand:#8a6d1f;--qr-brand2:#b8952f;--qr-green:#166534;--qr-greenbg:#dcfce7;--qr-red:#b91c1c;--qr-redbg:#fee2e2;--qr-blue:#1e40af;--qr-bluebg:#dbeafe;
+      max-width:1100px;margin:0 auto;padding:18px 16px 60px;color:var(--qr-ink);
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+    .qr-wrap *{box-sizing:border-box}
+    .qr-head{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:baseline;justify-content:space-between;margin-bottom:4px}
+    .qr-head h1{font-size:22px;font-weight:800;margin:0;line-height:1.2}
+    .qr-sub{color:var(--qr-muted);font-size:13px;margin:2px 0 18px}
+    .qr-chip{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;
+      padding:4px 10px;border-radius:999px;background:var(--qr-bluebg);color:var(--qr-blue)}
+
+    .qr-card{background:var(--qr-card);border:1px solid var(--qr-line);border-radius:14px;
+      box-shadow:0 1px 2px rgba(16,24,40,.04);margin-bottom:20px}
+    .qr-card>.qr-cardhead{padding:14px 18px;border-bottom:1px solid var(--qr-line);font-weight:700;font-size:15px;display:flex;align-items:center;gap:8px}
+    .qr-card>.qr-cardbody{padding:18px}
+
+    .qr-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px}
+    .qr-field{display:flex;flex-direction:column;gap:6px;min-width:0}
+    .qr-field.full{grid-column:1/-1}
+    .qr-field label{font-size:12.5px;font-weight:600;color:var(--qr-ink)}
+    .qr-field .hint{font-size:11.5px;color:var(--qr-muted)}
+    .qr-input,.qr-select,.qr-multi,textarea.qr-input{
+      width:100%;padding:10px 12px;border:1px solid var(--qr-line);border-radius:9px;font-size:14px;
+      background:#fff;color:var(--qr-ink);outline:none;transition:border-color .15s,box-shadow .15s}
+    .qr-input:focus,.qr-select:focus,.qr-multi:focus{border-color:var(--qr-brand2);box-shadow:0 0 0 3px rgba(184,149,47,.15)}
+    .qr-multi{min-height:150px;padding:6px}
+    .qr-multi option{padding:7px 8px;border-radius:6px}
+
+    .qr-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}
+    .qr-btn{appearance:none;border:1px solid transparent;border-radius:10px;padding:11px 18px;font-size:14px;
+      font-weight:700;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:7px;line-height:1}
+    .qr-btn-primary{background:linear-gradient(180deg,var(--qr-brand2),var(--qr-brand));color:#fff}
+    .qr-btn-primary:hover{filter:brightness(1.05)}
+    .qr-btn-ghost{background:#fff;border-color:var(--qr-line);color:var(--qr-ink)}
+    .qr-btn-ghost:hover{background:#f3f4f6}
+    .qr-btn-danger{background:#fff;border-color:#f3c2c2;color:var(--qr-red)}
+    .qr-btn-danger:hover{background:var(--qr-redbg)}
+    .qr-btn-sm{padding:7px 12px;font-size:12.5px;border-radius:8px}
+
+    .qr-badge{display:inline-block;font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px}
+    .b-green{background:var(--qr-greenbg);color:var(--qr-green)}
+    .b-red{background:var(--qr-redbg);color:var(--qr-red)}
+    .b-blue{background:var(--qr-bluebg);color:var(--qr-blue)}
+    .b-amber{background:#fef3c7;color:#92400e}
+    .b-slate{background:#e2e8f0;color:#475569}
+
+    /* Rules: table on wide screens, cards on phones */
+    .qr-tablewrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+    table.qr-table{width:100%;border-collapse:collapse;font-size:13.5px;min-width:640px}
+    table.qr-table th{background:#0f172a;color:#fff;text-align:left;padding:10px 12px;font-size:11.5px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;white-space:nowrap}
+    table.qr-table th:first-child{border-top-left-radius:10px}
+    table.qr-table th:last-child{border-top-right-radius:10px}
+    table.qr-table td{padding:11px 12px;border-bottom:1px solid #eef0f5;vertical-align:middle}
+    table.qr-table tr:last-child td{border-bottom:none}
+    table.qr-table tr:hover td{background:#fafbff}
+    .qr-quiztitle{font-weight:600;max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+    .qr-empty{text-align:center;color:var(--qr-muted);padding:40px 20px}
+    .qr-empty .ic{font-size:34px;display:block;margin-bottom:8px}
+    .qr-count{color:var(--qr-muted);font-size:13px;font-weight:600}
+
+    @media (max-width:720px){
+      .qr-head h1{font-size:19px}
+      table.qr-table{min-width:520px}
+      .qr-actions{position:sticky;bottom:0}
+    }
+  </style>
+
+  <div class="qr-head">
+    <h1>{{#if isCripSchool}}Employee Quiz Rules{{else}}Trial &amp; Paid Quiz Rules{{/if}}</h1>
+    <span class="qr-chip">{{org.name}}</span>
+  </div>
+  <p class="qr-sub">
+    {{#if isCripSchool}}
+      Assign quizzes to employees. Grade &amp; subject don't apply here.
+    {{else}}
+      Create quiz rules per grade &amp; subject. Trial rules auto-assign to matching students; paid rules apply to paying parents' children.
+    {{/if}}
+  </p>
+
+  {{!-- ─────────────── CREATE RULE ─────────────── --}}
+  <div class="qr-card">
+    <div class="qr-cardhead">➕ New quiz rule</div>
+    <div class="qr-cardbody">
+      <form method="POST" action="/admin/orgs/{{org.slug}}/quiz-rules">
+        <div class="qr-grid">
+          {{#unless isCripSchool}}
+          <div class="qr-field">
+            <label for="qr-grade">Grade</label>
+            <select id="qr-grade" name="grade" class="qr-select" required>
+              <option value="0">Grade 0 (ECD)</option>
+              <option value="1">Grade 1</option>
+              <option value="2">Grade 2</option>
+              <option value="3">Grade 3</option>
+              <option value="4" selected>Grade 4</option>
+              <option value="5">Grade 5</option>
+              <option value="6">Grade 6</option>
+              <option value="7">Grade 7</option>
+            </select>
+          </div>
+
+          <div class="qr-field">
+            <label for="qr-subject">Subject</label>
+            <select id="qr-subject" name="subject" class="qr-select" required>
+              <option value="math">Mathematics</option>
+              <option value="english">English</option>
+              <option value="science">Science</option>
+              <option value="biology">Biology</option>
+              <option value="computerstudies">Computer Studies</option>
+              <option value="businessstudies">Business Studies</option>
+              <option value="generalknowledge">General Knowledge</option>
+              <option value="history">History</option>
+              <option value="geography">Geography</option>
+              <option value="environmentalstudies">Environmental Studies</option>
+              <option value="responsibility">Responsibility</option>
+            </select>
+          </div>
+          {{/unless}}
+
+          <div class="qr-field">
+            <label for="qr-module">Module</label>
+            <input id="qr-module" name="module" class="qr-input" list="qr-modules" placeholder="e.g. numbers, comprehension" required>
+            <datalist id="qr-modules">
+              {{#each quizzes}}{{#if this.module}}<option value="{{this.module}}">{{/if}}{{/each}}
+            </datalist>
+          </div>
+
+          <div class="qr-field">
+            <label for="qr-type">Quiz type</label>
+            <select id="qr-type" name="quizType" class="qr-select" required>
+              <option value="trial">Trial (free)</option>
+              <option value="paid">Paid</option>
+            </select>
+          </div>
+
+          <div class="qr-field">
+            <label for="qr-count">Questions</label>
+            <input id="qr-count" name="questionCount" type="number" min="1" max="100" value="10" class="qr-input">
+          </div>
+
+          <div class="qr-field">
+            <label for="qr-duration">Duration (minutes)</label>
+            <input id="qr-duration" name="durationMinutes" type="number" min="1" max="240" value="30" class="qr-input">
+          </div>
+
+          <div class="qr-field full">
+            <label for="qr-quiz">Quiz(zes) / comprehension passage(s)</label>
+            <select id="qr-quiz" name="quizQuestionId" class="qr-multi" multiple required size="6">
+              {{#each quizzes}}
+                <option value="{{this._id}}">{{this.text}}{{#if this.module}} — {{this.module}}{{/if}}</option>
+              {{/each}}
+            </select>
+            <span class="hint">Hold Ctrl (Cmd on Mac) or tap to select more than one. One rule is created per selected quiz.</span>
+          </div>
+        </div>
+
+        <div class="qr-actions">
+          <button type="reset" class="qr-btn qr-btn-ghost">Clear</button>
+          <button type="submit" class="qr-btn qr-btn-primary">Create rule</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  {{!-- ─────────────── EXISTING RULES ─────────────── --}}
+  <div class="qr-card">
+    <div class="qr-cardhead">📋 Existing rules <span class="qr-count">&nbsp;· {{rules.length}}</span></div>
+    <div class="qr-cardbody" style="padding-top:8px">
+      {{#if rules.length}}
+      <div class="qr-tablewrap">
+        <table class="qr-table">
+          <thead>
+            <tr>
+              {{#unless isCripSchool}}<th>Grade</th><th>Subject</th>{{/unless}}
+              <th>Module</th>
+              <th>Quiz</th>
+              <th>Type</th>
+              <th>Qs</th>
+              <th>Mins</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{#each rules}}
+            <tr>
+              {{#unless ../isCripSchool}}
+                <td>{{#if (isNull this.grade)}}<span class="qr-badge b-slate">—</span>{{else}}Grade {{this.grade}}{{/if}}</td>
+                <td>{{#if this.subject}}{{capitalize this.subject}}{{else}}<span class="qr-badge b-slate">—</span>{{/if}}</td>
+              {{/unless}}
+              <td>{{#if this.module}}{{this.module}}{{else}}—{{/if}}</td>
+              <td><div class="qr-quiztitle" title="{{this.quizTitle}}">{{#if this.quizTitle}}{{this.quizTitle}}{{else}}<span class="qr-badge b-slate">Untitled</span>{{/if}}</div></td>
+              <td>{{#if (eq this.quizType "paid")}}<span class="qr-badge b-amber">Paid</span>{{else}}<span class="qr-badge b-blue">Trial</span>{{/if}}</td>
+              <td>{{this.questionCount}}</td>
+              <td>{{this.durationMinutes}}</td>
+              <td>{{#if this.enabled}}<span class="qr-badge b-green">Enabled</span>{{else}}<span class="qr-badge b-red">Disabled</span>{{/if}}</td>
+              <td>
+                <div style="display:flex;gap:6px;flex-wrap:wrap">
+                  <form method="POST" action="/admin/orgs/{{../org.slug}}/quiz-rules/{{this._id}}/toggle" style="display:inline">
+                    <button class="qr-btn qr-btn-ghost qr-btn-sm">{{#if this.enabled}}Disable{{else}}Enable{{/if}}</button>
+                  </form>
+                  <form method="POST" action="/admin/orgs/{{../org.slug}}/quiz-rules/{{this._id}}/delete" style="display:inline" onsubmit="return confirm('Delete this rule? Quizzes already assigned to students are not affected.')">
+                    <button class="qr-btn qr-btn-danger qr-btn-sm">Delete</button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+            {{/each}}
+          </tbody>
+        </table>
+      </div>
+      {{else}}
+      <div class="qr-empty"><span class="ic">📭</span>No rules yet. Create your first one above.</div>
+      {{/if}}
+    </div>
+  </div>
+</div>
