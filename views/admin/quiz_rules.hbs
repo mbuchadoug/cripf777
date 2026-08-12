@@ -105,7 +105,7 @@
         <div class="qr-stat"><div class="n">{{stats.rules}}</div><div class="l">Rules created</div></div>
       </div>
       <div class="qr-steps">
-        <div class="qr-step"><div class="num">1</div><h4>Import questions</h4><p>Build the question bank — upload questions to the org dashboard first.</p><a class="qr-btn qr-btn-ghost qr-btn-sm" href="/admin/orgs/{{org.slug}}/manage">Open dashboard →</a></div>
+        <div class="qr-step"><div class="num">1</div><h4>Import questions</h4><p>Upload questions, passages &amp; comprehension quizzes into the bank.</p><a class="qr-btn qr-btn-ghost qr-btn-sm" href="/admin/lms/import">Open importer →</a></div>
         <div class="qr-step"><div class="num">2</div><h4>Add quizzes / passages</h4><p>Create the comprehension quizzes and passages that a rule can point to.</p><a class="qr-btn qr-btn-ghost qr-btn-sm" href="/admin/orgs/{{org.slug}}/classify/quizzes">Manage quizzes →</a></div>
         <div class="qr-step"><div class="num">3</div><h4>Create a rule</h4><p>{{#if isCripSchool}}Pick a module &amp; quiz{{else}}Pick grade, subject, module &amp; quiz{{/if}}, choose trial or paid.</p><a class="qr-btn qr-btn-ghost qr-btn-sm" href="#create">Jump to form →</a></div>
         <div class="qr-step"><div class="num">4</div><h4>Auto-assign</h4><p>{{#if isCripSchool}}Rules apply to employees automatically (paid rules to paying employees).{{else}}Trial rules reach matching students; paid rules reach paying parents' children.{{/if}}</p></div>
@@ -119,9 +119,9 @@
       <div class="qr-imports">
         <div class="qr-imp">
           <div class="ic">🗂️</div>
-          <h4>Questions &amp; quizzes</h4>
-          <p>Upload questions, comprehension passages and quizzes from the org dashboard (CSV / bulk upload tools live here).</p>
-          <a class="qr-btn qr-btn-primary" href="/admin/orgs/{{org.slug}}/manage">Open org dashboard</a>
+          <h4>Import questions &amp; quizzes</h4>
+          <p>Bulk-import questions, passages &amp; comprehension quizzes (paste text or upload a file). This builds the quizzes a rule can point to.</p>
+          <a class="qr-btn qr-btn-primary" href="/admin/lms/import">Open the importer</a>
         </div>
         <div class="qr-imp">
           <div class="ic">🏷️</div>
