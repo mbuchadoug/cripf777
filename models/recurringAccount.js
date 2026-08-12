@@ -41,11 +41,25 @@ const RecurringAccountSchema = new mongoose.Schema({
   ref:  { type: String, trim: true, default: "" },
   description: { type: String, default: "" },
 
+  // category: the KIND of billable client/account. Inclusive across industries:
+  //   property/rentals - flat, apartment, room, house, cottage, unit, plot,
+  //     stand, shop, office, warehouse, parking, desk
+  //   people/services  - student, member, subscriber, patient, policy, vehicle
+  //   other            - anything else
+  // All original values are preserved, so existing accounts are unaffected.
   category: {
     type:    String,
-    enum:    ["unit", "room", "flat", "student", "policy", "member", "plot", "other"],
+    enum:    ["unit", "room", "flat", "apartment", "house", "cottage", "plot",
+              "stand", "shop", "office", "warehouse", "parking", "desk",
+              "student", "policy", "member", "subscriber", "patient", "vehicle",
+              "other"],
     default: "unit"
   },
+
+  // propertyName: optional grouping label so many accounts can sit under ONE
+  // property / building / site (e.g. "Sunrise Apartments" -> Flat 1, Flat 2) or
+  // any grouping that suits the business. Blank = ungrouped. Purely additive.
+  propertyName: { type: String, trim: true, default: "", index: true },
 
   // ── Recurring charge ────────────────────────────────────────────────────────
   billingAmount: { type: Number, required: true, default: 0 },
@@ -80,6 +94,7 @@ const RecurringAccountSchema = new mongoose.Schema({
 
 RecurringAccountSchema.index({ businessId: 1, isActive: 1 });
 RecurringAccountSchema.index({ businessId: 1, branchId: 1, isActive: 1 });
+RecurringAccountSchema.index({ businessId: 1, propertyName: 1, isActive: 1 });
 
 export default mongoose.models.RecurringAccount ||
   mongoose.model("RecurringAccount", RecurringAccountSchema);

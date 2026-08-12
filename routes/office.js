@@ -1380,64 +1380,208 @@ router.post("/team/unsuspend", requireOwner, (req, res) => setSuspended(req, res
 // ═════════════════════════════════════════════════════════════════════════════
 function recCanManage(office) { return office.isOwner || office.isManager; }
 
-// ─── Dashboard: accounts, balances, quick record-payment ─────────────────────
+// ─── Recurring clients / accounts: filters, create, import, balances ─────────
+const REC_CAT_LABELS = { flat:"Flat", apartment:"Apartment", room:"Room", house:"House", cottage:"Cottage", unit:"Unit", plot:"Plot", stand:"Stand", shop:"Shop", office:"Office space", warehouse:"Warehouse", parking:"Parking bay", desk:"Desk / hot-desk", student:"Student", member:"Member", subscriber:"Subscriber", patient:"Patient", policy:"Policy holder", vehicle:"Vehicle", other:"Other" };
+const REC_CAT_GROUPS = [
+  ["Property / rentals", ["flat","apartment","room","house","cottage","unit","plot","stand","shop","office","warehouse","parking","desk"]],
+  ["People / services",  ["student","member","subscriber","patient","policy","vehicle","other"]],
+];
+const REC_CAT_VALID = new Set(REC_CAT_GROUPS.flatMap(g => g[1]));
+function recCatOptions(sel) {
+  return REC_CAT_GROUPS.map(g => `<optgroup label="${g[0]}">` + g[1].map(v => `<option value="${v}" ${v===sel?"selected":""}>${REC_CAT_LABELS[v]||v}</option>`).join("") + `</optgroup>`).join("");
+}
+function recCycleOptions(sel) {
+  return ["monthly","quarterly","termly","annual","custom"].map(v => `<option value="${v}" ${v===sel?"selected":""}>${v[0].toUpperCase()+v.slice(1)}</option>`).join("");
+}
+
 router.get("/recurring", async (req, res) => {
   const { office } = req; const cur = office.cur;
   const branchId = effectiveBranch(office, req);
   try {
-    const { listAccountsForChatbot } = await import("../services/recurringBilling.js");
-    const accounts = await listAccountsForChatbot(office.biz._id, branchId);
+    const RecurringAccount = (await import("../models/recurringAccount.js")).default;
+    const RecurringTenant  = (await import("../models/recurringTenant.js")).default;
+    const manage = recCanManage(office);
 
-    let totalOwed = 0, tenantCount = 0;
-    accounts.forEach(a => { totalOwed += Number(a.currentBalance) || 0; tenantCount += (a._tenants || []).length; });
+    // Filters
+    const fCat    = (req.query.cat  || "").trim();
+    const fProp   = (req.query.prop || "").trim();
+    const fStatus = ["active","owing","vacated","all"].includes(req.query.status) ? req.query.status : "active";
+
+    const accQ = { businessId: office.biz._id };
+    if (branchId) accQ.branchId = branchId;
+    if (fCat)  accQ.category = fCat;
+    if (fProp) accQ.propertyName = fProp;
+    const accounts = await RecurringAccount.find(accQ).sort({ propertyName: 1, name: 1 }).lean();
+
+    const baseQ = { businessId: office.biz._id, ...(branchId ? { branchId } : {}) };
+    const propList = (await RecurringAccount.distinct("propertyName", baseQ).catch(() => [])).filter(Boolean).sort();
+
+    const acctIds = accounts.map(a => a._id);
+    const tenants = acctIds.length
+      ? await RecurringTenant.find({ businessId: office.biz._id, accountId: { $in: acctIds } }).sort({ name: 1 }).lean()
+      : [];
+    const tenByAcct = {};
+    tenants.forEach(t => { (tenByAcct[String(t.accountId)] = tenByAcct[String(t.accountId)] || []).push(t); });
+
+    const branches = await branchesFor(office.biz._id);
+
+    let totalOwed = 0, activeTenants = 0, vacatedOwing = 0, vacatedOwingCount = 0;
+    tenants.forEach(t => {
+      const bal = Number(t.currentBalance) || 0;
+      if (t.isActive && !t.vacated) activeTenants++;
+      if (bal > 0) totalOwed += bal;
+      if (t.vacated && bal > 0) { vacatedOwing += bal; vacatedOwingCount++; }
+    });
+
+    const showTenant = t => {
+      const owes = (Number(t.currentBalance) || 0) > 0.0001;
+      if (fStatus === "active")  return t.isActive && !t.vacated;
+      if (fStatus === "owing")   return owes;
+      if (fStatus === "vacated") return t.vacated;
+      return true;
+    };
 
     const ok  = req.query.ok  ? `<div class="alert ok">${esc(req.query.ok)}</div>`  : "";
     const err = req.query.err ? `<div class="alert err">${esc(req.query.err)}</div>` : "";
-    const manage = recCanManage(office);
+
+    const statusPills = ["active","owing","vacated","all"].map(v => {
+      const qp = new URLSearchParams({ ...(branchId?{branch:branchId}:{}), ...(fCat?{cat:fCat}:{}), ...(fProp?{prop:fProp}:{}), status:v }).toString();
+      const lbl = { active:"Active", owing:"Owing", vacated:"Moved out", all:"All" }[v];
+      return `<a href="/office/recurring?${qp}" class="btn btn-sm ${v===fStatus?"btn-primary":"btn-ghost"}">${lbl}</a>`;
+    }).join(" ");
+
+    const catFilterOpts = `<option value="">All types</option>` +
+      REC_CAT_GROUPS.map(g => `<optgroup label="${g[0]}">` + g[1].map(v => `<option value="${v}" ${v===fCat?"selected":""}>${REC_CAT_LABELS[v]||v}</option>`).join("") + `</optgroup>`).join("");
+    const propFilterOpts = `<option value="">All properties</option>` +
+      propList.map(pn => `<option value="${esc(pn)}" ${pn===fProp?"selected":""}>${esc(pn)}</option>`).join("");
 
     const cards = accounts.map(a => {
-      const tenants = a._tenants && a._tenants.length ? a._tenants : [{ _id: "", name: "(no tenant)", currentBalance: a.currentBalance }];
-      const tenantOpts = tenants.map(t => `<option value="${esc(t._id)}">${esc(t.name)}${(Number(t.currentBalance)||0) ? " · owes " + money(t.currentBalance, cur) : ""}</option>`).join("");
+      const list = (tenByAcct[String(a._id)] || []).filter(showTenant);
       const owed = Number(a.currentBalance) || 0;
+      const tenantRows = list.map(t => {
+        const bal = Number(t.currentBalance) || 0;
+        const badge = t.vacated ? `<span class="badge b-red">Moved out</span>` : (t.isActive ? `<span class="badge b-green">Active</span>` : `<span class="badge b-slate">Inactive</span>`);
+        const owe = bal > 0 ? `<span class="badge b-amber">Owes ${money(bal, cur)}</span>` : `<span class="badge b-green">Clear</span>`;
+        const vacBtn = manage ? (t.vacated
+          ? `<form method="POST" action="/office/recurring/tenant/${t._id}/reinstate" style="display:inline"><button class="btn btn-ghost btn-sm">↩ Reinstate</button></form>`
+          : `<form method="POST" action="/office/recurring/tenant/${t._id}/vacate" style="display:inline" onsubmit="return confirm('Mark ${esc(t.name)} as moved out? They stop being invoiced, but any balance stays collectable and on reports.')"><button class="btn btn-ghost btn-sm">🚪 Move out</button></form>`) : "";
+        const payForm = `<form method="POST" action="/office/recurring/pay" class="row" style="margin:6px 0 0;align-items:flex-end">
+            <input type="hidden" name="accountId" value="${esc(a._id)}"><input type="hidden" name="tenantId" value="${esc(t._id)}"><input type="hidden" name="branch" value="${esc(branchId || "")}">
+            <div class="field" style="margin:0;max-width:110px"><input class="input" type="number" step="0.01" min="0.01" name="amount" placeholder="Amount" required></div>
+            <div class="field" style="margin:0;max-width:120px"><select class="input" name="method"><option value="cash">Cash</option><option value="ecocash">EcoCash</option><option value="bank">Bank</option><option value="innbucks">InnBucks</option><option value="zipit">ZIPIT</option><option value="card">Card</option><option value="other">Other</option></select></div>
+            <div class="field" style="margin:0;max-width:140px"><input class="input" type="date" name="date" value="${new Date().toISOString().slice(0,10)}"></div>
+            <button class="btn btn-primary btn-sm">Record payment</button>
+          </form>`;
+        return `<div style="padding:10px 0;border-top:1px solid var(--line)">
+          <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center">
+            <div><b>${esc(t.name)}</b>${t.phone ? ` <span class="small muted">· ${esc(t.phone)}</span>` : ""} ${badge} ${owe}</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">${vacBtn}</div>
+          </div>
+          ${payForm}
+        </div>`;
+      }).join("");
+
+      const addTenant = manage ? `<details style="margin-top:10px"><summary class="small" style="cursor:pointer;color:var(--brand);font-weight:700">＋ Add client / tenant</summary>
+        <form method="POST" action="/office/recurring/${a._id}/tenant/new" style="margin-top:8px">
+          <div class="row">
+            <div class="field"><label>Name</label><input class="input" name="name" placeholder="e.g. John Moyo" required></div>
+            <div class="field"><label>Phone (optional)</label><input class="input" name="phone" placeholder="0771234567"></div>
+          </div>
+          <div class="row">
+            <div class="field"><label>Opening balance owed (optional)</label><input class="input" type="number" step="0.01" name="openingBalance" placeholder="0.00"></div>
+            <div class="field"><label>Own charge - overrides account (optional)</label><input class="input" type="number" step="0.01" name="billingAmount" placeholder="inherit account"></div>
+          </div>
+          <div style="display:flex;justify-content:flex-end"><button class="btn btn-primary btn-sm">Add client</button></div>
+        </form></details>` : "";
+
       return `<div class="card" style="margin-bottom:12px"><div class="cb">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+        <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-start">
           <div>
             <div style="font-weight:800;font-size:15px">${esc(a.name)}${a.ref ? ` <span class="muted small">(${esc(a.ref)})</span>` : ""}</div>
-            <div class="small muted">${esc(a.category || "unit")} · ${money(a.billingAmount || 0, cur)}/${esc(a.billingCycle || "monthly")} · ${(a._tenants||[]).length} tenant(s)</div>
+            <div class="small muted">${a.propertyName ? esc(a.propertyName) + " · " : ""}${REC_CAT_LABELS[a.category] || a.category} · ${money(a.billingAmount || 0, cur)}/${esc(a.billingCycle || "monthly")}</div>
           </div>
-          <div style="text-align:right">
-            <div class="small muted">Balance</div>
-            <div style="font-weight:800" class="${owed > 0 ? "red" : "green"}">${money(owed, cur)}</div>
-          </div>
+          <div style="text-align:right"><div class="small muted">Balance</div><div style="font-weight:800" class="${owed>0?"red":"green"}">${money(owed, cur)}</div>
+            <a class="btn btn-ghost btn-sm" href="/office/recurring/${a._id}/statement" style="margin-top:4px">📄 Statement</a></div>
         </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
-          <a class="btn btn-ghost btn-sm" href="/office/recurring/${a._id}/statement">📄 Statement</a>
-        </div>
-        <form method="POST" action="/office/recurring/pay" class="row" style="margin-top:12px;align-items:flex-end">
-          <input type="hidden" name="accountId" value="${esc(a._id)}">
-          <input type="hidden" name="branch" value="${esc(branchId || "")}">
-          <div class="field" style="margin:0;flex:2"><label>Tenant</label><select class="input" name="tenantId">${tenantOpts}</select></div>
-          <div class="field" style="margin:0;max-width:120px"><label>Amount</label><input class="input" type="number" step="0.01" min="0.01" name="amount" placeholder="0.00" required></div>
-          <div class="field" style="margin:0;max-width:130px"><label>Method</label><select class="input" name="method"><option value="cash">Cash</option><option value="ecocash">EcoCash</option><option value="bank">Bank</option><option value="innbucks">InnBucks</option><option value="zipit">ZIPIT</option><option value="card">Card</option><option value="other">Other</option></select></div>
-          <div class="field" style="margin:0;max-width:150px"><label>Date</label><input class="input" type="date" name="date" value="${new Date().toISOString().slice(0,10)}"></div>
-          <button class="btn btn-primary btn-sm">Record payment</button>
-        </form>
+        ${tenantRows || `<div class="small muted" style="padding:8px 0">No clients match this filter.</div>`}
+        ${addTenant}
       </div></div>`;
     }).join("");
+
+    const branchCard = manage ? `<details class="card" style="margin-bottom:16px" ${req.query.berr?"open":""}><summary class="ch" style="cursor:pointer"><h3>🏢 Branches / sites</h3><span class="pill">${num(branches.length)}</span></summary><div class="cb">
+        ${branches.length ? `<div class="tbl-wrap"><table><thead><tr><th>Name</th><th>Location</th><th>Default</th></tr></thead><tbody>${branches.map(b=>`<tr><td><b>${esc(b.name)}</b></td><td class="small muted">${esc(b.location||"")}</td><td>${b.isDefault?`<span class="badge b-green">Default</span>`:""}</td></tr>`).join("")}</tbody></table></div>` : `<div class="small muted">No branches yet - your business uses one default branch.</div>`}
+        <form method="POST" action="/office/branches/new" class="row" style="margin-top:12px;align-items:flex-end">
+          <div class="field" style="margin:0"><label>New branch / site name</label><input class="input" name="name" placeholder="e.g. Second Branch, Warehouse, Site B" required></div>
+          <div class="field" style="margin:0"><label>Location (optional)</label><input class="input" name="location" placeholder="e.g. Msasa, Harare"></div>
+          <button class="btn btn-primary btn-sm">Add branch</button>
+        </form>
+      </div></details>` : "";
+
+    const newAccount = manage ? `<details id="newacct" class="card" style="margin-bottom:16px" ${req.query.aerr?"open":""}><summary class="ch" style="cursor:pointer"><h3>➕ New recurring client / account</h3><span class="pill">tap to open</span></summary><div class="cb">
+        <form method="POST" action="/office/recurring/account/new">
+          <div class="row">
+            <div class="field"><label>Name / label</label><input class="input" name="name" placeholder="e.g. Flat 3A, John Moyo, Policy ZW-441" required></div>
+            <div class="field"><label>Short ref (optional)</label><input class="input" name="ref" placeholder="e.g. F3A"></div>
+          </div>
+          <div class="row">
+            <div class="field"><label>Type</label><select class="input" name="category">${recCatOptions("flat")}</select></div>
+            <div class="field"><label>Property / group (optional)</label><input class="input" name="propertyName" list="proplist" placeholder="e.g. Sunrise Apartments"><datalist id="proplist">${propList.map(pn=>`<option value="${esc(pn)}">`).join("")}</datalist></div>
+          </div>
+          <div class="row">
+            <div class="field"><label>Charge amount (${esc(cur)})</label><input class="input" type="number" step="0.01" min="0" name="billingAmount" placeholder="0.00" required></div>
+            <div class="field"><label>Cycle</label><select class="input" name="billingCycle">${recCycleOptions("monthly")}</select></div>
+          </div>
+          <div class="row">
+            <div class="field"><label>Billing day (1-28)</label><input class="input" type="number" min="1" max="28" name="billingDay" value="1"></div>
+            ${office.isOwner ? `<div class="field"><label>Branch (optional)</label><select class="input" name="branch"><option value="">— none —</option>${branches.map(b=>`<option value="${b._id}" ${String(b._id)===String(branchId)?"selected":""}>${esc(b.name)}</option>`).join("")}</select></div>` : `<div class="field"></div>`}
+          </div>
+          <div class="field"><label>Notes (optional)</label><input class="input" name="description" placeholder="Anything worth remembering"></div>
+          <div style="display:flex;justify-content:flex-end"><button class="btn btn-primary">Create account</button></div>
+        </form>
+      </div></details>` : "";
+
+    const importCard = manage ? `<details id="importrec" class="card" style="margin-bottom:16px" ${req.query.ierr?"open":""}><summary class="ch" style="cursor:pointer"><h3>📥 Import clients (bulk)</h3><span class="pill">paste a list</span></summary><div class="cb">
+        <form method="POST" action="/office/recurring/import">
+          <p class="small muted" style="margin:0 0 8px">One client per line. Columns (comma OR tab separated) in this order - only <b>Name</b> is required:<br><b>Name, Phone, Property, Type, Charge, Opening balance</b><br>Pasting straight from Excel / Google Sheets works too. Each row creates an account and its client.</p>
+          <textarea class="input" name="rows" rows="6" placeholder="John Moyo, 0771234567, Sunrise Apartments, flat, 120, 40&#10;Mary Ncube, 0772223344, Sunrise Apartments, flat, 120, 0&#10;Grade 7 - T. Banda, 0779998877, Term fees, student, 250, 0"></textarea>
+          <div class="row" style="margin-top:10px">
+            <div class="field"><label>Default type (when a row leaves it blank)</label><select class="input" name="defaultType">${recCatOptions("flat")}</select></div>
+            <div class="field"><label>Default cycle</label><select class="input" name="defaultCycle">${recCycleOptions("monthly")}</select></div>
+          </div>
+          <div class="row">
+            ${office.isOwner ? `<div class="field"><label>Branch (optional)</label><select class="input" name="branch"><option value="">— none —</option>${branches.map(b=>`<option value="${b._id}" ${String(b._id)===String(branchId)?"selected":""}>${esc(b.name)}</option>`).join("")}</select></div>` : `<div class="field"></div>`}
+            <div class="field" style="align-self:end"><label style="display:flex;align-items:center;gap:6px;font-weight:600"><input type="checkbox" name="hasHeader" value="1" style="width:auto"> First line is a header row (skip it)</label></div>
+          </div>
+          <div style="display:flex;justify-content:flex-end"><button class="btn btn-primary">Import clients</button></div>
+        </form>
+      </div></details>` : "";
 
     const body = `
       ${ok}${err}
       ${office.isOwner ? branchFilter(await branchesFor(office.biz._id), branchId, "/office/recurring") : ""}
       <div class="grid kpis" style="margin-bottom:16px">
-        <div class="card kpi"><div class="kl">Active accounts</div><div class="kv">${num(accounts.length)}</div><div class="ks">${num(tenantCount)} tenant(s)</div></div>
-        <div class="card kpi"><div class="kl">Total owed now</div><div class="kv ${totalOwed>0?"red":"green"}">${money(totalOwed, cur)}</div><div class="ks">Across all accounts</div></div>
+        <div class="card kpi"><div class="kl">Active clients</div><div class="kv">${num(activeTenants)}</div><div class="ks">${num(accounts.length)} account(s)</div></div>
+        <div class="card kpi"><div class="kl">Total owed now</div><div class="kv ${totalOwed>0?"red":"green"}">${money(totalOwed, cur)}</div><div class="ks">All clients</div></div>
+        <div class="card kpi"><div class="kl">Moved-out but owing</div><div class="kv ${vacatedOwing>0?"red":"green"}">${money(vacatedOwing, cur)}</div><div class="ks">${num(vacatedOwingCount)} former client(s)</div></div>
       </div>
-      <div class="card" style="margin-bottom:18px"><div class="cb" style="display:flex;gap:8px;flex-wrap:wrap">
+      <div class="card" style="margin-bottom:16px"><div class="cb" style="display:flex;gap:8px;flex-wrap:wrap">
         <a class="btn btn-primary" href="/office/recurring/ledger">📒 Recurring ledger</a>
         ${manage ? `<form method="POST" action="/office/recurring/bulk-generate" onsubmit="return confirm('Generate invoices for all active accounts this period?')"><input type="hidden" name="branch" value="${esc(branchId || "")}"><button class="btn btn-ghost">🧾 Generate invoices</button></form>` : ""}
-        ${manage ? `<form method="POST" action="/office/recurring/reminders" onsubmit="return confirm('Send WhatsApp payment reminders to tenants who owe?')"><input type="hidden" name="branch" value="${esc(branchId || "")}"><button class="btn btn-ghost">🔔 Send reminders</button></form>` : ""}
+        ${manage ? `<form method="POST" action="/office/recurring/reminders" onsubmit="return confirm('Send WhatsApp payment reminders to clients who owe?')"><input type="hidden" name="branch" value="${esc(branchId || "")}"><button class="btn btn-ghost">🔔 Send reminders</button></form>` : ""}
       </div></div>
-      ${accounts.length ? cards : `<div class="empty"><div class="e-ic">🏠</div>No recurring accounts yet. Add them on WhatsApp or the admin portal and they'll appear here.</div>`}`;
+      ${branchCard}
+      ${newAccount}
+      ${importCard}
+      <form method="GET" action="/office/recurring" class="card" style="margin-bottom:16px"><div class="cb row" style="align-items:flex-end">
+        ${branchId ? `<input type="hidden" name="branch" value="${esc(branchId)}">` : ""}
+        <div class="field" style="margin:0"><label>Type</label><select class="input" name="cat">${catFilterOpts}</select></div>
+        <div class="field" style="margin:0"><label>Property</label><select class="input" name="prop">${propFilterOpts}</select></div>
+        <input type="hidden" name="status" value="${fStatus}">
+        <button class="btn btn-ghost btn-sm">Apply filters</button>
+        <div style="flex:1"></div>
+        <div>${statusPills}</div>
+      </div></form>
+      ${accounts.length ? cards : `<div class="empty"><div class="e-ic">🏠</div>No recurring clients yet. Use ➕ New recurring client / account or 📥 Import above to add them.</div>`}`;
     res.send(shell(office, "recurring", "Recurring Billing", body));
   } catch (e) {
     console.error("[office recurring]", e);
@@ -1465,6 +1609,152 @@ router.post("/recurring/pay", async (req, res) => {
     });
     res.redirect(back + sep + "ok=" + encodeURIComponent(`Payment recorded - ${money(amount, office.cur)}`));
   } catch (e) { console.error("[office rec pay]", e); res.redirect(back + sep + "err=" + encodeURIComponent(e.message)); }
+});
+
+// ─── Create a recurring account / client / property ──────────────────────────
+router.post("/recurring/account/new", async (req, res) => {
+  const { office } = req;
+  const branchId = effectiveBranch(office, req) || (req.body.branch || null);
+  if (!recCanManage(office)) return res.redirect("/office/recurring?err=" + encodeURIComponent("Not allowed"));
+  try {
+    const RecurringAccount = (await import("../models/recurringAccount.js")).default;
+    const name = String(req.body.name || "").trim();
+    if (!name) return res.redirect("/office/recurring?aerr=1&err=" + encodeURIComponent("Name is required"));
+    await RecurringAccount.create({
+      businessId:   office.biz._id,
+      branchId:     branchId || null,
+      name,
+      ref:          String(req.body.ref || "").trim(),
+      propertyName: String(req.body.propertyName || "").trim(),
+      category:     req.body.category || "unit",
+      description:  String(req.body.description || "").trim(),
+      billingAmount: parseFloat(req.body.billingAmount) || 0,
+      billingCycle:  req.body.billingCycle || "monthly",
+      billingDay:    parseInt(req.body.billingDay, 10) || 1,
+      currency:      office.biz.currency || "USD",
+      isActive:      true,
+      createdBy:     office.role.phone || "web",
+    });
+    res.redirect("/office/recurring?ok=" + encodeURIComponent(`Account "${name}" created`));
+  } catch (e) { console.error("[office rec acct new]", e); res.redirect("/office/recurring?aerr=1&err=" + encodeURIComponent(e.message)); }
+});
+
+// ─── Bulk-import clients (paste CSV / tab-separated) ─────────────────────────
+router.post("/recurring/import", async (req, res) => {
+  const { office } = req;
+  const branchId = effectiveBranch(office, req) || (req.body.branch || null);
+  if (!recCanManage(office)) return res.redirect("/office/recurring?err=" + encodeURIComponent("Not allowed"));
+  try {
+    const RecurringAccount = (await import("../models/recurringAccount.js")).default;
+    const RecurringTenant  = (await import("../models/recurringTenant.js")).default;
+    const VALID = new Set(["unit","room","flat","apartment","house","cottage","plot","stand","shop","office","warehouse","parking","desk","student","policy","member","subscriber","patient","vehicle","other"]);
+    const defType  = VALID.has(req.body.defaultType) ? req.body.defaultType : "unit";
+    const defCycle = ["monthly","quarterly","termly","annual","custom"].includes(req.body.defaultCycle) ? req.body.defaultCycle : "monthly";
+    let lines = String(req.body.rows || "").split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    if (req.body.hasHeader) lines = lines.slice(1);
+    if (!lines.length) return res.redirect("/office/recurring?ierr=1&err=" + encodeURIComponent("Nothing to import - paste at least one line"));
+
+    let ok = 0, skipped = 0;
+    for (const line of lines) {
+      try {
+        const cols = (line.includes("\t") ? line.split("\t") : line.split(",")).map(c => c.trim());
+        const name = cols[0];
+        if (!name) { skipped++; continue; }
+        let phone = String(cols[1] || "").replace(/\D/g, "");
+        if (phone.startsWith("0")) phone = "263" + phone.slice(1);
+        const property = cols[2] || "";
+        let cat = String(cols[3] || "").toLowerCase();
+        if (!VALID.has(cat)) cat = defType;
+        const charge  = parseFloat(cols[4]) || 0;
+        const opening = parseFloat(cols[5]) || 0;
+
+        const acct = await RecurringAccount.create({
+          businessId: office.biz._id, branchId: branchId || null,
+          name, propertyName: property, category: cat,
+          billingAmount: charge, billingCycle: defCycle,
+          currency: office.biz.currency || "USD", isActive: true,
+          createdBy: office.role.phone || "web",
+        });
+        await RecurringTenant.create({
+          businessId: office.biz._id, accountId: acct._id,
+          name, phone, openingBalance: opening,
+          isActive: true, canSelfServe: false, notificationsEnabled: true,
+          createdBy: office.role.phone || "web",
+        });
+        ok++;
+      } catch (rowErr) { console.error("[office rec import row]", rowErr.message); skipped++; }
+    }
+    const msg = `Imported ${ok} client(s)` + (skipped ? `, ${skipped} skipped` : "");
+    res.redirect("/office/recurring?ok=" + encodeURIComponent(msg));
+  } catch (e) { console.error("[office rec import]", e); res.redirect("/office/recurring?ierr=1&err=" + encodeURIComponent(e.message)); }
+});
+
+// ─── Add a client / tenant under an account ──────────────────────────────────
+router.post("/recurring/:acctId/tenant/new", async (req, res) => {
+  const { office } = req;
+  if (!recCanManage(office)) return res.redirect("/office/recurring?err=" + encodeURIComponent("Not allowed"));
+  try {
+    const RecurringTenant = (await import("../models/recurringTenant.js")).default;
+    const name = String(req.body.name || "").trim();
+    if (!name) return res.redirect("/office/recurring?err=" + encodeURIComponent("Client name is required"));
+    let p = String(req.body.phone || "").replace(/\D/g, "");
+    if (p.startsWith("0")) p = "263" + p.slice(1);
+    const ob = req.body.billingAmount;
+    await RecurringTenant.create({
+      businessId:  office.biz._id,
+      accountId:   req.params.acctId,
+      name,
+      phone:       p,
+      isActive:    true,
+      canSelfServe: false,
+      notificationsEnabled: true,
+      openingBalance: parseFloat(req.body.openingBalance) || 0,
+      billingAmount:  (ob !== "" && ob != null) ? (parseFloat(ob) || null) : null,
+      createdBy:   office.role.phone || "web",
+    });
+    res.redirect("/office/recurring?ok=" + encodeURIComponent(`Client "${name}" added`));
+  } catch (e) { console.error("[office rec tenant new]", e); res.redirect("/office/recurring?err=" + encodeURIComponent(e.message)); }
+});
+
+// ─── Move out (vacate) - keeps arrears collectable, stops invoicing ──────────
+router.post("/recurring/tenant/:tid/vacate", async (req, res) => {
+  const { office } = req;
+  if (!recCanManage(office)) return res.redirect("/office/recurring?err=" + encodeURIComponent("Not allowed"));
+  try {
+    const RecurringTenant = (await import("../models/recurringTenant.js")).default;
+    await RecurringTenant.updateOne(
+      { _id: req.params.tid, businessId: office.biz._id },
+      { $set: { vacated: true, vacatedAt: new Date(), isActive: false } }
+    );
+    res.redirect("/office/recurring?status=vacated&ok=" + encodeURIComponent("Client marked moved out"));
+  } catch (e) { console.error("[office rec vacate]", e); res.redirect("/office/recurring?err=" + encodeURIComponent(e.message)); }
+});
+
+// ─── Reinstate a moved-out client ────────────────────────────────────────────
+router.post("/recurring/tenant/:tid/reinstate", async (req, res) => {
+  const { office } = req;
+  if (!recCanManage(office)) return res.redirect("/office/recurring?err=" + encodeURIComponent("Not allowed"));
+  try {
+    const RecurringTenant = (await import("../models/recurringTenant.js")).default;
+    await RecurringTenant.updateOne(
+      { _id: req.params.tid, businessId: office.biz._id },
+      { $set: { vacated: false, vacatedAt: null, isActive: true } }
+    );
+    res.redirect("/office/recurring?ok=" + encodeURIComponent("Client reinstated"));
+  } catch (e) { console.error("[office rec reinstate]", e); res.redirect("/office/recurring?err=" + encodeURIComponent(e.message)); }
+});
+
+// ─── Create a branch / site (owner/manager) - no team member needed ──────────
+router.post("/branches/new", async (req, res) => {
+  const { office } = req;
+  if (!recCanManage(office)) return res.redirect("/office/recurring?err=" + encodeURIComponent("Not allowed"));
+  try {
+    const Branch = (await import("../models/branch.js")).default;
+    const name = String(req.body.name || "").trim();
+    if (!name) return res.redirect("/office/recurring?berr=1&err=" + encodeURIComponent("Branch name required"));
+    await Branch.create({ businessId: office.biz._id, name, location: String(req.body.location || "").trim(), isDefault: false });
+    res.redirect("/office/recurring?ok=" + encodeURIComponent(`Branch added: ${name}`));
+  } catch (e) { console.error("[office branch new]", e); res.redirect("/office/recurring?berr=1&err=" + encodeURIComponent(e.message)); }
 });
 
 // ─── Bulk-generate this period's invoices (owner/manager) ────────────────────
