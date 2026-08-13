@@ -1338,10 +1338,6 @@
             <button class="btn btn-o" onclick="gotoPage('classify',document.querySelector('[data-page=classify]'))">🏷️ Classify Quizzes</button>
             {{/if}}
             <a href="/admin/orgs/{{org.slug}}/reports/attempts.csv" class="btn btn-o">⬇ Export CSV</a>
-            {{#if (or isHomeSchool isCripSchool)}}
-            <a href="/admin/lms/import" class="btn btn-o">📥 Import Quizzes &amp; Questions</a>
-            <a href="/admin/orgs/{{org.slug}}/quiz-rules" class="btn btn-o">⚙️ Quiz Rules</a>
-            {{/if}}
           </div>
         </div>
       </div>

@@ -1,90 +1,146 @@
 {{!-- views/admin/lms_import.hbs --}}
-
 {{> navbar}}
 
-<div style="max-width:980px;margin:18px auto;font-family:Inter,system-ui,Arial;color:#111">
+<div class="imp-wrap">
+  <style>
+    .imp-wrap{--line:#e2e8f0;--ink:#0f172a;--muted:#64748b;--brand:#0b6fb7;--brand2:#0a5c98;
+      --green:#166534;--greenbg:#dcfce7;--red:#b91c1c;--redbg:#fee2e2;--amber:#92400e;--amberbg:#fef3c7;
+      max-width:1000px;margin:20px auto;padding:0 16px 70px;color:var(--ink);
+      font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif}
+    .imp-wrap *{box-sizing:border-box}
+    .imp-head h1{font-size:22px;font-weight:800;margin:0 0 4px}
+    .imp-head p{color:var(--muted);font-size:13.5px;margin:0 0 18px}
+    .imp-flash{padding:12px 14px;border-radius:10px;font-size:13.5px;font-weight:600;margin-bottom:16px}
+    .flash-ok{background:var(--greenbg);color:var(--green)}
+    .flash-err{background:var(--redbg);color:var(--red)}
+    .flash-info{background:var(--amberbg);color:var(--amber)}
 
-  <h1>Import LMS Questions</h1>
+    .imp-card{background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:0 1px 2px rgba(16,24,40,.04);margin-bottom:18px}
+    .imp-card>.h{padding:13px 18px;border-bottom:1px solid var(--line);font-weight:700;font-size:15px;display:flex;align-items:center;gap:8px;justify-content:space-between}
+    .imp-card>.h .tag{font-size:11px;font-weight:700;color:var(--muted);background:#f1f5f9;padding:3px 9px;border-radius:999px}
+    .imp-card>.b{padding:18px}
 
-  <p style="color:#666;margin-bottom:10px">
-    Upload a plain text file (.txt) or paste quiz questions.
-    Now you can categorize questions by <strong>Organization</strong> and <strong>Module</strong>.
-  </p>
+    .imp-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px}
+    .imp-field{display:flex;flex-direction:column;gap:6px;min-width:0}
+    .imp-field.full{grid-column:1/-1}
+    .imp-field label{font-size:12.5px;font-weight:600}
+    .imp-field .hint{font-size:11.5px;color:var(--muted)}
+    .imp-input,.imp-select,textarea.imp-input{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-size:14px;background:#fff;color:var(--ink);outline:none;transition:border-color .15s,box-shadow .15s}
+    .imp-input:focus,.imp-select:focus,textarea.imp-input:focus{border-color:var(--brand);box-shadow:0 0 0 3px rgba(11,111,183,.15)}
+    textarea.imp-input{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;line-height:1.5;resize:vertical}
+    .imp-check{display:flex;align-items:flex-start;gap:9px;font-size:13.5px;padding:10px 12px;border:1px solid var(--line);border-radius:9px;background:#f8fafc}
+    .imp-check input{margin-top:2px}
+    .imp-check .sub{color:var(--muted);font-size:12px;display:block;margin-top:2px}
+
+    .imp-actions{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;margin-top:18px}
+    .imp-btn{border:1px solid transparent;border-radius:10px;padding:11px 20px;font-size:14px;font-weight:700;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:7px}
+    .imp-btn-p{background:linear-gradient(180deg,var(--brand),var(--brand2));color:#fff}
+    .imp-btn-p:hover{filter:brightness(1.05)}
+    .imp-btn-o{background:#fff;border-color:var(--line);color:var(--ink)}
+    .imp-btn-o:hover{background:#f3f4f6}
+    .imp-example{background:#f8fafc;border:1px dashed var(--line);border-radius:9px;padding:12px 14px;font-family:ui-monospace,Menlo,monospace;font-size:12px;color:var(--muted);white-space:pre-wrap;margin-top:8px}
+    .imp-links{font-size:13px;color:var(--muted);margin-top:6px}
+    .imp-links a{color:var(--brand);font-weight:600;text-decoration:none}
+    @media (max-width:720px){.imp-head h1{font-size:19px}}
+  </style>
+
+  <div class="imp-head">
+    <h1>📥 Import quizzes &amp; questions</h1>
+    <p>Build a quiz from a passage + questions, or questions only. Every import becomes a comprehension quiz you can attach to a rule.</p>
+  </div>
+
+  {{#if ok}}<div class="imp-flash flash-ok">✅ {{ok}}</div>{{/if}}
+  {{#if err}}<div class="imp-flash flash-err">⚠️ {{err}}</div>{{/if}}
+  {{#if preview}}<div class="imp-flash flash-info">👀 {{preview}}</div>{{/if}}
 
   <form method="post" enctype="multipart/form-data" action="/admin/lms/import">
 
-    {{!-- ORGANIZATION DROPDOWN --}}
-    <label><strong>Organization</strong></label>
-    <select name="orgId" style="padding:8px;width:100%;border-radius:6px;border:1px solid #ccc;margin:6px 0 12px">
-      <option value="">Global (all organizations)</option>
-      {{#each organizations}}
-        <option value="{{this._id}}">{{this.name}}</option>
-      {{/each}}
-    </select>
-
-    <label><strong>Quiz Title</strong></label>
-    <input
-      type="text"
-      name="quizTitle"
-      placeholder="e.g. Responsibility- Passage Quiz 1"
-      required
-      style="padding:8px;width:100%;border-radius:6px;border:1px solid #ccc;margin-bottom:12px"
-    />
-
-    <label><strong>Module</strong></label>
-    <input
-      type="text"
-      name="module"
-      placeholder="e.g. safety, hr, onboarding"
-      required
-      style="padding:8px;width:100%;border-radius:6px;border:1px solid #ccc;margin-bottom:12px"
-    />
-
-    <div style="margin-bottom:12px;margin-top:16px">
-      <label><strong>Upload .txt file</strong></label><br/>
-      <input type="file" name="file" accept=".txt" />
+    {{!-- ── DETAILS ── --}}
+    <div class="imp-card">
+      <div class="h">① Quiz details</div>
+      <div class="b">
+        <div class="imp-grid">
+          <div class="imp-field">
+            <label>Organisation</label>
+            <select name="orgId" class="imp-select">
+              <option value="">— choose org (required to save) —</option>
+              {{#each organizations}}<option value="{{this._id}}">{{this.name}}</option>{{/each}}
+            </select>
+          </div>
+          <div class="imp-field">
+            <label>Quiz title</label>
+            <input type="text" name="quizTitle" class="imp-input" placeholder="e.g. Responsibility — Passage Quiz 1" required>
+          </div>
+          <div class="imp-field">
+            <label>Module</label>
+            <input type="text" name="module" class="imp-input" placeholder="e.g. comprehension, responsibility" required>
+          </div>
+          <div class="imp-field">
+            <label>Subject <span class="hint">(optional)</span></label>
+            <input type="text" name="subject" class="imp-input" placeholder="e.g. english, science">
+          </div>
+          <div class="imp-field">
+            <label>Grade <span class="hint">(optional, 0–7)</span></label>
+            <input type="number" name="grade" min="0" max="7" class="imp-input" placeholder="e.g. 4">
+          </div>
+        </div>
+      </div>
     </div>
 
-    <div style="text-align:center;margin:8px 0;color:#888">- or -</div>
-
-    <label><strong>Paste questions (text)</strong></label>
-    <textarea
-      name="text"
-      placeholder="Paste the quiz text here..."
-      style="width:100%;height:360px;font-family:monospace;padding:12px;border:1px solid #ccc;border-radius:6px"
-    >{{{text}}}</textarea>
-
-    <div style="margin-top:10px">
-      <label style="font-weight:700">
-        <input type="checkbox" name="save" value="1" /> Save parsed questions to database
-      </label>
+    {{!-- ── PASSAGE ── --}}
+    <div class="imp-card">
+      <div class="h"><span>② Passage <span style="font-weight:400;color:var(--muted)">(for comprehension quizzes)</span></span><span class="tag">optional</span></div>
+      <div class="b">
+        <div class="imp-field full">
+          <label>Reading passage</label>
+          <textarea name="passage" class="imp-input" style="height:180px" placeholder="Paste the reading passage here. Leave empty for a plain questions-only quiz."></textarea>
+          <span class="hint">Shown to the learner above the questions. Leave blank if these are standalone questions.</span>
+        </div>
+      </div>
     </div>
 
-    <div style="margin-top:14px">
-      <button
-        type="submit"
-        style="padding:10px 14px;border-radius:6px;background:#0b6fb7;color:#fff;border:none;cursor:pointer"
-      >
-        Import
-      </button>
+    {{!-- ── QUESTIONS ── --}}
+    <div class="imp-card">
+      <div class="h"><span>③ Questions</span><span class="tag">required</span></div>
+      <div class="b">
+        <div class="imp-field full">
+          <label>Upload a .txt file</label>
+          <input type="file" name="file" accept=".txt" class="imp-input" style="padding:8px">
+        </div>
+        <div style="text-align:center;margin:10px 0;color:var(--muted)">— or paste below —</div>
+        <div class="imp-field full">
+          <label>Paste questions</label>
+          <textarea name="text" class="imp-input" style="height:320px" placeholder="Paste questions here…">{{{text}}}</textarea>
+          <div class="imp-example">Format — one question per block, blank line between blocks:
 
-      <button
-        type="reset"
-        style="padding:10px 14px;border-radius:6px;background:#eee;color:#222;border:1px solid #ccc;margin-left:8px"
-      >
-        Reset
-      </button>
+What is 2 + 2?
+a) 3
+b) 4
+c) 5
+Correct Answer: b</div>
+          <span class="hint">Each block needs at least 2 options (a/b/c/d) and a “Correct Answer: X” line. Duplicate questions in one import are skipped automatically.</span>
+        </div>
+      </div>
     </div>
 
+    {{!-- ── OPTIONS ── --}}
+    <div class="imp-card">
+      <div class="h">④ Save &amp; assign</div>
+      <div class="b">
+        <div class="imp-grid">
+          <label class="imp-check"><input type="checkbox" name="save" value="1"><span><b>Save to database</b><span class="sub">Off = preview only (parses &amp; validates, saves nothing).</span></span></label>
+          <label class="imp-check"><input type="checkbox" name="assignNow" value="1"><span><b>Assign to org members now</b><span class="sub">School-style: pushes to employees/managers immediately. Otherwise assign via Quiz Rules.</span></span></label>
+        </div>
+        <div class="imp-actions">
+          <button type="reset" class="imp-btn imp-btn-o">Reset</button>
+          <button type="submit" class="imp-btn imp-btn-p">Import</button>
+        </div>
+      </div>
+    </div>
   </form>
 
-  <div style="margin-top:12px">
-    <p>
-      After importing you can visit
-      <a href="/admin/lms/questions">Manage Questions</a>
-      or test quizzes at
-      <a href="/lms/quiz">/lms/quiz</a>.
-    </p>
+  <div class="imp-links">
+    Next: create rules on the <a href="javascript:history.length>1?history.back():null">org's Quiz Rules page</a>,
+    or test at <a href="/lms/quiz">/lms/quiz</a>.
   </div>
-
 </div>
