@@ -7,6 +7,8 @@
 /**
  * Predefined expense categories with keywords
  */
+import { extractTrailingDate, toISODate, formatDateLabel } from "./dateEntry.js";
+
 const CATEGORY_KEYWORDS = {
   Food: ['lunch', 'dinner', 'breakfast', 'food', 'meal', 'snack', 'drinks', 'tea', 'coffee', 'cake', 'rice', 'bread'],
   Travel: ['transport', 'fuel', 'petrol', 'diesel', 'taxi', 'bus', 'kombi', 'travel', 'trip'],
@@ -56,8 +58,13 @@ export function parseSingleExpense(text) {
     return null;
   }
   
-  const trimmed = text.trim();
+  let trimmed = text.trim();
   if (!trimmed) return null;
+
+  // Optional inline date at the end, e.g. "fuel 20 yesterday" or "lunch 10 12/08".
+  let dateISO = null, dateLabel = null;
+  const dx = extractTrailingDate(trimmed);
+  if (dx.parsed) { trimmed = dx.rest; dateISO = dx.parsed.iso; dateLabel = dx.parsed.label; }
   
   // Match pattern: "description number" or "number description"
   // Examples: "lunch 10", "10 lunch", "office supplies 25"
@@ -75,6 +82,8 @@ export function parseSingleExpense(text) {
         amount,
         description: capitalizeFirst(description),
         category,
+        date: dateISO,        // ISO yyyy-mm-dd or null (defaults to today at save)
+        dateLabel,            // friendly label for previews
         success: true
       };
     }
@@ -93,6 +102,8 @@ export function parseSingleExpense(text) {
         amount,
         description: capitalizeFirst(description),
         category,
+        date: dateISO,        // ISO yyyy-mm-dd or null (defaults to today at save)
+        dateLabel,            // friendly label for previews
         success: true
       };
     }
@@ -220,7 +231,8 @@ export function formatExpenseList(expenses, startIndex = 1, currency = '$') {
   expenses.forEach((exp, idx) => {
     const emoji = getCategoryEmoji(exp.category);
     const num = startIndex + idx;
-    output += `[${num}] ${emoji} ${currency}${exp.amount.toFixed(2)} - ${exp.description} (${exp.category})\n`;
+    const on = exp.dateLabel ? ` · 📅 ${exp.dateLabel}` : "";
+    output += `[${num}] ${emoji} ${currency}${exp.amount.toFixed(2)} - ${exp.description} (${exp.category})${on}\n`;
   });
   return output;
 }

@@ -11652,7 +11652,7 @@ Categories auto-detected ✨`);
       response += `⚠️ Skipped ${result.failed.length}:\n${result.failed.slice(0, 2).join(', ')}\n\n`;
     }
     
-    response += `Continue or type 'done' to save`;
+    response += `Continue or type 'done' to save\n_Tip: add a date, e.g. "fuel 20 yesterday" or "lunch 10 12/08"._`;
     
     await sendText(from, response);
     return;
@@ -11685,6 +11685,9 @@ Categories auto-detected ✨`);
           description: exp.description,
           category: exp.category,
           method: "Cash",
+          // Honour an inline date the user typed (e.g. "fuel 20 yesterday").
+          // Absent -> schema default (now), so no-date behaviour is unchanged.
+          ...(exp.date ? { createdAt: new Date(exp.date) } : {}),
           createdBy: phone
         }));
         
