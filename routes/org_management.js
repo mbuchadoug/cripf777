@@ -389,7 +389,7 @@ if (org.slug === "cripfcnt-home" || org.slug === "cripfcnt-school") {
       { organization: null }
     ]
   })
-    .select("_id text module subject grade")   // subject+grade so the rule quiz-picker can search by them
+    .select("_id text module subject grade questionIds")   // subject+grade+size so the rule quiz-picker can search + auto-fill
     .sort({ createdAt: -1 })
     .lean();
 }

@@ -2124,7 +2124,6 @@
                     {{#each quizzes}}
                     <div class="qzitem" data-id="{{_id}}"
                       data-search="{{text}} {{module}} {{subject}} {{#if grade}}grade {{grade}}{{/if}}"
-                      data-subject="{{subject}}" data-module="{{module}}" data-grade="{{grade}}" data-count="{{questionIds.length}}"
                       onclick="qzChoose(this)"
                       style="padding:9px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border-soft)">
                       <span style="font-weight:600">{{text}}</span>
@@ -2172,27 +2171,10 @@
                 });
                 if(empty) empty.style.display=shown?'none':'block';
               };
-              function qzSetSelect(form,name,val){
-                if(val==null||val==='') return;
-                var sel=form.querySelector('select[name="'+name+'"]'); if(!sel) return;
-                var has=Array.prototype.some.call(sel.options,function(o){return o.value===String(val);});
-                if(has) sel.value=String(val);
-              }
-              function qzSetInput(form,name,val){
-                if(val==null||val==='') return;
-                var inp=form.querySelector('input[name="'+name+'"]'); if(inp) inp.value=val;
-              }
               window.qzChoose=function(el){
                 value.value=el.getAttribute('data-id');
                 search.value=el.textContent.trim().replace(/\s+/g,' ');
                 list.style.display='none'; if(empty) empty.style.display='none';
-                // Auto-fill the rest of the rule from the quiz's own metadata
-                var form=value.closest('form'); if(!form) return;
-                qzSetSelect(form,'subject', el.getAttribute('data-subject'));
-                qzSetSelect(form,'grade',   el.getAttribute('data-grade'));
-                qzSetSelect(form,'module',  el.getAttribute('data-module'));
-                var c=el.getAttribute('data-count');
-                if(c && Number(c)>0) qzSetInput(form,'questionCount', c);
               };
               document.addEventListener('click',function(e){
                 if(!e.target.closest('.qzpick')){ list.style.display='none'; if(empty) empty.style.display='none'; }
