@@ -2114,25 +2114,9 @@
               {{/if}}
               <div class="fld">
                 <label>Quiz</label>
-                <div class="qzpick" style="position:relative">
-                  <input type="text" id="qzSearch" autocomplete="off"
-                    placeholder="🔎 Search {{quizzes.length}} quizzes by title, module, subject or grade…"
-                    oninput="qzFilter()" onfocus="qzFilter()"
-                    style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none">
-                  <input type="hidden" name="quizQuestionId" id="qzValue" required>
-                  <div id="qzList" style="display:none;position:absolute;z-index:50;left:0;right:0;top:calc(100% + 4px);max-height:280px;overflow:auto;background:#fff;border:1.5px solid var(--border);border-radius:8px;box-shadow:0 10px 28px rgba(15,23,42,.15)">
-                    {{#each quizzes}}
-                    <div class="qzitem" data-id="{{_id}}"
-                      data-search="{{text}} {{module}} {{subject}} {{#if grade}}grade {{grade}}{{/if}}"
-                      onclick="qzChoose(this)"
-                      style="padding:9px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border-soft)">
-                      <span style="font-weight:600">{{text}}</span>
-                      <span style="color:var(--ink-muted)"> · {{module}}{{#if grade}} · Grade {{grade}}{{/if}}</span>
-                    </div>
-                    {{/each}}
-                  </div>
-                  <div id="qzEmpty" style="display:none;padding:10px 12px;color:var(--ink-muted);font-size:12.5px">No quizzes match.</div>
-                </div>
+                <select name="quizQuestionId" required>
+                  {{#each quizzes}}<option value="{{_id}}" data-subject="{{subject}}">{{text}} ({{module}})</option>{{/each}}
+                </select>
               </div>
               <div class="fld">
                 <label>Question Count</label>
@@ -2154,37 +2138,6 @@
               </div>
             </div>
           </form>
-          <script>
-            (function(){
-              var search=document.getElementById('qzSearch');
-              var list=document.getElementById('qzList');
-              var empty=document.getElementById('qzEmpty');
-              var value=document.getElementById('qzValue');
-              if(!search||!list) return;
-              window.qzFilter=function(){
-                var v=(search.value||'').toLowerCase().trim();
-                list.style.display='block';
-                var items=list.querySelectorAll('.qzitem'), shown=0;
-                items.forEach(function(it){
-                  var ok=(it.getAttribute('data-search')||'').toLowerCase().indexOf(v)>-1;
-                  it.style.display=ok?'':'none'; if(ok)shown++;
-                });
-                if(empty) empty.style.display=shown?'none':'block';
-              };
-              window.qzChoose=function(el){
-                value.value=el.getAttribute('data-id');
-                search.value=el.textContent.trim().replace(/\s+/g,' ');
-                list.style.display='none'; if(empty) empty.style.display='none';
-              };
-              document.addEventListener('click',function(e){
-                if(!e.target.closest('.qzpick')){ list.style.display='none'; if(empty) empty.style.display='none'; }
-              });
-              var form=value.closest('form');
-              if(form) form.addEventListener('submit',function(e){
-                if(!value.value){ e.preventDefault(); alert('Please pick a quiz (use the search box).'); search.focus(); }
-              });
-            })();
-          </script>
         </div>
       </div>
 

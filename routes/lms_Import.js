@@ -55,7 +55,12 @@ res.render("admin/lms_import", {
   ok: req.query.ok || null,
   err: req.query.err || null,
   preview: req.query.preview || null,
-  text: req.query.text || ""
+  text: req.query.text || "",
+  // sticky selections so many quizzes can be imported for one org
+  orgId: req.query.orgId || "",
+  moduleVal: req.query.module || "",
+  subjectVal: req.query.subject || "",
+  gradeVal: req.query.grade || ""
 });
 
 });
@@ -71,7 +76,14 @@ router.post(
   ensureAdmin,
   upload.any(),
   async (req, res) => {
-    const back = (qs) => res.redirect("/admin/lms/import" + (qs ? "?" + qs : ""));
+    // Preserve the org + tagging selections across imports (sticky org).
+    const keep = new URLSearchParams();
+    if (req.body.orgId)   keep.set("orgId", req.body.orgId);
+    if (req.body.module)  keep.set("module", req.body.module);
+    if (req.body.subject) keep.set("subject", req.body.subject);
+    if (req.body.grade)   keep.set("grade", req.body.grade);
+    const keepStr = keep.toString();
+    const back = (qs) => res.redirect("/admin/lms/import?" + qs + (keepStr ? "&" + keepStr : ""));
     try {
       // ── 1. Gather content (file or pasted text) ──────────────────────────
       let content = "";
@@ -217,7 +229,8 @@ router.post(
 
     } catch (err) {
       console.error("[LMS IMPORT] error:", err && err.stack);
-      return res.redirect("/admin/lms/import?err=" + encodeURIComponent("Import failed: " + (err.message || "unknown error")));
+      const kq = new URLSearchParams(); if (req.body.orgId) kq.set("orgId", req.body.orgId); if (req.body.module) kq.set("module", req.body.module);
+      return res.redirect("/admin/lms/import?err=" + encodeURIComponent("Import failed: " + (err.message || "unknown error")) + (kq.toString() ? "&" + kq.toString() : ""));
     }
   }
 );

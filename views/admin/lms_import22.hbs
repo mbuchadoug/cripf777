@@ -62,11 +62,10 @@
         <div class="imp-grid">
           <div class="imp-field">
             <label>Organisation</label>
-            <select name="orgId" id="impOrg" class="imp-select" data-selected="{{orgId}}">
+            <select name="orgId" class="imp-select">
               <option value="">— choose org (required to save) —</option>
               {{#each organizations}}<option value="{{this._id}}">{{this.name}}</option>{{/each}}
             </select>
-            <span class="hint">Stays selected after each import, so you can add many quizzes to the same org.</span>
           </div>
           <div class="imp-field">
             <label>Quiz title</label>
@@ -74,15 +73,15 @@
           </div>
           <div class="imp-field">
             <label>Module</label>
-            <input type="text" name="module" class="imp-input" placeholder="e.g. comprehension, responsibility" value="{{moduleVal}}" required>
+            <input type="text" name="module" class="imp-input" placeholder="e.g. comprehension, responsibility" required>
           </div>
           <div class="imp-field">
             <label>Subject <span class="hint">(optional)</span></label>
-            <input type="text" name="subject" class="imp-input" placeholder="e.g. english, science" value="{{subjectVal}}">
+            <input type="text" name="subject" class="imp-input" placeholder="e.g. english, science">
           </div>
           <div class="imp-field">
             <label>Grade <span class="hint">(optional, 0–7)</span></label>
-            <input type="number" name="grade" min="0" max="7" class="imp-input" placeholder="e.g. 4" value="{{gradeVal}}">
+            <input type="number" name="grade" min="0" max="7" class="imp-input" placeholder="e.g. 4">
           </div>
         </div>
       </div>
@@ -144,10 +143,4 @@ Correct Answer: b</div>
     Next: create rules on the <a href="javascript:history.length>1?history.back():null">org's Quiz Rules page</a>,
     or test at <a href="/lms/quiz">/lms/quiz</a>.
   </div>
-  <script>
-    (function(){
-      var o=document.getElementById('impOrg');
-      if(o && o.dataset.selected){ o.value=o.dataset.selected; }
-    })();
-  </script>
 </div>
