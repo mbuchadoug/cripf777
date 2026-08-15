@@ -149,30 +149,58 @@ async function _postUniversalTemplate(phone, u) {
  * @param {string} message  - rich text (used inside the 24h window)
  * @param {{title,details,balance}} [universal] - data for the template fallback
  */
-async function _safeNotify(phone, message, universal = null) {
-  try {
-    await sendText(phone, message);
-    console.log(`[BIZ_NOTIF] \u2713 text sent to ${phone}`);
-  } catch (err) {
-    const code   = Number(err?.response?.data?.error?.code);
-    const detail = err?.response?.data?.error?.message || err?.message || "";
+// WHY route by isActive instead of "try text, fall back on error":
+//   metaSender.sendText() does NOT throw when Meta rejects an out-of-window
+//   text send - it returns as if it succeeded. So a catch-based fallback never
+//   fires for dormant owners (confirmed in production logs: "✓ text sent" for
+//   owners who received nothing). Templates deliver regardless of the 24h
+//   window, so we send the template to everyone who isn't the active transactor.
+//
+//   isActive === true  → this phone just interacted (tapped a button / typed),
+//                        so it is inside the 24h window: send the rich free text.
+//   isActive === false → window unknown (dormant owner, scheduled job, founder):
+//                        send the approved template, which always delivers.
+async function _safeNotify(phone, message, universal = null, isActive = false) {
+  // ── Active transactor: rich free-text (in-window, nicer, no template cost) ──
+  if (isActive) {
+    try {
+      await sendText(phone, message);
+      console.log(`[BIZ_NOTIF] \u2713 text \u2192 ${phone} (active/in-window)`);
+      return;
+    } catch (err) {
+      const detail = err?.response?.data?.error?.message || err?.message || "";
+      console.warn(`[BIZ_NOTIF] text failed for active ${phone}: ${detail} \u2192 trying template`);
+      // fall through to template
+    }
+  }
 
-    // Meta "please re-engage / outside the 24h window / undeliverable" family.
-    const windowish =
-      [131047, 131026, 470, 131051, 132000].includes(code) ||
-      /24 ?hours|re-?engag|outside|session|window|not .*open|allowed window/i.test(String(detail));
-
-    if (universal && windowish) {
+  // ── Everyone else: template delivers whether or not the window is open ───────
+  if (universal) {
+    try {
+      await _postUniversalTemplate(phone, universal);
+      console.log(`[BIZ_NOTIF] \u2713 template \u2192 ${phone}`);
+      return;
+    } catch (tplErr) {
+      const tdetail = tplErr?.response?.data?.error?.message || tplErr.message;
+      console.error(`[BIZ_NOTIF] \u2717 template \u2192 ${phone}: ${tdetail}` +
+                    ` \u2014 is the "${UNIVERSAL_TEMPLATE}" template CREATED and APPROVED on Meta?`);
+      // Last resort: plain text. Only lands if they happen to be in-window; if
+      // sendText swallows an out-of-window error this logs success but may not
+      // deliver - the template above is the real guarantee.
       try {
-        await _postUniversalTemplate(phone, universal);
-        console.log(`[BIZ_NOTIF] Template fallback delivered to ${phone} (code ${code || "n/a"})`);
-      } catch (tplErr) {
-        const tdetail = tplErr?.response?.data?.error?.message || tplErr.message;
-        console.error(`[BIZ_NOTIF] Template fallback FAILED for ${phone}: ${tdetail}` +
-                      ` — is "${UNIVERSAL_TEMPLATE}" approved on Meta?`);
+        await sendText(phone, message);
+        console.log(`[BIZ_NOTIF] text attempted (last-resort) \u2192 ${phone} ` +
+                    `(delivers only if inside the 24h window)`);
+      } catch (txtErr) {
+        const xd = txtErr?.response?.data?.error?.message || txtErr.message;
+        console.error(`[BIZ_NOTIF] \u2717 last-resort text \u2192 ${phone}: ${xd}`);
       }
-    } else {
-      console.error(`[BIZ_NOTIF] Could not notify ${phone}: ${detail}`);
+    }
+  } else {
+    try {
+      await sendText(phone, message);
+    } catch (e) {
+      console.error(`[BIZ_NOTIF] \u2717 text \u2192 ${phone}: ${e?.response?.data?.error?.message || e.message}`);
     }
   }
 }
@@ -282,8 +310,9 @@ function _balanceParam(bal) {
 async function _dispatch(biz, clerkPhone, message, universal = null) {
   try {
     const { allSet } = await getNotificationRecipients(biz._id, clerkPhone, [biz.providerId]);
-    console.log(`[BIZ_NOTIF] "${biz.name}" dispatching to ${allSet.length} recipient(s)`);
-    await Promise.all(allSet.map(p => _safeNotify(p, message, universal)));
+    const active = normPhone(clerkPhone);
+    console.log(`[BIZ_NOTIF] "${biz.name}" dispatching to ${allSet.length} recipient(s); active=${active || "none"}`);
+    await Promise.all(allSet.map(p => _safeNotify(p, message, universal, normPhone(p) === active)));
   } catch (err) {
     console.error("[BIZ_NOTIF] dispatch error:", err.message);
   }
