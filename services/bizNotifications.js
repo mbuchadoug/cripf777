@@ -5,62 +5,44 @@
  *
  * Fans every business event (invoice / quote / receipt, payment, expense,
  * payout, opening balance, daily summary) out to EVERY owner + manager + admin
- * of the business, plus the clerk who recorded it. Delivery is guaranteed even
- * when a recipient is OUTSIDE the 24-hour WhatsApp session window.
+ * of the business, plus the clerk who recorded it - and delivers even when a
+ * recipient is OUTSIDE the 24-hour WhatsApp session window.
  *
- * ── HOW DELIVERY WORKS (the 24-hour window) ──────────────────────────────────
+ * ── HOW DELIVERY IS DECIDED (this is the important part) ──────────────────────
  * WhatsApp Cloud API rules:
  *   • type:"text"      → only delivers if the recipient messaged the number in
- *                        the last 24h. Outside that, Meta rejects the send
- *                        (error 131047 "re-engagement", sometimes 131026).
+ *                        the last 24h. Outside that window Meta rejects it.
  *   • type:"template"  → delivers ANY time, no session needed, but the template
- *                        must be pre-approved by Meta (1-3 days).
+ *                        must be pre-approved by Meta.
  *
- * So: we try the rich free-text message first (nice formatting, works in-window),
- * and if Meta rejects it because the window is closed we automatically fall back
- * to ONE approved utility template that carries the same information. One
- * recipient may get the pretty text; another (dormant) owner gets the template.
- * Both are notified.
+ * We CANNOT rely on catching an error to know the window is closed:
+ * metaSender.sendText() does not throw when Meta rejects an out-of-window send -
+ * it returns as if it succeeded (confirmed in production: "✓ text sent" logged
+ * for owners who received nothing). So instead of "try text, fall back on
+ * error", we decide up front by WHO the recipient is:
  *
- * ── THE ONE TEMPLATE YOU MUST SUBMIT ONCE ────────────────────────────────────
- *   Meta Business Suite → WhatsApp → Message Templates → Create template
- *     Name:      biz_transaction_alert
- *     Category:  UTILITY
- *     Language:  English (en)
- *     Body:
- *       ─────────────────────────────────────────────
- *       🔔 {{1}}
+ *   • the ACTIVE transactor (just tapped a button / typed) is inside the 24h
+ *     window → send the rich free-text message (nice formatting, no template cost)
+ *   • EVERYONE ELSE (dormant owners, the founder, scheduled jobs) → send the
+ *     matching approved TEMPLATE, which always delivers.
  *
- *       {{2}}
+ * ── APPROVED TEMPLATES THIS FILE USES (already live on Meta, Utility/English) ─
+ *   biz_invoice_created      {{1}}=doc type {{2}}=ref {{3}}=client {{4}}=amount {{5}}=time/date {{6}}=by
+ *   biz_payment_received     {{1}}=invoice {{2}}=client {{3}}=amount {{4}}=method {{5}}=time/date {{6}}=by
+ *   biz_expenses_recorded    {{1}}=biz|branch {{2}}=items {{3}}=total {{4}}=time/date {{5}}=by
+ *   biz_payout_recorded      {{1}}=biz|branch {{2}}=amount {{3}}=reason {{4}}=time/date {{5}}=by
+ *   biz_opening_balance_set  {{1}}=biz|branch {{2}}=amount {{3}}=date {{4}}=by
+ *   biz_daily_summary        {{1}}=biz|branch {{2}}=date {{3}}=opening {{4}}=in {{5}}=out {{6}}=cash at hand
  *
- *       💰 {{3}}
+ * If any template send logs "(#132001) Template name does not exist", the name
+ * or language below no longer matches Meta - fix the name in _templates.
  *
- *       Reply *menu* to open ZimQuote.
- *       ─────────────────────────────────────────────
- *     Sample values (Meta asks for these on submit):
- *       {{1}}  New Receipt — Mudziyashe (Main Branch)
- *       {{2}}  Ref RCPT-000002 · Client pick n pay · Amount $30.00 · By 263771446827 · 15 Aug 2026 18:08
- *       {{3}}  Cash at hand: $50.00
- *
- *   Why one template with 3 short variables (not one big blob): Meta REJECTS a
- *   send whose parameter contains newlines, tabs, or 4+ consecutive spaces. So
- *   the line breaks live in the fixed template body, and every variable we pass
- *   is a single sanitised line. _sanitizeParam() below enforces that.
- *
- *   The body never starts or ends with a variable (Meta approves those faster),
- *   and it reads as a transactional account alert (UTILITY), which is exactly
- *   what it is.
- *
- * WHERE THIS FILE LIVES:
- *   /var/www/cripf777/services/bizNotifications.js
+ * WHERE THIS FILE LIVES: /var/www/cripf777/services/bizNotifications.js
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
 import { sendText } from "./metaSender.js";
 import axios from "axios";
-
-// The single Meta template every out-of-window alert falls back to.
-const UNIVERSAL_TEMPLATE = "biz_transaction_alert";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -79,7 +61,7 @@ function dateNow() {
   });
 }
 
-/** Combined "HH:MM on DD Mon YYYY" string. */
+/** Combined "HH:MM on DD Mon YYYY" string for template time/date variables. */
 function timeDateNow() {
   return `${timeNow()} on ${dateNow()}`;
 }
@@ -89,41 +71,25 @@ function normPhone(p) {
   return String(p || "").replace(/\D+/g, "");
 }
 
-/**
- * Make a string safe to pass as a WhatsApp TEMPLATE parameter.
- * Meta rejects parameters that contain newline characters, tab characters, or
- * more than 4 consecutive spaces - so we flatten newlines/tabs into " · ",
- * strip WhatsApp markdown, collapse whitespace, and cap length well under the
- * 1024-char limit. Never returns empty (Meta also rejects blank params).
- */
-function _sanitizeParam(text) {
-  let t = String(text == null ? "" : text);
-  t = t.replace(/[*_~`]/g, "");          // drop markdown so it reads clean
-  t = t.replace(/[\r\n\t]+/g, " · ");    // no newlines / tabs allowed in params
-  t = t.replace(/ {2,}/g, " ");          // collapse runs of spaces (>4 is illegal)
-  t = t.replace(/(?: · )+/g, " · ");     // tidy doubled separators
-  t = t.replace(/^(?: · )+|(?: · )+$/g, ""); // trim leading/trailing separators
-  t = t.trim();
-  if (t.length > 1000) t = t.slice(0, 997) + "...";
-  return t.length ? t : "-";
-}
+// ── Meta template plumbing ────────────────────────────────────────────────────
 
 /**
- * POST the universal utility template. Works with no active session.
- * @param {string} phone
- * @param {{title:string, details:string, balance:string}} u
+ * Make a value safe as a WhatsApp TEMPLATE parameter. Meta rejects parameters
+ * containing newlines, tabs, or 4+ consecutive spaces, so we flatten those and
+ * cap the length well under Meta's 1024-char limit. Never returns empty.
  */
-async function _postUniversalTemplate(phone, u) {
+function _param(text) {
+  let t = String(text == null ? "" : text);
+  t = t.replace(/[\r\n\t]+/g, " ").replace(/ {2,}/g, " ").trim();
+  if (t.length > 300) t = t.slice(0, 297) + "...";
+  return { type: "text", text: t.length ? t : "-" };
+}
+
+async function _postTemplate(phone, templateName, params) {
   const PHONE_ID = process.env.WHATSAPP_PHONE_NUMBER_ID ||
                    process.env.META_PHONE_NUMBER_ID     ||
                    process.env.PHONE_NUMBER_ID;
   const TOKEN    = process.env.META_ACCESS_TOKEN || process.env.WHATSAPP_ACCESS_TOKEN;
-
-  const params = [
-    { type: "text", text: _sanitizeParam(u.title)   },
-    { type: "text", text: _sanitizeParam(u.details) },
-    { type: "text", text: _sanitizeParam(u.balance) }
-  ];
 
   await axios.post(
     `https://graph.facebook.com/v24.0/${PHONE_ID}/messages`,
@@ -132,9 +98,9 @@ async function _postUniversalTemplate(phone, u) {
       to:   normPhone(phone),
       type: "template",
       template: {
-        name:     UNIVERSAL_TEMPLATE,
+        name:     templateName,
         language: { code: "en" },
-        components: [{ type: "body", parameters: params }]
+        components: [{ type: "body", parameters: params.map(_param) }]
       }
     },
     { headers: { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json" } }
@@ -142,26 +108,45 @@ async function _postUniversalTemplate(phone, u) {
 }
 
 /**
- * _safeNotify: send the rich free-text message; if the recipient is outside the
- * 24-hour window (Meta rejects it) fall back to the approved utility template.
- *
- * @param {string} phone
- * @param {string} message  - rich text (used inside the 24h window)
- * @param {{title,details,balance}} [universal] - data for the template fallback
+ * One dispatcher per notification type → its approved Meta template.
+ * Variable ORDER here must match the approved template exactly.
  */
-// WHY route by isActive instead of "try text, fall back on error":
-//   metaSender.sendText() does NOT throw when Meta rejects an out-of-window
-//   text send - it returns as if it succeeded. So a catch-based fallback never
-//   fires for dormant owners (confirmed in production logs: "✓ text sent" for
-//   owners who received nothing). Templates deliver regardless of the 24h
-//   window, so we send the template to everyone who isn't the active transactor.
-//
-//   isActive === true  → this phone just interacted (tapped a button / typed),
-//                        so it is inside the 24h window: send the rich free text.
-//   isActive === false → window unknown (dormant owner, scheduled job, founder):
-//                        send the approved template, which always delivers.
-async function _safeNotify(phone, message, universal = null, isActive = false) {
-  // ── Active transactor: rich free-text (in-window, nicer, no template cost) ──
+const _templates = {
+  invoice: (d) => _postTemplate(d.phone, "biz_invoice_created", [
+    d.docType, d.ref, d.clientName, d.amount, d.timeDate, d.clerkPhone
+  ]),
+  payment: (d) => _postTemplate(d.phone, "biz_payment_received", [
+    d.invoiceRef, d.clientName, d.amount, d.method, d.timeDate, d.clerkPhone
+  ]),
+  expense: (d) => _postTemplate(d.phone, "biz_expenses_recorded", [
+    d.bizBranch, d.items, d.total, d.timeDate, d.clerkPhone
+  ]),
+  payout: (d) => _postTemplate(d.phone, "biz_payout_recorded", [
+    d.bizBranch, d.amount, d.reason, d.timeDate, d.clerkPhone
+  ]),
+  opening: (d) => _postTemplate(d.phone, "biz_opening_balance_set", [
+    d.bizBranch, d.amount, d.date, d.clerkPhone
+  ]),
+  daily: (d) => _postTemplate(d.phone, "biz_daily_summary", [
+    d.bizBranch, d.date, d.opening, d.cashIn, d.cashOut, d.balance
+  ])
+};
+
+/**
+ * Deliver one notification to one phone.
+ *
+ *   isActive === true  → recipient just interacted, inside the 24h window:
+ *                        send rich free text; if that throws, try the template.
+ *   isActive === false → window unknown (dormant owner / founder / scheduled):
+ *                        send the approved template (always delivers); if that
+ *                        throws, last-resort plain text (only lands if in-window).
+ */
+async function _safeNotify(phone, message, templateType = null, templateData = null, isActive = false) {
+  const tpl = templateType && _templates[templateType]
+    ? () => _templates[templateType]({ ...(templateData || {}), phone })
+    : null;
+
+  // ── Active transactor: rich free text ──────────────────────────────────────
   if (isActive) {
     try {
       await sendText(phone, message);
@@ -169,24 +154,23 @@ async function _safeNotify(phone, message, universal = null, isActive = false) {
       return;
     } catch (err) {
       const detail = err?.response?.data?.error?.message || err?.message || "";
-      console.warn(`[BIZ_NOTIF] text failed for active ${phone}: ${detail} \u2192 trying template`);
+      console.warn(`[BIZ_NOTIF] text failed for active ${phone}: ${detail}` +
+                   (tpl ? " \u2192 trying template" : ""));
+      if (!tpl) return;
       // fall through to template
     }
   }
 
-  // ── Everyone else: template delivers whether or not the window is open ───────
-  if (universal) {
+  // ── Everyone else: template first (delivers regardless of window) ───────────
+  if (tpl) {
     try {
-      await _postUniversalTemplate(phone, universal);
-      console.log(`[BIZ_NOTIF] \u2713 template \u2192 ${phone}`);
+      await tpl();
+      console.log(`[BIZ_NOTIF] \u2713 template (${templateType}) \u2192 ${phone}`);
       return;
     } catch (tplErr) {
       const tdetail = tplErr?.response?.data?.error?.message || tplErr.message;
-      console.error(`[BIZ_NOTIF] \u2717 template \u2192 ${phone}: ${tdetail}` +
-                    ` \u2014 is the "${UNIVERSAL_TEMPLATE}" template CREATED and APPROVED on Meta?`);
-      // Last resort: plain text. Only lands if they happen to be in-window; if
-      // sendText swallows an out-of-window error this logs success but may not
-      // deliver - the template above is the real guarantee.
+      console.error(`[BIZ_NOTIF] \u2717 template (${templateType}) \u2192 ${phone}: ${tdetail}`);
+      // Last resort: plain text. Only lands if they happen to be in-window.
       try {
         await sendText(phone, message);
         console.log(`[BIZ_NOTIF] text attempted (last-resort) \u2192 ${phone} ` +
@@ -197,8 +181,10 @@ async function _safeNotify(phone, message, universal = null, isActive = false) {
       }
     }
   } else {
+    // No template configured for this type → plain text only.
     try {
       await sendText(phone, message);
+      console.log(`[BIZ_NOTIF] \u2713 text \u2192 ${phone} (no template for type)`);
     } catch (e) {
       console.error(`[BIZ_NOTIF] \u2717 text \u2192 ${phone}: ${e?.response?.data?.error?.message || e.message}`);
     }
@@ -209,9 +195,8 @@ async function _safeNotify(phone, message, universal = null, isActive = false) {
 
 /**
  * Every phone that should receive notifications for a business.
- * = owners + managers + admins + the founding owner (biz.providerId, passed in
- *   via extraPhones) + the clerk who recorded the transaction. Deduplicated and
- *   normalised to digits.
+ * = owners + managers + admins + founding owner (biz.providerId via extraPhones)
+ *   + the clerk who recorded it. Deduplicated, digits-only.
  */
 export async function getNotificationRecipients(businessId, clerkPhone = null, extraPhones = []) {
   const UserRole = (await import("../models/userRole.js")).default;
@@ -226,7 +211,6 @@ export async function getNotificationRecipients(businessId, clerkPhone = null, e
                    .map(normPhone).filter(Boolean);
   const clerk  = clerkPhone ? [normPhone(clerkPhone)] : [];
 
-  // Owners + founding owner first; then managers; then the recording clerk.
   const allSet = [...new Set([...owners, ...extras, ...managers, ...clerk])];
   console.log(
     `[BIZ_NOTIF] recipients for biz ${businessId}: ` +
@@ -251,11 +235,10 @@ export async function getDailyRunningBalance(businessId, branchId, currency = "U
   const today    = new Date(); today.setHours(0, 0, 0, 0);
   const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
 
-  const base   = { businessId, ...(branchId ? { branchId } : {}) };
-  const todayQ = { ...base, createdAt: { $gte: today, $lt: tomorrow } };
+  const base    = { businessId, ...(branchId ? { branchId } : {}) };
+  const todayQ  = { ...base, createdAt: { $gte: today, $lt: tomorrow } };
   const beforeQ = { ...base, createdAt: { $lt: today } };
 
-  // True carry-forward opening = everything collected minus spent before today.
   const [pmtsBefore, rcptsBefore, expsBefore, payoutsBefore,
          payments, receipts, expenses, payouts] = await Promise.all([
     InvoicePayment.aggregate([{ $match: beforeQ }, { $group: { _id: null, t: { $sum: "$amount" } } }]).catch(() => []),
@@ -279,9 +262,7 @@ export async function getDailyRunningBalance(businessId, branchId, currency = "U
   return { opening, cashIn, cashOut, closing: opening + cashIn - cashOut, currency };
 }
 
-/** Append a "💰 Cash at hand" line to notifications.
- *  With clerkPhone → that clerk's personal custody balance; else business-wide.
- */
+/** Append a "💰 Cash at hand" line to notifications. */
 async function _balanceLine(biz, branchId, clerkPhone = null) {
   try {
     if (clerkPhone) {
@@ -295,24 +276,23 @@ async function _balanceLine(biz, branchId, clerkPhone = null) {
   } catch (_) { return ""; }
 }
 
-/** Turn the "\n💰 *Cash at hand: ...*" line into a clean single-line template var. */
-function _balanceParam(bal) {
-  const clean = String(bal || "")
-    .replace(/[*_~`]/g, "")
-    .replace(/💰/g, "")
-    .replace(/[\r\n\t]+/g, " ")
-    .replace(/ {2,}/g, " ")
-    .trim();
-  return clean || "Cash at hand: -";
+/** Clean single-line "Cash at hand: ..." suffix for template amount variables. */
+function _balClean(bal) {
+  const c = String(bal || "")
+    .replace(/[*_~`]/g, "").replace(/💰/g, "")
+    .replace(/[\r\n\t]+/g, " ").replace(/ {2,}/g, " ").trim();
+  return c || "-";
 }
 
-/** Fire-and-forget to every recipient (owners + founding owner + managers + clerk). */
-async function _dispatch(biz, clerkPhone, message, universal = null) {
+/** Fan a notification out to every recipient. */
+async function _dispatch(biz, clerkPhone, message, templateType = null, templateData = null) {
   try {
     const { allSet } = await getNotificationRecipients(biz._id, clerkPhone, [biz.providerId]);
     const active = normPhone(clerkPhone);
     console.log(`[BIZ_NOTIF] "${biz.name}" dispatching to ${allSet.length} recipient(s); active=${active || "none"}`);
-    await Promise.all(allSet.map(p => _safeNotify(p, message, universal, normPhone(p) === active)));
+    await Promise.all(allSet.map(p =>
+      _safeNotify(p, message, templateType, { ...(templateData || {}), phone: p }, normPhone(p) === active)
+    ));
   } catch (err) {
     console.error("[BIZ_NOTIF] dispatch error:", err.message);
   }
@@ -340,14 +320,14 @@ export async function notifyDocumentCreated({
   👥 Client: ${doc.clientName || "Walk-in"}
   💵 Amount: *${fmt(doc.total, biz.currency)}*${bal}`;
 
-  const universal = {
-    title:   `New ${label} — ${biz.name}${branchName ? ` (${branchName})` : ""}`,
-    details: `Ref ${doc.number || "-"} · Client ${doc.clientName || "Walk-in"} · ` +
-             `Amount ${fmt(doc.total, biz.currency)} · By ${clerkPhone || "-"} · ${timeDateNow()}`,
-    balance: _balanceParam(bal)
-  };
-
-  await _dispatch(biz, clerkPhone, message, universal);
+  await _dispatch(biz, clerkPhone, message, "invoice", {
+    docType:    label,
+    ref:        `${doc.number || "-"} | ${biz.name}${branchName ? " | " + branchName : ""}`,
+    clientName: doc.clientName || "Walk-in",
+    amount:     `${fmt(doc.total, biz.currency)} | ${_balClean(bal)}`,
+    timeDate:   timeDateNow(),
+    clerkPhone: clerkPhone || "-"
+  });
 }
 
 /** Payment received on an invoice */
@@ -367,15 +347,14 @@ export async function notifyPaymentRecorded({
   💵 Amount: *${fmt(payment.amount, biz.currency)}*
   💳 Method: ${payment.method || "Cash"}${bal}`;
 
-  const universal = {
-    title:   `Payment Received — ${biz.name}${branchName ? ` (${branchName})` : ""}`,
-    details: `Invoice ${invoiceNumber || "-"} · Client ${clientName || "-"} · ` +
-             `Amount ${fmt(payment.amount, biz.currency)} · ${payment.method || "Cash"} · ` +
-             `By ${clerkPhone || "-"} · ${timeDateNow()}`,
-    balance: _balanceParam(bal)
-  };
-
-  await _dispatch(biz, clerkPhone, message, universal);
+  await _dispatch(biz, clerkPhone, message, "payment", {
+    invoiceRef: `${invoiceNumber || "-"} | ${biz.name}${branchName ? " | " + branchName : ""}`,
+    clientName: clientName || "-",
+    amount:     `${fmt(payment.amount, biz.currency)} | ${_balClean(bal)}`,
+    method:     payment.method || "Cash",
+    timeDate:   timeDateNow(),
+    clerkPhone: clerkPhone || "-"
+  });
 }
 
 /** One or more expenses recorded */
@@ -401,13 +380,13 @@ ${lines}
   ──────────────
   💵 Total out: *${fmt(total, biz.currency)}*${bal}`;
 
-  const universal = {
-    title:   `Expenses Recorded — ${biz.name}${branchName ? ` (${branchName})` : ""}`,
-    details: `${itemsFlat} · Total ${fmt(total, biz.currency)} · By ${clerkPhone || "-"} · ${timeDateNow()}`,
-    balance: _balanceParam(bal)
-  };
-
-  await _dispatch(biz, clerkPhone, message, universal);
+  await _dispatch(biz, clerkPhone, message, "expense", {
+    bizBranch:  `${biz.name}${branchName ? " | " + branchName : ""}`,
+    items:      itemsFlat,
+    total:      `${fmt(total, biz.currency)} | ${_balClean(bal)}`,
+    timeDate:   timeDateNow(),
+    clerkPhone: clerkPhone || "-"
+  });
 }
 
 /** Cash payout / drawing recorded */
@@ -425,14 +404,13 @@ export async function notifyPayoutRecorded({
   💵 Amount: *${fmt(payout.amount, biz.currency)}*
   📝 Reason: ${payout.reason || "-"}${bal}`;
 
-  const universal = {
-    title:   `Cash Payout — ${biz.name}${branchName ? ` (${branchName})` : ""}`,
-    details: `Amount ${fmt(payout.amount, biz.currency)} · Reason ${payout.reason || "-"} · ` +
-             `By ${clerkPhone || "-"} · ${timeDateNow()}`,
-    balance: _balanceParam(bal)
-  };
-
-  await _dispatch(biz, clerkPhone, message, universal);
+  await _dispatch(biz, clerkPhone, message, "payout", {
+    bizBranch:  `${biz.name}${branchName ? " | " + branchName : ""}`,
+    amount:     `${fmt(payout.amount, biz.currency)} | ${_balClean(bal)}`,
+    reason:     payout.reason || "-",
+    timeDate:   timeDateNow(),
+    clerkPhone: clerkPhone || "-"
+  });
 }
 
 /** Opening balance set for the day */
@@ -449,17 +427,17 @@ export async function notifyOpeningBalanceSet({
   💰 Opening: *${fmt(amount, biz.currency)}*
   _Cash tracking started for today._`;
 
-  const universal = {
-    title:   `Opening Balance Set — ${biz.name}${branchName ? ` (${branchName})` : ""}`,
-    details: `Opening ${fmt(amount, biz.currency)} · ${dateNow()} · By ${clerkPhone || "-"}`,
-    balance: `Opening balance: ${fmt(amount, biz.currency)}`
-  };
-
-  await _dispatch(biz, clerkPhone, message, universal);
+  await _dispatch(biz, clerkPhone, message, "opening", {
+    bizBranch:  `${biz.name}${branchName ? " | " + branchName : ""}`,
+    amount:     fmt(amount, biz.currency),
+    date:       dateNow(),
+    clerkPhone: clerkPhone || "-"
+  });
 }
 
 /**
  * Send a full daily summary to one phone (scheduled job or on demand).
+ * The recipient is usually dormant, so this goes template-first.
  */
 export async function sendDailyRunningReport({
   biz, branchId, branchName, toPhone
@@ -479,14 +457,14 @@ ${branchName ? `🏬 ${branchName}\n` : ""}📅 ${_date}
 💰 *Cash at hand:  ${fmt(b.closing, cur)}*
 ━━━━━━━━━━━━━━━━━━━━`;
 
-  const universal = {
-    title:   `Daily Summary — ${biz.name}${branchName ? ` (${branchName})` : ""}`,
-    details: `${_date} · Opening ${fmt(b.opening, cur)} · In ${fmt(b.cashIn, cur)} · ` +
-             `Out ${fmt(b.cashOut, cur)}`,
-    balance: `Cash at hand: ${fmt(b.closing, cur)}`
-  };
-
-  await _safeNotify(normPhone(toPhone), message, universal);
+  await _safeNotify(normPhone(toPhone), message, "daily", {
+    bizBranch: `${biz.name}${branchName ? " | " + branchName : ""}`,
+    date:      _date,
+    opening:   fmt(b.opening, cur),
+    cashIn:    fmt(b.cashIn,  cur),
+    cashOut:   fmt(b.cashOut, cur),
+    balance:   fmt(b.closing, cur)
+  }, false);
 }
 
 /**
