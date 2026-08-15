@@ -3,33 +3,64 @@
  * ─────────────────────────────────────────────────────────────────────────────
  * Real-time WhatsApp transaction notification engine.
  *
- * IMPORTANT - 24-HOUR SESSION WINDOW:
- * ─────────────────────────────────────────────────────────────────────────────
+ * Fans every business event (invoice / quote / receipt, payment, expense,
+ * payout, opening balance, daily summary) out to EVERY owner + manager + admin
+ * of the business, plus the clerk who recorded it. Delivery is guaranteed even
+ * when a recipient is OUTSIDE the 24-hour WhatsApp session window.
+ *
+ * ── HOW DELIVERY WORKS (the 24-hour window) ──────────────────────────────────
  * WhatsApp Cloud API rules:
- *   • type:"text" messages → ONLY work if the recipient messaged your number
- *     within the last 24 hours. Outside that window, Meta returns error 131026
- *     and the message is silently dropped.
- *   • type:"template" messages → Work ANY time, no session required, but the
- *     template must be pre-approved by Meta (takes 1-3 days to approve).
+ *   • type:"text"      → only delivers if the recipient messaged the number in
+ *                        the last 24h. Outside that, Meta rejects the send
+ *                        (error 131047 "re-engagement", sometimes 131026).
+ *   • type:"template"  → delivers ANY time, no session needed, but the template
+ *                        must be pre-approved by Meta (1-3 days).
+ *
+ * So: we try the rich free-text message first (nice formatting, works in-window),
+ * and if Meta rejects it because the window is closed we automatically fall back
+ * to ONE approved utility template that carries the same information. One
+ * recipient may get the pretty text; another (dormant) owner gets the template.
+ * Both are notified.
+ *
+ * ── THE ONE TEMPLATE YOU MUST SUBMIT ONCE ────────────────────────────────────
+ *   Meta Business Suite → WhatsApp → Message Templates → Create template
+ *     Name:      biz_transaction_alert
+ *     Category:  UTILITY
+ *     Language:  English (en)
+ *     Body:
+ *       ─────────────────────────────────────────────
+ *       🔔 {{1}}
+ *
+ *       {{2}}
+ *
+ *       💰 {{3}}
+ *
+ *       Reply *menu* to open ZimQuote.
+ *       ─────────────────────────────────────────────
+ *     Sample values (Meta asks for these on submit):
+ *       {{1}}  New Receipt — Mudziyashe (Main Branch)
+ *       {{2}}  Ref RCPT-000002 · Client pick n pay · Amount $30.00 · By 263771446827 · 15 Aug 2026 18:08
+ *       {{3}}  Cash at hand: $50.00
+ *
+ *   Why one template with 3 short variables (not one big blob): Meta REJECTS a
+ *   send whose parameter contains newlines, tabs, or 4+ consecutive spaces. So
+ *   the line breaks live in the fixed template body, and every variable we pass
+ *   is a single sanitised line. _sanitizeParam() below enforces that.
+ *
+ *   The body never starts or ends with a variable (Meta approves those faster),
+ *   and it reads as a transactional account alert (UTILITY), which is exactly
+ *   what it is.
  *
  * WHERE THIS FILE LIVES:
  *   /var/www/cripf777/services/bizNotifications.js
- *   (same folder as chatbotEngine.js, metaSender.js, twilioStateBridge.js)
- *
- * HOW TO USE THIS FILE:
- *   Import the notification functions in twilioStateBridge.js and chatbotEngine.js:
- *   const { notifyDocumentCreated } = await import("./bizNotifications.js");
- *
- * FOR GUARANTEED DELIVERY (outside 24hr window):
- *   Submit a Meta template named "biz_transaction_alert" with one body variable
- *   {{1}} containing the message. Once approved, uncomment the template fallback
- *   in _safeNotify() below. Template submission guide:
- *   https://business.facebook.com/wa/manage/message-templates/
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
 import { sendText } from "./metaSender.js";
 import axios from "axios";
+
+// The single Meta template every out-of-window alert falls back to.
+const UNIVERSAL_TEMPLATE = "biz_transaction_alert";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -48,152 +79,62 @@ function dateNow() {
   });
 }
 
-/** Combined "HH:MM on DD Mon YYYY" string for template {{timeDate}} variables */
+/** Combined "HH:MM on DD Mon YYYY" string. */
 function timeDateNow() {
   return `${timeNow()} on ${dateNow()}`;
 }
 
-/**
- * _safeNotify: Send a message, falling back to a Meta template if the 24hr
- * session window is expired.
- *
- * @param {string} phone          - Recipient phone e.g. "263771446827"
- * @param {string} message        - The text message (used within 24hr window)
- * @param {string} [templateType] - Template key: "invoice"|"payment"|"expense"|"payout"|"opening"|"daily"
- * @param {Object} [templateData] - Data object for the template variables (see _templates above)
- */
-async function _safeNotify(phone, message, templateType = null, templateData = null) {
-  try {
-    await sendText(phone, message);
-  } catch (err) {
-    const code = err?.response?.data?.error?.code;
-    const isSessionExpired = code === 131026 || String(err?.message).includes("131026");
-
-    if (isSessionExpired && templateType && templateData && _templates[templateType]) {
-      // ── TEMPLATE FALLBACK: works 24/7 once the template is approved on Meta ──
-      try {
-        await _templates[templateType]({ ...templateData, phone });
-        console.log(`[BIZ_NOTIF] Template fallback sent to ${phone} (${templateType})`);
-      } catch (tplErr) {
-        console.error(`[BIZ_NOTIF] Template fallback also failed for ${phone}:`, tplErr.message);
-      }
-    } else if (isSessionExpired) {
-      console.warn(`[BIZ_NOTIF] ${phone} outside 24hr window - no template configured for type "${templateType || "none"}". Submit templates to Meta to fix this.`);
-    } else {
-      console.error(`[BIZ_NOTIF] Failed to notify ${phone}:`, err.message);
-    }
-  }
+/** Normalise a phone to digits only (for dedup + Meta). */
+function normPhone(p) {
+  return String(p || "").replace(/\D+/g, "");
 }
 
 /**
- * _sendTemplate: Sends a pre-approved Meta template when the 24hr session is expired.
- * Each template maps to a specific notification type.
- *
- * HOW TO SUBMIT EACH TEMPLATE TO META:
- *   Meta Business Suite → WhatsApp → Message Templates → Create Template
- *   Category: UTILITY  |  Language: English (en)
- *
- * ─────────────────────────────────────────────────────────────────────────────
- * TEMPLATE 1: biz_invoice_created
- * Body: "New {{1}} recorded at {{2}}.
-
-Business: {{3}}
-Branch: {{4}}
-Ref: {{5}}
-Client: {{6}}
-Amount: {{7}}
-Recorded by: {{8}}
-
-Cash at hand today: {{9}}"
- * Samples: Invoice | 09:15 | Mudziyashe Hardware | Main Branch | INV-0042 | John Moyo | $250.00 | 263771446827 | $480.00 (In: +$250 | Out: -$30)
- *
- * TEMPLATE 2: biz_payment_received
- * Body: "Payment received at {{1}}.
-
-Business: {{2}}
-Branch: {{3}}
-Invoice: {{4}}
-Client: {{5}}
-Amount: {{6}}
-Method: {{7}}
-Recorded by: {{8}}
-
-Cash at hand today: {{9}}"
- * Samples: 10:30 | Mudziyashe Hardware | Main Branch | INV-0042 | John Moyo | $250.00 | Cash | 263771446827 | $730.00 (In: +$500 | Out: -$30)
- *
- * TEMPLATE 3: biz_expenses_recorded
- * Body: "Expenses recorded at {{1}}.
-
-Business: {{2}}
-Branch: {{3}}
-Items: {{4}}
-Total out: {{5}}
-Recorded by: {{6}}
-
-Cash at hand today: {{7}}"
- * Samples: 11:45 | Mudziyashe Hardware | Main Branch | Fuel $40.00, Lunch $15.00, Zesa $50.00 | $105.00 | 263771446827 | $395.00 (In: +$500 | Out: -$105)
- *
- * TEMPLATE 4: biz_payout_recorded
- * Body: "Cash payout recorded at {{1}}.
-
-Business: {{2}}
-Branch: {{3}}
-Amount: {{4}}
-Reason: {{5}}
-Recorded by: {{6}}
-
-Cash at hand today: {{7}}"
- * Samples: 14:00 | Mudziyashe Hardware | Main Branch | $200.00 | Owner drawing | 263771446827 | $195.00 (In: +$500 | Out: -$305)
- *
- * TEMPLATE 5: biz_opening_balance_set
- * Body: "Opening balance set for today.
-
-Business: {{1}}
-Branch: {{2}}
-Opening balance: {{3}}
-Date: {{4}}
-Set by: {{5}}
-
-Cash tracking has started for today."
- * Samples: Mudziyashe Hardware | Main Branch | $300.00 | 31 May 2026 | 263771446827
- *
- * TEMPLATE 6: biz_daily_summary
- * Body: "Daily summary for {{1}} - {{2}}.
-
-Branch: {{3}}
-Date: {{4}}
-
-Opening balance: {{5}}
-Cash in: {{6}}
-Cash out: {{7}}
-
-Cash at hand: {{8}}"
- * Samples: Mudziyashe Hardware | 31 May 2026 | Main Branch | 31 May 2026 | $300.00 | $850.00 | $305.00 | $845.00
- * ─────────────────────────────────────────────────────────────────────────────
+ * Make a string safe to pass as a WhatsApp TEMPLATE parameter.
+ * Meta rejects parameters that contain newline characters, tab characters, or
+ * more than 4 consecutive spaces - so we flatten newlines/tabs into " · ",
+ * strip WhatsApp markdown, collapse whitespace, and cap length well under the
+ * 1024-char limit. Never returns empty (Meta also rejects blank params).
  */
-
-function _param(text) {
-  // Truncate to Meta's 1024-char limit per parameter
-  const t = String(text || "-");
-  return { type: "text", text: t.length > 100 ? t.slice(0, 97) + "..." : t };
+function _sanitizeParam(text) {
+  let t = String(text == null ? "" : text);
+  t = t.replace(/[*_~`]/g, "");          // drop markdown so it reads clean
+  t = t.replace(/[\r\n\t]+/g, " · ");    // no newlines / tabs allowed in params
+  t = t.replace(/ {2,}/g, " ");          // collapse runs of spaces (>4 is illegal)
+  t = t.replace(/(?: · )+/g, " · ");     // tidy doubled separators
+  t = t.replace(/^(?: · )+|(?: · )+$/g, ""); // trim leading/trailing separators
+  t = t.trim();
+  if (t.length > 1000) t = t.slice(0, 997) + "...";
+  return t.length ? t : "-";
 }
 
-async function _postTemplate(phone, templateName, params) {
+/**
+ * POST the universal utility template. Works with no active session.
+ * @param {string} phone
+ * @param {{title:string, details:string, balance:string}} u
+ */
+async function _postUniversalTemplate(phone, u) {
   const PHONE_ID = process.env.WHATSAPP_PHONE_NUMBER_ID ||
                    process.env.META_PHONE_NUMBER_ID     ||
                    process.env.PHONE_NUMBER_ID;
   const TOKEN    = process.env.META_ACCESS_TOKEN || process.env.WHATSAPP_ACCESS_TOKEN;
 
+  const params = [
+    { type: "text", text: _sanitizeParam(u.title)   },
+    { type: "text", text: _sanitizeParam(u.details) },
+    { type: "text", text: _sanitizeParam(u.balance) }
+  ];
+
   await axios.post(
     `https://graph.facebook.com/v24.0/${PHONE_ID}/messages`,
     {
       messaging_product: "whatsapp",
-      to:   phone,
+      to:   normPhone(phone),
       type: "template",
       template: {
-        name:     templateName,
+        name:     UNIVERSAL_TEMPLATE,
         language: { code: "en" },
-        components: [{ type: "body", parameters: params.map(_param) }]
+        components: [{ type: "body", parameters: params }]
       }
     },
     { headers: { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json" } }
@@ -201,159 +142,68 @@ async function _postTemplate(phone, templateName, params) {
 }
 
 /**
- * Template dispatchers - one per notification type.
- * Each maps exactly to its approved Meta template.
- * Pass the same data object you pass to the sendText notification function.
+ * _safeNotify: send the rich free-text message; if the recipient is outside the
+ * 24-hour window (Meta rejects it) fall back to the approved utility template.
+ *
+ * @param {string} phone
+ * @param {string} message  - rich text (used inside the 24h window)
+ * @param {{title,details,balance}} [universal] - data for the template fallback
  */
-const _templates = {
+async function _safeNotify(phone, message, universal = null) {
+  try {
+    await sendText(phone, message);
+  } catch (err) {
+    const code   = Number(err?.response?.data?.error?.code);
+    const detail = err?.response?.data?.error?.message || err?.message || "";
 
-  // ── biz_invoice_created ────────────────────────────────────────────────────
-  // Body:
-  //   ZimQuote Business Alert
-  //   A new {{1}} has been recorded on your account.
-  //   Details:
-  //   - Ref: {{2}}
-  //   - Client: {{3}}
-  //   - Amount: {{4}}
-  //   Recorded at {{5}} by {{6}}.
-  //   Reply *menu* to open ZimQuote.
-  //
-  // Samples: Invoice | INV-0042 | John Moyo | $250.00 | 09:15 on 31 May 2026 | 263771446827
-  invoice: (d) => _postTemplate(d.phone, "biz_invoice_created", [
-    d.docType,    // {{1}} Invoice / Quote / Receipt
-    d.ref,        // {{2}} INV-0042 | Mudziyashe Hardware | Main Branch
-    d.clientName, // {{3}} John Moyo
-    d.amount,     // {{4}} $250.00 | Cash at hand: $480.00
-    d.timeDate,   // {{5}} 09:15 on 31 May 2026
-    d.clerkPhone  // {{6}} 263771446827
-  ]),
+    // Meta "please re-engage / outside the 24h window / undeliverable" family.
+    const windowish =
+      [131047, 131026, 470, 131051, 132000].includes(code) ||
+      /24 ?hours|re-?engag|outside|session|window|not .*open|allowed window/i.test(String(detail));
 
-  // ── biz_payment_received ───────────────────────────────────────────────────
-  // Body:
-  //   ZimQuote Business Alert
-  //   A payment has been received on your account.
-  //   Details:
-  //   - Invoice: {{1}}
-  //   - Client: {{2}}
-  //   - Amount paid: {{3}}
-  //   - Method: {{4}}
-  //   Recorded at {{5}} by {{6}}.
-  //   Reply *menu* to open ZimQuote.
-  //
-  // Samples: INV-0042 | John Moyo | $250.00 | Cash | 10:30 on 31 May 2026 | 263771446827
-  payment: (d) => _postTemplate(d.phone, "biz_payment_received", [
-    d.invoiceRef, // {{1}} INV-0042 | Mudziyashe Hardware | Main Branch
-    d.clientName, // {{2}} John Moyo
-    d.amount,     // {{3}} $250.00 | Cash at hand: $730.00
-    d.method,     // {{4}} Cash
-    d.timeDate,   // {{5}} 10:30 on 31 May 2026
-    d.clerkPhone  // {{6}} 263771446827
-  ]),
-
-  // ── biz_expenses_recorded ──────────────────────────────────────────────────
-  // Body:
-  //   ZimQuote Business Alert
-  //   Expenses have been recorded on your account.
-  //   Details:
-  //   - Business: {{1}}
-  //   - Items: {{2}}
-  //   - Total out: {{3}}
-  //   Recorded at {{4}} by {{5}}.
-  //   Reply *menu* to open ZimQuote.
-  //
-  // Samples: Mudziyashe Hardware | Main Branch | Fuel $40.00, Lunch $15.00 | $105.00 | 11:45 on 31 May 2026 | 263771446827
-  expense: (d) => _postTemplate(d.phone, "biz_expenses_recorded", [
-    d.bizBranch,  // {{1}} Mudziyashe Hardware | Main Branch
-    d.items,      // {{2}} Fuel $40.00, Lunch $15.00, Zesa $50.00
-    d.total,      // {{3}} $105.00 | Cash at hand: $395.00
-    d.timeDate,   // {{4}} 11:45 on 31 May 2026
-    d.clerkPhone  // {{5}} 263771446827
-  ]),
-
-  // ── biz_payout_recorded ────────────────────────────────────────────────────
-  // Body:
-  //   ZimQuote Business Alert
-  //   A cash payout has been recorded on your account.
-  //   Details:
-  //   - Business: {{1}}
-  //   - Amount: {{2}}
-  //   - Reason: {{3}}
-  //   Recorded at {{4}} by {{5}}.
-  //   Reply *menu* to open ZimQuote.
-  //
-  // Samples: Mudziyashe Hardware | Main Branch | $200.00 | Owner drawing | 14:00 on 31 May 2026 | 263771446827
-  payout: (d) => _postTemplate(d.phone, "biz_payout_recorded", [
-    d.bizBranch,  // {{1}} Mudziyashe Hardware | Main Branch
-    d.amount,     // {{2}} $200.00 | Cash at hand: $195.00
-    d.reason,     // {{3}} Owner drawing
-    d.timeDate,   // {{4}} 14:00 on 31 May 2026
-    d.clerkPhone  // {{5}} 263771446827
-  ]),
-
-  // ── biz_opening_balance_set ────────────────────────────────────────────────
-  // Body:
-  //   ZimQuote Business Alert
-  //   The opening balance has been set for today.
-  //   Details:
-  //   - Business: {{1}}
-  //   - Opening balance: {{2}}
-  //   - Date: {{3}}
-  //   Set by {{4}}. Cash tracking is now active for today.
-  //   Reply *menu* to open ZimQuote.
-  //
-  // Samples: Mudziyashe Hardware | Main Branch | $300.00 | 31 May 2026 | 263771446827
-  opening: (d) => _postTemplate(d.phone, "biz_opening_balance_set", [
-    d.bizBranch,  // {{1}} Mudziyashe Hardware | Main Branch
-    d.amount,     // {{2}} $300.00
-    d.date,       // {{3}} 31 May 2026
-    d.clerkPhone  // {{4}} 263771446827
-  ]),
-
-  // ── biz_daily_summary ─────────────────────────────────────────────────────
-  // Body:
-  //   ZimQuote Daily Summary
-  //   Your end-of-day cash report is ready.
-  //   Business: {{1}}
-  //   Date: {{2}}
-  //   Opening balance: {{3}}
-  //   Cash in today:   {{4}}
-  //   Cash out today:  {{5}}
-  //   Cash at hand:    {{6}}
-  //   Reply *menu* to view full report on ZimQuote.
-  //
-  // Samples: Mudziyashe Hardware | Main Branch | 31 May 2026 | $300.00 | $850.00 | $305.00 | $845.00
-  daily: (d) => _postTemplate(d.phone, "biz_daily_summary", [
-    d.bizBranch,  // {{1}} Mudziyashe Hardware | Main Branch
-    d.date,       // {{2}} 31 May 2026
-    d.opening,    // {{3}} $300.00
-    d.cashIn,     // {{4}} $850.00
-    d.cashOut,    // {{5}} $305.00
-    d.balance     // {{6}} $845.00
-  ])
+    if (universal && windowish) {
+      try {
+        await _postUniversalTemplate(phone, universal);
+        console.log(`[BIZ_NOTIF] Template fallback delivered to ${phone} (code ${code || "n/a"})`);
+      } catch (tplErr) {
+        const tdetail = tplErr?.response?.data?.error?.message || tplErr.message;
+        console.error(`[BIZ_NOTIF] Template fallback FAILED for ${phone}: ${tdetail}` +
+                      ` — is "${UNIVERSAL_TEMPLATE}" approved on Meta?`);
+      }
+    } else {
+      console.error(`[BIZ_NOTIF] Could not notify ${phone}: ${detail}`);
+    }
+  }
 }
 
 // ── Recipients ────────────────────────────────────────────────────────────────
 
 /**
- * Get all phones that should receive notifications for a business.
- * Returns the set of unique phones: owners + managers + admins + clerkPhone.
+ * Every phone that should receive notifications for a business.
+ * = owners + managers + admins + the founding owner (biz.providerId, passed in
+ *   via extraPhones) + the clerk who recorded the transaction. Deduplicated and
+ *   normalised to digits.
  */
-export async function getNotificationRecipients(businessId, clerkPhone = null) {
+export async function getNotificationRecipients(businessId, clerkPhone = null, extraPhones = []) {
   const UserRole = (await import("../models/userRole.js")).default;
   const roles = await UserRole.find({ businessId, pending: false }).lean();
 
-  const owners   = roles.filter(r => r.role === "owner").map(r => r.phone);
-  const managers = roles
-    .filter(r => r.role === "manager" || r.role === "admin")
-    .map(r => r.phone);
+  const owners   = roles.filter(r => r.role === "owner")
+                        .map(r => normPhone(r.phone)).filter(Boolean);
+  const managers = roles.filter(r => r.role === "manager" || r.role === "admin")
+                        .map(r => normPhone(r.phone)).filter(Boolean);
 
-  // Deduplicate: clerk may also be owner/manager
-  const allSet = [...new Set([...owners, ...managers, ...(clerkPhone ? [clerkPhone] : [])])];
+  const extras = (Array.isArray(extraPhones) ? extraPhones : [extraPhones])
+                   .map(normPhone).filter(Boolean);
+  const clerk  = clerkPhone ? [normPhone(clerkPhone)] : [];
+
+  // Owners + founding owner first; then managers; then the recording clerk.
+  const allSet = [...new Set([...owners, ...extras, ...managers, ...clerk])];
   return { owners, managers, allSet };
 }
 
 /**
- * Get today's running cash balance for a branch (or whole business if no branchId).
+ * Today's running cash balance for a branch (or whole business if no branchId).
  */
 export async function getDailyRunningBalance(businessId, branchId, currency = "USD") {
   const [InvoicePayment, Invoice, Expense, CashPayout] = await Promise.all([
@@ -370,10 +220,7 @@ export async function getDailyRunningBalance(businessId, branchId, currency = "U
   const todayQ = { ...base, createdAt: { $gte: today, $lt: tomorrow } };
   const beforeQ = { ...base, createdAt: { $lt: today } };
 
-  // FIX: Compute true opening from ALL transactions before today's midnight.
-  // This replaces the old CashBalance.findOne() lookup which returned 0 whenever
-  // no one manually set an opening balance that morning - causing every notification
-  // to show wrong "Cash at hand" values with no carry-forward from yesterday.
+  // True carry-forward opening = everything collected minus spent before today.
   const [pmtsBefore, rcptsBefore, expsBefore, payoutsBefore,
          payments, receipts, expenses, payouts] = await Promise.all([
     InvoicePayment.aggregate([{ $match: beforeQ }, { $group: { _id: null, t: { $sum: "$amount" } } }]).catch(() => []),
@@ -386,7 +233,6 @@ export async function getDailyRunningBalance(businessId, branchId, currency = "U
     CashPayout ? CashPayout.find({ ...base, createdAt: { $gte: today, $lt: tomorrow } }).lean().catch(() => []) : []
   ]);
 
-  // True carry-forward opening = everything collected minus everything spent before today
   const opening = (pmtsBefore[0]?.t || 0) + (rcptsBefore[0]?.t || 0)
                 - (expsBefore[0]?.t  || 0) - (payoutsBefore[0]?.t || 0);
 
@@ -399,14 +245,11 @@ export async function getDailyRunningBalance(businessId, branchId, currency = "U
 }
 
 /** Append a "💰 Cash at hand" line to notifications.
- *  When clerkPhone is supplied, shows THAT CLERK'S personal custody balance
- *  (what they physically hold), not the business-wide total.
- *  When clerkPhone is null/omitted, falls back to business-wide daily balance.
+ *  With clerkPhone → that clerk's personal custody balance; else business-wide.
  */
 async function _balanceLine(biz, branchId, clerkPhone = null) {
   try {
     if (clerkPhone) {
-      // Clerk-specific: sum all their credits minus debits up to now
       const { fetchClerkCumulativeBalance } = await import("./dailyReportEnhanced.js");
       const custody = await fetchClerkCumulativeBalance({ biz, clerkPhone, branchId, before: new Date(), inclusive: true });
       return `\n💰 *Cash at hand: ${fmt(custody, biz.currency)}*  (your current custody)`;
@@ -417,18 +260,29 @@ async function _balanceLine(biz, branchId, clerkPhone = null) {
   } catch (_) { return ""; }
 }
 
-/** Fire-and-forget to all recipients. */
-async function _dispatch(businessId, clerkPhone, message, templateType = null, templateData = null) {
+/** Turn the "\n💰 *Cash at hand: ...*" line into a clean single-line template var. */
+function _balanceParam(bal) {
+  const clean = String(bal || "")
+    .replace(/[*_~`]/g, "")
+    .replace(/💰/g, "")
+    .replace(/[\r\n\t]+/g, " ")
+    .replace(/ {2,}/g, " ")
+    .trim();
+  return clean || "Cash at hand: -";
+}
+
+/** Fire-and-forget to every recipient (owners + founding owner + managers + clerk). */
+async function _dispatch(biz, clerkPhone, message, universal = null) {
   try {
-    const { allSet } = await getNotificationRecipients(businessId, clerkPhone);
-    await Promise.all(allSet.map(p => _safeNotify(p, message, templateType, { ...templateData, phone: p })));
+    const { allSet } = await getNotificationRecipients(biz._id, clerkPhone, [biz.providerId]);
+    await Promise.all(allSet.map(p => _safeNotify(p, message, universal)));
   } catch (err) {
     console.error("[BIZ_NOTIF] dispatch error:", err.message);
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PUBLIC API
+// PUBLIC API  (signatures unchanged — call sites in twilioStateBridge.js keep working)
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Invoice / Quote / Receipt created */
@@ -441,28 +295,22 @@ export async function notifyDocumentCreated({
   const branch = branchName ? `\n  🏬 Branch: ${branchName}` : "";
   const clerk  = clerkPhone ? `\n  👤 By: ${clerkPhone}` : "";
 
-  const _time = timeNow();
-  const _bal  = bal.replace(/\n💰 \*Cash at hand: |\*.*$/g, "").trim() || fmt(0, biz.currency);
-  // strip markdown for template
-  const _balClean = bal.replace(/[*_]/g, "").replace(/\n/g, " ").trim() || "-";
-
-  await _dispatch(biz._id, clerkPhone,
+  const message =
 `${emoji} *New ${label} - ${biz.name}*
-📅 ${dateNow()} at ${_time}${branch}${clerk}
+📅 ${dateNow()} at ${timeNow()}${branch}${clerk}
 
   🔢 Ref: *${doc.number || "-"}*
   👥 Client: ${doc.clientName || "Walk-in"}
-  💵 Amount: *${fmt(doc.total, biz.currency)}*${bal}`,
-    "invoice",
-    {
-      docType:    label,
-      ref:        `${doc.number || "-"} | ${biz.name}${branchName ? " | " + branchName : ""}`,
-      clientName: doc.clientName || "Walk-in",
-      amount:     `${fmt(doc.total, biz.currency)} | Cash at hand: ${_balClean}`,
-      timeDate:   timeDateNow(),
-      clerkPhone: clerkPhone || "-"
-    }
-  );
+  💵 Amount: *${fmt(doc.total, biz.currency)}*${bal}`;
+
+  const universal = {
+    title:   `New ${label} — ${biz.name}${branchName ? ` (${branchName})` : ""}`,
+    details: `Ref ${doc.number || "-"} · Client ${doc.clientName || "Walk-in"} · ` +
+             `Amount ${fmt(doc.total, biz.currency)} · By ${clerkPhone || "-"} · ${timeDateNow()}`,
+    balance: _balanceParam(bal)
+  };
+
+  await _dispatch(biz, clerkPhone, message, universal);
 }
 
 /** Payment received on an invoice */
@@ -473,27 +321,24 @@ export async function notifyPaymentRecorded({
   const branch = branchName ? `\n  🏬 Branch: ${branchName}` : "";
   const clerk  = clerkPhone ? `\n  👤 By: ${clerkPhone}` : "";
 
-  const _time2 = timeNow();
-  const _balClean2 = bal.replace(/[*_]/g, "").replace(/\n/g, " ").trim() || "-";
-
-  await _dispatch(biz._id, clerkPhone,
+  const message =
 `💳 *Payment Received - ${biz.name}*
-📅 ${dateNow()} at ${_time2}${branch}${clerk}
+📅 ${dateNow()} at ${timeNow()}${branch}${clerk}
 
   📄 Invoice: *${invoiceNumber || "-"}*
   👥 Client: ${clientName || "-"}
   💵 Amount: *${fmt(payment.amount, biz.currency)}*
-  💳 Method: ${payment.method || "Cash"}${bal}`,
-    "payment",
-    {
-      invoiceRef:  `${invoiceNumber || "-"} | ${biz.name}${branchName ? " | " + branchName : ""}`,
-      clientName:  clientName || "-",
-      amount:      `${fmt(payment.amount, biz.currency)} | Cash at hand: ${_balClean2}`,
-      method:      payment.method || "Cash",
-      timeDate:    timeDateNow(),
-      clerkPhone:  clerkPhone || "-"
-    }
-  );
+  💳 Method: ${payment.method || "Cash"}${bal}`;
+
+  const universal = {
+    title:   `Payment Received — ${biz.name}${branchName ? ` (${branchName})` : ""}`,
+    details: `Invoice ${invoiceNumber || "-"} · Client ${clientName || "-"} · ` +
+             `Amount ${fmt(payment.amount, biz.currency)} · ${payment.method || "Cash"} · ` +
+             `By ${clerkPhone || "-"} · ${timeDateNow()}`,
+    balance: _balanceParam(bal)
+  };
+
+  await _dispatch(biz, clerkPhone, message, universal);
 }
 
 /** One or more expenses recorded */
@@ -507,29 +352,25 @@ export async function notifyExpensesRecorded({
   const lines  = expenses
     .map(e => `  • ${e.description} - ${fmt(e.amount, biz.currency)} (${e.category || "Other"})`)
     .join("\n");
-
-  const _time3 = timeNow();
-  const _balClean3 = bal.replace(/[*_]/g, "").replace(/\n/g, " ").trim() || "-";
-  const _itemsFlat = expenses
+  const itemsFlat = expenses
     .map(e => `${e.description} ${fmt(e.amount, biz.currency)}`)
     .join(", ");
 
-  await _dispatch(biz._id, clerkPhone,
+  const message =
 `💸 *Expenses Recorded - ${biz.name}*
-📅 ${dateNow()} at ${_time3}${branch}${clerk}
+📅 ${dateNow()} at ${timeNow()}${branch}${clerk}
 
 ${lines}
   ──────────────
-  💵 Total out: *${fmt(total, biz.currency)}*${bal}`,
-    "expense",
-    {
-      bizBranch:  `${biz.name}${branchName ? " | " + branchName : ""}`,
-      items:      _itemsFlat,
-      total:      `${fmt(total, biz.currency)} | Cash at hand: ${_balClean3}`,
-      timeDate:   timeDateNow(),
-      clerkPhone: clerkPhone || "-"
-    }
-  );
+  💵 Total out: *${fmt(total, biz.currency)}*${bal}`;
+
+  const universal = {
+    title:   `Expenses Recorded — ${biz.name}${branchName ? ` (${branchName})` : ""}`,
+    details: `${itemsFlat} · Total ${fmt(total, biz.currency)} · By ${clerkPhone || "-"} · ${timeDateNow()}`,
+    balance: _balanceParam(bal)
+  };
+
+  await _dispatch(biz, clerkPhone, message, universal);
 }
 
 /** Cash payout / drawing recorded */
@@ -540,24 +381,21 @@ export async function notifyPayoutRecorded({
   const branch = branchName ? `\n  🏬 Branch: ${branchName}` : "";
   const clerk  = clerkPhone ? `\n  👤 By: ${clerkPhone}` : "";
 
-  const _time4 = timeNow();
-  const _balClean4 = bal.replace(/[*_]/g, "").replace(/\n/g, " ").trim() || "-";
-
-  await _dispatch(biz._id, clerkPhone,
+  const message =
 `📤 *Cash Payout - ${biz.name}*
-📅 ${dateNow()} at ${_time4}${branch}${clerk}
+📅 ${dateNow()} at ${timeNow()}${branch}${clerk}
 
   💵 Amount: *${fmt(payout.amount, biz.currency)}*
-  📝 Reason: ${payout.reason || "-"}${bal}`,
-    "payout",
-    {
-      bizBranch:  `${biz.name}${branchName ? " | " + branchName : ""}`,
-      amount:     `${fmt(payout.amount, biz.currency)} | Cash at hand: ${_balClean4}`,
-      reason:     payout.reason || "-",
-      timeDate:   timeDateNow(),
-      clerkPhone: clerkPhone || "-"
-    }
-  );
+  📝 Reason: ${payout.reason || "-"}${bal}`;
+
+  const universal = {
+    title:   `Cash Payout — ${biz.name}${branchName ? ` (${branchName})` : ""}`,
+    details: `Amount ${fmt(payout.amount, biz.currency)} · Reason ${payout.reason || "-"} · ` +
+             `By ${clerkPhone || "-"} · ${timeDateNow()}`,
+    balance: _balanceParam(bal)
+  };
+
+  await _dispatch(biz, clerkPhone, message, universal);
 }
 
 /** Opening balance set for the day */
@@ -567,34 +405,33 @@ export async function notifyOpeningBalanceSet({
   const branch = branchName ? `\n  🏬 Branch: ${branchName}` : "";
   const clerk  = clerkPhone ? `\n  👤 By: ${clerkPhone}` : "";
 
-  await _dispatch(biz._id, clerkPhone,
+  const message =
 `🔓 *Opening Balance Set - ${biz.name}*
 📅 ${dateNow()} at ${timeNow()}${branch}${clerk}
 
   💰 Opening: *${fmt(amount, biz.currency)}*
-  _Cash tracking started for today._`,
-    "opening",
-    {
-      bizBranch:  `${biz.name}${branchName ? " | " + branchName : ""}`,
-      amount:     fmt(amount, biz.currency),
-      date:       dateNow(),
-      clerkPhone: clerkPhone || "-"
-    }
-  );
+  _Cash tracking started for today._`;
+
+  const universal = {
+    title:   `Opening Balance Set — ${biz.name}${branchName ? ` (${branchName})` : ""}`,
+    details: `Opening ${fmt(amount, biz.currency)} · ${dateNow()} · By ${clerkPhone || "-"}`,
+    balance: `Opening balance: ${fmt(amount, biz.currency)}`
+  };
+
+  await _dispatch(biz, clerkPhone, message, universal);
 }
 
 /**
- * Send a full daily summary to one phone.
- * Call this manually from a scheduled job or on demand.
+ * Send a full daily summary to one phone (scheduled job or on demand).
  */
 export async function sendDailyRunningReport({
   biz, branchId, branchName, toPhone
 }) {
   const b   = await getDailyRunningBalance(biz._id, branchId, biz.currency);
   const cur = biz.currency;
-
   const _date = dateNow();
-  await _safeNotify(toPhone,
+
+  const message =
 `📊 *Daily Summary - ${biz.name}*
 ${branchName ? `🏬 ${branchName}\n` : ""}📅 ${_date}
 ━━━━━━━━━━━━━━━━━━━━
@@ -603,22 +440,20 @@ ${branchName ? `🏬 ${branchName}\n` : ""}📅 ${_date}
 📉 Cash Out:        ${fmt(b.cashOut, cur)}
 ━━━━━━━━━━━━━━━━━━━━
 💰 *Cash at hand:  ${fmt(b.closing, cur)}*
-━━━━━━━━━━━━━━━━━━━━`,
-    "daily",
-    {
-      bizBranch:  `${biz.name}${branchName ? " | " + branchName : ""}`,
-      date:       _date,
-      opening:    fmt(b.opening, cur),
-      cashIn:     fmt(b.cashIn,  cur),
-      cashOut:    fmt(b.cashOut, cur),
-      balance:    fmt(b.closing, cur)
-    }
-  );
+━━━━━━━━━━━━━━━━━━━━`;
+
+  const universal = {
+    title:   `Daily Summary — ${biz.name}${branchName ? ` (${branchName})` : ""}`,
+    details: `${_date} · Opening ${fmt(b.opening, cur)} · In ${fmt(b.cashIn, cur)} · ` +
+             `Out ${fmt(b.cashOut, cur)}`,
+    balance: `Cash at hand: ${fmt(b.closing, cur)}`
+  };
+
+  await _safeNotify(normPhone(toPhone), message, universal);
 }
 
 /**
  * Auto-sync supplier products/services → Business Tools Product model.
- * Called after supplier adds products via chatbot or admin saves.
  */
 export async function syncSupplierProductsToBizTools(supplierId) {
   try {
