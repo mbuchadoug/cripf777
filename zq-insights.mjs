@@ -1,5 +1,5 @@
 /**
- * zq-insights.mjs — ZimQuote database analysis (READ-ONLY)
+ * zq-insights.mjs - ZimQuote database analysis (READ-ONLY)
  * ─────────────────────────────────────────────────────────────────────────────
  * Scans your live collections and prints a full growth/behaviour report, then
  * writes a timestamped JSON snapshot you can keep or chart later.
@@ -44,7 +44,7 @@ if (!URI) {
 }
 
 // ── tiny formatting helpers ──────────────────────────────────────────────────
-const pct = (n, d) => (d > 0 ? ((n / d) * 100).toFixed(1) + "%" : "—");
+const pct = (n, d) => (d > 0 ? ((n / d) * 100).toFixed(1) + "%" : "-");
 const pad = (s, n) => String(s).padEnd(n);
 const num = n => (n || 0).toLocaleString("en-US");
 const line = (c = "─", n = 66) => c.repeat(n);
@@ -114,7 +114,7 @@ async function main() {
   const daysAgo = d => new Date(now.getTime() - d * 864e5);
 
   // =========================================================================
-  h1("1 · Acquisition — every phone that ever messaged the bot");
+  h1("1 · Acquisition - every phone that ever messaged the bot");
   // =========================================================================
   if (C.phoneContacts) {
     const pc = db.collection(C.phoneContacts);
@@ -126,14 +126,14 @@ async function main() {
     console.log(`  New in last 90 days:   ${num(last90)}`);
     report.sections.acquisition = { total, last30, last90 };
 
-    // Daily histogram (last 45 days) — this visually exposes the 3-day ad bursts
+    // Daily histogram (last 45 days) - this visually exposes the 3-day ad bursts
     const daily = await safe("daily histogram", () => pc.aggregate([
       { $match: { firstSeen: { $gte: daysAgo(45) } } },
       { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: "$firstSeen" } }, n: { $sum: 1 } } },
       { $sort: { _id: 1 } }
     ]).toArray());
     if (daily && daily.length) {
-      h2("New contacts per day (last 45d) — spikes = your ad days");
+      h2("New contacts per day (last 45d) - spikes = your ad days");
       const max = Math.max(...daily.map(d => d.n));
       const activeDays = daily.filter(d => d.n > 0).length;
       for (const d of daily) console.log(`  ${d._id}  ${pad(d.n, 5)} ${bar(d.n, max, 28)}`);
@@ -155,7 +155,7 @@ async function main() {
       for (const m of monthly) console.log(`  ${m._id}  ${pad(m.n, 6)} ${bar(m.n, max, 24)}`);
     }
 
-    // What did people type FIRST — raw intent / demand signal
+    // What did people type FIRST - raw intent / demand signal
     const firstMsgs = await safe("first messages", () => pc.aggregate([
       { $match: { firstMessage: { $nin: [null, ""] } } },
       { $project: { t: { $toLower: { $trim: { input: "$firstMessage" } } } } },
@@ -169,7 +169,7 @@ async function main() {
   } else console.log("  (no phonecontacts collection found)");
 
   // =========================================================================
-  h1("2 · Suppliers — supply side + monetisation funnel");
+  h1("2 · Suppliers - supply side + monetisation funnel");
   // =========================================================================
   if (C.suppliers) {
     const sp = db.collection(C.suppliers);
@@ -246,7 +246,7 @@ async function main() {
   } else console.log("  (no supplierprofiles collection found)");
 
   // =========================================================================
-  h1("3 · Schools — supply side + parent funnel");
+  h1("3 · Schools - supply side + parent funnel");
   // =========================================================================
   if (C.schools) {
     const sc = db.collection(C.schools);
@@ -276,7 +276,7 @@ async function main() {
   } else console.log("  (no schoolprofiles collection found)");
 
   // =========================================================================
-  h1("4 · School contacts — parent view→apply→enrol funnel");
+  h1("4 · School contacts - parent view→apply→enrol funnel");
   // =========================================================================
   if (C.schoolContacts) {
     const cc = db.collection(C.schoolContacts);
@@ -297,7 +297,7 @@ async function main() {
   } else console.log("  (no schoolcontacts collection found)");
 
   // =========================================================================
-  h1("5 · Search logs — DEMAND INTELLIGENCE (your recruitment goldmine)");
+  h1("5 · Search logs - DEMAND INTELLIGENCE (your recruitment goldmine)");
   // =========================================================================
   if (C.searchLogs) {
     const sl = db.collection(C.searchLogs);
@@ -318,7 +318,7 @@ async function main() {
     console.log(`  Marked 'helped': ${num(helped)} (${pct(helped, total)})`);
 
     // THE money query: what people searched for but got zero results
-    h2("🔥 Top UNMET-DEMAND searches (0 results) — who to recruit / stock");
+    h2("🔥 Top UNMET-DEMAND searches (0 results) - who to recruit / stock");
     const unmet = await safe("unmet", () => sl.aggregate([
       { $match: { $or: [{ resultMode: { $in: ["none", "error"] } }, { resultCount: { $lte: 0 } }] } },
       { $project: { t: { $toLower: { $trim: { input: { $ifNull: ["$normalizedText", "$rawText"] } } } },
@@ -340,7 +340,7 @@ async function main() {
         fs.writeFileSync("zq-unmet-demand.csv", csv);
         console.log("\n  📄 Wrote zq-unmet-demand.csv (hand this to your sales team).");
       }
-    } else console.log("  (none found — great, or logging is new)");
+    } else console.log("  (none found - great, or logging is new)");
 
     h2("Top searched products/services (all searches)");
     const topSearch = await safe("top search", () => sl.aggregate([
@@ -359,7 +359,7 @@ async function main() {
     ]).toArray());
     if (cityDemand) table(cityDemand.map(s => [s._id, num(s.n)]));
 
-    // WHEN are people active — informs when to run your 3 ad-days
+    // WHEN are people active - informs when to run your 3 ad-days
     h2("Searches by day-of-week (1=Sun … 7=Sat)");
     const dow = await safe("dow", () => sl.aggregate([
       { $match: { createdAt: { $type: "date" } } },
@@ -370,7 +370,7 @@ async function main() {
       const max = Math.max(...dow.map(d => d.n));
       dow.forEach(d => console.log(`  ${pad(names[d._id] || d._id, 4)} ${pad(d.n, 6)} ${bar(d.n, max, 24)}`));
     }
-    h2("Searches by hour-of-day (UTC — shift for CAT +2)");
+    h2("Searches by hour-of-day (UTC - shift for CAT +2)");
     const hod = await safe("hod", () => sl.aggregate([
       { $match: { createdAt: { $type: "date" } } },
       { $group: { _id: { $hour: "$createdAt" }, n: { $sum: 1 } } }, { $sort: { _id: 1 } }
@@ -383,7 +383,7 @@ async function main() {
   } else console.log("  (no searchcommandlogs collection found)");
 
   // =========================================================================
-  h1("6 · Quotes — marketplace liquidity");
+  h1("6 · Quotes - marketplace liquidity");
   // =========================================================================
   if (C.quotes) {
     const q = db.collection(C.quotes);
@@ -403,15 +403,15 @@ async function main() {
   const t = [];
   const s = report.sections;
   if (s.suppliers) {
-    t.push(`Trial→paid conversion is ${pct(s.suppliers.paid, s.suppliers.paid + s.suppliers.trial)} — ${num(s.suppliers.paid)} paid of ${num(s.suppliers.paid + s.suppliers.trial)}.`);
+    t.push(`Trial→paid conversion is ${pct(s.suppliers.paid, s.suppliers.paid + s.suppliers.trial)} - ${num(s.suppliers.paid)} paid of ${num(s.suppliers.paid + s.suppliers.trial)}.`);
     if (s.suppliers.engagement) {
-      t.push(`${pct(s.suppliers.engagement.dead, s.suppliers.total)} of suppliers have 0 views AND 0 orders — dormant listings to re-activate or win back.`);
-      t.push(`Smart-link conversion is ${pct(s.suppliers.engagement.linkConv, s.suppliers.engagement.linkViews)} — the organic channel you barely use yet.`);
+      t.push(`${pct(s.suppliers.engagement.dead, s.suppliers.total)} of suppliers have 0 views AND 0 orders - dormant listings to re-activate or win back.`);
+      t.push(`Smart-link conversion is ${pct(s.suppliers.engagement.linkConv, s.suppliers.engagement.linkViews)} - the organic channel you barely use yet.`);
     }
   }
   if (s.acquisition?.dailyActiveDays != null)
-    t.push(`Only ${s.acquisition.dailyActiveDays}/45 recent days brought new contacts — acquisition is bursty (ad-day dependent).`);
-  if (s.search) t.push(`${pct(s.search.none, s.search.total)} of searches return nothing — that list is a ready-made supplier-recruitment pipeline.`);
+    t.push(`Only ${s.acquisition.dailyActiveDays}/45 recent days brought new contacts - acquisition is bursty (ad-day dependent).`);
+  if (s.search) t.push(`${pct(s.search.none, s.search.total)} of searches return nothing - that list is a ready-made supplier-recruitment pipeline.`);
   if (s.schools) t.push(`Schools: ${pct(s.schools.inq, s.schools.views)} view→inquiry rate.`);
   t.forEach((x, i) => console.log(`  ${i + 1}. ${x}`));
 

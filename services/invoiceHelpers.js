@@ -508,7 +508,7 @@ export function parseQuickItems(text) {
             "pkt|pcs|pc|pieces|piece|unit|units|roll|rolls|carton|" +
             "cartons|tonne|tonnes|ton|tons|m|cm";
 
-  // Ordered rules — the FIRST match wins. `x` (or × / *) is the primary
+  // Ordered rules - the FIRST match wins. `x` (or × / *) is the primary
   // separator; a bare number is a price with quantity 1.
   const RULES = [
     // name qty x price/unit        e.g. "Labour 3 x 50/hour"   (service, qty)
@@ -572,7 +572,7 @@ export function buildQuickAddHelpText(biz, docType) {
     `Example: *Cement 10 x 12*  (10 at ${currencySymbol(cur)}12)\n\n` +
     `More examples (separate with commas):\n` +
     `*Sugar 2kg x 15, Bread 3 x 1.50, Transport 20*\n\n` +
-    `• *x* means times  —  qty x price\n` +
+    `• *x* means times  -  qty x price\n` +
     `• One number = the price (qty is 1)\n` +
     `• Add units if you like: *2kg, 500g, 3 boxes*\n` +
     `• No price yet? Just type the name, we will ask.\n\n` +

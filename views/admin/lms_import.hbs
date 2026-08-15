@@ -63,14 +63,14 @@
           <div class="imp-field">
             <label>Organisation</label>
             <select name="orgId" id="impOrg" class="imp-select" data-selected="{{orgId}}">
-              <option value="">— choose org (required to save) —</option>
+              <option value="">- choose org (required to save) -</option>
               {{#each organizations}}<option value="{{this._id}}">{{this.name}}</option>{{/each}}
             </select>
             <span class="hint">Stays selected after each import, so you can add many quizzes to the same org.</span>
           </div>
           <div class="imp-field">
             <label>Quiz title</label>
-            <input type="text" name="quizTitle" class="imp-input" placeholder="e.g. Responsibility — Passage Quiz 1" required>
+            <input type="text" name="quizTitle" class="imp-input" placeholder="e.g. Responsibility - Passage Quiz 1" required>
           </div>
           <div class="imp-field">
             <label>Module</label>
@@ -108,11 +108,11 @@
           <label>Upload a .txt file</label>
           <input type="file" name="file" accept=".txt" class="imp-input" style="padding:8px">
         </div>
-        <div style="text-align:center;margin:10px 0;color:var(--muted)">— or paste below —</div>
+        <div style="text-align:center;margin:10px 0;color:var(--muted)">- or paste below -</div>
         <div class="imp-field full">
           <label>Paste questions</label>
           <textarea name="text" class="imp-input" style="height:320px" placeholder="Paste questions here…">{{{text}}}</textarea>
-          <div class="imp-example">Format — one question per block, blank line between blocks:
+          <div class="imp-example">Format - one question per block, blank line between blocks:
 
 What is 2 + 2?
 a) 3

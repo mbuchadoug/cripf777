@@ -1533,7 +1533,7 @@ router.get("/recurring", async (req, res) => {
           </div>
           <div class="row">
             <div class="field"><label>Billing day (1-28)</label><input class="input" type="number" min="1" max="28" name="billingDay" value="1"></div>
-            ${office.isOwner ? `<div class="field"><label>Branch (optional)</label><select class="input" name="branch"><option value="">— none —</option>${branches.map(b=>`<option value="${b._id}" ${String(b._id)===String(branchId)?"selected":""}>${esc(b.name)}</option>`).join("")}</select></div>` : `<div class="field"></div>`}
+            ${office.isOwner ? `<div class="field"><label>Branch (optional)</label><select class="input" name="branch"><option value="">- none -</option>${branches.map(b=>`<option value="${b._id}" ${String(b._id)===String(branchId)?"selected":""}>${esc(b.name)}</option>`).join("")}</select></div>` : `<div class="field"></div>`}
           </div>
           <div class="field"><label>Notes (optional)</label><input class="input" name="description" placeholder="Anything worth remembering"></div>
           <div style="display:flex;justify-content:flex-end"><button class="btn btn-primary">Create account</button></div>
@@ -1549,7 +1549,7 @@ router.get("/recurring", async (req, res) => {
             <div class="field"><label>Default cycle</label><select class="input" name="defaultCycle">${recCycleOptions("monthly")}</select></div>
           </div>
           <div class="row">
-            ${office.isOwner ? `<div class="field"><label>Branch (optional)</label><select class="input" name="branch"><option value="">— none —</option>${branches.map(b=>`<option value="${b._id}" ${String(b._id)===String(branchId)?"selected":""}>${esc(b.name)}</option>`).join("")}</select></div>` : `<div class="field"></div>`}
+            ${office.isOwner ? `<div class="field"><label>Branch (optional)</label><select class="input" name="branch"><option value="">- none -</option>${branches.map(b=>`<option value="${b._id}" ${String(b._id)===String(branchId)?"selected":""}>${esc(b.name)}</option>`).join("")}</select></div>` : `<div class="field"></div>`}
             <div class="field" style="align-self:end"><label style="display:flex;align-items:center;gap:6px;font-weight:600"><input type="checkbox" name="hasHeader" value="1" style="width:auto"> First line is a header row (skip it)</label></div>
           </div>
           <div style="display:flex;justify-content:flex-end"><button class="btn btn-primary">Import clients</button></div>

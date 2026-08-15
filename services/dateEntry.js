@@ -8,7 +8,7 @@
 //   • a friendly preview label so the user can spot & fix mistakes
 //
 // Zimbabwe-friendly: dates are read DAY-FIRST (12/08 = 12 August), never US
-// month-first. Everything here is pure — no models, no side effects — so it can
+// month-first. Everything here is pure - no models, no side effects - so it can
 // be imported anywhere (receipts, invoices, expenses, income) with zero risk.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -116,7 +116,7 @@ export function dateExamplesText() {
 }
 
 /**
- * A full list of every month shortcode / numeric prefix, with examples — handy
+ * A full list of every month shortcode / numeric prefix, with examples - handy
  * to show under the date prompt so the user knows exactly what they can type.
  * Renders (day-first, so 12/08 = 12 August):
  *

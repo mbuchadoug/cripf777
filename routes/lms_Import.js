@@ -66,7 +66,7 @@ res.render("admin/lms_import", {
 });
 
 /* ------------------------------------------------------------------ */
-/*  POST import  — builds a selectable comprehension "quiz" and optionally     */
+/*  POST import  - builds a selectable comprehension "quiz" and optionally     */
 /*  assigns it. Covers the full set of checks: content, org, parsing, passage,   */
 /*  in-batch de-duplication, and correct assignment field names.                 */
 /* ------------------------------------------------------------------ */
@@ -130,7 +130,7 @@ router.post(
         parsed.push(q);
       }
 
-      // ── 4. Preview mode (not saving) — report what WOULD happen ──────────
+      // ── 4. Preview mode (not saving) - report what WOULD happen ──────────
       if (!saveToDb) {
         const msg = `Preview: ${parsed.length} valid question(s)` +
           (duplicates ? `, ${duplicates} duplicate(s) skipped` : "") +
@@ -195,7 +195,7 @@ router.post(
           }
 
           // FIX: schema field is `userId` (not `user`), and m.user is already
-          // an ObjectId from .lean() — no ObjectId() wrapper (throws in Mongoose 7).
+          // an ObjectId from .lean() - no ObjectId() wrapper (throws in Mongoose 7).
           await ExamInstance.create({
             examId: crypto.randomUUID(),
             org: orgId,
@@ -220,7 +220,7 @@ router.post(
       }
 
       // ── 8. Success summary ───────────────────────────────────────────────
-      const okMsg = `Imported "${quizTitle}" — ${childIds.length} question(s)` +
+      const okMsg = `Imported "${quizTitle}" - ${childIds.length} question(s)` +
         (passage ? " with passage" : "") +
         (duplicates ? `, ${duplicates} duplicate(s) skipped` : "") +
         (assignNow ? `, assigned to ${assignedTo} member(s)` : "") +
