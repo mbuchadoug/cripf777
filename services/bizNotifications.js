@@ -152,6 +152,7 @@ async function _postUniversalTemplate(phone, u) {
 async function _safeNotify(phone, message, universal = null) {
   try {
     await sendText(phone, message);
+    console.log(`[BIZ_NOTIF] \u2713 text sent to ${phone}`);
   } catch (err) {
     const code   = Number(err?.response?.data?.error?.code);
     const detail = err?.response?.data?.error?.message || err?.message || "";
@@ -199,6 +200,12 @@ export async function getNotificationRecipients(businessId, clerkPhone = null, e
 
   // Owners + founding owner first; then managers; then the recording clerk.
   const allSet = [...new Set([...owners, ...extras, ...managers, ...clerk])];
+  console.log(
+    `[BIZ_NOTIF] recipients for biz ${businessId}: ` +
+    `owners=[${owners.join(",")}] managers=[${managers.join(",")}] ` +
+    `founder=[${extras.join(",")}] clerk=[${clerk.join(",")}] ` +
+    `\u2192 ${allSet.length} unique: ${allSet.join(", ")}`
+  );
   return { owners, managers, allSet };
 }
 
@@ -275,6 +282,7 @@ function _balanceParam(bal) {
 async function _dispatch(biz, clerkPhone, message, universal = null) {
   try {
     const { allSet } = await getNotificationRecipients(biz._id, clerkPhone, [biz.providerId]);
+    console.log(`[BIZ_NOTIF] "${biz.name}" dispatching to ${allSet.length} recipient(s)`);
     await Promise.all(allSet.map(p => _safeNotify(p, message, universal)));
   } catch (err) {
     console.error("[BIZ_NOTIF] dispatch error:", err.message);
