@@ -9690,10 +9690,13 @@ Page ${page + 1} of ${totalPages} · ${allProducts.length} item${allProducts.len
 ${numbered}
 
 ─────────────────
-*Pick by number - just type the number(s):*
-_One each:_  3, 7, 12
-_With quantity:_  3x2  (item 3, qty 2)
-_Prices are added automatically_`
+*Pick by number:*
+_One item:_  3
+_Item + qty:_  3 x 2   (item 3, qty 2)
+_Add a price:_  3 x 2 x 15
+_Many at once:_  3, 7 x 2, 12 x 5
+
+_Saved prices fill in automatically._`
     );
 
     // Navigation + action buttons
