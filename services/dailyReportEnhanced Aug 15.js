@@ -15,7 +15,6 @@
  *   report_clerk_pick       → handled in twilioStateBridge (picks clerk, then calls above)
  */
 
-import mongoose            from "mongoose";
 import { sendText }         from "./metaSender.js";
 import { sendDocument }     from "./metaSender.js";
 import { sendMainMenu }     from "./metaMenus.js";
@@ -671,17 +670,6 @@ ${recLine}
 // handovers attributed to this clerk to compute their true running balance.
 // This is the carry-forward opening for any clerk statement period.
 // ─── Exported so bizNotifications.js can use same logic for notification balance lines ─
-// A branchId may arrive as a STRING (getEffectiveBranchId returns .toString()).
-// Raw aggregate $match does NOT auto-cast a string to ObjectId the way Mongoose
-// .create() does, so a string branchId silently matched NOTHING - which made a
-// clerk's just-raised receipt drop out of "cash at hand" (showed $0.00). Coerce
-// to a real ObjectId so the branch filter matches the stored rows.
-function toBranchOid(branchId) {
-  if (!branchId) return null;
-  if (branchId instanceof mongoose.Types.ObjectId) return branchId;
-  return mongoose.isValidObjectId(branchId) ? new mongoose.Types.ObjectId(String(branchId)) : null;
-}
-
 export async function fetchClerkCumulativeBalance({ biz, clerkPhone, branchId, before, inclusive = false }) {
   try {
     const Invoice        = (await import("../models/invoice.js")).default;
@@ -698,11 +686,10 @@ export async function fetchClerkCumulativeBalance({ biz, clerkPhone, branchId, b
     const dateCond = inclusive
       ? { $lte: new Date(before) }
       : (() => { const d = new Date(before); d.setHours(0, 0, 0, 0); return { $lt: d }; })();
-    const branchOid = toBranchOid(branchId);
     const bQ = {
       businessId: biz._id,
       createdAt:  dateCond,
-      ...(branchOid ? { branchId: branchOid } : {})
+      ...(branchId ? { branchId } : {})
     };
 
     // Use $or to match createdBy OR recordedBy so we never miss a transaction.
@@ -710,7 +697,7 @@ export async function fetchClerkCumulativeBalance({ biz, clerkPhone, branchId, b
 
     // Same debit matcher the statement rows use (explicit till, recorder
     // fallback, and orphan rescue) so opening custody and the row list agree.
-    const debitMatch = await payoutDebitMatch({ biz, clerkPhone, branchId: branchOid });
+    const debitMatch = await payoutDebitMatch({ biz, clerkPhone, branchId });
 
     const [pmts, rcpts, adminIncome, exps, payouts, payoutsReceived, handoversOut, handoversIn] = await Promise.all([
       // Money the clerk collected (invoice payments created by them)
@@ -774,7 +761,7 @@ export async function fetchClerkCumulativeBalance({ biz, clerkPhone, branchId, b
     try {
       const { fetchClerkRecurringTotals } = await import("./recurringLedger.js");
       const rb = await fetchClerkRecurringTotals({
-        businessId: biz._id, clerkPhone, branchId: branchOid, before
+        businessId: biz._id, clerkPhone, branchId: branchId || null, before
       });
       rbIn = rb.in; rbOut = rb.out;
     } catch (_) {}
