@@ -3836,6 +3836,7 @@ a.startsWith("sup_load_preset_") ||
       a.startsWith("payinv_") ||
       a.startsWith("prod_") ||
       a.startsWith("doc_") ||
+      a.startsWith("docdate_") ||
       a.startsWith("subpay_") ||
       a.startsWith("stmt_client_") ||
       a.startsWith("invite_branch_") ||
@@ -9420,6 +9421,14 @@ return sendButtons(from, {
     return;
   }
 
+  // ── Document / expense DATE picker buttons ───────────────────────
+  // docdate_today | docdate_yesterday | docdate_type - handled by docDateEntry.
+  if (al === "docdate_today" || al === "docdate_yesterday" || al === "docdate_type") {
+    const { handleDocDateAction } = await import("./docDateEntry.js");
+    await handleDocDateAction(from, al);
+    return;
+  }
+
  if (a.startsWith("payinv_")) {
     if (!biz) return sendMainMenu(from);
     // Handle "Pay Full Balance" shortcut button: payinv_full_{id}
@@ -9833,7 +9842,7 @@ _No price?_   you'll be asked after picking`
 if (a === "add_another_expense") {
     if (!biz) return sendMainMenu(from);
     biz.sessionState = "expense_smart_entry";
-    biz.sessionData  = { targetBranchId: biz.sessionData?.targetBranchId, bulkExpenses: [] };
+    biz.sessionData  = { targetBranchId: biz.sessionData?.targetBranchId, bulkExpenses: [], docDateISO: biz.sessionData?.docDateISO };
     await saveBizSafe(biz);
     return sendButtons(from, {
       text:
@@ -9856,7 +9865,8 @@ Or tap to pick a category:`,
     // preserve branch context
     biz.sessionData = {
       targetBranchId: biz.sessionData?.targetBranchId,
-      bulkExpenses:   biz.sessionData?.bulkExpenses || []
+      bulkExpenses:   biz.sessionData?.bulkExpenses || [],
+      docDateISO:     biz.sessionData?.docDateISO
     };
     await saveBizSafe(biz);
     return sendList(from, "📂 Select Category", [
@@ -9897,7 +9907,8 @@ Or tap to pick a category:`,
     biz.sessionData  = {
       targetBranchId:  biz.sessionData?.targetBranchId,
       bulkExpenses:    biz.sessionData?.bulkExpenses || [],
-      presetCategory:  chosenCat
+      presetCategory:  chosenCat,
+      docDateISO:      biz.sessionData?.docDateISO
     };
     await saveBizSafe(biz);
     return sendButtons(from, {
@@ -10437,23 +10448,8 @@ if (a.startsWith("expense_branch_")) {
     delete biz.sessionData.orderCatalogueSearch;
 
     await saveBizSafe(biz);
-    return sendButtons(from, {
-      text:
-`💸 *Record Expenses*
-
-Type one or many - same format either way:
-
-Single:  _fuel 30_
-Many:  _fuel 30, lunch 15, zesa 50, rent 500_
-With method:  _salary 850 bank, fuel 30 ecocash_
-
-─────────────────
-Type *list* to review  ·  *done* to save  ·  *cancel* to quit`,
-      buttons: [
-        { id: "exp_show_categories", title: "📂 Pick by Category" },
-        { id: ACTIONS.MAIN_MENU,     title: "❌ Cancel" }
-      ]
-    });
+    const { sendDocDatePrompt } = await import("./docDateEntry.js");
+    return sendDocDatePrompt(from, { label: "expense", ret: "expense_entry" });
   }
   // ── Owner picks branch for Bulk Expenses ─────────────────────────────────
 
@@ -10723,23 +10719,13 @@ if (a.startsWith("vdoc_prev_") || a.startsWith("vdoc_next_")) {
 if (a === ACTIONS.RECORD_EXPENSE) {
     if (!biz) return sendMainMenu(from);
     if (caller?.role === "owner") return sendBranchSelectorExpense(from);
+    // Ask the date first, then continue to expense entry. docDateISO is kept
+    // in sessionData through the category pickers and applied at save time.
     biz.sessionState = "expense_smart_entry";
     biz.sessionData  = { bulkExpenses: [] };
     await saveBizSafe(biz);
-    return sendButtons(from, {
-      text:
-`💸 *Record Expenses*
-
-Single:  _fuel 30_
-Many:  _fuel 30, lunch 15, zesa 50_
-With method:  _salary 850 bank_
-
-Type *done* to save`,
-      buttons: [
-        { id: "exp_show_categories", title: "📂 Pick by Category" },
-        { id: ACTIONS.MAIN_MENU,     title: "❌ Cancel" }
-      ]
-    });
+    const { sendDocDatePrompt } = await import("./docDateEntry.js");
+    return sendDocDatePrompt(from, { label: "expense", ret: "expense_entry" });
   }
 
   // ── Stock Control ─────────────────────────────────────────────────────────
@@ -12065,6 +12051,9 @@ const schoolAdminStates = [
 // Business-tools free-text states must NEVER be intercepted here.
 // They belong to continueTwilioFlow(...), not marketplace shortcode search.
 const shortcodeBlockedStates = [
+  // Document / expense date picker (typed dates must not trigger city search)
+  "awaiting_doc_date",
+  "awaiting_doc_date_type",
   ...supplierStates.filter(s =>
     s !== "supplier_search_city" &&
     s !== "supplier_order_product" &&
@@ -19996,6 +19985,8 @@ if (!isMetaAction && text && text.trim().length > 1) {
   // Without this guard, ANY plain text typed during an invoice flow (e.g. "3x2, 3x3"
   // to pick catalogue items) lands here and shows "Request Sellers" instead.
   const _bizActiveStates = new Set([
+    // Document / expense date picker
+    "awaiting_doc_date", "awaiting_doc_date_type",
     // Invoice
     "creating_invoice_choose_client", "creating_invoice_new_client",
     "creating_invoice_new_client_phone", "creating_invoice_add_items",

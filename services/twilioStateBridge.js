@@ -577,6 +577,15 @@ const restrictedStateMap = {
     return true;
   }
 
+  // ── Document / expense DATE picker: typed dates ─────────────────
+  // States awaiting_doc_date / awaiting_doc_date_type are owned by docDateEntry.
+  // Quick buttons are dispatched in chatbotEngine; typed dates land here.
+  if (state === "awaiting_doc_date" || state === "awaiting_doc_date_type") {
+    const { handleDocDateInput } = await import("./docDateEntry.js");
+    await handleDocDateInput(from, trimmed);
+    return true;
+  }
+
 
 
 
@@ -1260,18 +1269,25 @@ if (state === "expense_method" || state === ACTIONS.EXPENSE_METHOD) {
   }
 
   const effectiveBranchId = getEffectiveBranchId(caller, biz.sessionData);
-  const expense = await Expense.create({
+  const { resolveDocDate } = await import("./docDateEntry.js");
+  const expenseDate = resolveDocDate(biz);
+  const expense = new Expense({
     businessId:  biz._id,
     branchId:    effectiveBranchId,
     amount:      biz.sessionData.amount,
     category:    biz.sessionData.prefillCat    || "Other",
     description: biz.sessionData.description  || biz.sessionData.prefillCat || "Other",
     method,
-    createdBy:   phone
+    createdBy:   phone,
+    enteredAt:   new Date()
   });
+  expense.createdAt = expenseDate;
+  expense.updatedAt = new Date();
+  await expense.save({ timestamps: false });
 
   const savedBranchId = biz.sessionData.targetBranchId;
-  biz.sessionData  = { targetBranchId: savedBranchId };
+  const savedDate     = biz.sessionData.docDateISO;
+  biz.sessionData  = { targetBranchId: savedBranchId, docDateISO: savedDate };
   biz.sessionState = "expense_add_another_menu";
   await saveBizSafe(biz);
 
@@ -1552,6 +1568,9 @@ if (state === "expense_bulk_confirm") {
   const effectiveBranchId = getEffectiveBranchId(caller, biz.sessionData);
 
   try {
+    const { resolveDocDate } = await import("./docDateEntry.js");
+    const bulkDate = resolveDocDate(biz);
+    const bulkNow  = new Date();
     await Expense.insertMany(items.map(e => ({
       businessId:  biz._id,
       branchId:    effectiveBranchId,
@@ -1559,8 +1578,11 @@ if (state === "expense_bulk_confirm") {
       description: e.description,
       category:    e.category,
       method:      e.method || "Cash",
-      createdBy:   phone
-    })));
+      createdBy:   phone,
+      createdAt:   bulkDate,
+      updatedAt:   bulkNow,
+      enteredAt:   bulkNow
+    })), { timestamps: false });
   } catch (dbErr) {
     console.error("[BULK EXP SAVE]", dbErr.message);
     await sendText(from, "❌ Error saving expenses. Please try again.");
@@ -1574,7 +1596,7 @@ if (state === "expense_bulk_confirm") {
     .join("\n");
 
   // Clear session BEFORE sending PDF so any error doesn't leave dirty state
-  biz.sessionData  = { targetBranchId: savedBranchId };
+  biz.sessionData  = { targetBranchId: savedBranchId, docDateISO: biz.sessionData.docDateISO };
   biz.sessionState = "expense_add_another_menu";
   await saveBizSafe(biz);
 
@@ -2509,6 +2531,18 @@ if (state === "creating_invoice_enter_catalogue_prices") {
   const docType = biz.sessionData.docType || "invoice";
 
   if (state === "creating_invoice_confirm" && trimmed === "2") {
+    // ── DATE GATE ────────────────────────────────────────
+    // Ask which date this document is for BEFORE generating it. One tap
+    // (Today) covers the common case; the chosen date is stored in
+    // sessionData.docDateISO and written to createdAt at save time so every
+    // report / ledger buckets it on the right day.
+    if (!biz.sessionData.docDateISO) {
+      const dateLabel = docType === "quote" ? "quote"
+                      : docType === "receipt" ? "receipt" : "invoice";
+      const { sendDocDatePrompt } = await import("./docDateEntry.js");
+      await sendDocDatePrompt(from, { label: dateLabel, ret: "doc_finalize" });
+      return true;
+    }
     let client = biz.sessionData.client;
     if (!client && biz.sessionData.clientId) client = await Client.findById(biz.sessionData.clientId);
     if (!client) { await sendText(from, "❌ Client information is missing."); return true; }
@@ -2558,7 +2592,13 @@ console.log("INVOICE BRANCH DEBUG", {
   targetBranchId: biz.sessionData?.targetBranchId,
   effectiveBranchId
 });
-    const invoiceDoc = await Invoice.create({
+    // Resolve the user-chosen business date (falls back to now if unset).
+    const { resolveDocDate } = await import("./docDateEntry.js");
+    const docDate = resolveDocDate(biz);
+
+    // Save with { timestamps: false } so createdAt carries the business date
+    // (what reports sum on); enteredAt keeps the true capture time for audit.
+    const invoiceDoc = new Invoice({
       businessId: biz._id, clientId: client._id, type: docType,
       branchId: effectiveBranchId,
       number, currency: biz.currency,
@@ -2567,14 +2607,18 @@ console.log("INVOICE BRANCH DEBUG", {
       amountPaid: isReceipt ? total : 0,
       balance: isReceipt ? 0 : total,
       status: isReceipt ? "paid" : "unpaid",
-      createdBy: phone
+      createdBy: phone,
+      enteredAt: new Date()
     });
+    invoiceDoc.createdAt = docDate;
+    invoiceDoc.updatedAt = new Date();
+    await invoiceDoc.save({ timestamps: false });
 
     biz.documentCountMonth += 1;
     await saveBizSafe(biz);
 
     const { filename } = await generatePDF({
-      type: docType, number, date: new Date(),
+      type: docType, number, date: docDate,
       billingTo: client.name || client.phone, items,
       bizMeta: {
         name: biz.name, logoUrl: biz.logoUrl, address: biz.address || "",

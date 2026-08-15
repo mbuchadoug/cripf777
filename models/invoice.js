@@ -68,6 +68,12 @@ type: {
 
   createdBy: String,
 
+  // ── True system-entry time (audit) ─────────────────────────────────────────
+  // createdAt carries the user-chosen BUSINESS date (may be backdated) so reports
+  // bucket the doc on the right day. enteredAt is always the real time the record
+  // was captured, kept for audit / anti-fraud.
+  enteredAt: { type: Date, default: Date.now },
+
   // ── Reversal trail (soft-reverse, keeps audit history) ─────────────────────
   // Mirrors Expense/CashIncome. Reversing a sale (receipt/invoice) zeroes its
   // contributing amount (total) and stashes the original, so EVERY

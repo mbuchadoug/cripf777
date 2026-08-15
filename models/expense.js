@@ -9,6 +9,9 @@ const ExpenseSchema = new mongoose.Schema({
   method: { type: String },
   createdBy: { type: String },
 
+  // True system-entry time (audit). createdAt carries the chosen business date.
+  enteredAt: { type: Date, default: Date.now },
+
   // ── Reversal trail (soft-reverse, keeps audit history) ─────────────────────
   reversed:       { type: Boolean, default: false },
   originalAmount: { type: Number, default: null },
