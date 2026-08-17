@@ -8997,10 +8997,10 @@ router.get("/broadcast", requireSupplierAdmin, async (req, res) => {
     let _campaignTpls = [];
     let _campaignCfgError = "";
     try {
-      const _wabaId = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || process.env.META_WABA_ID || process.env.WABA_ID;
+      const _wabaId = await _resolveWabaId();
       const _token  = process.env.META_ACCESS_TOKEN || process.env.WHATSAPP_ACCESS_TOKEN;
       if (!_wabaId) {
-        _campaignCfgError = "WHATSAPP_BUSINESS_ACCOUNT_ID is not set in .env - add your WABA ID (Meta Business Manager, WhatsApp, API Setup) and restart to enable this feature.";
+        _campaignCfgError = "Could not determine your WhatsApp Business Account (WABA) ID. Set WHATSAPP_BUSINESS_ACCOUNT_ID in .env (Meta Business Manager > WhatsApp > API Setup) and restart. Auto-detect from the access token also failed - the token may lack the whatsapp_business_management permission.";
       } else if (_token) {
         const _r = await axios.get(
           `https://graph.facebook.com/v24.0/${_wabaId}/message_templates`,
@@ -9801,9 +9801,9 @@ router.get("/broadcast/contacts", requireSupplierAdmin, async (req, res) => {
 // so broadcasts sent with these templates arrive formatted exactly as typed.
 router.post("/broadcast/create-campaign-template", requireSupplierAdmin, async (req, res) => {
   try {
-    const wabaId = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || process.env.META_WABA_ID || process.env.WABA_ID;
+    const wabaId = await _resolveWabaId();
     const token  = process.env.META_ACCESS_TOKEN || process.env.WHATSAPP_ACCESS_TOKEN;
-    if (!wabaId) throw new Error("WHATSAPP_BUSINESS_ACCOUNT_ID is not set in .env. Find your WABA ID in Meta Business Manager (WhatsApp > API Setup), add it, and restart.");
+    if (!wabaId) throw new Error("Could not determine your WABA ID. Set WHATSAPP_BUSINESS_ACCOUNT_ID in .env (Meta Business Manager > WhatsApp > API Setup) and restart. Auto-detect from the access token also failed.");
     if (!token)  throw new Error("META_ACCESS_TOKEN is not configured.");
 
     let text = String(req.body.campaignText || "").replace(/\r\n|\r/g, "\n").trim();
@@ -9865,7 +9865,7 @@ router.post("/broadcast/delete-campaign-template", requireSupplierAdmin, async (
   try {
     const name = String(req.body.name || "").trim();
     if (!name.startsWith("zqm_campaign_")) throw new Error("Only zqm_campaign_* templates can be deleted from here.");
-    const wabaId = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || process.env.META_WABA_ID || process.env.WABA_ID;
+    const wabaId = await _resolveWabaId();
     const token  = process.env.META_ACCESS_TOKEN || process.env.WHATSAPP_ACCESS_TOKEN;
     if (!wabaId || !token) throw new Error("WABA ID / token not configured.");
 
@@ -9891,6 +9891,41 @@ router.post("/broadcast/delete-campaign-template", requireSupplierAdmin, async (
 // Meta needs a sample-image "handle" (from the resumable App Upload API) when
 // the template is CREATED, and the same image URL again on every SEND. We keep
 // a small name -> imageUrl map on disk so the sender can re-attach it.
+// ── Resolve the WhatsApp Business Account (WABA) ID ──────────────────────
+// Preferred: an env var. If none is set, ask Meta which WABA this access token
+// manages (debug_token) and cache it - so the Formatted Campaign Builder works
+// even when WHATSAPP_BUSINESS_ACCOUNT_ID was never added to .env.
+let _cachedWabaId = null;
+async function _resolveWabaId() {
+  const envId = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID
+             || process.env.META_WABA_ID
+             || process.env.WABA_ID;
+  if (envId) return envId;
+  if (_cachedWabaId) return _cachedWabaId;
+
+  const TOKEN = process.env.META_ACCESS_TOKEN || process.env.WHATSAPP_ACCESS_TOKEN;
+  if (!TOKEN) return null;
+  try {
+    const r = await axios.get("https://graph.facebook.com/v24.0/debug_token", {
+      params: { input_token: TOKEN, access_token: TOKEN }, timeout: 10000
+    });
+    const scopes = r.data?.data?.granular_scopes || [];
+    const mgmt = scopes.find(x => x.scope === "whatsapp_business_management" && (x.target_ids || []).length)
+              || scopes.find(x => x.scope === "whatsapp_business_messaging" && (x.target_ids || []).length)
+              || scopes.find(x => (x.target_ids || []).length);
+    const id = mgmt?.target_ids?.[0];
+    if (id) {
+      _cachedWabaId = String(id);
+      console.log(`[BROADCAST] Auto-resolved WABA ID from token: ${_cachedWabaId}`);
+      return _cachedWabaId;
+    }
+    console.warn("[BROADCAST] debug_token returned no WABA target_ids.");
+  } catch (e) {
+    console.warn("[BROADCAST] WABA auto-resolve failed:", e.response?.data?.error?.message || e.message);
+  }
+  return null;
+}
+
 const _campaignImgStore = _receiptPath.join(_broadcastUploadDir, "_campaign_images.json");
 function _readCampaignImages() {
   try { return JSON.parse(fs.readFileSync(_campaignImgStore, "utf8")); }
