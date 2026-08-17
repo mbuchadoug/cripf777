@@ -9077,14 +9077,51 @@ router.get("/broadcast", requireSupplierAdmin, async (req, res) => {
             Max 1024 characters · keep emojis to 10 or fewer (Meta may reject marketing templates with more) ·
             WhatsApp formatting works: *bold* _italic_ ~strikethrough~
           </p>
-          <input name="headerImageUrl" type="url"
+          <!-- Attach a picture: EITHER upload a file (auto-fills the URL box) OR paste a URL. -->
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
+            <label style="font-size:12px;font-weight:600;color:var(--text);background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px;padding:8px 12px;cursor:pointer">
+              📎 Choose image
+              <input type="file" id="campaignHeaderFile" accept="image/*" style="display:none" />
+            </label>
+            <span id="campaignHeaderStatus" style="font-size:12px;color:var(--muted)">or paste a URL below</span>
+          </div>
+          <input name="headerImageUrl" id="campaignHeaderUrl" type="url"
             placeholder="(optional) Header image URL — https://…/flyer.jpg"
             style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;margin-bottom:6px" />
           <p style="font-size:11px;color:var(--muted);margin:0 0 12px;line-height:1.6">
-            Optional: paste a public image URL to show a picture <b>above</b> your formatted text (like the
-            infographic broadcasts). Leave blank for text-only. The image is baked into the template, so it
-            always arrives with the message. <i>Requires META_APP_ID in .env.</i>
+            Optional: add a picture to show <b>above</b> your formatted text (like the infographic broadcasts).
+            Use <b>Choose image</b> to upload one, or paste any public image URL. Leave blank for text-only.
+            The image is baked into the template, so it always arrives with the message. <i>Requires META_APP_ID in .env.</i>
           </p>
+          <script>
+          (function(){
+            var fileInput = document.getElementById("campaignHeaderFile");
+            var urlInput  = document.getElementById("campaignHeaderUrl");
+            var statusEl  = document.getElementById("campaignHeaderStatus");
+            if (!fileInput) return;
+            fileInput.addEventListener("change", async function(){
+              var f = fileInput.files && fileInput.files[0];
+              if (!f) return;
+              statusEl.textContent = "⬆ Uploading …"; statusEl.style.color = "#2563eb";
+              try {
+                var fd = new FormData(); fd.append("broadcastFile", f);
+                var r = await fetch("/zq-admin/broadcast/upload", { method: "POST", body: fd });
+                var j = await r.json();
+                if (j && j.url) {
+                  urlInput.value = j.url;
+                  statusEl.textContent = "✓ attached: " + (j.originalName || "image");
+                  statusEl.style.color = "#16a34a";
+                } else {
+                  statusEl.textContent = "⚠ " + ((j && j.error) || "upload failed");
+                  statusEl.style.color = "#b91c1c";
+                }
+              } catch (e) {
+                statusEl.textContent = "⚠ " + e.message;
+                statusEl.style.color = "#b91c1c";
+              }
+            });
+          })();
+          </script>
           <button type="submit" style="padding:9px 18px;border:none;border-radius:8px;background:#16a34a;color:white;font-size:13px;font-weight:700;cursor:pointer">
             🚀 Create &amp; Submit Template
           </button>
