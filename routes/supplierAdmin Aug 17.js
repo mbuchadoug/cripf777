@@ -9011,7 +9011,7 @@ router.get("/broadcast", requireSupplierAdmin, async (req, res) => {
           }
         );
         _campaignTpls = (_r.data?.data || [])
-          .filter(t => t.name && (t.name.startsWith("zqm_campaign_") || t.name.startsWith("zqm_campaignimg_")))
+          .filter(t => t.name && t.name.startsWith("zqm_campaign_"))
           .map(t => ({
             name:   t.name,
             status: t.status || "PENDING",
@@ -9076,14 +9076,6 @@ router.get("/broadcast", requireSupplierAdmin, async (req, res) => {
           <p style="font-size:11px;color:var(--muted);margin:6px 0 10px">
             Max 1024 characters · keep emojis to 10 or fewer (Meta may reject marketing templates with more) ·
             WhatsApp formatting works: *bold* _italic_ ~strikethrough~
-          </p>
-          <input name="headerImageUrl" type="url"
-            placeholder="(optional) Header image URL — https://…/flyer.jpg"
-            style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;margin-bottom:6px" />
-          <p style="font-size:11px;color:var(--muted);margin:0 0 12px;line-height:1.6">
-            Optional: paste a public image URL to show a picture <b>above</b> your formatted text (like the
-            infographic broadcasts). Leave blank for text-only. The image is baked into the template, so it
-            always arrives with the message. <i>Requires META_APP_ID in .env.</i>
           </p>
           <button type="submit" style="padding:9px 18px;border:none;border-radius:8px;background:#16a34a;color:white;font-size:13px;font-weight:700;cursor:pointer">
             🚀 Create &amp; Submit Template
@@ -9491,7 +9483,7 @@ router.get("/broadcast", requireSupplierAdmin, async (req, res) => {
         zqm_suppliers_ready:   { v1: "{{1}} - Category name, capitalised (also goes in header)  e.g. Plumbing",               v2: "{{2}} - Number of suppliers  e.g. 4", hasMedia: false }
       };
       function onTplChange(v) {
-        const isCampaign = v && (v.indexOf("zqm_campaign_") === 0 || v.indexOf("zqm_campaignimg_") === 0);
+        const isCampaign = v && v.indexOf("zqm_campaign_") === 0;
         const m = isCampaign
           ? { v1: "No variables needed - this template already contains your full formatted message.", v2: false, hasMedia: false }
           : (TPL_META[v] || {});
@@ -9812,27 +9804,9 @@ router.post("/broadcast/create-campaign-template", requireSupplierAdmin, async (
     // Meta rejects tabs and 4+ consecutive spaces even inside template bodies
     text = text.replace(/\t/g, " ").replace(/ {4,}/g, "   ");
 
-    // Optional image header: if a URL is supplied we upload a sample to Meta and
-    // build an IMAGE-header + BODY template (name prefix zqm_campaignimg_). The
-    // image URL is remembered so every send re-attaches it. No image -> the
-    // proven body-only template (name prefix zqm_campaign_).
-    const headerImageUrl = String(req.body.headerImageUrl || "").trim();
-
     // Auto-generated, unique, Meta-compliant name (lowercase + underscores only)
     const _d = new Date();
-    const _stamp = `${_d.toISOString().slice(0, 10).replace(/-/g, "")}_${Date.now().toString().slice(-6)}`;
-    const name = headerImageUrl ? `zqm_campaignimg_${_stamp}` : `zqm_campaign_${_stamp}`;
-
-    let components;
-    if (headerImageUrl) {
-      const handle = await _uploadTemplateHeaderSample(headerImageUrl);
-      components = [
-        { type: "HEADER", format: "IMAGE", example: { header_handle: [handle] } },
-        { type: "BODY", text }
-      ];
-    } else {
-      components = [{ type: "BODY", text }];
-    }
+    const name = `zqm_campaign_${_d.toISOString().slice(0, 10).replace(/-/g, "")}_${Date.now().toString().slice(-6)}`;
 
     const r = await axios.post(
       `https://graph.facebook.com/v24.0/${wabaId}/message_templates`,
@@ -9840,12 +9814,10 @@ router.post("/broadcast/create-campaign-template", requireSupplierAdmin, async (
         name,
         language: "en",
         category: "MARKETING",
-        components
+        components: [{ type: "BODY", text }]
       },
       { headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, timeout: 15000 }
     );
-
-    if (headerImageUrl) _writeCampaignImage(name, headerImageUrl);
 
     const status = r.data?.status || "PENDING";
     const msg = status === "APPROVED"
@@ -9885,73 +9857,12 @@ router.post("/broadcast/delete-campaign-template", requireSupplierAdmin, async (
 // Bypasses sendBroadcastTemplate since that function only knows the 4 older templates.
 // Returns { sent, failed, skipped } matching the shape sendBroadcastTemplate returns.
 // ── Send a zero-variable "formatted campaign" template broadcast ─────────────
-// ── Image-header formatted campaigns (zqm_campaignimg_*) ─────────────────
-// These carry a PICTURE header PLUS a fully formatted, zero-variable body -
-// so a broadcast arrives with an image AND proper paragraphs/line breaks.
-// Meta needs a sample-image "handle" (from the resumable App Upload API) when
-// the template is CREATED, and the same image URL again on every SEND. We keep
-// a small name -> imageUrl map on disk so the sender can re-attach it.
-const _campaignImgStore = _receiptPath.join(_broadcastUploadDir, "_campaign_images.json");
-function _readCampaignImages() {
-  try { return JSON.parse(fs.readFileSync(_campaignImgStore, "utf8")); }
-  catch { return {}; }
-}
-function _writeCampaignImage(name, imageUrl) {
-  const all = _readCampaignImages();
-  all[name] = imageUrl;
-  try { fs.writeFileSync(_campaignImgStore, JSON.stringify(all, null, 2)); }
-  catch (e) { console.error("[CAMPAIGN IMG STORE]", e.message); }
-}
-
-// Upload a sample image to Meta's resumable App Upload API; returns its handle,
-// required as example.header_handle when creating an IMAGE-header template.
-async function _uploadTemplateHeaderSample(imageUrl) {
-  const APP_ID = process.env.META_APP_ID || process.env.FACEBOOK_APP_ID || process.env.FB_APP_ID;
-  const TOKEN  = process.env.META_ACCESS_TOKEN || process.env.WHATSAPP_ACCESS_TOKEN;
-  if (!APP_ID) throw new Error("META_APP_ID (your Facebook App ID) is not set in .env - it is required to attach an image header. Add it and restart, or create the campaign without an image.");
-  if (!TOKEN)  throw new Error("META_ACCESS_TOKEN is not configured.");
-
-  // 1) Fetch the image bytes from the public URL the admin provided.
-  const imgResp = await axios.get(imageUrl, { responseType: "arraybuffer", timeout: 20000 });
-  const bytes   = Buffer.from(imgResp.data);
-  const ctype   = imgResp.headers["content-type"] || "image/jpeg";
-  if (!/^image\//i.test(ctype)) throw new Error(`That header URL is not an image (server returned ${ctype}).`);
-
-  // 2) Start a resumable upload session (App-scoped).
-  const startResp = await axios.post(
-    `https://graph.facebook.com/v24.0/${APP_ID}/uploads`,
-    null,
-    { params: { file_name: "header.jpg", file_length: bytes.length, file_type: ctype, access_token: TOKEN }, timeout: 20000 }
-  );
-  const uploadId = startResp.data?.id;
-  if (!uploadId) throw new Error("Meta did not return an upload session id.");
-
-  // 3) Upload the bytes; Meta returns the file handle.
-  const fileResp = await axios.post(
-    `https://graph.facebook.com/v24.0/${uploadId}`,
-    bytes,
-    { headers: { Authorization: `OAuth ${TOKEN}`, file_offset: 0, "Content-Type": "application/octet-stream" },
-      timeout: 30000, maxBodyLength: Infinity, maxContentLength: Infinity }
-  );
-  const handle = fileResp.data?.h;
-  if (!handle) throw new Error("Meta did not return a file handle for the header image.");
-  return handle;
-}
-
 async function _sendBroadcastCampaign({ phones, templateName, msPerMessage = 3000, dryRun = false }) {
   const PHONE_ID = process.env.WHATSAPP_PHONE_NUMBER_ID
                 || process.env.META_PHONE_NUMBER_ID
                 || process.env.PHONE_NUMBER_ID;
   const TOKEN    = process.env.META_ACCESS_TOKEN
                 || process.env.WHATSAPP_ACCESS_TOKEN;
-
-  // Image-header campaigns need the picture re-attached on every send.
-  let headerComponent = null;
-  if (String(templateName).startsWith("zqm_campaignimg_")) {
-    const imgUrl = _readCampaignImages()[templateName];
-    if (imgUrl) headerComponent = { type: "header", parameters: [{ type: "image", image: { link: imgUrl } }] };
-    else console.warn(`[BROADCAST CAMPAIGN] No stored image URL for ${templateName}; sending body only.`);
-  }
 
   let sent = 0, failed = 0, skipped = 0;
 
@@ -9965,9 +9876,7 @@ async function _sendBroadcastCampaign({ phones, templateName, msPerMessage = 300
           messaging_product: "whatsapp",
           to:   phone,
           type: "template",
-          template: headerComponent
-            ? { name: templateName, language: { code: "en" }, components: [headerComponent] }
-            : { name: templateName, language: { code: "en" } }
+          template: { name: templateName, language: { code: "en" } }
         },
         { headers: { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json" } }
       );
@@ -10063,7 +9972,7 @@ router.post("/broadcast", requireSupplierAdmin, async (req, res) => {
     } = req.body;
 
     if (!templateName) throw new Error("Please select a template.");
-    const _isCampaignTpl = String(templateName).startsWith("zqm_campaign_") || String(templateName).startsWith("zqm_campaignimg_");
+    const _isCampaignTpl = String(templateName).startsWith("zqm_campaign_");
     if (!var1.trim() && !_isCampaignTpl) throw new Error("{{1}} variable is required.");
 
     // ── TEMPLATE-SAFE TEXT ────────────────────────────────────────────────────
