@@ -969,7 +969,19 @@ router.get("/products", async (req, res) => {
         </div><button class="btn btn-primary">Add to catalogue</button></form></div>
       </div>` : "";
 
-    const body = `${ok}${err}${addForm}
+    const importForm = canEdit ? `
+      <div class="card" style="margin-bottom:18px"><div class="ch"><h3>📥 Import products / services</h3><span class="pill">bulk paste</span></div>
+        <div class="cb">
+          <p class="muted" style="margin:0 0 10px;line-height:1.6">Paste one item per line as <b>Name, Price, Type</b>. Price and Type are optional. Type <b>service</b> (or <b>s</b>) marks a service - anything else is a product. Commas or tabs both work, so you can paste straight from Excel or Google Sheets.</p>
+          <form method="POST" action="/office/products/import">
+            <textarea class="input" name="rows" rows="8" placeholder="Starlink Mini Kit, 120&#10;Installation, 30, service&#10;HDMI Cable, 5&#10;Consultation, 15, s" style="width:100%;font-family:monospace;line-height:1.6"></textarea>
+            <label style="display:flex;align-items:center;gap:8px;margin:10px 0;font-size:13px"><input type="checkbox" name="hasHeader" value="1"> First line is a header (skip it)</label>
+            <button class="btn btn-primary">Import all</button>
+          </form>
+        </div>
+      </div>` : "";
+
+    const body = `${ok}${err}${addForm}${importForm}
       <div class="card"><div class="ch"><h3>Catalogue</h3><span class="pill">${num(products.length)} items</span></div>
         ${products.length ? `<div class="tbl-wrap"><table><thead><tr><th>Product / Service</th><th class="r">Price</th><th class="c">Visible</th></tr></thead><tbody>${rows}</tbody></table></div>`
         : `<div class="empty"><div class="e-ic">🏷</div>No products yet. Add one above - they become pickable (with price) when recording a sale.</div>`}
@@ -986,6 +998,47 @@ router.post("/products/add", async (req, res) => {
     await createProduct({ businessId: office.biz._id, branchId: office.scopeBranchId || null, name: req.body.name, unitPrice: req.body.unitPrice, isService: !!req.body.isService });
     res.redirect("/office/products?ok=" + encodeURIComponent("Product saved"));
   } catch (e) { res.redirect("/office/products?err=" + encodeURIComponent(e.message)); }
+});
+
+router.post("/products/import", async (req, res) => {
+  const { office } = req;
+  if (!(office.isOwner || office.isManager)) return res.redirect("/office/products?err=Not+allowed");
+  try {
+    const { createProduct, listProducts } = await import("../services/officeData.js");
+
+    let lines = String(req.body.rows || "").split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    if (req.body.hasHeader) lines = lines.slice(1);
+    if (!lines.length) return res.redirect("/office/products?err=" + encodeURIComponent("Nothing to import - paste at least one line"));
+
+    // Skip names already in the catalogue (and duplicates within the paste).
+    const existing = await listProducts({ businessId: office.biz._id, includeInactive: true }).catch(() => []);
+    const seen = new Set(existing.map(p => String(p.name || "").trim().toLowerCase()));
+
+    let ok = 0, skipped = 0, dupes = 0;
+    for (const line of lines) {
+      try {
+        const cols = (line.includes("\t") ? line.split("\t") : line.split(",")).map(c => c.trim());
+        const name = cols[0];
+        if (!name) { skipped++; continue; }
+        const key = name.toLowerCase();
+        if (seen.has(key)) { dupes++; continue; }
+        const unitPrice = parseFloat(String(cols[1] || "").replace(/[^0-9.]/g, "")) || 0;
+        const typeStr = String(cols[2] || "").toLowerCase();
+        const isService = ["service", "services", "svc", "serv", "s"].includes(typeStr);
+        await createProduct({
+          businessId: office.biz._id,
+          branchId:   office.scopeBranchId || null,
+          name, unitPrice, isService
+        });
+        seen.add(key);
+        ok++;
+      } catch (rowErr) { console.error("[office products import row]", rowErr.message); skipped++; }
+    }
+    const parts = [`Imported ${ok} item(s)`];
+    if (dupes)   parts.push(`${dupes} already existed`);
+    if (skipped) parts.push(`${skipped} skipped`);
+    res.redirect("/office/products?ok=" + encodeURIComponent(parts.join(", ")));
+  } catch (e) { console.error("[office products import]", e); res.redirect("/office/products?err=" + encodeURIComponent(e.message)); }
 });
 
 router.post("/products/update", async (req, res) => {
