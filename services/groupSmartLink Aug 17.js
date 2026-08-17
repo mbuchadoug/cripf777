@@ -723,26 +723,9 @@ export async function handleSchoolGroupTap({ from, action, biz, saveBiz }) {
       const { default: SchoolProfile } = await import("../models/schoolProfile.js");
       SchoolProfile.findByIdAndUpdate(schoolId, { $inc: { monthlyViews: 1 } }).catch(() => {});
 
-      // Notify the ADMIN and the SCHOOL'S OWN contacts that their smart link was
-      // opened from a group link. We fetch the FULL school doc (not just name/city)
-      // so notifyAllSchoolProfileView has phone + notificationContacts to fan out
-      // to. That helper is template-first (school_profile_view), so the school is
-      // notified even outside the 24-hour window - exactly like a direct
-      // ZQ:SCHOOL: open. Non-blocking; a notify failure never breaks the tap.
-      SchoolProfile.findById(schoolId).lean().then(async (sch) => {
-        if (!sch) return;
-        _notifyAdminSchoolTapped(sch, from).catch(() => {});
-        try {
-          const { notifyAllSchoolProfileView } = await import("./schoolNotifications.js");
-          const displayFrom = String(from).startsWith("263") ? "0" + String(from).slice(3) : from;
-          notifyAllSchoolProfileView(sch, displayFrom).catch(() => {});
-        } catch (e) {
-          console.warn("[SCHOOL GROUP TAP] school-contact notify failed:", e.message);
-        }
-        try {
-          const { captureSchoolContact } = await import("./schoolApplicationForm.js");
-          captureSchoolContact({ schoolId, phone: String(from).replace(/\D+/g, ""), source: "school_group" }).catch(() => {});
-        } catch (_) {}
+      // Notify admin which school was tapped and by whom - non-blocking
+      SchoolProfile.findById(schoolId, { schoolName: 1, city: 1 }).lean().then(sch => {
+        if (sch) _notifyAdminSchoolTapped(sch, from).catch(() => {});
       }).catch(() => {});
 
       // Open school FAQ menu - identical to tapping a ZQ:SCHOOL: link
