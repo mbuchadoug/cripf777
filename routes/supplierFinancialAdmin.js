@@ -167,7 +167,7 @@ async function fetchClerkIncome(biz, phone, since) {
         const inv = await Invoice.findById(p.invoiceId).lean();
         if (inv) {
           const clientName = await resolveClient(inv.clientId);
-          label = `Inv Payment · ${inv.number}${clientName !== "Walk-in" ? " – " + clientName : ""}`;
+          label = `Inv Payment · ${inv.number}${clientName !== "Walk-in" ? " - " + clientName : ""}`;
         }
       } catch (_) {}
     }
@@ -321,7 +321,7 @@ router.get("/all", requireSupplierAdmin, async (req, res) => {
     payments.forEach(r => rows.push({ icon: "💳", label: "Inv Payment", date: r.createdAt, amount: r.amount || 0, sign: 1, desc: r.method || "", by: r.createdBy, reversed: false }));
     rbPayments.filter(rbBranchOk).forEach(r => {
       const acct = rbAcctMap[String(r.accountId)]; const ten = r.tenantId ? rbTenantMap[String(r.tenantId)] : null;
-      rows.push({ icon: "🏠", label: "Billing Payment", date: r.date, amount: r.amount || 0, sign: 1, desc: `${acct?.name || "Account"}${ten ? " – " + ten.name : ""} · ${r.method || "cash"}`, by: r.createdBy, reversed: false });
+      rows.push({ icon: "🏠", label: "Billing Payment", date: r.date, amount: r.amount || 0, sign: 1, desc: `${acct?.name || "Account"}${ten ? " - " + ten.name : ""} · ${r.method || "cash"}`, by: r.createdBy, reversed: false });
     });
     rbExpenses.filter(rbBranchOk).forEach(r => {
       const acct = rbAcctMap[String(r.accountId)];

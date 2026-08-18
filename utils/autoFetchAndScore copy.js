@@ -45,7 +45,7 @@ You are the CRIPFCnt analyzer. Based on this data about "${entity}", estimate:
 3. Income Dependence (I) - 0 to 100
 
 Respond strictly in JSON: {"VI": number, "NE": number, "I": number}
-Then, briefly explain your reasoning and list source credibility scores (0–1).
+Then, briefly explain your reasoning and list source credibility scores (0-1).
 
 Data:
 ${webData}

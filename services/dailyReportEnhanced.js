@@ -390,18 +390,18 @@ export async function runDetailedLedgerReport({ biz, from, period = "day", custo
 
   if (period === "custom" && customStart && customEnd) {
     start = customStart; end = customEnd;
-    periodLabel = `${shortDate(start)} – ${shortDate(end)}`;
+    periodLabel = `${shortDate(start)} - ${shortDate(end)}`;
   } else if (period === "alltime") {
     // All Time: from the very first business document ever recorded to right now.
     // Opening balance is always 0 (no history before the beginning of time).
     end   = new Date(); end.setHours(23, 59, 59, 999);
     start = new Date(biz.createdAt || "2020-01-01"); start.setHours(0, 0, 0, 0);
-    periodLabel = `All Time · ${shortDate(start)} – ${shortDate(end)}`;
+    periodLabel = `All Time · ${shortDate(start)} - ${shortDate(end)}`;
   } else if (period === "week") {
     // Last 7 days rolling (more useful than Mon-Sun calendar week)
     end   = new Date(); end.setHours(23, 59, 59, 999);
     start = new Date(end); start.setDate(start.getDate() - 6); start.setHours(0, 0, 0, 0);
-    periodLabel = `${shortDate(start)} – ${shortDate(end)}`;
+    periodLabel = `${shortDate(start)} - ${shortDate(end)}`;
   } else if (period === "month") {
     const now = new Date();
     start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
@@ -572,18 +572,18 @@ export async function runClerkStatementReport({ biz, from, clerkPhone, period = 
   let start, end, periodLabel;
   if (period === "custom" && customStart && customEnd) {
     start = customStart; end = customEnd;
-    periodLabel = `${shortDate(start)} – ${shortDate(end)}`;
+    periodLabel = `${shortDate(start)} - ${shortDate(end)}`;
   } else if (period === "alltime") {
     // All Time: every transaction this clerk has ever recorded, from day one.
     // Opening custody is 0 (they had nothing before their first ever transaction).
     end   = new Date(); end.setHours(23, 59, 59, 999);
     start = new Date(biz.createdAt || "2020-01-01"); start.setHours(0, 0, 0, 0);
-    periodLabel = `All Time · ${shortDate(start)} – ${shortDate(end)}`;
+    periodLabel = `All Time · ${shortDate(start)} - ${shortDate(end)}`;
   } else if (period === "week") {
     // Last 7 days rolling
     end   = new Date(); end.setHours(23, 59, 59, 999);
     start = new Date(end); start.setDate(start.getDate() - 6); start.setHours(0, 0, 0, 0);
-    periodLabel = `${shortDate(start)} – ${shortDate(end)}`;
+    periodLabel = `${shortDate(start)} - ${shortDate(end)}`;
   } else if (period === "month") {
     const now = new Date();
     start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);

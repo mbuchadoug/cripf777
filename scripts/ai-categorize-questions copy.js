@@ -30,7 +30,7 @@ For each question assign:
 
 2. "category" - the specific professional domain or subject this question addresses.
    Be SPECIFIC. Use the question's actual content to decide.
-   Use lowercase-hyphenated format. 2–3 words ideal.
+   Use lowercase-hyphenated format. 2-3 words ideal.
    Examples: "institutional-accountability", "language-recalibration",
    "civic-consciousness", "strategic-communication", "public-sector-ethics",
    "social-contract", "governance-reform", "digital-ethics", "media-literacy",
@@ -63,7 +63,7 @@ For each quiz assign:
 
 2. "category" - the specific professional domain this quiz addresses.
    Be SPECIFIC and grounded in the quiz content.
-   Use lowercase-hyphenated format. 2–3 words ideal.
+   Use lowercase-hyphenated format. 2-3 words ideal.
 
 3. "series" - the learning series or course track this quiz belongs to.
    Think of it as a course name. Be descriptive and meaningful.

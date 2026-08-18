@@ -728,7 +728,7 @@ export async function notifyAdminGroupLinkOpened({ groupName, slug, viewCount, v
 }
 // ═════════════════════════════════════════════════════════════════════════════
 // ═════════════════════════════════════════════════════════════════════════════
-// BROADCAST ENGINE  –  sendBroadcastTemplate()
+// BROADCAST ENGINE  -  sendBroadcastTemplate()
 // ─────────────────────────────────────────────────────────────────────────────
 //
 // HOW IT WORKS (based on working school announcement pattern from whatsapp.js):

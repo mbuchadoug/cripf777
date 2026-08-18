@@ -256,7 +256,7 @@ CRIPFCnt SCOI Audit- Apple Inc. (2025, Revised with Global Moderation Factor)
 ⸻
 
 1️⃣ Visibility (Capacity / Denominator)
-	•	Global dominance: 2.7–3 trillion valuation, ecosystem penetration in over 180 countries.
+	•	Global dominance: 2.7-3 trillion valuation, ecosystem penetration in over 180 countries.
 	•	Symbol of civilization’s aesthetic and control grid - unmatched visibility.
 Visibility Score = 10/10
 
@@ -328,7 +328,7 @@ Innscor represents the civilization layer of supply - the feeding, fuelling, and
 
 Variable
 Description
-Indicative Score (0–10)
+Indicative Score (0-10)
 Visibility (V)
 Public listing, large workforce, dominant retail presence, brand saturation.
 9.2
@@ -424,7 +424,7 @@ Air Zimbabwe isn’t just an airline; it is the skyward mirror of a civilization
 
 ⁠Variable
 Description
-Indicative Score (0–10)
+Indicative Score (0-10)
 Visibility (V)
 National icon, global recognizability, historical prestige - but diminished recent presence.
 8.4
@@ -499,7 +499,7 @@ Ethiopian Airlines is the closest current example of aviation as placement - an 
 
 ⁠Variable
 Description
-Indicative Score (0–10)
+Indicative Score (0-10)
 Visibility (V)
 Africa’s most recognized airline, global branding, strategic partnerships with Boeing & Airbus, international awards.
 9.5
@@ -756,9 +756,9 @@ if erf_mode == "multiply": adj = base * ERF
 elif erf_mode == "divide": adj = base / max(ERF, 1e-6)
 
 # Adjustments
-adj *= headwind_index                  # 0.9–1.1 (resistance boost/drag)
-adj *= civilization_factor             # 0.85–1.15 (context maturity)
-adj *= negative_externality_factor     # 0.70–1.00 (penalize harmful effects)
+adj *= headwind_index                  # 0.9-1.1 (resistance boost/drag)
+adj *= civilization_factor             # 0.85-1.15 (context maturity)
+adj *= negative_externality_factor     # 0.70-1.00 (penalize harmful effects)
 
 # Silent Over-Contribution bonus (optional, small & bounded)
 if (Cw > Vw) and (Vw < 0.6*Cw):
@@ -781,9 +781,9 @@ if erf_mode == "multiply": adj = base * ERF
 elif erf_mode == "divide": adj = base / max(ERF, 1e-6)
 
 # Adjustments
-adj *= headwind_index                  # 0.9–1.1 (resistance boost/drag)
-adj *= civilization_factor             # 0.85–1.15 (context maturity)
-adj *= negative_externality_factor     # 0.70–1.00 (penalize harmful effects)
+adj *= headwind_index                  # 0.9-1.1 (resistance boost/drag)
+adj *= civilization_factor             # 0.85-1.15 (context maturity)
+adj *= negative_externality_factor     # 0.70-1.00 (penalize harmful effects)
 
 # Silent Over-Contribution bonus (optional, small & bounded)
 if (Cw > Vw) and (Vw < 0.6*Cw):
@@ -855,7 +855,7 @@ Cynefin (current standard view- not a standard-bearer, Grid origin)
 
 --------------------------
 
-What to expect (ballpark): ~0.8–0.95 depending on AAI & factors (brings Alpha and manual into the same corridor).
+What to expect (ballpark): ~0.8-0.95 depending on AAI & factors (brings Alpha and manual into the same corridor).
 
 Van Hoegaerden (proto-axis, non-performative
 --------------------------------
@@ -875,7 +875,7 @@ Van Hoegaerden (proto-axis, non-performative
 }
 
 ------------------------------
-What to expect: ~1.05–1.15 (silent over-contribution preserved).
+What to expect: ~1.05-1.15 (silent over-contribution preserved).
 
 Standard-Bearer (e.g., Donald Mataranyika - apply ERF ÷)
 

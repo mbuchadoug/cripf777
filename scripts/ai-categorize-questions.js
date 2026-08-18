@@ -385,7 +385,7 @@ One object per quiz with EXACTLY these fields:
 2. "pillar"       - one of the 8 pillars OR "out-of-scope"
 3. "category"     - most specific allowed category OR "out-of-scope"
 4. "series"       - lowercase-hyphenated learning track (NOT the quiz title)
-5. "seriesOrder"  - integer 1–10 by complexity within the series
+5. "seriesOrder"  - integer 1-10 by complexity within the series
 6. "level"        - foundation | intermediate | advanced | expert
 7. "title"        - clean professional display title (max 8 words, title case)
 8. "confidence"   - float 0.0 to 1.0

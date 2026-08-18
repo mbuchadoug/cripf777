@@ -151,7 +151,7 @@ let html = output.textContent
   // Highlight key metrics
   .replace(/SCOI\s*=?\s*[\d.]+/gi, "<span class='highlight-key'>$&</span>")
   .replace(/ERF\s*:?[\s\d.]+/gi, "<span class='highlight-key'>$&</span>")
-  // Add breaks before each numbered section (1️⃣–6️⃣)
+  // Add breaks before each numbered section (1️⃣-6️⃣)
   .replace(/\s*(\d+)\s*[️⃣⛹️‍♂️]?\s*(?=\b(Visibility|Contribution|SCOI|Environment|Adjustment|Final|Commentary)\b)/gi, 
     "<br><br><div class='card'><div class='card-header'>Section $1</div>")
   // Make section headers bold and colored

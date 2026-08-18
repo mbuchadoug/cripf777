@@ -21,7 +21,7 @@ export async function startEducationHub(from, biz, saveBiz) {
 
 Find the right education on ZimQuote. What are you looking for?`,
     [
-      { id: "edu_find_school",  title: "🏫 A School (ECD–Form 6)", description: "Primary & secondary schools" },
+      { id: "edu_find_school",  title: "🏫 A School (ECD-Form 6)", description: "Primary & secondary schools" },
       { id: "edu_find_tutor",   title: "👩‍🏫 A Private Tutor",       description: "Extra lessons by subject, level & budget" },
       { id: "edu_find_college", title: "🎓 A College / Course",      description: "Culinary, driving, IT, music, skills & more" }
     ]

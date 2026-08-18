@@ -77,7 +77,7 @@ const router = express.Router();
 
 
 // ─────────────────────────────────────────────────────────────────────────────
-// RECEIPT PDF HELPER  –  plain black-and-white A5, logo top-left
+// RECEIPT PDF HELPER  -  plain black-and-white A5, logo top-left
 // Call:  await _streamReceiptPDF(res, { ...opts })
 // Logo resolves from: <projectRoot>/public/zimQouteLogo.jpeg
 // ─────────────────────────────────────────────────────────────────────────────
@@ -5000,7 +5000,7 @@ router.get("/contacts", requireSupplierAdmin, async (req, res) => {
           ${Number(page) < pages ? `<a href="${qs(Number(page) + 1)}">Next →</a>` : ""}
         </div>
         <p style="font-size:12px;color:var(--muted);margin-top:8px">
-          Showing ${skip + 1}–${Math.min(skip + limit, filteredTotal)} of ${filteredTotal}
+          Showing ${skip + 1}-${Math.min(skip + limit, filteredTotal)} of ${filteredTotal}
         </p>` : ""}
       </div>
     `));
@@ -6597,8 +6597,8 @@ router.get("/expiry", requireSupplierAdmin, async (req, res) => {
         ${stat(expiredRecent.length,"Expired this week",   "gray")}
       </div>
 
-      ${expiryTable("⏰ Expiring in 4–7 Days", expiring7,     "yellow")}
-      ${expiryTable("⚠️ Expiring in 1–3 Days", expiring3,     "orange")}
+      ${expiryTable("⏰ Expiring in 4-7 Days", expiring7,     "yellow")}
+      ${expiryTable("⚠️ Expiring in 1-3 Days", expiring3,     "orange")}
       ${expiryTable("🔴 Expiring Within 24 Hours", expiring1, "red")}
       ${expiryTable("❌ Expired This Week", expiredRecent,    "orange")}
       ${expiryTable("💀 Expired Last 30 Days", expiredOld,    "gray")}
@@ -8928,7 +8928,7 @@ router.post("/school-groups/:slug/delete", requireSupplierAdmin, async (req, res
 });
 
 // ══════════════════════════════════════════════════════════════════════════════
-// BROADCAST HUB  –  /zq-admin/broadcast
+// BROADCAST HUB  -  /zq-admin/broadcast
 // ──────────────────────────────────────────────────────────────────────────────
 // Uses the 4 approved MARKETING templates:
 //   zqm_welcome_back      · zqm_add_your_business
@@ -10957,7 +10957,7 @@ router.post("/suppliers/:id/users/:uid/remove", requireSupplierAdmin, async (req
 // ══════════════════════════════════════════════════════════════════════════════
 
 const _NOT_DEPLOYED_HTML = (supplierId) => `<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>Staff Cards – Setup Required</title>
+<html><head><meta charset="utf-8"><title>Staff Cards - Setup Required</title>
 <style>body{font-family:system-ui,sans-serif;background:#f8f9fa;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}
 .box{background:#fff;border-radius:12px;padding:40px;max-width:500px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.1)}
 h2{color:#dc2626;margin:0 0 12px}p{color:#555;font-size:14px;line-height:1.6}
@@ -11045,7 +11045,7 @@ router.get("/suppliers/:id/staff-cards", requireSupplierAdmin, async (req, res) 
     }).join("");
     res.send(`<!DOCTYPE html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Staff E-Business Cards – ${esc(supplier.businessName)}</title>
+<title>Staff E-Business Cards - ${esc(supplier.businessName)}</title>
 <style>body{font-family:system-ui,sans-serif;margin:0;background:#f8f9fa;color:#222}.wrap{max-width:1150px;margin:0 auto;padding:24px 16px}h1{font-size:20px;margin:0 0 4px}.sub{font-size:13px;color:#888;margin-bottom:20px}.back{font-size:13px;color:#3b82f6;text-decoration:none;margin-bottom:16px;display:inline-block}table{width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.08)}th{background:#f5f5f5;font-size:11px;text-transform:uppercase;padding:10px 8px;text-align:left;color:#888}.card{background:#fff;border-radius:8px;padding:20px;margin-bottom:20px;box-shadow:0 1px 4px rgba(0,0,0,.08)}.form-row{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px}.form-row label{display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:600;flex:1;min-width:160px}.form-row input,.form-row textarea{padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;font-family:inherit}.btn-primary{padding:10px 20px;background:#3b82f6;color:#fff;border:none;border-radius:6px;font-size:14px;cursor:pointer;font-weight:600}.empty{text-align:center;padding:40px;color:#aaa;font-size:14px}</style></head>
 <body><div class="wrap">
   <a class="back" href="/zq-admin/suppliers/${esc(req.params.id)}">← Back to Supplier</a>
@@ -11112,10 +11112,10 @@ router.get("/suppliers/:id/staff-cards/:cid/edit", requireSupplierAdmin, async (
     const card     = await StaffCard.findById(req.params.cid).lean();
     if (!supplier||!card) return res.redirect(`/zq-admin/suppliers/${req.params.id}/staff-cards`);
     const msg = req.query.success ? `<div style="background:#dcfce7;color:#16a34a;padding:12px 16px;border-radius:8px;margin-bottom:16px;font-size:13px">✅ ${esc(req.query.success)}</div>` : "";
-    res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Edit Card – ${esc(card.name)}</title>
+    res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Edit Card - ${esc(card.name)}</title>
 <style>body{font-family:system-ui,sans-serif;margin:0;background:#f8f9fa}.wrap{max-width:700px;margin:0 auto;padding:24px 16px}.back{font-size:13px;color:#3b82f6;text-decoration:none;margin-bottom:16px;display:inline-block}.card{background:#fff;border-radius:8px;padding:24px;box-shadow:0 1px 4px rgba(0,0,0,.08)}h1{font-size:18px;margin:0 0 20px}.form-row{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px}.form-row label{display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:600;flex:1;min-width:180px}.form-row input,.form-row textarea{padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;font-family:inherit}.btn-primary{padding:10px 20px;background:#3b82f6;color:#fff;border:none;border-radius:6px;font-size:14px;cursor:pointer;font-weight:600}</style></head>
 <body><div class="wrap"><a class="back" href="/zq-admin/suppliers/${esc(req.params.id)}/staff-cards">← Staff Cards</a>${msg}
-<div class="card"><h1>✏️ Edit – ${esc(card.name)}</h1>
+<div class="card"><h1>✏️ Edit - ${esc(card.name)}</h1>
 <form method="POST" action="/zq-admin/suppliers/${esc(req.params.id)}/staff-cards/${esc(req.params.cid)}/edit">
 <div class="form-row"><label>Full Name *<input name="name" required value="${esc(card.name)}" maxlength="60"></label><label>Job Title<input name="title" value="${esc(card.title||"")}" maxlength="80"></label></div>
 <div class="form-row"><label>Phone *<input name="phone" required value="${esc(card.phone)}" maxlength="20"></label><label>Email<input name="email" type="email" value="${esc(card.email||"")}" maxlength="80"></label></div>
@@ -11226,7 +11226,7 @@ router.get("/suppliers/:id/staff-cards/:cid/smart-link", requireSupplierAdmin, a
         </details></td>
       </tr>`;
     }).join("");
-    res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Smart Link – ${esc(card.name)}</title>
+    res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Smart Link - ${esc(card.name)}</title>
 <style>body{font-family:system-ui,sans-serif;margin:0;background:#f8f9fa;color:#222}.wrap{max-width:1100px;margin:0 auto;padding:24px 16px}.back{font-size:13px;color:#3b82f6;text-decoration:none;margin-bottom:16px;display:inline-block}h1{font-size:20px;margin:0 0 4px}.sub{font-size:13px;color:#888;margin-bottom:16px}.cols{display:flex;gap:20px;flex-wrap:wrap}.col{flex:1;min-width:280px}.card{background:#fff;border-radius:8px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,.08);margin-bottom:20px}.card h2{font-size:12px;text-transform:uppercase;color:#888;margin:0 0 14px;letter-spacing:.05em}.stat-row{display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap}.stat{flex:1;min-width:80px;background:#f5f5f5;border-radius:8px;padding:12px 16px;text-align:center}.stat .n{font-size:26px;font-weight:700}.stat .l{font-size:11px;color:#888;margin-top:2px}table{width:100%;border-collapse:collapse}th{background:#f5f5f5;font-size:11px;text-transform:uppercase;padding:8px;text-align:left;color:#888}.preview{background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:16px;font-family:monospace;font-size:12px;white-space:pre-wrap;line-height:1.7}</style></head>
 <body><div class="wrap">
 <a class="back" href="/zq-admin/suppliers/${esc(req.params.id)}/staff-cards">← Staff Cards</a>
@@ -11309,7 +11309,7 @@ router.get("/suppliers/:id/staff-cards/:cid/business-card", requireSupplierAdmin
     const phone    = (() => { const p=card.phone; return p.length>=11?`+${p.slice(0,3)} ${p.slice(3,5)} ${p.slice(5,8)} ${p.slice(8)}`:p; })();
     const tagline  = card.tagline || supplier.businessName;
     res.setHeader("Content-Type","text/html");
-    res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Business Card – ${esc(card.name)}</title>
+    res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Business Card - ${esc(card.name)}</title>
 <style>@page{size:85mm 54mm;margin:0}*{box-sizing:border-box;margin:0;padding:0}body{width:85mm;height:54mm;font-family:Arial,sans-serif;overflow:hidden}.card{width:85mm;height:54mm;background:#0f1f3d;color:#fff;display:flex;position:relative;overflow:hidden}.accent{width:8mm;background:linear-gradient(180deg,#b8860b 0%,#ffd700 50%,#b8860b 100%);flex-shrink:0}.content{flex:1;padding:5mm 4mm 4mm 5mm;display:flex;flex-direction:column;justify-content:space-between}.top{display:flex;justify-content:space-between;align-items:flex-start}.name-block .name{font-size:11pt;font-weight:700;color:#ffd700;letter-spacing:.03em}.name-block .title{font-size:7pt;color:#cbd5e1;margin-top:1mm}.name-block .biz{font-size:8pt;font-weight:600;color:#fff;margin-top:2mm}.name-block .loc{font-size:6pt;color:#94a3b8;margin-top:0.5mm}.qr-block{display:flex;flex-direction:column;align-items:center;gap:1mm}.qr-block img{width:16mm;height:16mm;border:1px solid #ffd700;border-radius:2px}.qr-block .scan-text{font-size:5pt;color:#94a3b8;text-align:center;white-space:nowrap}.bottom{display:flex;flex-direction:column;gap:1mm}.contact-line{font-size:7pt;color:#e2e8f0;display:flex;align-items:center;gap:1.5mm}.contact-line .icon{color:#ffd700;font-size:7pt}.tagline{font-size:5.5pt;color:#ffd700;font-style:italic;margin-top:1mm;text-align:center;border-top:0.5px solid rgba(255,215,0,.3);padding-top:1.5mm}.zq-badge{position:absolute;bottom:2mm;right:3mm;font-size:5pt;color:rgba(255,255,255,.3)}@media screen{body{display:flex;align-items:center;justify-content:center;height:100vh;background:#555}.card{box-shadow:0 8px 32px rgba(0,0,0,.5);border-radius:3mm}.print-btn{position:fixed;top:20px;right:20px;padding:10px 20px;background:#3b82f6;color:#fff;border:none;border-radius:6px;font-size:14px;cursor:pointer;font-family:system-ui}}</style></head>
 <body><button class="print-btn" onclick="window.print()">🖨 Print / Save PDF</button>
 <div class="card"><div class="accent"></div><div class="content">
@@ -11671,7 +11671,7 @@ router.get("/suppliers/:id/recurring/:acctId/edit", requireSupplierAdmin, async 
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
             <div>
-              <label style="font-weight:600;display:block;margin-bottom:6px">Billing Day (1–28)</label>
+              <label style="font-weight:600;display:block;margin-bottom:6px">Billing Day (1-28)</label>
               <input name="billingDay" type="number" min="1" max="28" value="${acct.billingDay || 1}"
                 style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:7px;font-size:14px">
             </div>
@@ -13706,7 +13706,7 @@ router.get("/suppliers/:id/recurring/clerk-statement/:phone", requireSupplierAdm
     if (req.query.from && req.query.to) {
       from = new Date(req.query.from); from.setHours(0, 0, 0, 0);
       to   = new Date(req.query.to);   to.setHours(23, 59, 59, 999);
-      periodLabel = `${from.toLocaleDateString("en-GB")} – ${to.toLocaleDateString("en-GB")}`;
+      periodLabel = `${from.toLocaleDateString("en-GB")} - ${to.toLocaleDateString("en-GB")}`;
     } else if (preset === "today") {
       from = new Date(); from.setHours(0, 0, 0, 0);
       to   = new Date(); to.setHours(23, 59, 59, 999);
@@ -14025,7 +14025,7 @@ router.get("/suppliers/:id/recurring/ledger", requireSupplierAdmin, async (req, 
     if (req.query.from && req.query.to) {
       from = new Date(req.query.from); from.setHours(0, 0, 0, 0);
       to   = new Date(req.query.to);   to.setHours(23, 59, 59, 999);
-      periodLabel = `${from.toLocaleDateString("en-GB")} – ${to.toLocaleDateString("en-GB")}`;
+      periodLabel = `${from.toLocaleDateString("en-GB")} - ${to.toLocaleDateString("en-GB")}`;
     } else if (preset === "today") {
       from = new Date(); from.setHours(0, 0, 0, 0);
       to   = new Date(); to.setHours(23, 59, 59, 999);

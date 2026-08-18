@@ -78,8 +78,8 @@ ${cripfLogic}
 Perform a CRIPFCnt SCOI Audit for: "${entity}"
 
 Always follow this 6-step structure:
-1️⃣ Visibility - score (0–10) and rationale  
-2️⃣ Contribution - score (0–10) and rationale  
+1️⃣ Visibility - score (0-10) and rationale  
+2️⃣ Contribution - score (0-10) and rationale  
 3️⃣ SCOI Calculation (show formula + interpretation)  
 4️⃣ Global Environment Adjustment - ERF and rationale  
 5️⃣ Adjusted SCOI (show full equation)  

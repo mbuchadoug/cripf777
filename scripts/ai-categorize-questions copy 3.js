@@ -166,7 +166,7 @@ Return a JSON array with one object per quiz. Fields:
                     "public-finance-accountability", "rule-of-law-foundations",
                     "ethics-in-public-service", "leadership-and-strategy",
                     "consciousness-and-leadership", "electoral-systems-in-practice"
-5. "seriesOrder"  - integer 1–10 by complexity within the series
+5. "seriesOrder"  - integer 1-10 by complexity within the series
 6. "level"        - foundation | intermediate | advanced | expert
 7. "title"        - clean professional display title, max 8 words
 8. "confidence"   - 0.0 to 1.0

@@ -1919,7 +1919,7 @@ function isBuyerRequestHeadingLine(line = "") {
   if (!raw) return true;
 
   const clean = raw
-    .replace(/[–-]/g, "-")
+    .replace(/[--]/g, "-")
     .replace(/\s+/g, " ")
     .trim();
 
@@ -3467,7 +3467,7 @@ async function showSalesDocs(from, type, ownerBranchId = undefined, page = 0, se
     if (dateStr)    msg += ` · ${dateStr}`;
     msg += "\n";
   });
-  msg += `\nType a number (1–${docs.length}) to open it.`;
+  msg += `\nType a number (1-${docs.length}) to open it.`;
 
   await sendText(from, msg);
 
@@ -6100,7 +6100,7 @@ await UserSession.findOneAndUpdate(
       ...(supplier?.roomTypes || []).map(t => ({ name: t.roomType, price: Number(t.pricePerNight||0), unit: "night" }))
     ].filter(i => i.name).slice(0, 10);
     const _picked = _catItems[_pickIdx];
-    if (!_picked) return sendText(from, `Item ${_pickIdx+1} not found in your catalogue. You have ${_catItems.length} items (1–${_catItems.length}).`);
+    if (!_picked) return sendText(from, `Item ${_pickIdx+1} not found in your catalogue. You have ${_catItems.length} items (1-${_catItems.length}).`);
     const _pDraft  = pendingDraftQuote?.responseItems?.length ? pendingDraftQuote : { responseItems: [], skippedItems: [], totalAmount: 0 };
     const _pTotal  = Number((_picked.price * _pickQty).toFixed(2));
     const _pItem   = { product: _picked.name, quantity: _pickQty, unit: _picked.unit, pricePerUnit: _picked.price, total: _pTotal, _edited: true };
@@ -11104,7 +11104,7 @@ Type *done* to save`,
     biz.sessionData  = { filterFor: "detailed" };
     await saveBizSafe(biz);
     return sendButtons(from, {
-      text: '🗓 *Detailed Ledger - Custom Date Range*\n\nType a date range in any of these formats:\n\n*Same month:*\n  01 Jun - 27 Jun\n  01/06 - 27/06\n\n*Across months:*\n  01 Apr - 01 Jul\n  01/04 - 01/07\n  01/04/2026 - 01/07/2026\n\n*ISO format:*\n  2026-06-01 - 2026-07-01\n\n*Month names (Jan–Dec):*\n  Jan  Feb  Mar  Apr  May  Jun\n  Jul  Aug  Sep  Oct  Nov  Dec\n\nOr type *cancel* to go back.',
+      text: '🗓 *Detailed Ledger - Custom Date Range*\n\nType a date range in any of these formats:\n\n*Same month:*\n  01 Jun - 27 Jun\n  01/06 - 27/06\n\n*Across months:*\n  01 Apr - 01 Jul\n  01/04 - 01/07\n  01/04/2026 - 01/07/2026\n\n*ISO format:*\n  2026-06-01 - 2026-07-01\n\n*Month names (Jan-Dec):*\n  Jan  Feb  Mar  Apr  May  Jun\n  Jul  Aug  Sep  Oct  Nov  Dec\n\nOr type *cancel* to go back.',
       buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
     });
   }
@@ -11127,7 +11127,7 @@ Type *done* to save`,
       biz.sessionData  = { filterFor: "clerk" };
       await saveBizSafe(biz);
       return sendButtons(from, {
-        text: '🗓 *Clerk Statement - Custom Date Range*\n\nType a date range in any of these formats:\n\n*Same month:*\n  01 Jun - 27 Jun\n  01/06 - 27/06\n\n*Across months:*\n  01 Apr - 01 Jul\n  01/04/2026 - 01/07/2026\n\n*ISO format:*\n  2026-06-01 - 2026-07-01\n\n*Month names (Jan–Dec):*\n  Jan  Feb  Mar  Apr  May  Jun\n  Jul  Aug  Sep  Oct  Nov  Dec\n\nOr type *cancel* to go back.',
+        text: '🗓 *Clerk Statement - Custom Date Range*\n\nType a date range in any of these formats:\n\n*Same month:*\n  01 Jun - 27 Jun\n  01/06 - 27/06\n\n*Across months:*\n  01 Apr - 01 Jul\n  01/04/2026 - 01/07/2026\n\n*ISO format:*\n  2026-06-01 - 2026-07-01\n\n*Month names (Jan-Dec):*\n  Jan  Feb  Mar  Apr  May  Jun\n  Jul  Aug  Sep  Oct  Nov  Dec\n\nOr type *cancel* to go back.',
         buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
       });
     }
@@ -11155,7 +11155,7 @@ Type *done* to save`,
       biz.sessionData  = { filterFor: "clerk_self" };
       await saveBizSafe(biz);
       return sendButtons(from, {
-        text: '🗓 *My Statement - Custom Date Range*\n\nType a date range in any of these formats:\n\n*Same month:*\n  01 Jun - 27 Jun\n  01/06 - 27/06\n\n*Across months:*\n  01 Apr - 01 Jul\n  01/04/2026 - 01/07/2026\n\n*ISO format:*\n  2026-06-01 - 2026-07-01\n\n*Month names (Jan–Dec):*\n  Jan  Feb  Mar  Apr  May  Jun\n  Jul  Aug  Sep  Oct  Nov  Dec\n\nOr type *cancel* to go back.',
+        text: '🗓 *My Statement - Custom Date Range*\n\nType a date range in any of these formats:\n\n*Same month:*\n  01 Jun - 27 Jun\n  01/06 - 27/06\n\n*Across months:*\n  01 Apr - 01 Jul\n  01/04/2026 - 01/07/2026\n\n*ISO format:*\n  2026-06-01 - 2026-07-01\n\n*Month names (Jan-Dec):*\n  Jan  Feb  Mar  Apr  May  Jun\n  Jul  Aug  Sep  Oct  Nov  Dec\n\nOr type *cancel* to go back.',
         buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
       });
     }
@@ -13401,7 +13401,7 @@ if (a === "sup_search_more_categories") {
   }
 
   const filteredCategories = getSupplierCategoriesForType(searchType);
-  // WhatsApp max 10 rows - products overflow: items 9–17, capped at 9 + Back
+  // WhatsApp max 10 rows - products overflow: items 9-17, capped at 9 + Back
   const overflowRows = filteredCategories.slice(9, 18).map(c => ({
     id: `sup_search_cat_${c.id}`,
     title: c.label
@@ -14298,7 +14298,7 @@ if (a === "school_my_profile") {
   const school = await SchoolProfile.findOne({ phone });
   if (!school) return sendMainMenu(from);
   const { SCHOOL_FACILITIES, SCHOOL_EXTRAMURALACTIVITIES } = await import("./schoolPlans.js");
- const typeLabels    = { ecd: "ECD / Preschool Only", ecd_primary: "ECD + Primary", primary: "Primary (Grade 1–7)", secondary: "Secondary (Form 1–6)", combined: "Combined (ECD–Form 6)" };
+ const typeLabels    = { ecd: "ECD / Preschool Only", ecd_primary: "ECD + Primary", primary: "Primary (Grade 1-7)", secondary: "Secondary (Form 1-6)", combined: "Combined (ECD-Form 6)" };
   const genderLabels  = { mixed: "Mixed (Co-ed)", boys: "Boys Only", girls: "Girls Only" };
   const boardingLabels= { day: "Day School", boarding: "Boarding", both: "Day & Boarding" };
   const curricText    = (school.curriculum || []).map(c => c.toUpperCase()).join(" + ") || "Not set";
@@ -14884,7 +14884,7 @@ if (a === "my_orders" || a.startsWith("my_orders_page_")) {
     if (hasMore) rows.push({ id: `my_orders_page_${page + 1}`, title: `➡ Next page` });
     if (hasPrev) rows.push({ id: `my_orders_page_${page - 1}`, title: `⬅ Previous page` });
 
-    const showing = `${page * PAGE_SIZE + 1}–${Math.min((page + 1) * PAGE_SIZE, totalCount)} of ${totalCount}`;
+    const showing = `${page * PAGE_SIZE + 1}-${Math.min((page + 1) * PAGE_SIZE, totalCount)} of ${totalCount}`;
     return sendList(from, `📋 *My Orders* (${showing})\nNewest first - tap any order to view details.`, rows);
   }
 
@@ -18635,7 +18635,7 @@ if (a === "sup_back_to_search_results") {
 
   if (rows.length > 10) rows.splice(10);
 
-  const showing = `${start + 1}–${Math.min(start + PAGE_SIZE, allResults.length)}`;
+  const showing = `${start + 1}-${Math.min(start + PAGE_SIZE, allResults.length)}`;
   return sendList(
     from,
     `🔍 Results ${showing} of ${allResults.length}\n_Tap a supplier to continue shopping_`,
@@ -18707,7 +18707,7 @@ if (a === "sup_search_next_page") {
 
   if (rows.length > 10) rows.splice(10);
 
-  const showing = `${start + 1}–${Math.min(start + PAGE_SIZE, allResults.length)}`;
+  const showing = `${start + 1}-${Math.min(start + PAGE_SIZE, allResults.length)}`;
   return sendList(
     from,
     `🔍 Results ${showing} of ${allResults.length}\n_Tap a supplier to view details_`,
@@ -18769,7 +18769,7 @@ if (a === "sup_search_prev_page") {
 
   if (rows.length > 10) rows.splice(10);
 
-  const showing = `${start + 1}–${Math.min(start + PAGE_SIZE, allResults.length)}`;
+  const showing = `${start + 1}-${Math.min(start + PAGE_SIZE, allResults.length)}`;
   return sendList(
     from,
     `🔍 Results ${showing} of ${allResults.length}\n_Tap a supplier to view details_`,

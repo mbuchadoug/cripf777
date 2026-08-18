@@ -501,7 +501,7 @@ export async function sendInvoiceConfirmMenu(to, summaryText) {
 }
 
 /* =============================================================================
-   REPORTS MENU  – 2 reports only: Detailed Ledger + Clerk Statement
+   REPORTS MENU  - 2 reports only: Detailed Ledger + Clerk Statement
    Date filter is embedded in the menu list - one tap picks report + period.
    Admin: sees all clerks. Clerk/manager: sees only own statement.
 ============================================================================= */
@@ -1288,7 +1288,7 @@ export async function sendRbAccountPicker(to, accounts, offset = 0) {
   items.push({ id: ACTIONS.BACK, title: "⬅ Back" });
 
   const label = accounts.length > PAGE
-    ? `🏠 Select account (${offset + 1}–${Math.min(offset + PAGE, accounts.length)} of ${accounts.length}):`
+    ? `🏠 Select account (${offset + 1}-${Math.min(offset + PAGE, accounts.length)} of ${accounts.length}):`
     : "🏠 Select account / unit:";
 
   return sendList(to, label, items);

@@ -165,17 +165,17 @@ export const SCHOOL_CURRICULA = [
 
 // ── School types ──────────────────────────────────────────────────────────────
 export const SCHOOL_TYPES = [
-  { id: "ecd",       label: "🌱 ECD / Preschool Only (ECD A–B)" },
-  { id: "primary",   label: "📗 Primary (Grade 1–7)" },
-  { id: "ecd_primary", label: "📗 ECD + Primary (ECD A–Grade 7)" },
-  { id: "secondary", label: "📙 Secondary (Form 1–6)" },
-  { id: "combined",  label: "📘 Combined (ECD–Form 6)" }
+  { id: "ecd",       label: "🌱 ECD / Preschool Only (ECD A-B)" },
+  { id: "primary",   label: "📗 Primary (Grade 1-7)" },
+  { id: "ecd_primary", label: "📗 ECD + Primary (ECD A-Grade 7)" },
+  { id: "secondary", label: "📙 Secondary (Form 1-6)" },
+  { id: "combined",  label: "📘 Combined (ECD-Form 6)" }
 ];
 
 // ── Fee ranges (auto-computed, also used as search filter) ───────────────────
 export const SCHOOL_FEE_RANGES = [
   { id: "budget",  label: "💚 Budget (Under $300/term)" },
-  { id: "mid",     label: "💛 Mid-Range ($300–$800/term)" },
+  { id: "mid",     label: "💛 Mid-Range ($300-$800/term)" },
   { id: "premium", label: "💎 Premium ($800+/term)" }
 ];
 
@@ -229,7 +229,7 @@ export const SCHOOL_PLANS = {
 // own "Colleges & Training" search tab.
 // ─────────────────────────────────────────────────────────────────────────────
 export const INSTITUTION_CATEGORIES = [
-  { id: "academic",   label: "🏫 Academic School (ECD–Form 6)", specialised: false },
+  { id: "academic",   label: "🏫 Academic School (ECD-Form 6)", specialised: false },
   { id: "college",    label: "🎓 College / Polytechnic / Tertiary", specialised: true },
   { id: "vocational", label: "🛠 Vocational / Skills Training", specialised: true },
   { id: "culinary",   label: "🍳 Culinary Arts / Catering", specialised: true },
@@ -287,10 +287,10 @@ export const TUTOR_SUBJECTS = [
 // Levels a tutor teaches / a parent filters by.
 export const TUTOR_LEVELS = [
   { id: "ecd",       label: "🧸 ECD / Pre-school" },
-  { id: "primary",   label: "📗 Primary (Grade 1–7)" },
-  { id: "zjc",       label: "📘 ZJC (Form 1–2)" },
-  { id: "olevel",    label: "📙 O-Level (Form 3–4)" },
-  { id: "alevel",    label: "📕 A-Level (Form 5–6)" },
+  { id: "primary",   label: "📗 Primary (Grade 1-7)" },
+  { id: "zjc",       label: "📘 ZJC (Form 1-2)" },
+  { id: "olevel",    label: "📙 O-Level (Form 3-4)" },
+  { id: "alevel",    label: "📕 A-Level (Form 5-6)" },
   { id: "cambridge", label: "🎓 Cambridge (IGCSE/AS/A)" },
   { id: "college",   label: "🏛 College / University" },
   { id: "adult",     label: "🧑 Adult / Professional" }
@@ -313,8 +313,8 @@ export const TUTOR_VENUES = [
 // Hourly-rate filter buckets for parent search (USD).
 export const TUTOR_RATE_RANGES = [
   { id: "under5",  label: "💚 Under $5/hr",  max: 5 },
-  { id: "5to10",   label: "💛 $5–$10/hr",    min: 5,  max: 10 },
-  { id: "10to20",  label: "🧡 $10–$20/hr",   min: 10, max: 20 },
+  { id: "5to10",   label: "💛 $5-$10/hr",    min: 5,  max: 10 },
+  { id: "10to20",  label: "🧡 $10-$20/hr",   min: 10, max: 20 },
   { id: "over20",  label: "💎 $20+/hr",      min: 20 }
 ];
 
@@ -335,7 +335,7 @@ export function computeSchoolFeeRange(termFee = 0) {
 
 // ── Helper: readable fee range label ─────────────────────────────────────────
 export function feeRangeLabel(range = "") {
-  return { budget: "Under $300/term", mid: "$300–$800/term", premium: "$800+/term" }[range] || "Not specified";
+  return { budget: "Under $300/term", mid: "$300-$800/term", premium: "$800+/term" }[range] || "Not specified";
 }
 
 // ── Helper: emoji icon for facility id ───────────────────────────────────────

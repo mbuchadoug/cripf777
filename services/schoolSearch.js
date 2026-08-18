@@ -1309,7 +1309,7 @@ if (search.keyword) {
   }
 }
 if (search.type) {
-  // "combined" schools span ECD–Form 6, so they must appear in ALL type searches
+  // "combined" schools span ECD-Form 6, so they must appear in ALL type searches
   if (search.type === "ecd") {
     query.type = { $in: ["ecd", "ecd_primary", "combined"] };
   } else if (search.type === "primary") {

@@ -639,7 +639,7 @@ Paid: $${Number(doc.amountPaid || 0).toFixed(2)} | Balance: $${Number(doc.balanc
   }
 
   // Not a valid number - remind user
-  await sendText(from, `❌ Type the item number from the list (1–${ids.length + offset}) to open it, or use the buttons below.`);
+  await sendText(from, `❌ Type the item number from the list (1-${ids.length + offset}) to open it, or use the buttons below.`);
   return true;
 }
 
@@ -4102,7 +4102,7 @@ Thank you for your payment.`
       return true;
     }
     const acctId = biz.sessionData?.rbAccountId;
-    const pl = `${range.start.toLocaleDateString("en-GB", { day: "numeric", month: "short" })} – ${range.end.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`;
+    const pl = `${range.start.toLocaleDateString("en-GB", { day: "numeric", month: "short" })} - ${range.end.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`;
     biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
     if (!acctId) return sendMainMenu(from);
     await _generateAndSendAccountStatement({ biz, from, acctId, periodStart: range.start, periodEnd: range.end, pl });
@@ -4194,7 +4194,7 @@ Thank you for your payment.`
       const range = parseCustomDateRange(trimmed);
       if (!range) { await sendText(from, "❌ Invalid date. Try: *01 Jun - 30 Jun*"); return true; }
       periodStart = range.start; periodEnd = range.end;
-      pl = `${range.start.toLocaleDateString("en-GB", { day: "numeric", month: "short" })} – ${range.end.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`;
+      pl = `${range.start.toLocaleDateString("en-GB", { day: "numeric", month: "short" })} - ${range.end.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`;
     }
 
     biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
@@ -4276,7 +4276,7 @@ ${stmt.rows.length} transactions
       await sendText(from, "❌ Invalid format. Try: *01 Jun - 30 Jun*");
       return true;
     }
-    const pl = `${range.start.toLocaleDateString("en-GB", { day: "numeric", month: "short" })} – ${range.end.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`;
+    const pl = `${range.start.toLocaleDateString("en-GB", { day: "numeric", month: "short" })} - ${range.end.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`;
     biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
     await _generateAndSendBillingStatement({ biz, from, caller, periodStart: range.start, periodEnd: range.end, pl });
     const { sendRecurringBillingMenu } = await import("./metaMenus.js");
@@ -4488,7 +4488,7 @@ Sales of this product will now reduce its stock automatically.`);
   if (state === "stock_report_custom_date") {
     const range = parseCustomDateRange(trimmed);
     if (!range) { await sendText(from, "❌ Invalid format. Try: *01 Jun - 30 Jun*"); return true; }
-    const pl = `${range.start.toLocaleDateString("en-GB", { day: "numeric", month: "short" })} – ${range.end.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`;
+    const pl = `${range.start.toLocaleDateString("en-GB", { day: "numeric", month: "short" })} - ${range.end.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`;
     biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
     await _generateAndSendStockReport({ biz, from, caller, periodStart: range.start, periodEnd: range.end, pl });
     const { sendStockMenu } = await import("./metaMenus.js");

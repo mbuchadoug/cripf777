@@ -71,7 +71,7 @@ const RecurringAccountSchema = new mongoose.Schema({
     default: "monthly"
   },
 
-  // Day of month to raise an invoice (1–28).  Used by bulk-generate.
+  // Day of month to raise an invoice (1-28).  Used by bulk-generate.
   billingDay: { type: Number, default: 1, min: 1, max: 28 },
 
   // Custom interval in days (used when billingCycle = "custom")

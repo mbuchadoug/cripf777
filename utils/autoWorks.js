@@ -61,7 +61,7 @@ export default async function autoFetchAndScore(query, openai) {
       ${combinedText}
       
       Summarize the main points in 5 bullet points.
-      Then rate relevance (0–10) for how useful these are to someone asking about "${query}".
+      Then rate relevance (0-10) for how useful these are to someone asking about "${query}".
     `,
   });
 

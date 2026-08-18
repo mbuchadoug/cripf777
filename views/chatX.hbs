@@ -121,7 +121,7 @@
         currentCard = document.createElement("div");
         currentCard.className = "card";
 
-        const [title, ...rest] = text.split(/[-–:]/);
+        const [title, ...rest] = text.split(/[--:]/);
         currentCard.innerHTML = `<h3>${title.trim()}</h3><p>${rest.join(":").trim()}</p>`;
         output.appendChild(currentCard);
       } else if (currentCard) {

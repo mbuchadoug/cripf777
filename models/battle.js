@@ -49,7 +49,7 @@ default: "scheduled",
 quiz: {
   subject: { type: String, default: "general", lowercase: true },
   grade: { type: Number, default: 0 }, // 0 = mixed
-  difficulty: { type: Number, default: 2, min: 1, max: 5 }, // numeric 1–5
+  difficulty: { type: Number, default: 2, min: 1, max: 5 }, // numeric 1-5
   topics: { type: [String], default: [] },
 
   // "bank" = Question collection only

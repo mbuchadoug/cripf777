@@ -12,11 +12,11 @@ import { computeSchoolFeeRange } from "../services/schoolPlans.js";
 //   "nursery"  - Baby Class / Nursery (age ~3)
 //   "ecd_a"    - ECD A (age ~4)
 //   "ecd_b"    - ECD B (age ~5, pre-Grade 1)
-//   "grade1_4" - Lower Primary: Grades 1–4
-//   "grade5_7" - Upper Primary: Grades 5–7
-//   "primary"  - Primary Grades 1–7 (when not split lower/upper)
-//   "form1_4"  - O-Level: Form 1–4
-//   "form5_6"  - A-Level: Form 5–6 / Upper 6
+//   "grade1_4" - Lower Primary: Grades 1-4
+//   "grade5_7" - Upper Primary: Grades 5-7
+//   "primary"  - Primary Grades 1-7 (when not split lower/upper)
+//   "form1_4"  - O-Level: Form 1-4
+//   "form5_6"  - A-Level: Form 5-6 / Upper 6
 //   "boarding" - Boarding (accommodation + meals, any level)
 //   "transport"- School bus / transport
 //   "all"      - School-wide (levies, registration)
