@@ -1,4 +1,4 @@
-// models/schoolProfile.js
+a// models/schoolProfile.js
 import mongoose from "mongoose";
 import { computeSchoolFeeRange } from "../services/schoolPlans.js";
 
@@ -98,6 +98,57 @@ const schoolProfileSchema = new mongoose.Schema({
   city:    { type: String, required: true, index: true },
   suburb:  { type: String, default: "", index: true },
   address: { type: String, default: "" },
+
+  // ── Institution category ───────────────────────────────────────────────────
+  // "academic" keeps the existing ECD→Form 6 school behaviour (fees per level,
+  // curriculum, boarding, grades). Any other value marks a SPECIALISED
+  // institution (culinary, driving, music, vocational, college, etc.) which uses
+  // the LIGHT registration branch (courses[] instead of grade-level fee sections)
+  // and appears under its own "Colleges & Training" search tab - never mixed into
+  // the parent primary/secondary funnel. See schoolPlans.INSTITUTION_CATEGORIES.
+  //   "academic"   - traditional ECD / Primary / Secondary school (default)
+  //   "culinary"   - culinary arts / catering / hospitality training
+  //   "driving"    - driving school
+  //   "music_arts" - music / dance / drama / fine-art academy
+  //   "vocational" - trade & skills (welding, hairdressing, tailoring, mechanics)
+  //   "beauty"     - beauty / cosmetology / nails / spa training
+  //   "computer"   - computer / IT / coding / graphic-design school
+  //   "language"   - language school (English, French, Chinese, etc.)
+  //   "sports"     - sports academy
+  //   "college"    - college / polytechnic / tertiary / professional (ACCA, etc.)
+  //   "special_ed" - special-needs / remedial school
+  //   "other"      - anything else
+  institutionType: {
+    type:    String,
+    enum:    ["academic","culinary","driving","music_arts","vocational","beauty",
+              "computer","language","sports","college","special_ed","other"],
+    default: "academic",
+    index:   true
+  },
+
+  // Courses/programmes offered by a SPECIALISED institution (institutionType !== "academic").
+  // Each is one line on their prospectus - this is what parents/students browse.
+  //   name      - "Professional Cookery Certificate", "Class 4 Driving", "Grade 1-8 Piano"
+  //   fee       - headline price for the course
+  //   per       - how the fee is charged
+  //   duration  - "6 months", "3 weeks", "per lesson"
+  courses: {
+    type: [{
+      id:       { type: String, default: () => Date.now().toString(36) + Math.random().toString(36).slice(2,5) },
+      name:     { type: String, required: true },
+      fee:      { type: Number, default: 0 },
+      currency: { type: String, default: "USD" },
+      per:      { type: String, enum: ["course","term","month","week","lesson","hour","once_off"], default: "course" },
+      duration: { type: String, default: "" },
+      note:     { type: String, default: "" }
+    }],
+    default: []
+  },
+
+  // Extra context specialised institutions want to surface.
+  accreditation: { type: String, default: "" },  // "HEXCO registered", "Ministry of Transport approved"
+  intakeInfo:    { type: String, default: "" },  // "Rolling intake" / "Jan, May, Sep"
+  ageRange:      { type: String, default: "" },  // "16+", "All ages", "Kids 6-12"
 
   // ── Academic profile ───────────────────────────────────────────────────────
   type:       { type: String, enum: ["ecd","ecd_primary","primary","secondary","combined"], default: "combined" },
@@ -287,6 +338,15 @@ const schoolProfileSchema = new mongoose.Schema({
 schoolProfileSchema.pre("save", function (next) {
   const sf = this.schoolFees || [];
 
+  // ── Specialised institutions: derive feeRange from the cheapest course ──────
+  // These have no grade-level fee sections, so the academic logic below is
+  // skipped. We still populate feeRange so the budget/mid/premium filter works.
+  if (this.institutionType && this.institutionType !== "academic") {
+    const courseFees = (this.courses || []).map(c => Number(c.fee) || 0).filter(n => n > 0);
+    if (courseFees.length) this.feeRange = computeSchoolFeeRange(Math.min(...courseFees));
+    return next();
+  }
+
   // Helper: find tuition amount for given appliesTo level(s)
   const tuitionFor = (...levels) => {
     for (const lvl of levels) {
@@ -356,6 +416,7 @@ schoolProfileSchema.index({ curriculum: 1, active: 1 });
 schoolProfileSchema.index({ gender: 1, active: 1 });
 schoolProfileSchema.index({ boarding: 1, active: 1 });
 schoolProfileSchema.index({ city: 1, type: 1, feeRange: 1, active: 1 });
+schoolProfileSchema.index({ institutionType: 1, city: 1, active: 1 });
 schoolProfileSchema.index({ "preschoolLevels.nursery": 1, city: 1, active: 1 });
 schoolProfileSchema.index({ "preschoolLevels.ecd_a":   1, city: 1, active: 1 });
 schoolProfileSchema.index({ "preschoolLevels.ecd_b":   1, city: 1, active: 1 });

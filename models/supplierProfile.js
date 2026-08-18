@@ -111,9 +111,12 @@ const SupplierProfileSchema = new mongoose.Schema({
   // "product"     = sells physical goods
   // "service"     = offers services (plumbing, electrical, cleaning, etc.)
   // "hospitality" = lodge, hotel, guesthouse, safari operator, tour guide, etc.
+  // "tutor"       = private teacher / lessons provider (rides on supplier rails:
+  //                 smart link, seller chat, viewer-phone notifications all reused).
+  //                 Billed on the $5/mo supplier "basic" plan.
   profileType: {
     type:    String,
-    enum:    ["product", "service", "hospitality"],
+    enum:    ["product", "service", "hospitality", "tutor"],
     default: "product"
   },
 
@@ -176,8 +179,49 @@ const SupplierProfileSchema = new mongoose.Schema({
   canViewContacts: { type: Boolean, default: false },
 
   // ── Tutor / teacher fields ─────────────────────────────────────────────────
-  subjects:      { type: [String], default: [] },
-  gradesOffered: { type: [String], default: [] },
+  // Populated when profileType = "tutor". A tutor IS a SupplierProfile, so it
+  // automatically inherits smart links (zqSlug), seller chat, and the
+  // revealVisitorPhone notification (teacher gets the phone number of anyone who
+  // opens their profile). These fields drive the PARENT-FACING search funnel:
+  // parents pick a subject + level + city, and optionally a price ceiling.
+  subjects:      { type: [String], default: [], index: true },  // ["Mathematics","Physics","English",...]
+  gradesOffered: { type: [String], default: [] },               // legacy free-text levels
+
+  // Structured levels for search filtering. Allowed codes (see schoolPlans.TUTOR_LEVELS):
+  //   "ecd","primary","zjc","olevel","alevel","cambridge","college","adult"
+  teachingLevels: { type: [String], default: [], index: true },
+
+  // How lessons are delivered - drives "online tutor" vs "near me" searches.
+  //   "in_person" = tutor travels to / hosts the student
+  //   "online"    = video / WhatsApp lessons (nationwide reach, no city filter)
+  //   "both"      = offers both
+  teachingMode: {
+    type:    String,
+    enum:    ["in_person", "online", "both"],
+    default: "in_person"
+  },
+
+  // Where in-person lessons happen (any combination).
+  //   "tutor_place" = at the tutor's home/study
+  //   "student_home"= tutor travels to the student (home visits)
+  //   "public"      = library / agreed venue
+  lessonVenues: { type: [String], default: ["tutor_place"] },
+
+  // Hourly rate is the headline number parents compare on. Kept simple + numeric
+  // so it can be range-filtered ("under $10/hr").
+  hourlyRate:      { type: Number, default: 0 },
+  hourlyCurrency:  { type: String, enum: ["USD", "ZWL"], default: "USD" },
+  groupRate:       { type: Number, default: 0 },   // per-student rate for group lessons (0 = not offered)
+  offersGroups:    { type: Boolean, default: false },
+  offersExamPrep:  { type: Boolean, default: false }, // final-exam crash courses / holiday intensives
+  offersHolidayLessons: { type: Boolean, default: false },
+
+  // Credibility signals parents look for.
+  qualifications:  { type: String, default: "" },  // "BSc Maths (UZ), 8 yrs experience"
+  experienceYears: { type: Number, default: 0 },
+  examBoards:      { type: [String], default: [] }, // ["ZIMSEC","Cambridge"]
+  availability:    { type: String, default: "" },   // free text: "Weekday evenings, Sat mornings"
+  languages:       { type: [String], default: [] }, // ["English","Shona","Ndebele"]
 
   // ── HOSPITALITY & TOURISM fields ───────────────────────────────────────────
   // Populated when profileType = "hospitality".
@@ -287,6 +331,17 @@ SupplierProfileSchema.index({
   profileType: 1,
   facilities:  1,
   active:      1
+});
+
+// Tutor search: subject + level + city, cheapest credible tutors first.
+SupplierProfileSchema.index({
+  profileType:    1,
+  subjects:       1,
+  teachingLevels: 1,
+  "location.city":1,
+  active:         1,
+  tierRank:       -1,
+  hourlyRate:     1
 });
 
 export default mongoose.models.SupplierProfile ||

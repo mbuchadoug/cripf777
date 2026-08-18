@@ -239,7 +239,7 @@ export async function sendMainMenu(to) {
       { id: "sup_request_sellers", title: "⚡ Request Sellers" },
       { id: "find_supplier",       title: "🔍 Browse & Shop" },
       { id: "my_orders",           title: "📋 My Orders" },
-      { id: "find_school",         title: "🏫 Find a School" },
+      { id: "find_school",         title: "🎓 Schools & Tutors" },
       { id: "my_supplier_account", title: "🏪 My Store" }
     ]);
   }
@@ -251,7 +251,7 @@ export async function sendMainMenu(to) {
       { id: "sup_request_sellers", title: "⚡ Request Sellers" },
       { id: "find_supplier",       title: "🔍 Browse & Shop" },
       { id: "my_orders",           title: "📋 My Orders" },
-      { id: "find_school",         title: "🏫 Find a School" },
+      { id: "find_school",         title: "🎓 Schools & Tutors" },
       { id: "my_supplier_account", title: "🏪 My Store" },
       { id: "sup_upgrade_plan",    title: "💳 Activate Listing" }
     ]);
@@ -271,7 +271,7 @@ export async function sendMainMenu(to) {
     { id: "sup_request_sellers", title: "⚡ Request Sellers" },
     { id: "find_supplier",       title: "🔍 Browse & Shop" },
     { id: "my_orders",           title: "📋 My Orders" },
-    { id: "find_school",         title: "🏫 Find a School" }
+    { id: "find_school",         title: "🎓 Schools & Tutors" }
   ]);
 }
 
@@ -386,7 +386,7 @@ export async function sendMarketplaceMenu(to, biz, { isOwner = false } = {}) {
     { id: "sup_request_sellers", title: "⚡ Request Sellers" },
     { id: "find_supplier",       title: "🔍 Browse & Shop" },
     { id: "my_orders",           title: "📋 My Orders" },
-    { id: "find_school",         title: "🏫 Find a School" },
+    { id: "find_school",         title: "🎓 Schools & Tutors" },
     ...(isOwner ? [{ id: "my_supplier_account", title: "🏪 My Store" }] : []),
     { id: "main_menu_back",      title: "⬅ Back" }
   ];
@@ -1151,7 +1151,7 @@ export async function sendSchoolAccountMenu(to, schoolDoc) {
   return sendList(to, "👋 *Welcome to ZimQuote!*\nZimbabwe's marketplace for products & services.", [
     { id: "register_supplier", title: "🏪 List My Business" },
     { id: "find_supplier",     title: "🔍 Browse & Shop" },
-    { id: "find_school",       title: "🏫 Find a School" },
+    { id: "find_school",       title: "🎓 Schools & Tutors" },
     { id: "my_orders",         title: "📋 My Orders" },
   ]);
 }
@@ -1215,7 +1215,7 @@ export async function sendSchoolMarketplaceMenu(to) {
   return sendList(to, "🛍️ *Buy Supplies & More*\nSource uniforms, stationery, books, furniture and services from ZimQuote sellers.", [
     { id: "sup_request_sellers", title: "⚡ Request Quotes" },
     { id: "find_supplier",       title: "🔍 Browse & Shop" },
-    { id: "find_school",         title: "🏫 Find a School" },
+    { id: "find_school",         title: "🎓 Schools & Tutors" },
     { id: "school_account",      title: "⬅ Back to School" }
   ]);
 }

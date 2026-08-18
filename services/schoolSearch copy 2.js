@@ -1282,12 +1282,7 @@ async function _runSchoolSearch(from, search = {}) {
     );
   } catch (_) {}
 
-// Academic search must exclude specialised institutions (culinary/driving/college
-// etc.) which live in the same SchoolProfile collection with institutionType set.
-// $in:["academic", null] also matches legacy docs saved before the field existed.
-const _ACADEMIC_ONLY = { institutionType: { $in: ["academic", null] } };
-
-const query = { active: true, ..._ACADEMIC_ONLY };
+const query = { active: true };
 if (search.city)     query.city    = new RegExp(`^${search.city}$`, "i");
 if (search.suburb)   query.suburb  = new RegExp(search.suburb, "i");
 
@@ -1362,7 +1357,7 @@ if (typeof search.admissionsOpen === "boolean") {
 
     // Step 2: drop type filter, keep location
     if (!schools.length && search.type && (search.city || search.suburb)) {
-      const q3 = { active: true, ..._ACADEMIC_ONLY };
+      const q3 = { active: true };
       if (search.city)   q3.city   = query.city;
       if (search.suburb) q3.suburb = query.suburb;
       if (search.feeRange)   q3.feeRange   = search.feeRange;
@@ -1380,7 +1375,7 @@ if (typeof search.admissionsOpen === "boolean") {
 
     // Step 2b: drop ownership, keep type + city (e.g. show all ECD schools even if not "private")
     if (!schools.length && search.ownership && (search.type || search.city)) {
-      const q3b = { active: true, ..._ACADEMIC_ONLY };
+      const q3b = { active: true };
       if (query.city)   q3b.city = query.city;
       if (query.type)   q3b.type = query.type;
       if (search.feeRange)  q3b.feeRange  = search.feeRange;
@@ -1396,7 +1391,7 @@ if (typeof search.admissionsOpen === "boolean") {
 
     // Step 3: drop all filters except city
     if (!schools.length && search.city) {
-      schools = await SchoolProfile.find({ active: true, ..._ACADEMIC_ONLY, city: query.city })
+      schools = await SchoolProfile.find({ active: true, city: query.city })
         .sort({ tier: -1, rating: -1, qualityScore: -1 })
         .limit(PAGE_SIZE)
         .lean();
@@ -1406,7 +1401,7 @@ if (typeof search.admissionsOpen === "boolean") {
     // Step 3b: name/keyword search with no location match - retry name-only
     // across ALL cities so "hellenic" finds it wherever it is.
     if (!schools.length && search.keyword && query.schoolName) {
-      schools = await SchoolProfile.find({ active: true, ..._ACADEMIC_ONLY, schoolName: query.schoolName })
+      schools = await SchoolProfile.find({ active: true, schoolName: query.schoolName })
         .sort({ tier: -1, rating: -1, qualityScore: -1 })
         .limit(PAGE_SIZE)
         .lean();
@@ -1415,7 +1410,7 @@ if (typeof search.admissionsOpen === "boolean") {
 
     // Step 4: no match at all - show the schools we DO have (featured / top rated).
     if (!schools.length) {
-      schools = await SchoolProfile.find({ active: true, ..._ACADEMIC_ONLY })
+      schools = await SchoolProfile.find({ active: true })
         .sort({ tier: -1, rating: -1, qualityScore: -1 })
         .limit(PAGE_SIZE)
         .lean();

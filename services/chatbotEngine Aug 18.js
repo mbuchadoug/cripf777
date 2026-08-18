@@ -146,11 +146,6 @@ import {
   handleFollowUpLead
 } from "./schoolSearch.js";
 
-// ── Education hub + new parent search verticals (tutors, colleges) ───────────
-import { startEducationHub, handleEducationHubAction } from "./educationHub.js";
-import { startTutorSearch, handleTutorSearchAction } from "./tutorSearch.js";
-import { startInstitutionSearch, handleInstitutionSearchAction } from "./institutionSearch.js";
-
 import {
   showSchoolFAQMenu,
   handleSchoolFAQAction,
@@ -3753,10 +3748,6 @@ a.startsWith("sup_load_preset_") ||
       a.startsWith("paylist_search_") ||
       // ── Schools ────────────────────────────────────────────────────────────
       a === "find_school" ||
-      // ── Education hub + tutor + college(institution) parent search taps ──────
-      a.startsWith("edu_") ||
-      a.startsWith("tutor_") ||
-      a.startsWith("inst_") ||
       a === "school_register" ||
       a === "school_account" ||
       a === "school_pay_plan" ||
@@ -7807,14 +7798,6 @@ a === "sup_search_next_page" ||
   a.startsWith("sup_ask_availability_") ||
   // ── Schools ──────────────────────────────────────────────────────────────
   a === "find_school" ||
-  a === "find_education" ||
-  // ── Education hub + tutor + college parent search (non-biz parents!) ───────
-  // Without these, a parent with no business record gets bounced to the welcome
-  // screen the moment they tap a subject/level/city row - the classic
-  // "nothing happens when I select a city" symptom.
-  a.startsWith("edu_") ||
-  a.startsWith("tutor_") ||
-  a.startsWith("inst_") ||
   a === "school_register" ||
   a === "school_account" ||
   a === "school_pay_plan" ||
@@ -13692,44 +13675,9 @@ if (a === "main_menu_back") {
 // 🏫 SCHOOLS - Action handlers
 // ═══════════════════════════════════════════════════════════════════════════════
  
-// ── Parent taps the education menu row → open the inclusive Education Hub ─────
-// (Renamed from "Find a School" to "Schools & Tutors". The hub forks to the
-//  academic-school, private-tutor, and college/course searches.)
-if (a === "find_school" || a === "find_education") {
-  return startEducationHub(from, biz, saveBizSafe.bind(null, biz));
-}
-
-// ── Education hub fork (School / Tutor / College) ────────────────────────────
-if (a.startsWith("edu_")) {
-  const handled = await handleEducationHubAction({
-    action: a, from, biz, saveBiz: saveBizSafe.bind(null, biz)
-  });
-  if (handled) return;
-}
-
-// ── Parent opens a tutor from search results → seller chat + viewer-phone alert
-// A tutor is a SupplierProfile, so showSellerMenu handles the profile card, the
-// seller chat, AND notifyAllSupplierLinkOpened (tutor receives the parent's phone
-// number when revealVisitorPhone is on). source "direct" keeps it a normal open.
-if (a.startsWith("tutor_open_")) {
-  const _tutorId = a.replace("tutor_open_", "").trim();
-  return showSellerMenu(from, _tutorId, biz, saveBizSafe.bind(null, biz), { source: "direct" });
-}
-
-// ── Private-tutor search funnel (subject → level → city → rate → results) ─────
-if (a.startsWith("tutor_")) {
-  const handled = await handleTutorSearchAction({
-    action: a, from, biz, saveBiz: saveBizSafe.bind(null, biz)
-  });
-  if (handled) return;
-}
-
-// ── College / specialised-institution search funnel (category → city → view) ─
-if (a.startsWith("inst_")) {
-  const handled = await handleInstitutionSearchAction({
-    action: a, from, biz, saveBiz: saveBizSafe.bind(null, biz)
-  });
-  if (handled) return;
+// ── Parent taps "🏫 Find a School" ───────────────────────────────────────────
+if (a === "find_school") {
+  return startSchoolSearch(from, biz, saveBizSafe.bind(null, biz));
 }
  
 

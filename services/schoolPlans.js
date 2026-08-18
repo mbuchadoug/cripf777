@@ -221,6 +221,110 @@ export const SCHOOL_PLANS = {
   }
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// SPECIALISED INSTITUTIONS (culinary, driving, music, vocational, college, ...)
+// Registered as SchoolProfile with institutionType !== "academic".
+// They use the SAME SCHOOL_PLANS pricing as academic schools, but a LIGHT
+// registration branch (courses[] instead of grade-level fee sections) and their
+// own "Colleges & Training" search tab.
+// ─────────────────────────────────────────────────────────────────────────────
+export const INSTITUTION_CATEGORIES = [
+  { id: "academic",   label: "🏫 Academic School (ECD–Form 6)", specialised: false },
+  { id: "college",    label: "🎓 College / Polytechnic / Tertiary", specialised: true },
+  { id: "vocational", label: "🛠 Vocational / Skills Training", specialised: true },
+  { id: "culinary",   label: "🍳 Culinary Arts / Catering", specialised: true },
+  { id: "computer",   label: "💻 Computer / IT / Coding", specialised: true },
+  { id: "driving",    label: "🚗 Driving School", specialised: true },
+  { id: "beauty",     label: "💇 Beauty / Cosmetology / Hair", specialised: true },
+  { id: "music_arts", label: "🎵 Music / Dance / Drama / Art", specialised: true },
+  { id: "language",   label: "🗣 Language School", specialised: true },
+  { id: "sports",     label: "⚽ Sports Academy", specialised: true },
+  { id: "special_ed", label: "💙 Special Needs / Remedial", specialised: true },
+  { id: "other",      label: "➕ Other Institution", specialised: true }
+];
+
+export function isSpecialisedInstitution(id = "") {
+  const c = INSTITUTION_CATEGORIES.find(x => x.id === id);
+  return !!c && c.specialised === true;
+}
+export function institutionLabel(id = "") {
+  return (INSTITUTION_CATEGORIES.find(x => x.id === id)?.label || "Institution").replace(/^[^\w]+/, "").trim();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PRIVATE TEACHERS / TUTORS
+// Registered as SupplierProfile with profileType = "tutor".
+// Billed on the existing $5/mo supplier "basic" plan (no new payment plumbing).
+// TUTOR_PLAN is a display reference only - actual activation reuses the supplier
+// plan action ids (sup_plan_basic_monthly / sup_plan_basic_annual).
+// ─────────────────────────────────────────────────────────────────────────────
+export const TUTOR_PLAN = {
+  monthly: { price: 5,  label: "$5/month",           actionId: "sup_plan_basic_monthly" },
+  annual:  { price: 50, label: "$50/year (save $10)", actionId: "sup_plan_basic_annual"  },
+  features: "Listed in tutor search · Shareable smart link · Parent enquiry alerts with their phone number · Seller chat"
+};
+
+// Subjects parents actually search for in Zimbabwe. Kept tight for a fast picker;
+// tutors can add a custom subject via free text during registration.
+export const TUTOR_SUBJECTS = [
+  { id: "mathematics",  label: "➗ Mathematics" },
+  { id: "english",      label: "📖 English" },
+  { id: "sciences",     label: "🔬 Sciences (Bio/Chem/Phys)" },
+  { id: "accounts",     label: "📊 Accounts / Commerce" },
+  { id: "shona",        label: "🗣 Shona" },
+  { id: "ndebele",      label: "🗣 Ndebele" },
+  { id: "ict",          label: "💻 ICT / Computers" },
+  { id: "geography",    label: "🌍 Geography" },
+  { id: "history",      label: "📜 History" },
+  { id: "heritage",     label: "🏛 Heritage / FAREME" },
+  { id: "agriculture",  label: "🌱 Agriculture" },
+  { id: "french",       label: "🇫🇷 French" },
+  { id: "art",          label: "🎨 Art & Design" },
+  { id: "music",        label: "🎵 Music" },
+  { id: "early_learning", label: "🧸 Early Learning (ECD)" }
+];
+
+// Levels a tutor teaches / a parent filters by.
+export const TUTOR_LEVELS = [
+  { id: "ecd",       label: "🧸 ECD / Pre-school" },
+  { id: "primary",   label: "📗 Primary (Grade 1–7)" },
+  { id: "zjc",       label: "📘 ZJC (Form 1–2)" },
+  { id: "olevel",    label: "📙 O-Level (Form 3–4)" },
+  { id: "alevel",    label: "📕 A-Level (Form 5–6)" },
+  { id: "cambridge", label: "🎓 Cambridge (IGCSE/AS/A)" },
+  { id: "college",   label: "🏛 College / University" },
+  { id: "adult",     label: "🧑 Adult / Professional" }
+];
+
+// How lessons are delivered.
+export const TUTOR_MODES = [
+  { id: "in_person", label: "🏠 In person" },
+  { id: "online",    label: "💻 Online (video/WhatsApp)" },
+  { id: "both",      label: "🔁 Both" }
+];
+
+// Where in-person lessons happen (multi-select).
+export const TUTOR_VENUES = [
+  { id: "tutor_place",  label: "🏠 At my place" },
+  { id: "student_home", label: "🚗 I travel to student (home visits)" },
+  { id: "public",       label: "📚 Library / agreed venue" }
+];
+
+// Hourly-rate filter buckets for parent search (USD).
+export const TUTOR_RATE_RANGES = [
+  { id: "under5",  label: "💚 Under $5/hr",  max: 5 },
+  { id: "5to10",   label: "💛 $5–$10/hr",    min: 5,  max: 10 },
+  { id: "10to20",  label: "🧡 $10–$20/hr",   min: 10, max: 20 },
+  { id: "over20",  label: "💎 $20+/hr",      min: 20 }
+];
+
+export function tutorSubjectLabel(id = "") {
+  return TUTOR_SUBJECTS.find(s => s.id === id)?.label?.replace(/^[^\w]+/, "").trim() || id;
+}
+export function tutorLevelLabel(id = "") {
+  return TUTOR_LEVELS.find(l => l.id === id)?.label?.replace(/^[^\w]+/, "").trim() || id;
+}
+
 // ── Helper: compute fee range string from term fee amount ────────────────────
 export function computeSchoolFeeRange(termFee = 0) {
   const n = Number(termFee) || 0;
