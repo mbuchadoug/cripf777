@@ -148,7 +148,7 @@ import {
 
 // ── Education hub + new parent search verticals (tutors, colleges) ───────────
 import { startEducationHub, handleEducationHubAction } from "./educationHub.js";
-import { startTutorSearch, handleTutorSearchAction, handleTutorFreeTextSearch } from "./tutorSearch.js";
+import { startTutorSearch, handleTutorSearchAction, handleTutorFreeTextSearch, showTutorProfile, handleTutorEnquiryState } from "./tutorSearch.js";
 import { startInstitutionSearch, handleInstitutionSearchAction, handleInstitutionFreeTextSearch } from "./institutionSearch.js";
 
 import {
@@ -4193,6 +4193,19 @@ if (!isMetaAction && /^ZQ:S:[a-z0-9_-]{1,60}$/i.test(text.trim())) {
   } catch (_slErr) {
     console.warn("[ZQ:S STAFF SLUG CHECK]", _slErr.message);
   }
+  // ── Tutor slugs: show the school-style tutor profile, not the supplier store ─
+  try {
+    const _slugT = text.trim().slice(5).toLowerCase(); // strip "ZQ:S:"
+    const _SupModel = (await import("../models/supplierProfile.js")).default;
+    const _tutorBySlug = await _SupModel.findOne({ zqSlug: _slugT, profileType: "tutor" }).lean();
+    if (_tutorBySlug) {
+      await showTutorProfile(from, String(_tutorBySlug._id), biz, saveBizSafe.bind(null, biz), { source: "wa" });
+      return;
+    }
+  } catch (_tsErr) {
+    console.warn("[ZQ:S TUTOR SLUG CHECK]", _tsErr.message);
+  }
+
   // Not a staff slug - try as supplier slug
   const _zqsTopHandled = await handleZqDeepLink({
     from, text: text.trim(), biz, saveBiz: saveBizSafe.bind(null, biz)
@@ -4210,7 +4223,9 @@ if (!isMetaAction && /^ZQ:S:[a-z0-9_-]{1,60}$/i.test(text.trim())) {
 // fresh seller list exists in the session AND the user is not inside any other
 // text-entry flow (invoices, registration, sc_ quote flows, school forms, etc),
 // so typed numbers in every other flow are untouched. "0"/"00" never match.
-if (!isMetaAction && /^(?:[1-9][0-9]{0,2}|more|list|results)$/i.test(text.trim())) {
+if (!isMetaAction && /^(?:[1-9][0-9]{0,2}|more|list|results)$/i.test(text.trim())
+    && biz?.sessionState !== "tutor_search_input"
+    && biz?.sessionState !== "tutor_parent_enquiry") {
   try {
     const { tryHandleSellerPickText } = await import("./sellerSearchList.js");
     const _spkHandled = await tryHandleSellerPickText({
@@ -4784,6 +4799,25 @@ try {
         });
         if (handled !== false) return handled;
       }
+    }
+  }
+
+  // ── TUTOR ENQUIRY free-text (parent typing their message to a tutor) ────────
+  // Must run BEFORE the tutor search block so the enquiry text isn't parsed as a
+  // new search. Covers biz (sessionState) and non-biz (tempData.tutorEnquiryState).
+  if (!isMetaAction && text.trim().length > 0) {
+    let _inTutorEnq = !!biz && biz.sessionState === "tutor_parent_enquiry";
+    if (!_inTutorEnq && !biz) {
+      try {
+        const _ec = await UserSession.findOne({ phone }).lean();
+        _inTutorEnq = _ec?.tempData?.tutorEnquiryState === "tutor_parent_enquiry";
+      } catch (_) {}
+    }
+    if (_inTutorEnq) {
+      const handled = await handleTutorEnquiryState({
+        from, text, biz, saveBiz: biz ? saveBizSafe : async () => {}
+      });
+      if (handled !== false) return handled;
     }
   }
 
@@ -12120,6 +12154,7 @@ const shortcodeBlockedStates = [
   // Education type-to-search states - handled by our own free-text router above,
   // must NOT be grabbed by marketplace shortcode / city search.
   "tutor_search_input",
+  "tutor_parent_enquiry",
   "inst_search_input",
   ...supplierStates.filter(s =>
     s !== "supplier_search_city" &&
@@ -13757,16 +13792,16 @@ if (a.startsWith("edu_")) {
   if (handled) return;
 }
 
-// ── Parent opens a tutor from search results → seller chat + viewer-phone alert
-// A tutor is a SupplierProfile, so showSellerMenu handles the profile card, the
-// seller chat, AND notifyAllSupplierLinkOpened (tutor receives the parent's phone
-// number when revealVisitorPhone is on). source "direct" keeps it a normal open.
+// ── Parent opens a tutor → SCHOOL-STYLE tutor profile (not the supplier store) ─
+// showTutorProfile sends pitch + flyers + brochures + a clean card (subjects,
+// levels, price/hr - no "products") with an ✉️ Send Enquiry button, and notifies
+// the tutor of the view WITH the parent's phone number.
 if (a.startsWith("tutor_open_")) {
   const _tutorId = a.replace("tutor_open_", "").trim();
-  return showSellerMenu(from, _tutorId, biz, saveBizSafe.bind(null, biz), { source: "direct" });
+  return showTutorProfile(from, _tutorId, biz, saveBizSafe.bind(null, biz), { source: "direct" });
 }
 
-// ── Private-tutor search funnel (subject → level → city → rate → results) ─────
+// ── Private-tutor buttons (enquiry / contact / refine / show-all / open) ──────
 if (a.startsWith("tutor_")) {
   const handled = await handleTutorSearchAction({
     action: a, from, biz, saveBiz: saveBizSafe.bind(null, biz)
@@ -20178,7 +20213,7 @@ if (!isMetaAction && text && text.trim().length > 1) {
     // typing "maths olevel harare" / "driving harare". Dedicated handlers sit
     // ABOVE this catch-all (the tutor/college free-text blocks). Without these,
     // their typed text would be hijacked into ⚡ Request Sellers.
-    "tutor_search_input", "inst_search_input",
+    "tutor_search_input", "inst_search_input", "tutor_parent_enquiry",
     // ── School-admin text-input states ───────────────────────────────────────
     // When a school owner/clerk types their fees, email, website, reg link, etc.,
     // biz.sessionState is one of these. Without registering them here, that typed
