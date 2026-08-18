@@ -1,4 +1,4 @@
-a// models/schoolProfile.js
+// models/schoolProfile.js
 import mongoose from "mongoose";
 import { computeSchoolFeeRange } from "../services/schoolPlans.js";
 
