@@ -4826,7 +4826,9 @@ try {
   // is ever shown - the city is parsed from the typed phrase - so the old
   // "select city" step cannot appear. Covers biz owners (sessionState) AND
   // non-biz parents (tempData.tutorSearchActive marker).
-  if (!isMetaAction && text.trim().length > 1) {
+  // NOTE: length >= 1 (not > 1) so a single-digit reply like "1" opens tutor #1
+  // from the numbered results. "0"/"menu"/etc. are still caught by _navTok below.
+  if (!isMetaAction && text.trim().length >= 1) {
     const _navTok = /^(0|00|menu|main menu|back|cancel|exit|home|hi|hie|hey|hello|start)$/i.test(text.trim());
     if (!_navTok) {
       let _inTutor = !!biz && biz.sessionState === "tutor_search_input";

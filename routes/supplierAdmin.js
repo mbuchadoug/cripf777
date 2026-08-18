@@ -1551,6 +1551,11 @@ router.get("/suppliers/new-tutor", requireSupplierAdmin, async (req, res) => {
           <label style="display:inline-flex;align-items:center;gap:8px;margin-top:10px;font-size:13px">
             <input type="checkbox" name="revealVisitorPhone" value="true" checked />
             🔔 Send tutor the parent's phone number when their profile is opened <b>(recommended)</b></label>
+          <div class="fg" style="margin-top:14px">
+            <label>📢 Flyer image URL (optional)</label>
+            <input name="flyerUrl" placeholder="https://... a public JPG/PNG of the tutor's flyer" />
+            <span style="font-size:11px;color:var(--muted)">Paste a hosted image URL to attach a flyer now - parents see it when they open the tutor. To <b>upload a file</b> (or add brochures/more flyers), open <b>📢 Marketing</b> on the tutor's page after saving.</span>
+          </div>
         </div>
 
         <div style="margin-bottom:20px">
@@ -1637,6 +1642,9 @@ router.post("/suppliers/new-tutor", requireSupplierAdmin, async (req, res) => {
       experienceYears: Number(experienceYears) || 0,
       availability:   availability?.trim() || "",
       smartLinkPitch: (smartLinkPitch || "").trim().slice(0, 1000),
+      smartLinkFlyers: (req.body.flyerUrl || "").trim()
+        ? [{ url: (req.body.flyerUrl || "").trim(), label: "Flyer", mimeType: "image/jpeg", addedAt: now }]
+        : [],
       revealVisitorPhone: req.body.revealVisitorPhone === "true",
       canViewContacts: true,
       tier: tier || "basic", tierRank,
