@@ -333,11 +333,14 @@ SupplierProfileSchema.index({
   active:      1
 });
 
-// Tutor search: subject + level + city, cheapest credible tutors first.
+// Tutor search: subject + city, cheapest credible tutors first.
+// NOTE: MongoDB forbids a compound index over TWO array fields ("cannot index
+// parallel arrays"). subjects[] and teachingLevels[] are both arrays, so only
+// subjects[] goes in this compound index. teachingLevels[] keeps its own
+// single-field (multikey) index above for level filtering.
 SupplierProfileSchema.index({
   profileType:    1,
   subjects:       1,
-  teachingLevels: 1,
   "location.city":1,
   active:         1,
   tierRank:       -1,
