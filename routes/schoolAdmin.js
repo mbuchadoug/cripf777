@@ -26,6 +26,7 @@ import {
   SCHOOL_GENDERS,
   SCHOOL_BOARDING,
   SCHOOL_PLANS,
+  INSTITUTION_CATEGORIES,
   computeSchoolFeeRange
 } from "../services/schoolPlans.js";
 
@@ -377,6 +378,7 @@ router.get("/schools", requireSupplierAdmin, async (req, res) => {
           <h3>Schools <span class="count">${total}</span></h3>
           <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
             <a href="/zq-admin/schools/new" class="btn btn-green btn-sm">➕ Register School</a>
+            <a href="/zq-admin/institutions/new" class="btn btn-sm" style="background:#0891b2;color:#fff">🎓 Register College</a>
             <form method="GET" class="filter-form">
               <input name="search" placeholder="Name, phone, city..." value="${esc(search)}" />
               <select name="status">
@@ -819,6 +821,205 @@ router.post("/schools/new", requireSupplierAdmin, async (req, res) => {
     res.redirect(
       `/zq-admin/schools/new?error=${encodeURIComponent(err.message)}`
     );
+  }
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// SPECIALISED INSTITUTIONS (culinary, driving, music, vocational, college...)
+// Stored as SchoolProfile with institutionType !== "academic" + courses[].
+// Light form (no grade-level fee sections). Auto-generates a smart-link slug so
+// the share link works immediately. Uses the SAME SCHOOL_PLANS pricing.
+// ═════════════════════════════════════════════════════════════════════════════
+const SPECIALISED_CATS = INSTITUTION_CATEGORIES.filter(c => c.specialised);
+
+function _slugifyInstitution(name = "") {
+  return String(name).toLowerCase().trim()
+    .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 48) || "college";
+}
+async function _uniqueSchoolSlug(base) {
+  let slug = base, i = 1;
+  // eslint-disable-next-line no-await-in-loop
+  while (await SchoolProfile.findOne({ zqSlug: slug }).lean()) {
+    slug = `${base}-${i++}`;
+  }
+  return slug;
+}
+
+// ── GET /zq-admin/institutions/new ───────────────────────────────────────────
+router.get("/institutions/new", requireSupplierAdmin, (req, res) => {
+  const error   = req.query.error   ? `<div class="alert red" style="margin-bottom:16px">❌ ${esc(req.query.error)}</div>` : "";
+  const success = req.query.success ? `<div style="background:#dcfce7;color:#16a34a;padding:14px;border-radius:8px;margin-bottom:16px">✅ ${esc(req.query.success)}</div>` : "";
+
+  const cityOptions = SCHOOL_CITIES.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join("");
+  const catOptions  = SPECIALISED_CATS.map(c => `<option value="${esc(c.id)}">${esc(c.label)}</option>`).join("");
+
+  // 6 blank course rows (name / fee / per / duration)
+  const perOpts = ["course","term","month","week","lesson","hour","once_off"]
+    .map(p => `<option value="${p}">${p}</option>`).join("");
+  const courseRows = Array.from({ length: 6 }).map((_, i) => `
+    <tr>
+      <td><input name="course_name_${i}" placeholder="e.g. Professional Cookery Certificate" /></td>
+      <td><input name="course_fee_${i}" type="number" step="0.01" placeholder="0" style="width:90px" /></td>
+      <td><select name="course_per_${i}" style="width:100px">${perOpts}</select></td>
+      <td><input name="course_dur_${i}" placeholder="e.g. 6 months" style="width:120px" /></td>
+    </tr>`).join("");
+
+  res.send(layout("Register College / Institution", `
+    <a href="/zq-admin/schools" class="back-link">← Back to Schools</a>
+    ${error}${success}
+    <div class="panel" style="max-width:900px">
+      <div class="panel-head">
+        <h3>🎓 Register College / Academy / Training Institution</h3>
+        <span style="font-size:12px;color:var(--muted)">Culinary, driving, IT, music, vocational, college… — appears under "College / Course" search</span>
+      </div>
+      <form method="POST" action="/zq-admin/institutions/new" class="edit-form">
+        <div style="margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--border)">
+          <p style="font-weight:700;font-size:13px;margin-bottom:14px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">1. Institution Info</p>
+          <div class="form-grid">
+            <div class="fg"><label>Name <span style="color:red">*</span></label>
+              <input name="schoolName" placeholder="e.g. Harare Culinary Academy" required /></div>
+            <div class="fg"><label>Category <span style="color:red">*</span></label>
+              <select name="institutionType" required>${catOptions}</select></div>
+            <div class="fg"><label>WhatsApp Phone <span style="color:red">*</span></label>
+              <input name="phone" placeholder="e.g. 2637712345678" required /></div>
+            <div class="fg"><label>Contact Phone (shown publicly)</label>
+              <input name="contactPhone" placeholder="e.g. 0772123456" /></div>
+            <div class="fg"><label>City <span style="color:red">*</span></label>
+              <select name="city" required><option value="">Select city...</option>${cityOptions}<option value="Other">Other City</option></select></div>
+            <div class="fg"><label>Suburb / Area</label>
+              <input name="suburb" placeholder="e.g. Avondale" /></div>
+            <div class="fg"><label>Physical Address</label>
+              <input name="address" placeholder="e.g. 12 Fife Ave" /></div>
+            <div class="fg"><label>Email</label><input name="email" type="email" /></div>
+            <div class="fg"><label>Website</label><input name="website" /></div>
+            <div class="fg"><label>Accreditation</label>
+              <input name="accreditation" placeholder="e.g. HEXCO registered" /></div>
+            <div class="fg"><label>Intake</label>
+              <input name="intakeInfo" placeholder="e.g. Rolling / Jan, May, Sep" /></div>
+            <div class="fg"><label>Age Range</label>
+              <input name="ageRange" placeholder="e.g. 16+ / All ages" /></div>
+          </div>
+        </div>
+
+        <div style="margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--border)">
+          <p style="font-weight:700;font-size:13px;margin-bottom:8px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">2. Courses & Fees</p>
+          <p style="font-size:12px;color:var(--muted);margin-bottom:10px">Leave a row blank to skip it. The cheapest course sets the budget filter.</p>
+          <table style="width:100%;font-size:13px">
+            <thead><tr style="text-align:left;color:var(--muted)">
+              <th>Course</th><th>Fee $</th><th>Per</th><th>Duration</th></tr></thead>
+            <tbody>${courseRows}</tbody>
+          </table>
+        </div>
+
+        <div style="margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--border)">
+          <p style="font-weight:700;font-size:13px;margin-bottom:14px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">3. Smart-Link Pitch (optional)</p>
+          <textarea name="smartLinkPitch" rows="4" maxlength="800" style="width:100%;font-size:13px"
+            placeholder="Short description sent when a student opens the institution's smart link."></textarea>
+        </div>
+
+        <div style="margin-bottom:20px">
+          <p style="font-weight:700;font-size:13px;margin-bottom:14px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">4. Plan & Status</p>
+          <div class="form-grid">
+            <div class="fg"><label>Tier / Plan</label>
+              <select name="tier"><option value="basic">Basic ($15/mo)</option><option value="featured">Featured ($35/mo)</option></select></div>
+            <div class="fg"><label>Billing Cycle</label>
+              <select name="billingCycle"><option value="monthly">Monthly</option><option value="annual">Annual</option></select></div>
+            <div class="fg"><label>Duration (days)</label>
+              <input name="durationDays" type="number" value="30" /></div>
+            <div class="fg"><label>Activate now?</label>
+              <select name="setActive"><option value="true">✅ Active (live)</option><option value="false">⏸ Inactive</option></select></div>
+            <div class="fg"><label>Verified badge?</label>
+              <select name="verified"><option value="false">No</option><option value="true">✅ Verified</option></select></div>
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-green">🎓 Register Institution</button>
+      </form>
+    </div>
+  `));
+});
+
+// ── POST /zq-admin/institutions/new ──────────────────────────────────────────
+router.post("/institutions/new", requireSupplierAdmin, async (req, res) => {
+  try {
+    const {
+      schoolName, institutionType, phone, contactPhone, city, suburb, address,
+      email, website, accreditation, intakeInfo, ageRange, smartLinkPitch,
+      tier, billingCycle, durationDays, setActive, verified
+    } = req.body;
+
+    if (!schoolName?.trim())       throw new Error("Institution name is required.");
+    if (!phone?.trim())            throw new Error("Phone number is required.");
+    if (!city?.trim())             throw new Error("City is required.");
+    if (!institutionType?.trim())  throw new Error("Category is required.");
+
+    const cleanPhone = phone.trim().replace(/\s+/g, "");
+    const existing = await SchoolProfile.findOne({ phone: cleanPhone });
+    if (existing) {
+      return res.redirect(`/zq-admin/institutions/new?error=${encodeURIComponent("A listing with phone " + cleanPhone + " already exists.")}`);
+    }
+
+    // Collect course rows
+    const courses = [];
+    for (let i = 0; i < 6; i++) {
+      const name = (req.body[`course_name_${i}`] || "").trim();
+      if (!name) continue;
+      courses.push({
+        name,
+        fee:      parseFloat(req.body[`course_fee_${i}`]) || 0,
+        currency: "USD",
+        per:      req.body[`course_per_${i}`] || "course",
+        duration: (req.body[`course_dur_${i}`] || "").trim(),
+        note:     ""
+      });
+    }
+
+    const now       = new Date();
+    const days      = Number(durationDays) || 30;
+    const expiresAt = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
+    const isActive  = setActive === "true";
+
+    // Unique smart-link slug so the share link works right away.
+    const slug = await _uniqueSchoolSlug(_slugifyInstitution(schoolName));
+
+    const school = await SchoolProfile.create({
+      schoolName:      schoolName.trim(),
+      phone:           cleanPhone,
+      contactPhone:    contactPhone?.trim() || "",
+      institutionType: institutionType.trim(),
+      city:            city.trim(),
+      suburb:          suburb?.trim() || "",
+      address:         address?.trim() || "",
+      email:           email?.trim() || "",
+      website:         website?.trim() || "",
+      accreditation:   accreditation?.trim() || "",
+      intakeInfo:      intakeInfo?.trim() || "",
+      ageRange:        ageRange?.trim() || "",
+      courses,
+      smartLinkPitch:  (smartLinkPitch || "").trim().slice(0, 800),
+      zqSlug:          slug,
+      // Non-academic: keep academic fields neutral so it never shows in school funnel.
+      type:            "combined",
+      curriculum:      [],
+      admissionsOpen:  true,
+      verified:        verified === "true",
+      active:          isActive,
+      tier:            tier || "basic",
+      subscriptionPlan: billingCycle || "monthly",
+      subscriptionEndsAt: expiresAt,
+      adminNote: `[Admin registered institution (${institutionType}) on ${now.toDateString()}]`
+    });
+
+    await SchoolSubscriptionPayment.create({
+      phone: cleanPhone, schoolId: school._id, tier: tier || "basic",
+      plan: billingCycle || "monthly", amount: 0, currency: "USD",
+      reference: `ADMIN_INST_${school._id}_${Date.now()}`,
+      status: "paid", paidAt: now, endsAt: expiresAt
+    });
+
+    res.redirect(`/zq-admin/schools/${school._id}?success=${encodeURIComponent("Institution registered! Smart link: ZQ:S:" + slug)}`);
+  } catch (err) {
+    res.redirect(`/zq-admin/institutions/new?error=${encodeURIComponent(err.message)}`);
   }
 });
 

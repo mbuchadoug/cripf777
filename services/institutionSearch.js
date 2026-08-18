@@ -1,141 +1,192 @@
 // services/institutionSearch.js
-// ─── ZimQuote Education - PARENT: Find a College / Training Institution ───────
+// ─── ZimQuote Education - PARENT: Find a College / Training (TYPE-TO-SEARCH) ──
 //
 // Specialised institutions (culinary, driving, music, vocational, college, etc.)
-// are stored as SchoolProfile with institutionType !== "academic". They use the
-// SAME SCHOOL_PLANS pricing, but are searched SEPARATELY from academic schools so
-// primary/secondary results are never polluted (schoolSearch.js excludes them).
+// are SchoolProfile docs with institutionType !== "academic". Searched SEPARATELY
+// from academic schools (schoolSearch.js excludes them), and now via TYPED
+// commands - no category button maze, no city button, so no "select city" step.
 //
-// Funnel (button-driven): category → city → results → view card → contact.
-// State persistence mirrors tutorSearch / schoolSearch (biz vs UserSession).
+// The parent picks "College / Course" then TYPES, e.g.:
+//     driving school harare
+//     culinary bulawayo
+//     IT college harare
+//     hairdressing mutare
+//     welding gweru
+// parseInstitutionQuery() pulls out the category + city.
+//
+// Arming:
+//   • biz users     → biz.sessionState = "inst_search_input"
+//   • non-biz users → UserSession.tempData.instSearchActive = true
 // ─────────────────────────────────────────────────────────────────────────────
 
 import SchoolProfile from "../models/schoolProfile.js";
 import { sendText, sendButtons, sendList } from "./metaSender.js";
 import {
   INSTITUTION_CATEGORIES, institutionLabel,
-  SCHOOL_CITIES, feeRangeLabel
+  SCHOOL_CITIES, SCHOOL_SUBURB_TO_CITY, feeRangeLabel
 } from "./schoolPlans.js";
 
 const PAGE_SIZE = 6;
 
-// Only the specialised categories are searchable here (academic has its own funnel).
-const SPECIALISED = INSTITUTION_CATEGORIES.filter(c => c.specialised);
+// ── Synonyms → institutionType id ────────────────────────────────────────────
+const CATEGORY_SYNONYMS = {
+  culinary:   ["culinary","cooking","chef","catering","cookery","pastry","baking","food preparation"],
+  driving:    ["driving","drivers","driver","class 4","class 2","vid","motoring"],
+  music_arts: ["music","piano","guitar","dance","drama","theatre","fine art","arts academy","art school","ballet","singing","voice"],
+  vocational: ["vocational","welding","tailoring","dressmaking","carpentry","plumbing","mechanic","motor mechanic","electrical","building","brick","skills training","trade"],
+  beauty:     ["beauty","cosmetology","hairdressing","hair","nails","spa","makeup","barber"],
+  computer:   ["computer","it college","ict","coding","software","programming","graphic design","web design","networking","cisco"],
+  language:   ["language","english school","french","chinese","mandarin","portuguese","spanish","tefl"],
+  sports:     ["sport","sports academy","football academy","soccer academy","tennis academy","cricket academy","athletics"],
+  college:    ["college","polytechnic","university","tertiary","acca","cima","degree","diploma","professional","institute"],
+  special_ed: ["special needs","remedial","special education","learning support","autism","therapy school"],
+  other:      ["other","training centre","training center"]
+};
 
 function _titleCase(s = "") {
   return s.split(/\s+/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
 }
-function _citySlug(c = "") { return c.toLowerCase().replace(/\s+/g, "_"); }
-function _cityFromSlug(slug = "") { return _titleCase(slug.replace(/_/g, " ").trim()); }
+function _resolveCity(normText) {
+  const cities = [...SCHOOL_CITIES].sort((a, b) => b.length - a.length);
+  for (const c of cities) {
+    const re = new RegExp(`\\b${c.toLowerCase().replace(/\s+/g, "\\s+")}\\b`, "i");
+    if (re.test(normText)) return c;
+  }
+  const suburbs = Object.keys(SCHOOL_SUBURB_TO_CITY || {}).sort((a, b) => b.length - a.length);
+  for (const sub of suburbs) {
+    const re = new RegExp(`\\b${sub.toLowerCase().replace(/\s+/g, "\\s+")}\\b`, "i");
+    if (re.test(normText)) return SCHOOL_SUBURB_TO_CITY[sub];
+  }
+  return null;
+}
 
-async function _loadSearch(from, biz) {
+export function parseInstitutionQuery(text = "") {
+  const norm = String(text).toLowerCase().replace(/[’']/g, "").replace(/\s+/g, " ").trim();
+  let category = null;
+  for (const [id, syns] of Object.entries(CATEGORY_SYNONYMS)) {
+    if (syns.some(s => new RegExp(`\\b${s.replace(/\s+/g, "\\s+")}\\b`, "i").test(norm))) { category = id; break; }
+  }
+  const city = _resolveCity(norm);
+  return { category, city, raw: text };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ARM / ENTRY - parent chose "College / Course"
+// ─────────────────────────────────────────────────────────────────────────────
+export async function startInstitutionSearch(from, biz, saveBiz) {
+  if (biz) {
+    biz.sessionState = "inst_search_input";
+    biz.sessionData  = { ...(biz.sessionData || {}), instSearch: {} };
+    if (saveBiz) await saveBiz(biz);
+  } else {
+    const { default: UserSession } = await import("../models/userSession.js");
+    const phone = from.replace(/\D+/g, "");
+    await UserSession.findOneAndUpdate(
+      { phone },
+      { $set: { "tempData.instSearchActive": true, "tempData.instSearch": {} } },
+      { upsert: true }
+    );
+  }
+
+  return sendButtons(from, {
+    text:
+`🎓 *Find a College / Course*
+
+Just *type* the course and area:
+
+📝 *Examples:*
+• _driving school harare_
+• _culinary bulawayo_
+• _IT college harare_
+• _hairdressing mutare_
+• _welding gweru_
+• _music academy harare_
+
+_Even just "driving harare" or "college bulawayo" works._`,
+    buttons: [
+      { id: "inst_show_all",  title: "🔎 Show All Colleges" },
+      { id: "main_menu_back", title: "🏠 Main Menu" }
+    ]
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FREE-TEXT HANDLER
+// ─────────────────────────────────────────────────────────────────────────────
+export async function handleInstitutionFreeTextSearch({ from, text, biz, saveBiz }) {
+  const search = parseInstitutionQuery(text);
+  if (!search.category && !search.city) {
+    await sendText(from,
+`🤔 I couldn't read that. Try a course + city, e.g.:
+• _driving harare_
+• _culinary bulawayo_
+• _IT college mutare_`
+    );
+    return true;
+  }
+  search.page = 0;
+  await _persist(from, biz, saveBiz, search);
+  await _disarm(from, biz, saveBiz);
+  return _render(from, search);
+}
+
+async function _persist(from, biz, saveBiz, search) {
+  if (biz) {
+    biz.sessionData = { ...(biz.sessionData || {}), instSearch: search };
+    if (saveBiz) await saveBiz(biz);
+  } else {
+    const { default: UserSession } = await import("../models/userSession.js");
+    const phone = from.replace(/\D+/g, "");
+    await UserSession.findOneAndUpdate(
+      { phone }, { $set: { "tempData.instSearch": search } }, { upsert: true }
+    );
+  }
+}
+async function _disarm(from, biz, saveBiz) {
+  if (biz) {
+    if (biz.sessionState === "inst_search_input") biz.sessionState = "ready";
+    if (saveBiz) await saveBiz(biz);
+  } else {
+    const { default: UserSession } = await import("../models/userSession.js");
+    const phone = from.replace(/\D+/g, "");
+    await UserSession.updateOne({ phone }, { $unset: { "tempData.instSearchActive": "" } });
+  }
+}
+async function _load(from, biz) {
   if (biz) return biz?.sessionData?.instSearch || {};
   const { default: UserSession } = await import("../models/userSession.js");
   const phone = from.replace(/\D+/g, "");
   const sess = await UserSession.findOne({ phone });
   return sess?.tempData?.instSearch || {};
 }
-async function _saveSearch(from, biz, saveBiz, search) {
-  if (biz) {
-    biz.sessionData = { ...(biz.sessionData || {}), instSearch: search };
-    if (saveBiz) await saveBiz(biz);
-    return;
-  }
-  const { default: UserSession } = await import("../models/userSession.js");
-  const phone = from.replace(/\D+/g, "");
-  await UserSession.findOneAndUpdate(
-    { phone },
-    { $set: { "tempData.instSearch": search } },
-    { upsert: true }
-  );
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ENTRY - parent chose "College / Course" in the Education hub
-// ─────────────────────────────────────────────────────────────────────────────
-export async function startInstitutionSearch(from, biz, saveBiz) {
-  await _saveSearch(from, biz, saveBiz, {});
-  return _sendCategoryPicker(from, 0);
-}
-
-function _sendCategoryPicker(from, page = 0) {
-  const start = page * 8;
-  const slice = SPECIALISED.slice(start, start + 8);
-  const rows  = slice.map(c => ({ id: `inst_cat_${c.id}`, title: c.label }));
-  if (start + 8 < SPECIALISED.length) {
-    rows.push({ id: `inst_cat_more_${page + 1}`, title: "➡ More" });
-  }
-  rows.push({ id: "inst_cat_any", title: "🔍 Any / All Colleges" });
-  return sendList(
-    from,
-`🎓 *Colleges, Academies & Training*
-
-What kind of course or training are you looking for?`,
-    rows
-  );
-}
-
-function _sendCityPicker(from, page = 0) {
-  const start = page * 8;
-  const slice = SCHOOL_CITIES.slice(start, start + 8);
-  const rows  = slice.map(c => ({ id: `inst_city_${_citySlug(c)}`, title: `📍 ${c}` }));
-  if (start + 8 < SCHOOL_CITIES.length) {
-    rows.push({ id: `inst_city_more_${page + 1}`, title: "➡ More Cities" });
-  }
-  rows.push({ id: "inst_city_all", title: "🌍 All Cities" });
-  return sendList(from, "📍 Which city?", rows);
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ACTION ROUTER - handles every inst_* button tap. Returns true if handled.
+// BUTTON ROUTER - pagination / view / contact / refine / show-all
 // ─────────────────────────────────────────────────────────────────────────────
 export async function handleInstitutionSearchAction({ action: a, from, biz, saveBiz }) {
-  if (typeof a !== "string" || !a.startsWith("inst_")) return false;
-
-  const search = await _loadSearch(from, biz);
-
-  if (a.startsWith("inst_cat_more_")) {
-    await _sendCategoryPicker(from, parseInt(a.replace("inst_cat_more_", ""), 10) || 0);
-    return true;
-  }
-  if (a.startsWith("inst_cat_")) {
-    const raw = a.replace("inst_cat_", "");
-    search.category = raw === "any" ? null : raw;
-    await _saveSearch(from, biz, saveBiz, search);
-    await _sendCityPicker(from, 0);
-    return true;
-  }
-
-  if (a.startsWith("inst_city_more_")) {
-    await _sendCityPicker(from, parseInt(a.replace("inst_city_more_", ""), 10) || 0);
-    return true;
-  }
-  if (a.startsWith("inst_city_")) {
-    const raw = a.replace("inst_city_", "");
-    search.city = raw === "all" ? null : _cityFromSlug(raw);
-    search.page = 0;
-    await _saveSearch(from, biz, saveBiz, search);
-    return _runAndRender(from, biz, saveBiz, search);
-  }
-
-  if (a.startsWith("inst_page_")) {
-    search.page = parseInt(a.replace("inst_page_", ""), 10) || 0;
-    await _saveSearch(from, biz, saveBiz, search);
-    return _runAndRender(from, biz, saveBiz, search);
-  }
-
-  if (a.startsWith("inst_view_")) {
-    return _showInstitutionDetail(from, a.replace("inst_view_", ""));
-  }
-
-  if (a.startsWith("inst_contact_")) {
-    return _showInstitutionContact(from, a.replace("inst_contact_", ""));
-  }
+  if (typeof a !== "string") return false;
 
   if (a === "inst_refine") {
     return startInstitutionSearch(from, biz, saveBiz);
   }
-
+  if (a === "inst_show_all") {
+    const search = { page: 0 };
+    await _persist(from, biz, saveBiz, search);
+    await _disarm(from, biz, saveBiz);
+    return _render(from, search);
+  }
+  if (a.startsWith("inst_page_")) {
+    const search = await _load(from, biz);
+    search.page = parseInt(a.replace("inst_page_", ""), 10) || 0;
+    await _persist(from, biz, saveBiz, search);
+    return _render(from, search);
+  }
+  if (a.startsWith("inst_view_")) {
+    return _showInstitutionDetail(from, a.replace("inst_view_", ""));
+  }
+  if (a.startsWith("inst_contact_")) {
+    return _showInstitutionContact(from, a.replace("inst_contact_", ""));
+  }
   return false;
 }
 
@@ -144,7 +195,7 @@ export async function handleInstitutionSearchAction({ action: a, from, biz, save
 // ─────────────────────────────────────────────────────────────────────────────
 export async function runInstitutionSearch({ category, city }) {
   const query = { active: true, institutionType: { $ne: "academic" } };
-  if (category) query.institutionType = category;   // overrides the $ne with an exact match
+  if (category) query.institutionType = category;
   if (city)     query.city = new RegExp(`^${city}$`, "i");
 
   return SchoolProfile.find(query)
@@ -153,7 +204,7 @@ export async function runInstitutionSearch({ category, city }) {
     .lean();
 }
 
-async function _runAndRender(from, biz, saveBiz, search) {
+async function _render(from, search) {
   let list = await runInstitutionSearch(search);
 
   let note = "";
@@ -164,6 +215,10 @@ async function _runAndRender(from, biz, saveBiz, search) {
   if (!list.length && search.category) {
     list = await runInstitutionSearch({ city: search.city });
     if (list.length) note = "Showing all colleges & training in that city:";
+  }
+  if (!list.length) {
+    list = await runInstitutionSearch({});
+    if (list.length) note = "No exact match - here are colleges on ZimQuote:";
   }
 
   if (!list.length) {
@@ -212,7 +267,7 @@ We don't have a matching college or academy on ZimQuote yet.
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// DETAIL CARD
+// DETAIL + CONTACT
 // ─────────────────────────────────────────────────────────────────────────────
 async function _showInstitutionDetail(from, id) {
   const s = await SchoolProfile.findById(id).lean();
@@ -223,7 +278,6 @@ async function _showInstitutionDetail(from, id) {
     });
   }
 
-  // Track view + notify the institution a parent is interested (reuses school view notify).
   SchoolProfile.findByIdAndUpdate(id, { $inc: { monthlyViews: 1 } }).catch(() => {});
   try {
     const { notifyAllSchoolProfileView } = await import("./schoolNotifications.js");

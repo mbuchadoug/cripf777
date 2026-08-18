@@ -42,6 +42,9 @@ import {
   buildSchoolGroupQrImageUrl,
 } from "../services/groupSmartLink.js";
 import { assignSlugToSupplier } from "../services/supplierSmartLink.js";
+import {
+  TUTOR_SUBJECTS, TUTOR_LEVELS, TUTOR_MODES, SCHOOL_CITIES
+} from "../services/schoolPlans.js";
 
 // ── Staff E-Business Card imports ─────────────────────────────────────────────
 // staffCard.js and staffSmartLink.js are loaded lazily so the server starts
@@ -453,6 +456,7 @@ router.get("/suppliers", requireSupplierAdmin, async (req, res) => {
           <h3>Suppliers <span class="count">${total}</span></h3>
           <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
             <a href="/zq-admin/suppliers/new" class="btn btn-green btn-sm">➕ Register New</a>
+            <a href="/zq-admin/suppliers/new-tutor" class="btn btn-sm" style="background:#7c3aed;color:#fff">👩‍🏫 Register Tutor</a>
             <form method="GET" class="filter-form">
               <input name="search" placeholder="Name, phone, city..." value="${esc(search)}" />
               <select name="status">
@@ -1465,6 +1469,200 @@ const supplier = await SupplierProfile.create({
     res.redirect(
       `/zq-admin/suppliers/new?error=${encodeURIComponent(err.message)}`
     );
+  }
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// PRIVATE TUTORS  (SupplierProfile profileType: "tutor", $5/mo basic plan)
+// A tutor rides the supplier rails: smart link, seller chat, and viewer-phone
+// notifications all work automatically. This route creates the full Business +
+// SupplierProfile + slug so the tutor is live and shareable immediately, and
+// defaults revealVisitorPhone ON (the tutor's core promise: get the parent's #).
+// ═════════════════════════════════════════════════════════════════════════════
+router.get("/suppliers/new-tutor", requireSupplierAdmin, async (req, res) => {
+  const error   = req.query.error   ? `<div class="alert red" style="margin-bottom:16px">❌ ${esc(req.query.error)}</div>` : "";
+  const success = req.query.success ? `<div style="background:#dcfce7;color:#16a34a;padding:14px;border-radius:8px;margin-bottom:16px">✅ ${esc(req.query.success)}</div>` : "";
+
+  const cityOptions = SCHOOL_CITIES.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join("");
+  const subjectChecks = TUTOR_SUBJECTS.map(s => `
+    <label style="display:inline-flex;align-items:center;gap:6px;margin:2px 10px 2px 0;font-size:13px">
+      <input type="checkbox" name="subjects" value="${esc(s.id)}" /> ${esc(s.label)}</label>`).join("");
+  const levelChecks = TUTOR_LEVELS.map(l => `
+    <label style="display:inline-flex;align-items:center;gap:6px;margin:2px 10px 2px 0;font-size:13px">
+      <input type="checkbox" name="teachingLevels" value="${esc(l.id)}" /> ${esc(l.label)}</label>`).join("");
+  const modeOptions = TUTOR_MODES.map(m => `<option value="${esc(m.id)}">${esc(m.label)}</option>`).join("");
+
+  res.send(layout("Register Tutor", `
+    <a href="/zq-admin/suppliers" class="back-link">← Back to Suppliers</a>
+    ${error}${success}
+    <div class="panel" style="max-width:900px">
+      <div class="panel-head">
+        <h3>👩‍🏫 Register Private Tutor</h3>
+        <span style="font-size:12px;color:var(--muted)">$5/mo basic plan · appears under "Private Tutor" search · gets parent phone numbers on profile views</span>
+      </div>
+      <form method="POST" action="/zq-admin/suppliers/new-tutor" class="edit-form">
+        <div style="margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--border)">
+          <p style="font-weight:700;font-size:13px;margin-bottom:14px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">1. Tutor Info</p>
+          <div class="form-grid">
+            <div class="fg"><label>Tutor / Business Name <span style="color:red">*</span></label>
+              <input name="businessName" placeholder="e.g. Tendai Maths Tutor" required /></div>
+            <div class="fg"><label>WhatsApp Phone <span style="color:red">*</span></label>
+              <input name="phone" placeholder="e.g. 2637712345678" required /></div>
+            <div class="fg"><label>City <span style="color:red">*</span></label>
+              <select name="city" required><option value="">Select city...</option>${cityOptions}</select></div>
+            <div class="fg"><label>Suburb / Area</label>
+              <input name="area" placeholder="e.g. Borrowdale" /></div>
+            <div class="fg"><label>Contact (shown to parents)</label>
+              <input name="contactDetails" placeholder="e.g. 0772123456" /></div>
+            <div class="fg"><label>Qualifications</label>
+              <input name="qualifications" placeholder="e.g. BSc Maths (UZ), 8 yrs" /></div>
+            <div class="fg"><label>Experience (years)</label>
+              <input name="experienceYears" type="number" value="0" /></div>
+          </div>
+        </div>
+
+        <div style="margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--border)">
+          <p style="font-weight:700;font-size:13px;margin-bottom:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">2. Subjects</p>
+          <div>${subjectChecks}</div>
+          <input name="subjectsExtra" placeholder="Other subjects (comma separated)" style="margin-top:10px;width:100%" />
+        </div>
+
+        <div style="margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--border)">
+          <p style="font-weight:700;font-size:13px;margin-bottom:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">3. Levels</p>
+          <div>${levelChecks}</div>
+        </div>
+
+        <div style="margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--border)">
+          <p style="font-weight:700;font-size:13px;margin-bottom:14px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">4. Lessons & Rate</p>
+          <div class="form-grid">
+            <div class="fg"><label>Teaching Mode</label><select name="teachingMode">${modeOptions}</select></div>
+            <div class="fg"><label>Hourly Rate ($)</label><input name="hourlyRate" type="number" step="0.01" placeholder="e.g. 8" /></div>
+            <div class="fg"><label>Group Rate ($/student, optional)</label><input name="groupRate" type="number" step="0.01" placeholder="e.g. 4" /></div>
+            <div class="fg"><label>Availability</label><input name="availability" placeholder="e.g. Weekday evenings, Sat AM" /></div>
+          </div>
+          <label style="display:inline-flex;align-items:center;gap:8px;margin-top:10px;font-size:13px">
+            <input type="checkbox" name="offersExamPrep" value="true" /> 🔥 Offers exam-prep / holiday intensives</label>
+        </div>
+
+        <div style="margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--border)">
+          <p style="font-weight:700;font-size:13px;margin-bottom:14px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">5. Smart Link & Notifications</p>
+          <textarea name="smartLinkPitch" rows="3" maxlength="1000" style="width:100%;font-size:13px"
+            placeholder="Short pitch sent when a parent opens the tutor's smart link."></textarea>
+          <label style="display:inline-flex;align-items:center;gap:8px;margin-top:10px;font-size:13px">
+            <input type="checkbox" name="revealVisitorPhone" value="true" checked />
+            🔔 Send tutor the parent's phone number when their profile is opened <b>(recommended)</b></label>
+        </div>
+
+        <div style="margin-bottom:20px">
+          <p style="font-weight:700;font-size:13px;margin-bottom:14px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">6. Plan & Status</p>
+          <div class="form-grid">
+            <div class="fg"><label>Tier</label><select name="tier">
+              <option value="basic">Basic ($5/mo)</option><option value="pro">Pro ($12/mo)</option><option value="featured">Featured ($25/mo)</option></select></div>
+            <div class="fg"><label>Billing Cycle</label><select name="billingCycle"><option value="monthly">Monthly</option><option value="annual">Annual</option></select></div>
+            <div class="fg"><label>Duration (days)</label><input name="durationDays" type="number" value="30" /></div>
+            <div class="fg"><label>Activate now?</label><select name="setActive"><option value="true">✅ Active (live)</option><option value="false">⏸ Inactive</option></select></div>
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-green">👩‍🏫 Register Tutor</button>
+      </form>
+    </div>
+  `));
+});
+
+router.post("/suppliers/new-tutor", requireSupplierAdmin, async (req, res) => {
+  try {
+    const {
+      businessName, phone, city, area, contactDetails, qualifications, experienceYears,
+      teachingMode, hourlyRate, groupRate, availability, smartLinkPitch,
+      subjectsExtra, tier, billingCycle, durationDays, setActive
+    } = req.body;
+
+    if (!businessName?.trim()) throw new Error("Tutor name is required.");
+    if (!phone?.trim())        throw new Error("Phone number is required.");
+    if (!city?.trim())         throw new Error("City is required.");
+
+    const cleanPhone = phone.trim().replace(/\s+/g, "");
+    const existing = await SupplierProfile.findOne({ phone: cleanPhone });
+    if (existing) {
+      return res.redirect(`/zq-admin/suppliers/new-tutor?error=${encodeURIComponent("A listing with phone " + cleanPhone + " already exists.")}`);
+    }
+
+    const subjects = Array.isArray(req.body.subjects) ? req.body.subjects
+                   : req.body.subjects ? [req.body.subjects] : [];
+    const extra = (subjectsExtra || "").split(",").map(s => s.trim()).filter(Boolean);
+    const allSubjects = [...new Set([...subjects, ...extra])];
+    const teachingLevels = Array.isArray(req.body.teachingLevels) ? req.body.teachingLevels
+                         : req.body.teachingLevels ? [req.body.teachingLevels] : [];
+
+    const now       = new Date();
+    const days      = Number(durationDays) || 30;
+    const expiresAt = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
+    const tierRank  = tier === "featured" ? 3 : tier === "pro" ? 2 : 1;
+    const isActive  = setActive === "true";
+
+    const Business    = (await import("../models/business.js")).default;
+    const UserRole    = (await import("../models/userRole.js")).default;
+    const Branch      = (await import("../models/branch.js")).default;
+    const UserSession = (await import("../models/userSession.js")).default;
+
+    const newBiz = await Business.create({
+      name: businessName.trim(), currency: "USD",
+      package: isActive ? "bronze" : "trial",
+      subscriptionStatus: isActive ? "active" : "inactive",
+      isSupplier: true, ownerPhone: cleanPhone, sessionState: "ready", sessionData: {}
+    });
+    await UserRole.create({ phone: cleanPhone, role: "owner", pending: false, businessId: newBiz._id });
+    const mainBranch = await Branch.create({ businessId: newBiz._id, name: "Main Branch", isDefault: true });
+    await UserRole.findOneAndUpdate({ phone: cleanPhone, businessId: newBiz._id }, { branchId: mainBranch._id });
+    await UserSession.findOneAndUpdate({ phone: cleanPhone }, { phone: cleanPhone, activeBusinessId: newBiz._id }, { upsert: true });
+
+    const supplier = await SupplierProfile.create({
+      businessName:  businessName.trim(),
+      phone:         cleanPhone,
+      businessId:    newBiz._id,
+      mainBranchId:  mainBranch._id,
+      profileType:   "tutor",
+      location:      { city: city.trim(), area: (area || "").trim() },
+      contactDetails: contactDetails?.trim() || "",
+      subjects:       allSubjects,
+      teachingLevels,
+      teachingMode:   teachingMode || "in_person",
+      hourlyRate:     parseFloat(hourlyRate) || 0,
+      hourlyCurrency: "USD",
+      groupRate:      parseFloat(groupRate) || 0,
+      offersGroups:   (parseFloat(groupRate) || 0) > 0,
+      offersExamPrep: req.body.offersExamPrep === "true",
+      qualifications: qualifications?.trim() || "",
+      experienceYears: Number(experienceYears) || 0,
+      availability:   availability?.trim() || "",
+      smartLinkPitch: (smartLinkPitch || "").trim().slice(0, 1000),
+      revealVisitorPhone: req.body.revealVisitorPhone === "true",
+      canViewContacts: true,
+      tier: tier || "basic", tierRank,
+      subscriptionStatus: isActive ? "active" : "pending",
+      subscriptionPlan: billingCycle || "monthly",
+      subscriptionStartedAt: now, subscriptionEndsAt: expiresAt,
+      active: isActive,
+      adminNote: `[Admin registered tutor on ${now.toDateString()}]`
+    });
+
+    await Business.findByIdAndUpdate(newBiz._id, { supplierProfileId: supplier._id });
+
+    // Generate the smart-link slug so the tutor's link works immediately.
+    let slug = null;
+    try { slug = await assignSlugToSupplier(String(supplier._id)); } catch (_) {}
+
+    await SupplierSubscriptionPayment.create({
+      supplierPhone: cleanPhone, supplierId: supplier._id, tier: tier || "basic",
+      plan: billingCycle || "monthly", amount: 0, currency: "USD",
+      reference: `ADMIN_TUTOR_${supplier._id}_${Date.now()}`,
+      status: "paid", paidAt: now, ecocashPhone: "admin-registered"
+    });
+
+    res.redirect(`/zq-admin/suppliers/${supplier._id}?success=${encodeURIComponent("Tutor registered!" + (slug ? " Smart link: ZQ:S:" + slug : ""))}`);
+  } catch (err) {
+    res.redirect(`/zq-admin/suppliers/new-tutor?error=${encodeURIComponent(err.message)}`);
   }
 });
 

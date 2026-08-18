@@ -148,8 +148,8 @@ import {
 
 // ── Education hub + new parent search verticals (tutors, colleges) ───────────
 import { startEducationHub, handleEducationHubAction } from "./educationHub.js";
-import { startTutorSearch, handleTutorSearchAction } from "./tutorSearch.js";
-import { startInstitutionSearch, handleInstitutionSearchAction } from "./institutionSearch.js";
+import { startTutorSearch, handleTutorSearchAction, handleTutorFreeTextSearch } from "./tutorSearch.js";
+import { startInstitutionSearch, handleInstitutionSearchAction, handleInstitutionFreeTextSearch } from "./institutionSearch.js";
 
 import {
   showSchoolFAQMenu,
@@ -4780,6 +4780,52 @@ try {
 
       if (_inSchoolSearch) {
         const handled = await handleSchoolFreeTextSearch({
+          from, text, biz, saveBiz: biz ? saveBizSafe : async () => {}
+        });
+        if (handled !== false) return handled;
+      }
+    }
+  }
+
+  // ── TUTOR search FREE-TEXT (type "maths olevel harare") ─────────────────────
+  // Armed when a parent taps "Private Tutor" in the Education hub. NO city button
+  // is ever shown - the city is parsed from the typed phrase - so the old
+  // "select city" step cannot appear. Covers biz owners (sessionState) AND
+  // non-biz parents (tempData.tutorSearchActive marker).
+  if (!isMetaAction && text.trim().length > 1) {
+    const _navTok = /^(0|00|menu|main menu|back|cancel|exit|home|hi|hie|hey|hello|start)$/i.test(text.trim());
+    if (!_navTok) {
+      let _inTutor = !!biz && biz.sessionState === "tutor_search_input";
+      if (!_inTutor && !biz) {
+        try {
+          const _tc = await UserSession.findOne({ phone }).lean();
+          _inTutor = !!_tc?.tempData?.tutorSearchActive &&
+                     !_tc?.tempData?.buyerRequestState && !_tc?.tempData?.orderState;
+        } catch (_) {}
+      }
+      if (_inTutor) {
+        const handled = await handleTutorFreeTextSearch({
+          from, text, biz, saveBiz: biz ? saveBizSafe : async () => {}
+        });
+        if (handled !== false) return handled;
+      }
+    }
+  }
+
+  // ── COLLEGE / institution search FREE-TEXT (type "driving harare") ──────────
+  if (!isMetaAction && text.trim().length > 1) {
+    const _navTok = /^(0|00|menu|main menu|back|cancel|exit|home|hi|hie|hey|hello|start)$/i.test(text.trim());
+    if (!_navTok) {
+      let _inInst = !!biz && biz.sessionState === "inst_search_input";
+      if (!_inInst && !biz) {
+        try {
+          const _ic = await UserSession.findOne({ phone }).lean();
+          _inInst = !!_ic?.tempData?.instSearchActive &&
+                    !_ic?.tempData?.buyerRequestState && !_ic?.tempData?.orderState;
+        } catch (_) {}
+      }
+      if (_inInst) {
+        const handled = await handleInstitutionFreeTextSearch({
           from, text, biz, saveBiz: biz ? saveBizSafe : async () => {}
         });
         if (handled !== false) return handled;
@@ -12071,6 +12117,10 @@ const shortcodeBlockedStates = [
   // Document / expense date picker (typed dates must not trigger city search)
   "awaiting_doc_date",
   "awaiting_doc_date_type",
+  // Education type-to-search states - handled by our own free-text router above,
+  // must NOT be grabbed by marketplace shortcode / city search.
+  "tutor_search_input",
+  "inst_search_input",
   ...supplierStates.filter(s =>
     s !== "supplier_search_city" &&
     s !== "supplier_order_product" &&
@@ -20123,6 +20173,12 @@ if (!isMetaAction && text && text.trim().length > 1) {
     // (the school free-text block). Without registering them here, that typed text
     // was hijacked into ⚡ Request Sellers instead of searching schools.
     "school_search_city", "school_search_results",
+    // ── Education type-to-search: tutor + college armed states ────────────────
+    // A biz-owner who taps Private Tutor / College sits in one of these while
+    // typing "maths olevel harare" / "driving harare". Dedicated handlers sit
+    // ABOVE this catch-all (the tutor/college free-text blocks). Without these,
+    // their typed text would be hijacked into ⚡ Request Sellers.
+    "tutor_search_input", "inst_search_input",
     // ── School-admin text-input states ───────────────────────────────────────
     // When a school owner/clerk types their fees, email, website, reg link, etc.,
     // biz.sessionState is one of these. Without registering them here, that typed
