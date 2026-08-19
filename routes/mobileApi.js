@@ -725,4 +725,98 @@ router.post("/8qt/certificate-request", requireMobileAuth, async (req, res) => {
   }
 });
 
+/* ══════════════════════════════════════════════════════════════════
+   DELETE ACCOUNT - App Store Guideline 5.1.1(v).
+   An app that lets people create accounts must let them delete the account
+   from inside the app. This is a HARD delete of the account and everything it
+   owns - not a deactivation.
+
+   For a parent / private teacher this also removes every managed learner
+   profile they created and all of that learner's progress: those profiles have
+   no existence independent of the account being deleted.
+
+   The JWT is stateless, but it dies the moment the User document is gone -
+   requireMobileAuth does User.findById and 401s once the account no longer
+   exists, so there is nothing extra to revoke.
+   ════════════════════════════════════════════════════════════════════ */
+
+router.post("/auth/delete", requireMobileAuth, async (req, res) => {
+  try {
+    const me = req.mobileUser; // lean doc from requireMobileAuth
+    const myId = me._id;
+
+    // Soft guard against an accidental call. The app only sends confirm:true
+    // after the user confirms an explicit, irreversible "delete account" prompt.
+    if (req.body?.confirm !== true) {
+      return res.status(400).json({ error: "Deletion was not confirmed." });
+    }
+
+    // Managed learners this account created (parent / teacher only). They are
+    // removed together with their owner.
+    const childIds = ["parent", "private_teacher", "teacher"].includes(me.role)
+      ? (
+          await User.find({ parentUserId: myId, role: "student" })
+            .select("_id")
+            .lean()
+        ).map((c) => c._id)
+      : [];
+
+    const allUserIds = [myId, ...childIds];
+
+    // 1) Every collection keyed by userId (owner + any managed learners).
+    //    No Mongo transaction: single-node deployments have no replica set, so
+    //    a session would throw. Deletes are ordered so the User docs go LAST -
+    //    if anything fails midway the account still exists and can retry.
+    await EightQTAttempt.deleteMany({ userId: { $in: allUserIds } });
+    await ExamInstance.deleteMany({ userId: { $in: allUserIds } });
+    await OrgMembership.deleteMany({ user: { $in: allUserIds } });
+    await MobileAuthCode.deleteMany({ user: { $in: allUserIds } });
+
+    // Attempt + Payment belong to the school router's model set. Import lazily
+    // so this route has no hard dependency on them, and never fails if a model
+    // path differs in a given deployment.
+    try {
+      const { default: Attempt } = await import("../models/attempt.js");
+      await Attempt.deleteMany({ userId: { $in: allUserIds } });
+    } catch (e) {
+      console.warn("[mobile auth/delete] attempt cleanup skipped:", e.message);
+    }
+    try {
+      const { default: Payment } = await import("../models/payment.js");
+      await Payment.deleteMany({ userId: { $in: allUserIds } });
+    } catch (e) {
+      console.warn("[mobile auth/delete] payment cleanup skipped:", e.message);
+    }
+
+    // Best-effort: topic-mastery records if that model exists. Different
+    // deployments key it differently, so try the common shapes and move on.
+    try {
+      const { default: TopicMastery } = await import("../models/topicMastery.js");
+      if (TopicMastery) {
+        await TopicMastery.deleteMany({
+          $or: [{ userId: { $in: allUserIds } }, { student: { $in: allUserIds } }]
+        });
+      }
+    } catch (e) {
+      // model absent or different shape - non-fatal
+    }
+
+    // 2) Any pending email verification codes tied to this email.
+    if (me.email) {
+      await MobileVerification.deleteMany({ email: me.email }).catch(() => {});
+    }
+
+    // 3) Remove the user documents themselves - learners first, owner last.
+    if (childIds.length) {
+      await User.deleteMany({ _id: { $in: childIds } });
+    }
+    await User.deleteOne({ _id: myId });
+
+    return res.json({ ok: true, deletedAccounts: allUserIds.length });
+  } catch (err) {
+    console.error("[mobile auth/delete]", err);
+    return res.status(500).json({ error: "Could not delete the account. Try again." });
+  }
+});
+
 export default router;
