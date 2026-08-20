@@ -40,6 +40,16 @@ import {
   setSchoolGroupTagline,
   buildSchoolGroupDeepLink,
   buildSchoolGroupQrImageUrl,
+  // ── Tutor group functions ─────────────────────────────────────────────
+  createTutorGroup,
+  getAllTutorGroups,
+  getTutorGroupBySlug,
+  addTutorToGroup,
+  removeTutorFromGroup,
+  deleteTutorGroup,
+  setTutorGroupTagline,
+  buildTutorGroupDeepLink,
+  buildTutorGroupQrImageUrl,
 } from "../services/groupSmartLink.js";
 import { assignSlugToSupplier } from "../services/supplierSmartLink.js";
 import {
@@ -4397,6 +4407,7 @@ const isPresets     = t === "Presets" || t.startsWith("Preset:");
   const isDashboard   = t === "Dashboard";
   const isGroups        = t === "Group Smart Links" || t.startsWith("Group:");
   const isSchoolGroups  = t === "School Group Smart Links" || t.startsWith("School Group:");
+  const isTutorGroups   = t === "Tutor Group Smart Links" || t.startsWith("Tutor Group:");
   const isAssignSlugs   = t === "Assign Slugs";
 
   const nav = [
@@ -4407,6 +4418,7 @@ const isPresets     = t === "Presets" || t.startsWith("Preset:");
     { href: "/zq-admin/suppliers/new",   label: "➕ Register Supplier",   active: t === "Register Supplier" },
     { href: "/zq-admin/groups",          label: "🔗 Group Links",          active: isGroups },
     { href: "/zq-admin/school-groups",   label: "🏫 School Groups",         active: isSchoolGroups },
+    { href: "/zq-admin/tutor-groups",    label: "🧑‍🏫 Tutor Groups",        active: isTutorGroups },
     { href: "/zq-admin/suppliers/assign-slugs", label: "🏷️ Assign Slugs",      active: isAssignSlugs },
     // ── Schools ───────────────────────────────────────────────────────────────
     { divider: "SCHOOLS" },
@@ -9180,6 +9192,381 @@ router.post("/school-groups/:slug/delete", requireSupplierAdmin, async (req, res
     res.redirect(`/zq-admin/school-groups?error=${encodeURIComponent(err.message)}`);
   }
 });
+
+// ══════════════════════════════════════════════════════════════════════════════
+// TUTOR GROUP SMART LINKS  -  /zq-admin/tutor-groups
+// ──────────────────────────────────────────────────────────────────────────────
+// Bundle multiple private tutors (SupplierProfile profileType "tutor") under one
+// shareable ZQ:TGROUP:<slug> link. Mirrors the school-group admin pages.
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── GET /zq-admin/tutor-groups - list all tutor groups ────────────────────────
+router.get("/tutor-groups", requireSupplierAdmin, async (req, res) => {
+  try {
+    const groups = await getAllTutorGroups();
+    const rows = groups.map(g => {
+      const tutorCount = (g.tutors || []).length;
+      const link = buildTutorGroupDeepLink(g.slug);
+      return `
+      <tr>
+        <td><a href="/zq-admin/tutor-groups/${esc(g.slug)}" style="font-weight:600;color:var(--blue)">${esc(g.name)}</a></td>
+        <td style="font-family:monospace;font-size:12px;color:var(--muted)">${esc(g.slug)}</td>
+        <td>${esc(g.tagline || "-")}</td>
+        <td style="text-align:center">${tutorCount}</td>
+        <td style="text-align:center">${g.viewCount || 0}</td>
+        <td>
+          <span style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;background:${g.active ? "#dcfce7" : "#fee2e2"};color:${g.active ? "#16a34a" : "#dc2626"}">
+            ${g.active ? "Active" : "Inactive"}
+          </span>
+        </td>
+        <td>
+          <a href="/zq-admin/tutor-groups/${esc(g.slug)}" class="btn btn-sm" style="background:#e0f2fe;color:#0369a1">✏️ Manage</a>
+          <button onclick="copyText('${esc(link)}')" class="btn btn-sm" style="background:#f0fdf4;color:#16a34a;margin-left:4px">📋 Copy Link</button>
+        </td>
+      </tr>`;
+    }).join("");
+
+    const html = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+      <div>
+        <h1 style="font-size:22px;font-weight:700;margin:0">🧑‍🏫 Tutor Group Smart Links</h1>
+        <p style="color:var(--muted);margin-top:4px;font-size:13px">One link for a group of private tutors. Share on Facebook, WhatsApp groups, or print as QR codes.</p>
+      </div>
+      <a href="/zq-admin/tutor-groups/new" class="btn btn-green">➕ Create Tutor Group</a>
+    </div>
+
+    ${groups.length === 0 ? `
+    <div style="background:white;border-radius:12px;padding:40px;text-align:center;color:var(--muted)">
+      <div style="font-size:40px;margin-bottom:12px">🧑‍🏫</div>
+      <h3 style="margin-bottom:8px;color:var(--text)">No tutor groups yet</h3>
+      <p style="margin-bottom:20px">Bundle multiple private tutors under one shareable WhatsApp link.</p>
+      <a href="/zq-admin/tutor-groups/new" class="btn btn-blue">➕ Create your first tutor group</a>
+    </div>` : `
+    <div style="background:white;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.08)">
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead>
+          <tr style="background:#f8fafc">
+            <th style="padding:10px 14px;text-align:left;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.5px;border-bottom:2px solid var(--border)">Name</th>
+            <th style="padding:10px 14px;text-align:left;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.5px;border-bottom:2px solid var(--border)">Slug</th>
+            <th style="padding:10px 14px;text-align:left;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.5px;border-bottom:2px solid var(--border)">Tagline</th>
+            <th style="padding:10px 14px;text-align:center;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.5px;border-bottom:2px solid var(--border)">Tutors</th>
+            <th style="padding:10px 14px;text-align:center;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.5px;border-bottom:2px solid var(--border)">Views</th>
+            <th style="padding:10px 14px;text-align:center;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.5px;border-bottom:2px solid var(--border)">Status</th>
+            <th style="padding:10px 14px;border-bottom:2px solid var(--border)"></th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`}
+
+    <script>
+    function copyText(text) {
+      navigator.clipboard.writeText(text).then(() => {
+        const t = document.createElement("div");
+        t.textContent = "✅ Copied!";
+        t.style.cssText = "position:fixed;bottom:24px;right:24px;background:#0f172a;color:white;padding:10px 18px;border-radius:8px;font-size:13px;z-index:9999";
+        document.body.appendChild(t);
+        setTimeout(() => t.remove(), 2000);
+      });
+    }
+    </script>`;
+
+    res.send(layout("Tutor Group Smart Links", html));
+  } catch (err) {
+    res.send(layout("Tutor Group Smart Links", `<div style="color:red;padding:20px">Error: ${esc(err.message)}</div>`));
+  }
+});
+
+// ── GET /zq-admin/tutor-groups/new ────────────────────────────────────────────
+router.get("/tutor-groups/new", requireSupplierAdmin, async (req, res) => {
+  const err = req.query.error || "";
+  const html = `
+  <div style="max-width:560px">
+    <a href="/zq-admin/tutor-groups" style="color:var(--blue);font-size:13px;text-decoration:none">← Back to Tutor Groups</a>
+    <h1 style="margin:16px 0 4px;font-size:22px;font-weight:700">Create Tutor Group Link</h1>
+    <p style="color:var(--muted);font-size:13px;margin-bottom:24px">Bundle multiple private tutors under one shareable WhatsApp link.</p>
+
+    ${err ? `<div style="background:#fee2e2;color:#dc2626;padding:12px 16px;border-radius:8px;margin-bottom:16px;font-size:13px">❌ ${esc(err)}</div>` : ""}
+
+    <div style="background:white;border-radius:12px;padding:24px;box-shadow:0 1px 3px rgba(0,0,0,.08)">
+      <form method="POST" action="/zq-admin/tutor-groups/new">
+        <div style="margin-bottom:16px">
+          <label style="display:block;font-weight:600;font-size:13px;margin-bottom:6px">Group Name *</label>
+          <input name="name" type="text" required placeholder="e.g. Harare Maths & Science Tutors"
+            style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px">
+          <p style="color:var(--muted);font-size:12px;margin-top:4px">Display name shown to parents when they open the group link.</p>
+        </div>
+
+        <div style="margin-bottom:16px">
+          <label style="display:block;font-weight:600;font-size:13px;margin-bottom:6px">Slug (URL identifier) *</label>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:13px;color:var(--muted);font-family:monospace;white-space:nowrap">ZQ:TGROUP:</span>
+            <input name="slug" id="slugInput" type="text" required placeholder="harare-maths-tutors"
+              style="flex:1;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;font-family:monospace"
+              pattern="[a-z0-9-]+" title="Lowercase letters, numbers and hyphens only">
+          </div>
+          <p style="color:var(--muted);font-size:12px;margin-top:4px">Link becomes: <code>wa.me/...?text=ZQ:TGROUP:<strong>your-slug</strong></code></p>
+        </div>
+
+        <div style="margin-bottom:24px">
+          <label style="display:block;font-weight:600;font-size:13px;margin-bottom:6px">Tagline <span style="color:var(--muted);font-weight:400">(optional)</span></label>
+          <input name="tagline" type="text" placeholder="e.g. Qualified private tutors in Harare - tap one to enquire"
+            style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px">
+        </div>
+
+        <div style="display:flex;gap:10px">
+          <button type="submit" class="btn btn-green" style="padding:10px 24px;font-size:14px">✅ Create Group</button>
+          <a href="/zq-admin/tutor-groups" class="btn" style="background:var(--border);color:var(--text);padding:10px 24px;font-size:14px">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+  const nameInput = document.querySelector('input[name="name"]');
+  const slugInput = document.getElementById("slugInput");
+  let slugManuallyEdited = false;
+  slugInput.addEventListener("input", () => { slugManuallyEdited = true; });
+  nameInput.addEventListener("input", () => {
+    if (slugManuallyEdited) return;
+    slugInput.value = nameInput.value
+      .toLowerCase().replace(/[^a-z0-9\s-]/g, "").trim()
+      .replace(/\s+/g, "-").replace(/-+/g, "-").slice(0, 40);
+  });
+  </script>`;
+
+  res.send(layout("Tutor Group: New", html));
+});
+
+// ── POST /zq-admin/tutor-groups/new ───────────────────────────────────────────
+router.post("/tutor-groups/new", requireSupplierAdmin, async (req, res) => {
+  try {
+    const { name, slug, tagline } = req.body;
+    const group = await createTutorGroup({ slug, name, tagline });
+    res.redirect(`/zq-admin/tutor-groups/${encodeURIComponent(group.slug)}?success=Tutor+group+created`);
+  } catch (err) {
+    res.redirect(`/zq-admin/tutor-groups/new?error=${encodeURIComponent(err.message)}`);
+  }
+});
+
+// ── GET /zq-admin/tutor-groups/:slug ──────────────────────────────────────────
+router.get("/tutor-groups/:slug", requireSupplierAdmin, async (req, res) => {
+  try {
+    const group = await getTutorGroupBySlug(req.params.slug);
+    if (!group) return res.redirect("/zq-admin/tutor-groups");
+
+    const tutorIds = (group.tutors || [])
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+      .map(t => t.tutorId);
+    const tutors = await SupplierProfile.find({ _id: { $in: tutorIds } }).lean();
+    const orderedTutors = tutorIds
+      .map(id => tutors.find(t => String(t._id) === String(id)))
+      .filter(Boolean);
+
+    const tutorRows = orderedTutors.map((t, i) => {
+      const loc  = [t.location?.area, t.location?.city].filter(Boolean).join(", ");
+      const subj = (t.subjects || []).slice(0, 3).join(", ");
+      const rate = t.hourlyRate > 0 ? `$${t.hourlyRate}/hr` : "rate on request";
+      const notTutor = t.profileType !== "tutor"
+        ? `<br><span style="font-size:11px;color:#dc2626">⚠️ Not a tutor profile</span>` : "";
+      return `
+      <tr>
+        <td style="width:32px;color:var(--muted);font-size:13px">${i + 1}</td>
+        <td>
+          <strong>${esc(t.businessName || "Tutor")}</strong>${notTutor}
+          ${loc ? `<br><span style="color:var(--muted);font-size:12px">📍 ${esc(loc)}</span>` : ""}
+          ${subj ? `<br><span style="color:var(--muted);font-size:12px">📚 ${esc(subj)}</span>` : ""}
+        </td>
+        <td style="font-family:monospace;font-size:12px;color:var(--muted)">${esc(t.phone || "")}</td>
+        <td><span style="font-size:11px;padding:2px 8px;border-radius:10px;background:#f1f5f9;color:var(--muted)">${esc(rate)}</span></td>
+        <td>
+          <form method="POST" action="/zq-admin/tutor-groups/${esc(group.slug)}/remove-tutor" style="display:inline">
+            <input type="hidden" name="phone" value="${esc(t.phone)}">
+            <button type="submit" class="btn btn-sm" style="background:#fee2e2;color:#dc2626"
+              onclick="return confirm('Remove ${esc(t.businessName || "this tutor")} from this group?')">Remove</button>
+          </form>
+        </td>
+      </tr>`;
+    }).join("");
+
+    const groupLink = buildTutorGroupDeepLink(group.slug);
+    const qrUrl     = buildTutorGroupQrImageUrl(group.slug, 300);
+    const waLink    = `${BOT_WA}?text=${encodeURIComponent("ZQ:TGROUP:" + group.slug)}`;
+
+    const successMsg = req.query.success ? `<div style="background:#dcfce7;color:#16a34a;padding:12px 16px;border-radius:8px;margin-bottom:16px;font-size:13px">✅ ${esc(req.query.success)}</div>` : "";
+    const errorMsg   = req.query.error   ? `<div style="background:#fee2e2;color:#dc2626;padding:12px 16px;border-radius:8px;margin-bottom:16px;font-size:13px">❌ ${esc(req.query.error)}</div>` : "";
+
+    const html = `
+    <a href="/zq-admin/tutor-groups" style="color:var(--blue);font-size:13px;text-decoration:none">← Back to Tutor Groups</a>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin:16px 0 8px">
+      <div>
+        <h1 style="font-size:22px;font-weight:700;margin:0">${esc(group.name)}</h1>
+        <p style="color:var(--muted);font-size:13px;margin-top:2px">${esc(group.tagline || "")}</p>
+      </div>
+      <form method="POST" action="/zq-admin/tutor-groups/${esc(group.slug)}/delete">
+        <button type="submit" class="btn btn-sm" style="background:#fee2e2;color:#dc2626"
+          onclick="return confirm('Delete group ${esc(group.name)}? This cannot be undone.')">🗑 Delete Group</button>
+      </form>
+    </div>
+
+    ${successMsg}${errorMsg}
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px">
+      <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.08)">
+        <h2 style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:14px">Group Link</h2>
+        <div style="background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-family:monospace;font-size:12px;color:#0369a1;word-break:break-all;margin-bottom:12px;cursor:pointer"
+          onclick="copyText('${esc(groupLink)}')" title="Click to copy">
+          ${esc(groupLink)}
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button onclick="copyText('${esc(groupLink)}')" class="btn btn-sm" style="background:#e0f2fe;color:#0369a1">📋 Copy Link</button>
+          <a href="${esc(waLink)}" target="_blank" class="btn btn-sm" style="background:#dcfce7;color:#16a34a">📱 Test on WhatsApp</a>
+        </div>
+        <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div style="text-align:center;padding:10px;background:#f8fafc;border-radius:8px">
+              <div style="font-size:22px;font-weight:800;color:var(--blue)">${orderedTutors.length}</div>
+              <div style="font-size:11px;color:var(--muted);margin-top:2px">Tutors</div>
+            </div>
+            <div style="text-align:center;padding:10px;background:#f8fafc;border-radius:8px">
+              <div style="font-size:22px;font-weight:800;color:var(--teal)">${group.viewCount || 0}</div>
+              <div style="font-size:11px;color:var(--muted);margin-top:2px">Total Views</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.08)">
+        <h2 style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:14px">QR Code</h2>
+        <div style="text-align:center;margin-bottom:12px">
+          <img src="${esc(qrUrl)}" width="180" height="180" alt="QR Code" style="border-radius:8px;border:2px solid var(--border)">
+          <p style="color:var(--muted);font-size:11px;margin-top:6px">Print on flyers or notice boards</p>
+        </div>
+        <a href="${esc(qrUrl)}" download="tutor-group-qr-${esc(group.slug)}.png" target="_blank"
+          class="btn btn-sm" style="width:100%;text-align:center;display:block;background:#f1f5f9;color:var(--text)">
+          ⬇️ Download QR
+        </a>
+      </div>
+    </div>
+
+    <!-- Edit group details -->
+    <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.08);margin-bottom:24px">
+      <h2 style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:14px">Edit Group Details</h2>
+      <form method="POST" action="/zq-admin/tutor-groups/${esc(group.slug)}/edit" style="display:grid;grid-template-columns:1fr 1fr auto;gap:12px;align-items:end">
+        <div>
+          <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px">Name</label>
+          <input name="name" value="${esc(group.name)}" required
+            style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px">
+        </div>
+        <div>
+          <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px">Tagline</label>
+          <input name="tagline" value="${esc(group.tagline || "")}" placeholder="One-line description"
+            style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px">
+        </div>
+        <button type="submit" class="btn btn-blue" style="padding:8px 16px;font-size:13px">Save</button>
+      </form>
+    </div>
+
+    <!-- Tutors table -->
+    <div style="background:white;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.08);margin-bottom:20px">
+      <div style="padding:16px 20px;border-bottom:1px solid var(--border)">
+        <h2 style="font-size:14px;font-weight:700;margin:0">Tutors in this group (${orderedTutors.length})</h2>
+      </div>
+      ${orderedTutors.length === 0 ? `
+        <div style="padding:32px;text-align:center;color:var(--muted)">No tutors added yet. Add tutors below.</div>` : `
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead>
+          <tr style="background:#f8fafc">
+            <th style="padding:8px 12px;text-align:left;color:var(--muted);font-size:11px;border-bottom:1px solid var(--border)">#</th>
+            <th style="padding:8px 12px;text-align:left;color:var(--muted);font-size:11px;border-bottom:1px solid var(--border)">Tutor</th>
+            <th style="padding:8px 12px;text-align:left;color:var(--muted);font-size:11px;border-bottom:1px solid var(--border)">Phone</th>
+            <th style="padding:8px 12px;text-align:left;color:var(--muted);font-size:11px;border-bottom:1px solid var(--border)">Rate</th>
+            <th style="padding:8px 12px;border-bottom:1px solid var(--border)"></th>
+          </tr>
+        </thead>
+        <tbody>${tutorRows}</tbody>
+      </table>`}
+    </div>
+
+    <!-- Add tutor form -->
+    <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.08)">
+      <h2 style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:14px">Add Tutor to Group</h2>
+      <form method="POST" action="/zq-admin/tutor-groups/${esc(group.slug)}/add-tutor"
+        style="display:grid;grid-template-columns:1fr auto;gap:10px;align-items:end">
+        <div>
+          <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px">Tutor Phone Number</label>
+          <input name="phone" type="text" required placeholder="e.g. 263771446827 or 0771446827"
+            style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px">
+          <p style="color:var(--muted);font-size:11px;margin-top:3px">The tutor's registered phone number on ZimQuote. Only private-tutor listings can be added.</p>
+        </div>
+        <button type="submit" class="btn btn-green" style="padding:8px 16px;font-size:13px">➕ Add</button>
+      </form>
+    </div>
+
+    <script>
+    function copyText(text) {
+      navigator.clipboard.writeText(text).then(() => {
+        const t = document.createElement("div");
+        t.textContent = "✅ Copied!";
+        t.style.cssText = "position:fixed;bottom:24px;right:24px;background:#0f172a;color:white;padding:10px 18px;border-radius:8px;font-size:13px;z-index:9999";
+        document.body.appendChild(t);
+        setTimeout(() => t.remove(), 2000);
+      });
+    }
+    </script>`;
+
+    res.send(layout(`Tutor Group: ${group.name}`, html));
+  } catch (err) {
+    res.redirect(`/zq-admin/tutor-groups?error=${encodeURIComponent(err.message)}`);
+  }
+});
+
+// ── POST /zq-admin/tutor-groups/:slug/edit ────────────────────────────────────
+router.post("/tutor-groups/:slug/edit", requireSupplierAdmin, async (req, res) => {
+  try {
+    const { name, tagline } = req.body;
+    const mongoose = (await import("mongoose")).default;
+    const TutorGroup = mongoose.model("TutorGroup");
+    await TutorGroup.findOneAndUpdate(
+      { slug: req.params.slug },
+      { $set: { name: String(name || "").trim(), tagline: String(tagline || "").trim() } }
+    );
+    res.redirect(`/zq-admin/tutor-groups/${encodeURIComponent(req.params.slug)}?success=Group+updated`);
+  } catch (err) {
+    res.redirect(`/zq-admin/tutor-groups/${encodeURIComponent(req.params.slug)}?error=${encodeURIComponent(err.message)}`);
+  }
+});
+
+// ── POST /zq-admin/tutor-groups/:slug/add-tutor ───────────────────────────────
+router.post("/tutor-groups/:slug/add-tutor", requireSupplierAdmin, async (req, res) => {
+  try {
+    await addTutorToGroup(req.params.slug, req.body.phone);
+    res.redirect(`/zq-admin/tutor-groups/${encodeURIComponent(req.params.slug)}?success=Tutor+added`);
+  } catch (err) {
+    res.redirect(`/zq-admin/tutor-groups/${encodeURIComponent(req.params.slug)}?error=${encodeURIComponent(err.message)}`);
+  }
+});
+
+// ── POST /zq-admin/tutor-groups/:slug/remove-tutor ────────────────────────────
+router.post("/tutor-groups/:slug/remove-tutor", requireSupplierAdmin, async (req, res) => {
+  try {
+    await removeTutorFromGroup(req.params.slug, req.body.phone);
+    res.redirect(`/zq-admin/tutor-groups/${encodeURIComponent(req.params.slug)}?success=Tutor+removed`);
+  } catch (err) {
+    res.redirect(`/zq-admin/tutor-groups/${encodeURIComponent(req.params.slug)}?error=${encodeURIComponent(err.message)}`);
+  }
+});
+
+// ── POST /zq-admin/tutor-groups/:slug/delete ──────────────────────────────────
+router.post("/tutor-groups/:slug/delete", requireSupplierAdmin, async (req, res) => {
+  try {
+    await deleteTutorGroup(req.params.slug);
+    res.redirect("/zq-admin/tutor-groups?success=Group+deleted");
+  } catch (err) {
+    res.redirect(`/zq-admin/tutor-groups?error=${encodeURIComponent(err.message)}`);
+  }
+});
+
 
 // ══════════════════════════════════════════════════════════════════════════════
 // BROADCAST HUB  -  /zq-admin/broadcast

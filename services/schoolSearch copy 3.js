@@ -23,7 +23,6 @@ import { notifyAllSupplierLinkOpened } from "./supplierNotifications.js";
 import {
   handleGroupSmartLink,
   handleGroupSellerTap,
-  handleTutorGroupSmartLink,
 } from "./groupSmartLink.js";
 
 import SupplierProfile from "../models/supplierProfile.js";
@@ -534,16 +533,6 @@ export async function handleZqDeepLink({ from, text, biz, saveBiz }) {
   if (/^ZQ:GROUP:[a-z0-9-]{2,40}$/i.test(raw)) {
     const slug = raw.split(":")[2].toLowerCase().trim();
     const handled = await handleGroupSmartLink({ from, slug, biz, saveBiz });
-    return handled;
-  }
-
-  // ── TUTOR GROUP link: ZQ:TGROUP:<slug> ───────────────────────────────────────
-  // Bundles multiple private tutors under one shareable link. Opening it lists
-  // the tutors + a "List as a Tutor" CTA, notifies the admin, and (on tap) shows
-  // the full tutor profile with any flyers/brochures.
-  if (/^ZQ:TGROUP:[a-z0-9-]{2,40}$/i.test(raw)) {
-    const slug = raw.split(":")[2].toLowerCase().trim();
-    const handled = await handleTutorGroupSmartLink({ from, slug, biz, saveBiz });
     return handled;
   }
 

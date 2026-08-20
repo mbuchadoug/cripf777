@@ -197,6 +197,16 @@ async function _load(from, biz) {
 export async function handleTutorSearchAction({ action: a, from, biz, saveBiz }) {
   if (typeof a !== "string") return false;
 
+  // ── Tutor GROUP smart-link taps (zqtg_tut_<id> / zqtg_register_<slug>) ───────
+  // The chatbot engine already routes every tutor action tap through this
+  // handler, so wiring the tutor-group taps here means NO chatbotEngine change
+  // is required. Delegates to groupSmartLink.handleTutorGroupTap(), which opens
+  // the tutor profile (pitch → flyers → brochures → card) or starts registration.
+  if (a.startsWith("zqtg_")) {
+    const { handleTutorGroupTap } = await import("./groupSmartLink.js");
+    return handleTutorGroupTap({ from, action: a, biz, saveBiz });
+  }
+
   if (a === "tutor_refine")   return startTutorSearch(from, biz, saveBiz);
   if (a === "tutor_show_all") {
     const search = {};
