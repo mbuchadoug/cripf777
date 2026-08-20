@@ -1178,10 +1178,52 @@ if (state === "supplier_reg_tutor_levels") {
   });
 }
 
+// Rate per hour (mode button set state here and sent the prompt).
+if (state === "supplier_reg_tutor_rate") {
+  const raw = (text || "").trim();
+  if (raw.toLowerCase() === "skip") {
+    biz.sessionData.supplierReg.hourlyRate = 0;
+  } else {
+    const m = raw.match(/(\d+(?:\.\d+)?)/);
+    if (!m) {
+      await sendText(from, "❌ Please type your rate as a number, e.g. *8*, or tap Skip.");
+      return true;
+    }
+    biz.sessionData.supplierReg.hourlyRate = parseFloat(m[1]) || 0;
+  }
+  biz.sessionState = "supplier_reg_tutor_about";
+  await saveBiz(biz);
+  return sendButtons(from, {
+    text:
+`🎓 *A short line about you* (qualifications / experience), or tap Skip.
+
+_e.g. BSc Maths (UZ), 8 yrs teaching_`,
+    buttons: [{ id: "sup_tutor_about_skip", title: "⏭ Skip" }]
+  });
+}
+
 if (state === "supplier_reg_tutor_about") {
   const raw = (text || "").trim();
   if (raw.toLowerCase() !== "skip" && raw.length > 1) {
     biz.sessionData.supplierReg.qualifications = raw.slice(0, 300);
+  }
+  biz.sessionState = "supplier_reg_tutor_pitch";
+  await saveBiz(biz);
+  return sendButtons(from, {
+    text:
+`📣 *Add a short marketing pitch for parents & students* (or tap Skip).
+
+This is shown when a parent opens your profile.
+
+_e.g. Patient, experienced Maths & Science tutor. Weekend and holiday exam-prep classes. Proven results - let's get those A's!_`,
+    buttons: [{ id: "sup_tutor_pitch_skip", title: "⏭ Skip" }]
+  });
+}
+
+if (state === "supplier_reg_tutor_pitch") {
+  const raw = (text || "").trim();
+  if (raw.toLowerCase() !== "skip" && raw.length > 1) {
+    biz.sessionData.supplierReg.smartLinkPitch = raw.slice(0, 1000);
   }
   return _finaliseTutorRegistration(from, biz, saveBiz);
 }
@@ -2057,9 +2099,10 @@ _Type *cancel* to start over._`
 
 // ═════════════════════════════════════════════════════════════════════════════
 // PRIVATE TUTOR - finalise registration
-// Creates an ACTIVE, FREE tutor profile (price hidden for now), links it to the
-// Business, generates a smart-link slug, and turns on revealVisitorPhone so the
-// tutor gets each parent's number. No plan / payment step.
+// Creates an INACTIVE tutor profile and routes to the SAME plan → payment flow
+// as every other supplier. The tutor is NOT live and gets NO smart link until
+// (a) they pay, and (b) an admin issues their link. revealVisitorPhone is on so
+// that once the admin activates + issues the link, phone reveal works.
 // ═════════════════════════════════════════════════════════════════════════════
 async function _finaliseTutorRegistration(from, biz, saveBiz) {
   const phone = from.replace(/\D+/g, "");
@@ -2078,20 +2121,17 @@ async function _finaliseTutorRegistration(from, biz, saveBiz) {
     biz.sessionState = "ready";
     await saveBiz(biz);
     return sendButtons(from, {
-      text: `✅ You're already listed as *${existing.businessName}*. Type *menu* to manage your profile.`,
+      text: `✅ You already have a listing (*${existing.businessName}*). Type *menu* to manage it.`,
       buttons: [{ id: "main_menu_back", title: "🏠 Main Menu" }]
     });
   }
-
-  const now = new Date();
-  // Free for now: active immediately, generous end date (price hidden).
-  const endsAt = new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000);
 
   const allSubjects = [
     ...(reg.subjects || []),
     ...(reg.customSubjects || [])
   ].filter(Boolean);
 
+  // Create INACTIVE - buyers can't see them until they pay & are activated.
   const supplier = await SupplierProfile.create({
     phone,
     businessName:   reg.businessName,
@@ -2102,50 +2142,39 @@ async function _finaliseTutorRegistration(from, biz, saveBiz) {
     subjects:       allSubjects,
     teachingLevels: reg.teachingLevels || [],
     teachingMode:   reg.teachingMode || "in_person",
+    hourlyRate:     Number(reg.hourlyRate) || 0,
+    hourlyCurrency: "USD",
     qualifications: reg.qualifications || "",
+    smartLinkPitch: reg.smartLinkPitch || "",
     revealVisitorPhone: true,
     canViewContacts:    true,
     tier: "basic", tierRank: 1,
-    subscriptionStatus: "active",       // free-for-now
-    subscriptionPlan:   "monthly",
-    subscriptionStartedAt: now,
-    subscriptionEndsAt:    endsAt,
-    active: true
+    subscriptionStatus: "pending",   // ← not active until payment
+    active: false                    // ← admin issues the smart link separately
   });
 
-  // Link back to the Business.
+  // Link back to the Business and hand off to the shared plan/payment flow.
   biz.supplierProfileId = supplier._id;
   biz.isSupplier = true;
   if (!biz.name || biz.name.startsWith("pending_")) biz.name = reg.businessName;
-  biz.sessionState = "ready";
-  biz.sessionData  = {};
+  biz.sessionData = { ...(biz.sessionData || {}), pendingSupplierId: supplier._id.toString() };
+  biz.sessionState = "supplier_reg_choose_plan";
   await saveBiz(biz);
 
-  // Generate the smart-link slug so the tutor has a shareable link right away.
-  let slug = null;
-  try {
-    const { assignSlugToSupplier } = await import("./supplierSmartLink.js");
-    slug = await assignSlugToSupplier(String(supplier._id));
-  } catch (e) {
-    console.warn("[Tutor reg] slug assignment failed:", e.message);
-  }
-
-  const base = process.env.PUBLIC_BASE_URL || process.env.BASE_URL || "https://zimquote.co.zw";
-  const linkLine = slug ? `\n\n🔗 *Your tutor link:*\n${base}/s/${slug}\n\nPost it on your WhatsApp status and socials - every parent who opens it comes straight to you, with their number.` : "";
-
-  return sendButtons(from, {
-    text:
-`🎉 *You're live on ZimQuote, ${reg.businessName}!*
-
-Parents can now find you when they search for tutors.
+  // Same plan action IDs as other suppliers → existing EcoCash payment handlers.
+  return sendList(from,
+`✅ *Almost done, ${reg.businessName}!*
 
 📚 Subjects: ${reg.subjectsText || allSubjects.join(", ") || "-"}
 🎯 Levels: ${reg.levelsText || "-"}
-📍 ${reg.area ? reg.area + ", " : ""}${reg.city || ""}
+${(Number(reg.hourlyRate) || 0) > 0 ? "💵 Rate: $" + (Number(reg.hourlyRate)||0) + "/hr\n" : ""}📍 ${reg.area ? reg.area + ", " : ""}${reg.city || ""}
 
-🔔 You'll get a WhatsApp alert with the *parent's phone number* whenever someone opens your profile.${linkLine}`,
-    buttons: [
-      { id: "main_menu_back", title: "🏠 Main Menu" }
+To go live and start getting students, choose a plan and pay. Parents will then find you when they search for tutors.
+
+💳 *Choose your plan:*`,
+    [
+      { id: "sup_plan_basic_monthly", title: "✅ $5 / month",  description: "Listed in tutor search" },
+      { id: "sup_plan_basic_annual",  title: "✅ $50 / year",  description: "Save $10 - pay once" }
     ]
-  });
+  );
 }

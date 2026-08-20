@@ -4464,21 +4464,32 @@ if (a === "sup_tmode_in_person" || a === "sup_tmode_online" || a === "sup_tmode_
   if (biz && biz.sessionData?.supplierReg) {
     biz.sessionData.supplierReg.teachingMode =
       a === "sup_tmode_online" ? "online" : a === "sup_tmode_both" ? "both" : "in_person";
-    biz.sessionState = "supplier_reg_tutor_about";
+    biz.sessionState = "supplier_reg_tutor_rate";
     await saveBizSafe(biz);
     return sendButtons(from, {
-      text: "🎓 *Last step - one short line about you* (qualifications / experience), or tap Skip.\n\n_e.g. BSc Maths (UZ), 8 yrs teaching_",
-      buttons: [{ id: "sup_tutor_about_skip", title: "⏭ Skip" }]
+      text:
+`💵 *What's your rate per hour?* (USD)
+
+Type a number, e.g. *8* or *10*.
+
+_You can change it later, or tap Skip._`,
+      buttons: [{ id: "sup_tutor_rate_skip", title: "⏭ Skip" }]
     });
   }
 }
 
-// ── PRIVATE TUTOR: skip the "about" step → finalise via the text handler ─────
-if (a === "sup_tutor_about_skip") {
+// ── PRIVATE TUTOR: skip buttons for rate / about / pitch → finalise via handler
+if (a === "sup_tutor_rate_skip" || a === "sup_tutor_about_skip" || a === "sup_tutor_pitch_skip") {
   if (!_bizIsOwnedByUser) biz = null;
-  if (biz && biz.sessionState === "supplier_reg_tutor_about") {
+  const _tutorSkipStates = {
+    sup_tutor_rate_skip:  "supplier_reg_tutor_rate",
+    sup_tutor_about_skip: "supplier_reg_tutor_about",
+    sup_tutor_pitch_skip: "supplier_reg_tutor_pitch"
+  };
+  const _wantState = _tutorSkipStates[a];
+  if (biz && biz.sessionState === _wantState) {
     const _tHandled = await handleSupplierRegistrationStates({
-      state: "supplier_reg_tutor_about", from, text: "skip",
+      state: _wantState, from, text: "skip",
       biz, saveBiz: saveBizSafe.bind(null, biz)
     });
     if (_tHandled) return;
@@ -12125,7 +12136,9 @@ const supplierStates = [
   "supplier_reg_tutor_subjects",
   "supplier_reg_tutor_levels",
   "supplier_reg_tutor_mode",
+  "supplier_reg_tutor_rate",
   "supplier_reg_tutor_about",
+  "supplier_reg_tutor_pitch",
   "supplier_reg_tourism_details",
   "supplier_reg_hospitality_subtype",
   "supplier_reg_hospitality_rooms",

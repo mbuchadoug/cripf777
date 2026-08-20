@@ -113,22 +113,6 @@ const _broadcastUpload = multer({
   }
 });
 
-// ── Tutor media (flyer + brochure) upload → served publicly for Meta to fetch ─
-// Saved into public/tutor-media and served at https://<host>/tutor-media/<file>.
-const _tutorMediaDir = _receiptPath.join(_receiptDir, "..", "public", "tutor-media");
-if (!fs.existsSync(_tutorMediaDir)) fs.mkdirSync(_tutorMediaDir, { recursive: true });
-const _tutorMediaUpload = multer({
-  storage: multer.diskStorage({
-    destination: (req, file, cb) => cb(null, _tutorMediaDir),
-    filename:    (req, file, cb) => {
-      const ext = _receiptPath.extname(file.originalname) || "";
-      cb(null, "tut_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7) + ext);
-    }
-  }),
-  limits: { fileSize: 16 * 1024 * 1024 },
-  fileFilter: (req, file, cb) => cb(null, /\.(jpg|jpeg|png|gif|webp|pdf)$/i.test(file.originalname))
-});
-
 async function _streamReceiptPDF(res, {
   filename, ref, isActivation,
   supplierName, phone, location,
@@ -1516,7 +1500,7 @@ router.get("/suppliers/new-tutor", requireSupplierAdmin, async (req, res) => {
         <h3>👩‍🏫 Register Private Tutor</h3>
         <span style="font-size:12px;color:var(--muted)">$5/mo basic plan · appears under "Private Tutor" search · gets parent phone numbers on profile views</span>
       </div>
-      <form method="POST" action="/zq-admin/suppliers/new-tutor" enctype="multipart/form-data" class="edit-form">
+      <form method="POST" action="/zq-admin/suppliers/new-tutor" class="edit-form">
         <div style="margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--border)">
           <p style="font-weight:700;font-size:13px;margin-bottom:14px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">1. Tutor Info</p>
           <div class="form-grid">
@@ -1568,14 +1552,9 @@ router.get("/suppliers/new-tutor", requireSupplierAdmin, async (req, res) => {
             <input type="checkbox" name="revealVisitorPhone" value="true" checked />
             🔔 Send tutor the parent's phone number when their profile is opened <b>(recommended)</b></label>
           <div class="fg" style="margin-top:14px">
-            <label>📢 Flyer image (optional)</label>
-            <input type="file" name="flyerFile" accept="image/*" />
-            <span style="font-size:11px;color:var(--muted)">JPG/PNG. Shown to parents when they open the tutor's profile and smart link.</span>
-          </div>
-          <div class="fg" style="margin-top:12px">
-            <label>📄 Brochure (optional)</label>
-            <input type="file" name="brochureFile" accept="application/pdf,image/*" />
-            <span style="font-size:11px;color:var(--muted)">PDF or image. Sent as a document after the flyer.</span>
+            <label>📢 Flyer image URL (optional)</label>
+            <input name="flyerUrl" placeholder="https://... a public JPG/PNG of the tutor's flyer" />
+            <span style="font-size:11px;color:var(--muted)">Paste a hosted image URL to attach a flyer now - parents see it when they open the tutor. To <b>upload a file</b> (or add brochures/more flyers), open <b>📢 Marketing</b> on the tutor's page after saving.</span>
           </div>
         </div>
 
@@ -1596,9 +1575,7 @@ router.get("/suppliers/new-tutor", requireSupplierAdmin, async (req, res) => {
   `));
 });
 
-router.post("/suppliers/new-tutor", requireSupplierAdmin,
-  _tutorMediaUpload.fields([{ name: "flyerFile", maxCount: 1 }, { name: "brochureFile", maxCount: 1 }]),
-  async (req, res) => {
+router.post("/suppliers/new-tutor", requireSupplierAdmin, async (req, res) => {
   try {
     const {
       businessName, phone, city, area, contactDetails, qualifications, experienceYears,
@@ -1665,22 +1642,8 @@ router.post("/suppliers/new-tutor", requireSupplierAdmin,
       experienceYears: Number(experienceYears) || 0,
       availability:   availability?.trim() || "",
       smartLinkPitch: (smartLinkPitch || "").trim().slice(0, 1000),
-      smartLinkFlyers: (req.files?.flyerFile?.[0])
-        ? [{
-            url: req.protocol + "://" + req.get("host") + "/tutor-media/" + req.files.flyerFile[0].filename,
-            label: "Flyer",
-            mimeType: req.files.flyerFile[0].mimetype || "image/jpeg",
-            addedAt: now
-          }]
-        : [],
-      brochures: (req.files?.brochureFile?.[0])
-        ? [{
-            url: req.protocol + "://" + req.get("host") + "/tutor-media/" + req.files.brochureFile[0].filename,
-            label: "Brochure",
-            isImage: /image\//i.test(req.files.brochureFile[0].mimetype || ""),
-            mimeType: req.files.brochureFile[0].mimetype || "application/pdf",
-            addedAt: now
-          }]
+      smartLinkFlyers: (req.body.flyerUrl || "").trim()
+        ? [{ url: (req.body.flyerUrl || "").trim(), label: "Flyer", mimeType: "image/jpeg", addedAt: now }]
         : [],
       revealVisitorPhone: req.body.revealVisitorPhone === "true",
       canViewContacts: true,
