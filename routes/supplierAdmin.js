@@ -490,6 +490,7 @@ router.get("/suppliers", requireSupplierAdmin, async (req, res) => {
                 <option value="">All Types</option>
                 <option ${type === "product" ? "selected" : ""} value="product">📦 Product Suppliers</option>
                 <option ${type === "service" ? "selected" : ""} value="service">🔧 Service Providers</option>
+                <option ${type === "tutor" ? "selected" : ""} value="tutor">👩‍🏫 Private Tutors</option>
                 <option ${type === "hospitality" ? "selected" : ""} value="hospitality">🏨 Hospitality / Tourism</option>
               </select>
               <button type="submit">Filter</button>
@@ -512,6 +513,7 @@ router.get("/suppliers", requireSupplierAdmin, async (req, res) => {
               <td>${esc(s.location?.city || "-")}</td>
               <td><span class="type-pill">${
                 s.profileType === "hospitality" ? "🏨 " + (s.tourismSubtype?.[0] || "hospitality") :
+                s.profileType === "tutor" ? "👩‍🏫 tutor" :
                 s.profileType === "service" ? "🔧 service" : "📦 product"
               }</span></td>
               <td>${badge(s.tier || "basic", tierColor(s.tier))}</td>
