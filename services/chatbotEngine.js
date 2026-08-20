@@ -4429,7 +4429,7 @@ if (
     await saveBizSafe(biz);
     console.log("[REG_TYPE_FIXED] profileType: tutor bizId:", biz._id, "-> supplier_reg_name");
     return sendText(from,
-`👩‍🏫 *Private Tutor Registration*
+`🧑‍🏫 *Private Tutor Registration*
 
 What's your *tutoring name*?
 

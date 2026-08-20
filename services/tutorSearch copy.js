@@ -117,7 +117,7 @@ export async function startTutorSearch(from, biz, saveBiz) {
 
   return sendButtons(from, {
     text:
-`🧑‍🏫 *Find a Private Tutor*
+`👩‍🏫 *Find a Private Tutor*
 
 Type the *subject*, *level*, *area* (or "online"), and your *budget per hour*.
 
@@ -269,7 +269,7 @@ async function _renderResults(from, biz, saveBiz, search) {
 
   if (!tutors.length) {
     await sendText(from,
-`🧑‍🏫 *No tutors yet*
+`👩‍🏫 *No tutors yet*
 
 We don't have a tutor for that on ZimQuote yet.
 
@@ -290,10 +290,10 @@ We don't have a tutor for that on ZimQuote yet.
 
   const lines = tutors.map((t, i) => {
     const badge = t.tierRank >= 3 ? " 🔥" : (t.verified ? " ✅" : "");
-    return `*${i + 1}.* 🧑‍🏫 ${t.businessName}${badge}\n     ${_tutorLine(t)}`;
+    return `*${i + 1}.* 👩‍🏫 ${t.businessName}${badge}\n     ${_tutorLine(t)}`;
   }).join("\n\n");
 
-  const header = note ? `\u26a0\ufe0f ${note}` : `🧑‍🏫 *Tutors found: ${tutors.length}*`;
+  const header = note ? `\u26a0\ufe0f ${note}` : `👩‍🏫 *Tutors found: ${tutors.length}*`;
 
   await sendText(from,
 `${header}
@@ -376,7 +376,7 @@ export async function showTutorProfile(from, tutorId, biz, saveBiz, { source = "
     : "⭐ No reviews yet";
 
   const card =
-`🧑‍🏫 *${t.businessName}*${verified}${featured}
+`👩‍🏫 *${t.businessName}*${verified}${featured}
 ${area ? "📍 " + area : ""}
 
 📚 *Subjects:* ${subjects}

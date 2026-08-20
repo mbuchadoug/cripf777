@@ -347,47 +347,5 @@ SupplierProfileSchema.index({
   hourlyRate:     1
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-// TUTOR INTEGRITY GUARD — "fix it for once"
-// A record with teachingLevels[] is unambiguously a private tutor (a real
-// product/service supplier NEVER has teachingLevels). This guarantees that no
-// code path — self-registration, EcoCash/Paynow activation, a payment webhook,
-// or any future update — can silently save such a record as "product"/"service".
-// It does NOT touch normal suppliers (they have no teachingLevels), so it can't
-// mislabel anyone. To intentionally convert a tutor to another type, clear
-// teachingLevels in the same operation.
-// ─────────────────────────────────────────────────────────────────────────────
-function _looksLikeTutor(levels) {
-  return Array.isArray(levels) && levels.length > 0;
-}
-
-// Covers supplier.save() (self-reg finalise + payment activation both use .save()).
-SupplierProfileSchema.pre("save", function (next) {
-  if (this.profileType !== "tutor" && _looksLikeTutor(this.teachingLevels)) {
-    this.profileType = "tutor";
-  }
-  next();
-});
-
-// Covers findOneAndUpdate / findByIdAndUpdate paths (e.g. webhooks) that would
-// set profileType to product/service without also clearing teachingLevels.
-SupplierProfileSchema.pre(["findOneAndUpdate", "updateOne", "updateMany"], async function () {
-  const update  = this.getUpdate() || {};
-  const set     = update.$set || update;
-  const newType = set.profileType;
-  if (newType && ["product", "service"].includes(newType)) {
-    const clearingLevels =
-      (Array.isArray(set.teachingLevels) && set.teachingLevels.length === 0) ||
-      (update.$unset && "teachingLevels" in update.$unset);
-    if (!clearingLevels) {
-      const existing = await this.model.findOne(this.getQuery()).select("teachingLevels").lean();
-      if (existing && _looksLikeTutor(existing.teachingLevels)) {
-        if (update.$set) delete update.$set.profileType; else delete update.profileType;
-        this.setUpdate(update);
-      }
-    }
-  }
-});
-
 export default mongoose.models.SupplierProfile ||
   mongoose.model("SupplierProfile", SupplierProfileSchema);

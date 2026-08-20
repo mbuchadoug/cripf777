@@ -472,7 +472,7 @@ router.get("/suppliers", requireSupplierAdmin, async (req, res) => {
           <h3>Suppliers <span class="count">${total}</span></h3>
           <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
             <a href="/zq-admin/suppliers/new" class="btn btn-green btn-sm">➕ Register New</a>
-            <a href="/zq-admin/suppliers/new-tutor" class="btn btn-sm" style="background:#7c3aed;color:#fff">👩‍🏫 Register Tutor</a>
+            <a href="/zq-admin/suppliers/new-tutor" class="btn btn-sm" style="background:#7c3aed;color:#fff">🧑‍🏫 Register Tutor</a>
             <form method="GET" class="filter-form">
               <input name="search" placeholder="Name, phone, city..." value="${esc(search)}" />
               <select name="status">
@@ -490,7 +490,7 @@ router.get("/suppliers", requireSupplierAdmin, async (req, res) => {
                 <option value="">All Types</option>
                 <option ${type === "product" ? "selected" : ""} value="product">📦 Product Suppliers</option>
                 <option ${type === "service" ? "selected" : ""} value="service">🔧 Service Providers</option>
-                <option ${type === "tutor" ? "selected" : ""} value="tutor">👩‍🏫 Private Tutors</option>
+                <option ${type === "tutor" ? "selected" : ""} value="tutor">🧑‍🏫 Private Tutors</option>
                 <option ${type === "hospitality" ? "selected" : ""} value="hospitality">🏨 Hospitality / Tourism</option>
               </select>
               <button type="submit">Filter</button>
@@ -513,7 +513,7 @@ router.get("/suppliers", requireSupplierAdmin, async (req, res) => {
               <td>${esc(s.location?.city || "-")}</td>
               <td><span class="type-pill">${
                 s.profileType === "hospitality" ? "🏨 " + (s.tourismSubtype?.[0] || "hospitality") :
-                s.profileType === "tutor" ? "👩‍🏫 tutor" :
+                s.profileType === "tutor" ? "🧑‍🏫 tutor" :
                 s.profileType === "service" ? "🔧 service" : "📦 product"
               }</span></td>
               <td>${badge(s.tier || "basic", tierColor(s.tier))}</td>
@@ -1515,7 +1515,7 @@ router.get("/suppliers/new-tutor", requireSupplierAdmin, async (req, res) => {
     ${error}${success}
     <div class="panel" style="max-width:900px">
       <div class="panel-head">
-        <h3>👩‍🏫 Register Private Tutor</h3>
+        <h3>🧑‍🏫 Register Private Tutor</h3>
         <span style="font-size:12px;color:var(--muted)">$5/mo basic plan · appears under "Private Tutor" search · gets parent phone numbers on profile views</span>
       </div>
       <form method="POST" action="/zq-admin/suppliers/new-tutor" enctype="multipart/form-data" class="edit-form">
@@ -1592,7 +1592,7 @@ router.get("/suppliers/new-tutor", requireSupplierAdmin, async (req, res) => {
           </div>
         </div>
 
-        <button type="submit" class="btn btn-green">👩‍🏫 Register Tutor</button>
+        <button type="submit" class="btn btn-green">🧑‍🏫 Register Tutor</button>
       </form>
     </div>
   `));
@@ -2303,7 +2303,7 @@ ${supplier.profileType === "hospitality" ? `
               <select name="profileType">
                 <option ${supplier.profileType === "product" ? "selected" : ""} value="product">📦 Product Supplier</option>
                 <option ${supplier.profileType === "service" ? "selected" : ""} value="service">🔧 Service Provider</option>
-                <option ${supplier.profileType === "tutor" ? "selected" : ""} value="tutor">👩‍🏫 Private Tutor</option>
+                <option ${supplier.profileType === "tutor" ? "selected" : ""} value="tutor">🧑‍🏫 Private Tutor</option>
                 <option ${supplier.profileType === "hospitality" ? "selected" : ""} value="hospitality">🏨 Hospitality / Tourism</option>
               </select>
             </div>
