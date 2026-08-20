@@ -208,7 +208,6 @@ What would you like to list?`,
       [
         { id: "reg_type_product", title: "📦 I Sell Products" },
         { id: "reg_type_service", title: "🧰 I Offer Services" },
-        { id: "reg_type_tutor",   title: "👩‍🏫 Private Tutor" },
         { id: "reg_type_school",  title: "🏫 I Run a School" }
       ]
     );
@@ -230,7 +229,6 @@ What would you like to list?`,
     [
       { id: "reg_type_product",     title: "📦 I Sell Products"         },
       { id: "reg_type_service",     title: "🧰 I Offer Services"        },
-      { id: "reg_type_tutor",       title: "👩‍🏫 Private Tutor"     },
       { id: "reg_type_hospitality", title: "🏨 Lodge / Hotel / Tourism" },
       { id: "reg_type_school",      title: "🏫 I Run a School"          }
     ]
@@ -293,7 +291,6 @@ export async function handleSupplierRegistrationStates({
     _actionId === "reg_type_product" ||
     _actionId === "reg_type_service" ||
     _actionId === "reg_type_school" ||
-    _actionId === "reg_type_tutor" ||
     _actionId === "reg_type_hospitality"
   ) {
     return false; // ← let chatbotEngine handle it at the action handler
@@ -361,20 +358,6 @@ if (state === "supplier_reg_area") {
     }
     biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
     biz.sessionData.supplierReg.area = area;
-
-    // ── Private tutor: short dedicated flow (no address/website/category) ──────
-    if (biz.sessionData.supplierReg.profileType === "tutor") {
-      biz.sessionState = "supplier_reg_tutor_subjects";
-      await saveBiz(biz);
-      return sendText(from,
-`📚 *Which subjects do you teach?*
-
-Type them separated by commas.
-_e.g. Maths, Physics, English_
-_or: Accounts, Business Studies_`
-      );
-    }
-
     biz.sessionState = "supplier_reg_address";
     await saveBiz(biz);
 
@@ -1089,103 +1072,6 @@ Type your ${rateLabel} and send, or tap Skip 👇`
   });
 }
   // ── Step 4: Minimum Order ──────────────────────────────
-
-// ── PRIVATE TUTOR self-registration (dedicated short flow) ──────────────────
-// Flow: name → city → area (all reused/working) → subjects → levels → mode
-//       (button) → about → CREATE (active + free; price hidden for now).
-// Reuses the working supplier_reg_city step, so NO "select city" error.
-
-const _TUTOR_SUBJECT_SYN = {
-  mathematics: ["maths","math","mathematics","add maths","additional maths","pure maths","statistics","stats"],
-  english:     ["english","language","literature","comprehension"],
-  sciences:    ["science","sciences","biology","bio","chemistry","chem","physics","combined science","integrated science"],
-  accounts:    ["accounts","accounting","poa","commerce","business studies","economics","econ"],
-  shona:       ["shona","chishona"], ndebele: ["ndebele","isindebele"],
-  ict:         ["ict","computers","computer science","computing","coding"],
-  geography:   ["geography","geo"], history: ["history"],
-  heritage:    ["heritage","fareme","religious studies","divinity"],
-  agriculture: ["agriculture","agric"], french: ["french"],
-  art:         ["art","fine art"], music: ["music","piano","guitar"],
-  early_learning: ["early learning","ecd"]
-};
-const _TUTOR_LEVEL_SYN = {
-  cambridge: ["cambridge","igcse","gcse","as level","a2","checkpoint"],
-  alevel:    ["a level","a-level","alevel","advanced","form 5","form 6","lower 6","upper 6"],
-  olevel:    ["o level","o-level","olevel","ordinary","form 3","form 4"],
-  zjc:       ["zjc","form 1","form 2","junior"],
-  primary:   ["primary","grade 1","grade 2","grade 3","grade 4","grade 5","grade 6","grade 7"],
-  ecd:       ["ecd","pre-school","preschool","nursery"],
-  college:   ["college","university","tertiary","degree","diploma"],
-  adult:     ["adult","professional"]
-};
-function _mapTutorTokens(raw, synMap) {
-  const found = new Set();
-  const custom = [];
-  for (const chunk of String(raw).split(/[,;/]+/).map(s => s.trim()).filter(Boolean)) {
-    const low = chunk.toLowerCase();
-    let matched = null;
-    for (const [id, syns] of Object.entries(synMap)) {
-      if (syns.some(s => low.includes(s))) { matched = id; break; }
-    }
-    if (matched) found.add(matched);
-    else custom.push(chunk);
-  }
-  return { ids: [...found], custom };
-}
-
-if (state === "supplier_reg_tutor_subjects") {
-  const raw = (text || "").trim();
-  if (!raw || raw.length < 2) {
-    await sendText(from, "❌ Please type at least one subject, e.g. *Maths, English*:");
-    return true;
-  }
-  const { ids, custom } = _mapTutorTokens(raw, _TUTOR_SUBJECT_SYN);
-  biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
-  // Store canonical ids for search + keep the human-typed list for display.
-  biz.sessionData.supplierReg.subjects = ids.length ? ids : [];
-  biz.sessionData.supplierReg.subjectsText = raw;
-  biz.sessionData.supplierReg.customSubjects = custom;
-  biz.sessionState = "supplier_reg_tutor_levels";
-  await saveBiz(biz);
-  return sendText(from,
-`🎯 *Which levels do you teach?*
-
-Type them separated by commas.
-_e.g. O-Level, A-Level_
-_or: Primary, Form 1-2_
-_or: College_`
-  );
-}
-
-if (state === "supplier_reg_tutor_levels") {
-  const raw = (text || "").trim();
-  if (!raw || raw.length < 2) {
-    await sendText(from, "❌ Please type at least one level, e.g. *O-Level, A-Level*:");
-    return true;
-  }
-  const { ids } = _mapTutorTokens(raw, _TUTOR_LEVEL_SYN);
-  biz.sessionData.supplierReg.teachingLevels = ids;
-  biz.sessionData.supplierReg.levelsText = raw;
-  biz.sessionState = "supplier_reg_tutor_mode";
-  await saveBiz(biz);
-  return sendButtons(from, {
-    text: "🖥 *How do you teach?*",
-    buttons: [
-      { id: "sup_tmode_in_person", title: "🏠 In person" },
-      { id: "sup_tmode_online",    title: "💻 Online" },
-      { id: "sup_tmode_both",      title: "🔁 Both" }
-    ]
-  });
-}
-
-if (state === "supplier_reg_tutor_about") {
-  const raw = (text || "").trim();
-  if (raw.toLowerCase() !== "skip" && raw.length > 1) {
-    biz.sessionData.supplierReg.qualifications = raw.slice(0, 300);
-  }
-  return _finaliseTutorRegistration(from, biz, saveBiz);
-}
-// ── /PRIVATE TUTOR ──────────────────────────────────────────────────────────
 
 // ── Step: Teacher / Tutor details (subjects & grades) ───────────────────────
 if (state === "supplier_reg_teacher_details") {
@@ -2053,99 +1939,4 @@ _Type *cancel* to start over._`
 
 
   return false;
-}
-
-// ═════════════════════════════════════════════════════════════════════════════
-// PRIVATE TUTOR - finalise registration
-// Creates an ACTIVE, FREE tutor profile (price hidden for now), links it to the
-// Business, generates a smart-link slug, and turns on revealVisitorPhone so the
-// tutor gets each parent's number. No plan / payment step.
-// ═════════════════════════════════════════════════════════════════════════════
-async function _finaliseTutorRegistration(from, biz, saveBiz) {
-  const phone = from.replace(/\D+/g, "");
-  const reg   = biz.sessionData?.supplierReg || {};
-
-  if (!reg.businessName) {
-    biz.sessionState = "ready";
-    await saveBiz(biz);
-    await sendText(from, "❌ Something went wrong. Please type *register* to start again.");
-    return true;
-  }
-
-  // Guard against a duplicate tutor for this phone.
-  const existing = await SupplierProfile.findOne({ phone });
-  if (existing) {
-    biz.sessionState = "ready";
-    await saveBiz(biz);
-    return sendButtons(from, {
-      text: `✅ You're already listed as *${existing.businessName}*. Type *menu* to manage your profile.`,
-      buttons: [{ id: "main_menu_back", title: "🏠 Main Menu" }]
-    });
-  }
-
-  const now = new Date();
-  // Free for now: active immediately, generous end date (price hidden).
-  const endsAt = new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000);
-
-  const allSubjects = [
-    ...(reg.subjects || []),
-    ...(reg.customSubjects || [])
-  ].filter(Boolean);
-
-  const supplier = await SupplierProfile.create({
-    phone,
-    businessName:   reg.businessName,
-    businessId:     biz._id,
-    profileType:    "tutor",
-    location:       { city: reg.city || "Harare", area: reg.area || "" },
-    contactDetails: reg.contactDetails || "",
-    subjects:       allSubjects,
-    teachingLevels: reg.teachingLevels || [],
-    teachingMode:   reg.teachingMode || "in_person",
-    qualifications: reg.qualifications || "",
-    revealVisitorPhone: true,
-    canViewContacts:    true,
-    tier: "basic", tierRank: 1,
-    subscriptionStatus: "active",       // free-for-now
-    subscriptionPlan:   "monthly",
-    subscriptionStartedAt: now,
-    subscriptionEndsAt:    endsAt,
-    active: true
-  });
-
-  // Link back to the Business.
-  biz.supplierProfileId = supplier._id;
-  biz.isSupplier = true;
-  if (!biz.name || biz.name.startsWith("pending_")) biz.name = reg.businessName;
-  biz.sessionState = "ready";
-  biz.sessionData  = {};
-  await saveBiz(biz);
-
-  // Generate the smart-link slug so the tutor has a shareable link right away.
-  let slug = null;
-  try {
-    const { assignSlugToSupplier } = await import("./supplierSmartLink.js");
-    slug = await assignSlugToSupplier(String(supplier._id));
-  } catch (e) {
-    console.warn("[Tutor reg] slug assignment failed:", e.message);
-  }
-
-  const base = process.env.PUBLIC_BASE_URL || process.env.BASE_URL || "https://zimquote.co.zw";
-  const linkLine = slug ? `\n\n🔗 *Your tutor link:*\n${base}/s/${slug}\n\nPost it on your WhatsApp status and socials - every parent who opens it comes straight to you, with their number.` : "";
-
-  return sendButtons(from, {
-    text:
-`🎉 *You're live on ZimQuote, ${reg.businessName}!*
-
-Parents can now find you when they search for tutors.
-
-📚 Subjects: ${reg.subjectsText || allSubjects.join(", ") || "-"}
-🎯 Levels: ${reg.levelsText || "-"}
-📍 ${reg.area ? reg.area + ", " : ""}${reg.city || ""}
-
-🔔 You'll get a WhatsApp alert with the *parent's phone number* whenever someone opens your profile.${linkLine}`,
-    buttons: [
-      { id: "main_menu_back", title: "🏠 Main Menu" }
-    ]
-  });
 }

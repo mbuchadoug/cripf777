@@ -3627,7 +3627,6 @@ a === "my_orders" ||
   a === "reg_type_product" ||
       a === "reg_type_service" ||
       a === "reg_type_hospitality" ||
-      a === "reg_type_tutor" ||
       a === "reg_type_school" ||
       a === "reg_type_product" ||
       a === "reg_type_service" ||
@@ -4373,7 +4372,6 @@ if (
   a === "reg_type_product" ||
   a === "reg_type_service" ||
   a === "reg_type_hospitality" ||
-  a === "reg_type_tutor" ||
   a === "reg_type_school"
 ) {
   console.log("[REG_TYPE_FIXED] phone:", phone, "action:", a, "biz:", biz?._id, "state:", biz?.sessionState);
@@ -4422,22 +4420,6 @@ if (
     return sendText(from, `🏫 *School Registration*\n\nWhat is your *school's full name*?\n\n_Type *cancel* at any time to stop._`);
   }
 
-  // ── Private tutor: dedicated short flow (name → city → area → subjects...) ─
-  if (a === "reg_type_tutor") {
-    biz.sessionData  = { supplierReg: { profileType: "tutor" } };
-    biz.sessionState = "supplier_reg_name";
-    await saveBizSafe(biz);
-    console.log("[REG_TYPE_FIXED] profileType: tutor bizId:", biz._id, "-> supplier_reg_name");
-    return sendText(from,
-`👩‍🏫 *Private Tutor Registration*
-
-What's your *tutoring name*?
-
-_e.g. Tendai Maths Tutor_
-_Type *cancel* at any time to stop._`
-    );
-  }
-
   const profileType =
     a === "reg_type_service"     ? "service"     :
     a === "reg_type_hospitality" ? "hospitality" :
@@ -4457,33 +4439,6 @@ _Type *cancel* at any time to stop._`
   );
 }
 // ── END REG TYPE EARLY HANDLER ───────────────────────────────────────────────
-
-// ── PRIVATE TUTOR: teaching-mode buttons (during supplier_reg_tutor_mode) ────
-if (a === "sup_tmode_in_person" || a === "sup_tmode_online" || a === "sup_tmode_both") {
-  if (!_bizIsOwnedByUser) biz = null;
-  if (biz && biz.sessionData?.supplierReg) {
-    biz.sessionData.supplierReg.teachingMode =
-      a === "sup_tmode_online" ? "online" : a === "sup_tmode_both" ? "both" : "in_person";
-    biz.sessionState = "supplier_reg_tutor_about";
-    await saveBizSafe(biz);
-    return sendButtons(from, {
-      text: "🎓 *Last step - one short line about you* (qualifications / experience), or tap Skip.\n\n_e.g. BSc Maths (UZ), 8 yrs teaching_",
-      buttons: [{ id: "sup_tutor_about_skip", title: "⏭ Skip" }]
-    });
-  }
-}
-
-// ── PRIVATE TUTOR: skip the "about" step → finalise via the text handler ─────
-if (a === "sup_tutor_about_skip") {
-  if (!_bizIsOwnedByUser) biz = null;
-  if (biz && biz.sessionState === "supplier_reg_tutor_about") {
-    const _tHandled = await handleSupplierRegistrationStates({
-      state: "supplier_reg_tutor_about", from, text: "skip",
-      biz, saveBiz: saveBizSafe.bind(null, biz)
-    });
-    if (_tHandled) return;
-  }
-}
 
 // ── SCHOOL FAQ EARLY HANDLER ────────────────────────────────────────────────
 // MUST be at top level - sfaq_* arrive as isMetaAction=true interactive replies.
@@ -7854,7 +7809,6 @@ const allowedWithoutBiz =
       a === "sup_search_type_service" ||
      a === "reg_type_school" ||
       a === "reg_type_hospitality" ||
-      a === "reg_type_tutor" ||
       a === "reg_type_product" ||
       a === "reg_type_service" ||
       a.startsWith("sup_hosp_type_") ||
@@ -12121,11 +12075,6 @@ const supplierStates = [
   "supplier_reg_type",
   "supplier_reg_travel",
   "supplier_reg_teacher_details",
-  // ── Private-tutor self-registration (dedicated short flow) ─────────────────
-  "supplier_reg_tutor_subjects",
-  "supplier_reg_tutor_levels",
-  "supplier_reg_tutor_mode",
-  "supplier_reg_tutor_about",
   "supplier_reg_tourism_details",
   "supplier_reg_hospitality_subtype",
   "supplier_reg_hospitality_rooms",
