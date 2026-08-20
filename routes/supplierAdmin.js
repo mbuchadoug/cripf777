@@ -2301,8 +2301,9 @@ ${supplier.profileType === "hospitality" ? `
             <div class="fg">
               <label>Profile Type</label>
               <select name="profileType">
-                <option ${supplier.profileType === "product" ? "selected" : ""} value="product">Product Supplier</option>
-                <option ${supplier.profileType === "service" ? "selected" : ""} value="service">Service Provider</option>
+                <option ${supplier.profileType === "product" ? "selected" : ""} value="product">📦 Product Supplier</option>
+                <option ${supplier.profileType === "service" ? "selected" : ""} value="service">🔧 Service Provider</option>
+                <option ${supplier.profileType === "tutor" ? "selected" : ""} value="tutor">👩‍🏫 Private Tutor</option>
                 <option ${supplier.profileType === "hospitality" ? "selected" : ""} value="hospitality">🏨 Hospitality / Tourism</option>
               </select>
             </div>
@@ -2532,13 +2533,21 @@ update.notificationContacts = [...new Set(_notifRaw)].filter(
     // ── VIP notification flags (set via VIP Settings page, not edit form) ────
     // These are managed via /suppliers/:id/vip-settings - do not overwrite here.
 
-    // Safety guard: never silently downgrade a hospitality supplier to product/service
-    // if the form somehow submitted without the hospitality option selected.
-    // Fetch the current record and preserve profileType if it's hospitality and
-    // the submitted value is missing or invalid.
-    if (!update.profileType || !["product","service","hospitality"].includes(update.profileType)) {
+    // Safety guard: never silently downgrade a special-type supplier (tutor or
+    // hospitality) to product/service. If the submitted value is missing/invalid,
+    // OR it would flip an existing tutor/hospitality into product/service without
+    // the form explicitly carrying that type, preserve the existing profileType.
+    if (!update.profileType || !["product","service","hospitality","tutor"].includes(update.profileType)) {
       const _existing = await SupplierProfile.findById(req.params.id).select("profileType").lean();
       if (_existing?.profileType) update.profileType = _existing.profileType;
+    } else {
+      const _existing = await SupplierProfile.findById(req.params.id).select("profileType").lean();
+      if (_existing && ["tutor","hospitality"].includes(_existing.profileType) &&
+          ["product","service"].includes(update.profileType)) {
+        // A tutor/hospitality record being saved as product/service is almost
+        // always the edit form defaulting, not an intentional change - keep it.
+        update.profileType = _existing.profileType;
+      }
     }
 
     await SupplierProfile.findByIdAndUpdate(req.params.id, update, { new: true });
