@@ -339,12 +339,8 @@ export async function showTutorProfile(from, tutorId, biz, saveBiz, { source = "
   // Count the view + notify the tutor WITH the parent's phone number.
   SupplierProfile.findByIdAndUpdate(tutorId, { $inc: { monthlyViews: 1, viewCount: 1 } }).catch(() => {});
   try {
-    // Notify the tutor AND all their extra notification contacts that their
-    // profile was viewed, ALWAYS including the viewer's phone number, via an
-    // approved UTILITY template so it is delivered even OUTSIDE the 24-hour
-    // session window (with a plain-text fallback inside the window).
-    const { notifyAllTutorProfileView } = await import("./supplierNotifications.js");
-    notifyAllTutorProfileView(t, source, from).catch(() => {});
+    const { notifyAllSupplierLinkOpened } = await import("./supplierNotifications.js");
+    notifyAllSupplierLinkOpened(t, source, from).catch(() => {});
   } catch (_) {}
 
   // 1) Pitch

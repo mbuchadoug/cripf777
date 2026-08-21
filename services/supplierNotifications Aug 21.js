@@ -549,35 +549,6 @@ export async function notifyAllSupplierLinkOpened(supplier, source, visitorPhone
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// PUBLIC: Tutor profile viewed - notify the tutor + ALL notification contacts,
-//         ALWAYS including the viewer's (parent's) phone number.
-//
-// This differs from notifyAllSupplierLinkOpened() on purpose. For ordinary
-// sellers the visitor's number is only revealed to VIPs (revealVisitorPhone).
-// For a TUTOR, sharing the viewer's number is core to the product - parents are
-// found by tutors so lessons can be arranged - so the phone is ALWAYS included,
-// regardless of the revealVisitorPhone flag.
-//
-// Fan-out: tutor.phone PLUS every number in tutor.notificationContacts
-//          (additive, de-duplicated - the extra numbers never replace the primary).
-//
-// Delivery: reuses the approved UTILITY template `supplier_link_opened_with_phone`
-//           (via notifySupplierLinkOpened with a non-null visitorPhone), so the
-//           alert reaches the tutor and their contacts EVEN OUTSIDE the 24-hour
-//           session window. If the template send fails, notifySupplierLinkOpened
-//           falls back to plain sendText (which only works inside the window).
-//
-// If visitorPhone is somehow missing, it degrades gracefully to the standard
-// no-phone link-open template so the tutor is still notified of the view.
-// ─────────────────────────────────────────────────────────────────────────────
-export async function notifyAllTutorProfileView(tutor, source, visitorPhone = null) {
-  if (!tutor) return;
-  await _notifyAllSupplier(tutor, phone =>
-    notifySupplierLinkOpened(phone, tutor.businessName, source, visitorPhone)
-  );
-}
-
 export async function notifySupplierLinkOpened(supplierPhone, businessName, source, visitorPhone = null) {
   const ts           = _timestamp();
   const normalizedTo = _normalizeZimPhone(supplierPhone);
