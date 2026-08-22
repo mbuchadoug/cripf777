@@ -406,6 +406,7 @@ export async function buildLedger({ biz, data, branchId, start, end, openingBala
         if (c) description = `${description} - ${c.name || c.phone}`;
       } catch (_) {}
     }
+    if (inv?.note) description += ` · 📝 ${inv.note}`;
     const { name, role } = await resolveStaff(pay.createdBy || null);
     rows.push({
       at: new Date(pay.createdAt),
@@ -426,7 +427,7 @@ export async function buildLedger({ biz, data, branchId, start, end, openingBala
     rows.push({
       at: new Date(rec.createdAt),
       type: "CASH_SALE", typeLabel: "Cash Sale",
-      description: `${rec.number ? rec.number + " - " : ""}${description}`,
+      description: `${rec.number ? rec.number + " - " : ""}${description}${rec.note ? " · 📝 " + rec.note : ""}`,
       recorder: name, role,
       credit: rec.total || 0, debit: 0,
       ref: rec.number,
@@ -727,12 +728,13 @@ export async function buildClerkStatement({ biz, clerkPhone, branchId, start, en
     if (inv?.clientId) {
       try { const c = await Client.findById(inv.clientId).lean(); if (c) desc += ` - ${c.name || c.phone}`; } catch (_) {}
     }
+    if (inv?.note) desc += ` · 📝 ${inv.note}`;
     txRows.push({ at: new Date(pay.createdAt), typeLabel: "Invoice Payment", description: desc, credit: pay.amount || 0, debit: 0 });
   }
 
   for (const rec of receipts) {
     const items = (rec.items || []).slice(0, 2).map(it => it.item || it.name || "Item").join(", ");
-    txRows.push({ at: new Date(rec.createdAt), typeLabel: "Cash Sale", description: `${rec.number ? rec.number + " - " : ""}${items || "Sale"}`, credit: rec.total || 0, debit: 0 });
+    txRows.push({ at: new Date(rec.createdAt), typeLabel: "Cash Sale", description: `${rec.number ? rec.number + " - " : ""}${items || "Sale"}${rec.note ? " · 📝 " + rec.note : ""}`, credit: rec.total || 0, debit: 0 });
   }
 
   for (const exp of expenses) {

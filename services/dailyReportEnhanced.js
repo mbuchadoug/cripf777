@@ -508,7 +508,7 @@ export async function _buildRunningLedger({ biz, data, branchId, start, end, ope
   for (const r of data.receipts) {
     const items = (r.items || []).slice(0, 2).map(i => i.item || i.name || "Item").join(", ");
     rows.push({ date: r.createdAt, type: "receipt", credit: r.total || 0, debit: 0,
-      description: `Cash sale · ${r.number ? r.number + " · " : ""}${items || "Receipt"}`,
+      description: `Cash sale · ${r.number ? r.number + " · " : ""}${items || "Receipt"}${r.note ? " · 📝 " + r.note : ""}`,
       ref: r._id, recordedBy: _who(r.createdBy || r.recordedBy) || null });
   }
 

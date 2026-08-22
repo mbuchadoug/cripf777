@@ -613,7 +613,9 @@ if (state === "sales_doc_list") {
 `📄 *${doc.number}*
 Type: ${doc.type} | ${statusEmoji} ${doc.status}
 Total: $${Number(doc.total || 0).toFixed(2)} ${doc.currency || ""}
-Paid: $${Number(doc.amountPaid || 0).toFixed(2)} | Balance: $${Number(doc.balance || 0).toFixed(2)}`;
+Paid: $${Number(doc.amountPaid || 0).toFixed(2)} | Balance: $${Number(doc.balance || 0).toFixed(2)}${doc.note ? `\n🗒 Note: ${doc.note}` : ""}
+
+💬 _Type a note to ${doc.note ? "edit" : "add"} it on this document._`;
 
         const isManager = caller && ["owner", "manager"].includes(caller.role);
         if (isManager) {
@@ -640,6 +642,63 @@ Paid: $${Number(doc.amountPaid || 0).toFixed(2)} | Balance: $${Number(doc.balanc
 
   // Not a valid number - remind user
   await sendText(from, `❌ Type the item number from the list (1-${ids.length + offset}) to open it, or use the buttons below.`);
+  return true;
+}
+
+/* ===========================
+   SALES DOC ACTION - add/edit a note by typing it
+   The document buttons (View PDF / Delete / Back) are handled in chatbotEngine.
+   Any FREE TEXT typed here is treated as the note to add/edit on the open
+   document - this is how a user attaches a note they skipped by mistake.
+   (cancel / menu / 0 are already intercepted as escape words above.)
+=========================== */
+if (state === "sales_doc_action") {
+  const docId = biz.sessionData?.docId;
+  const noteText = trimmed;
+
+  // Ignore stray interactive ids that may arrive as text; only real notes count.
+  const looksLikeButtonId = /^(view_doc|delete_doc|sales_menu|menu|doc_)/i.test(noteText);
+  if (!docId || !noteText || looksLikeButtonId) {
+    await sendText(from, "💬 Type a note to add it to this document, or use the buttons above.");
+    return true;
+  }
+
+  const doc = await Invoice.findById(docId);
+  if (!doc) {
+    biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
+    await sendText(from, "❌ Document not found.");
+    return true;
+  }
+
+  doc.note = noteText.slice(0, 500);
+  await doc.save();
+
+  const statusEmoji = doc.status === "paid" ? "✅" : doc.status === "partial" ? "⏳" : "🔴";
+  const cur = doc.currency || biz.currency || "USD";
+  const docText =
+`✅ *Note saved to ${doc.number}*
+
+📄 *${doc.number}*
+Type: ${doc.type} | ${statusEmoji} ${doc.status}
+Total: $${Number(doc.total || 0).toFixed(2)} ${cur}
+🗒 Note: ${doc.note}`;
+
+  const isManager = caller && ["owner", "manager"].includes(caller.role);
+  const buttons = isManager
+    ? [
+        { id: ACTIONS.VIEW_DOC,   title: "📄 View PDF" },
+        { id: ACTIONS.DELETE_DOC, title: "🗑 Delete" },
+        { id: ACTIONS.SALES_MENU, title: "⬅ Back" }
+      ]
+    : [
+        { id: ACTIONS.VIEW_DOC,   title: "📄 View PDF" },
+        { id: ACTIONS.SALES_MENU, title: "⬅ Back" },
+        { id: ACTIONS.MAIN_MENU,  title: "🏠 Main Menu" }
+      ];
+
+  // Stay in sales_doc_action so the user can retype to correct the note.
+  await saveBizSafe(biz);
+  await sendButtons(from, { text: docText, buttons });
   return true;
 }
 
@@ -2526,6 +2585,27 @@ if (state === "creating_invoice_enter_catalogue_prices") {
   }
 
   /* ===========================
+     ADD NOTE STEP (optional, skippable)
+     State: creating_invoice_add_note
+     Entered from the NOTE GATE in the confirm block. Captures a typed note or a
+     Skip, stores it in sessionData.docNote, then resumes finalize by replaying
+     the confirm trigger ("2"). Used for invoice / quote / receipt (shared flow).
+  =========================== */
+  if (state === "creating_invoice_add_note") {
+    const isSkip =
+      a === "doc_note_skip" ||
+      ["skip", "-", "no", "none", "n"].includes(trimmed.toLowerCase());
+
+    biz.sessionData.docNote = isSkip ? "" : trimmed.slice(0, 500);
+    biz.sessionState = "creating_invoice_confirm";
+    await saveBizSafe(biz);
+
+    if (!isSkip) await sendText(from, "📝 Note added.");
+    // Resume finalize - date + note gates now both pass.
+    return continueTwilioFlow({ from, text: "2" });
+  }
+
+  /* ===========================
      CONFIRMATION → GENERATE PDF
   ============================ */
   const docType = biz.sessionData.docType || "invoice";
@@ -2543,6 +2623,28 @@ if (state === "creating_invoice_enter_catalogue_prices") {
       await sendDocDatePrompt(from, { label: dateLabel, ret: "doc_finalize" });
       return true;
     }
+
+    // ── NOTE GATE ────────────────────────────────────────
+    // After the date, offer an OPTIONAL note/memo for this document. It's fully
+    // skippable. The note is saved onto the document (shows on reports) and
+    // echoed in a "note" business alert right after the document alert. Once
+    // answered (text OR skip), docNote is set and we fall through to finalize.
+    if (biz.sessionData.docNote === undefined) {
+      const noteLabel = docType === "quote" ? "quotation"
+                      : docType === "receipt" ? "receipt" : "invoice";
+      biz.sessionState = "creating_invoice_add_note";
+      await saveBizSafe(biz);
+      await sendButtons(from, {
+        text:
+          `📝 *Add a note to this ${noteLabel}?* (optional)\n\n` +
+          `Type a short note now - e.g. a reference, a reason, or delivery details - ` +
+          `or tap *Skip*.\n\n` +
+          `_The note appears on your reports and in the confirmation alert._`,
+        buttons: [{ id: "doc_note_skip", title: "⏭ Skip note" }]
+      });
+      return true;
+    }
+
     let client = biz.sessionData.client;
     if (!client && biz.sessionData.clientId) client = await Client.findById(biz.sessionData.clientId);
     if (!client) { await sendText(from, "❌ Client information is missing."); return true; }
@@ -2598,6 +2700,10 @@ console.log("INVOICE BRANCH DEBUG", {
 
     // Save with { timestamps: false } so createdAt carries the business date
     // (what reports sum on); enteredAt keeps the true capture time for audit.
+    // Capture the optional note BEFORE sessionData is cleared below, so it can be
+    // both saved on the document and echoed in the note alert.
+    const docNote = String(biz.sessionData.docNote || "").trim();
+
     const invoiceDoc = new Invoice({
       businessId: biz._id, clientId: client._id, type: docType,
       branchId: effectiveBranchId,
@@ -2607,6 +2713,7 @@ console.log("INVOICE BRANCH DEBUG", {
       amountPaid: isReceipt ? total : 0,
       balance: isReceipt ? 0 : total,
       status: isReceipt ? "paid" : "unpaid",
+      note: docNote,
       createdBy: phone,
       enteredAt: new Date()
     });
@@ -2636,7 +2743,7 @@ console.log("INVOICE BRANCH DEBUG", {
 
     // ── Notify owners/managers/clerk ─────────────────────────────────────────
     try {
-      const { notifyDocumentCreated } = await import("./bizNotifications.js");
+      const { notifyDocumentCreated, notifyDocumentNote } = await import("./bizNotifications.js");
       const Branch = (await import("../models/branch.js")).default;
       const branchDoc = effectiveBranchId ? await Branch.findById(effectiveBranchId).lean() : null;
       await notifyDocumentCreated({
@@ -2647,6 +2754,18 @@ console.log("INVOICE BRANCH DEBUG", {
         branchName: branchDoc?.name || null,
         branchId:   effectiveBranchId
       });
+      // If a note was added, send it as a SEPARATE alert right after the
+      // document alert (no-ops when the note is empty).
+      if (docNote) {
+        await notifyDocumentNote({
+          biz,
+          doc: { number },
+          docType,
+          note: docNote,
+          clerkPhone: phone,
+          branchName: branchDoc?.name || null
+        });
+      }
     } catch (_n) { console.error("[DOC NOTIF]", _n.message); }
 
     await sendMainMenu(from);

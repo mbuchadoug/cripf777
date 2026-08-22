@@ -68,6 +68,13 @@ type: {
 
   createdBy: String,
 
+  // ── Optional note / memo ────────────────────────────────────────────────────
+  // Free-text note the user can attach when creating the document (invoice /
+  // quote / receipt) or add later from the sales list if they skipped it. Shows
+  // on the reports and is echoed in the "note" business notification. Optional -
+  // defaults to empty so existing documents are unaffected.
+  note: { type: String, default: "" },
+
   // ── True system-entry time (audit) ─────────────────────────────────────────
   // createdAt carries the user-chosen BUSINESS date (may be backdated) so reports
   // bucket the doc on the right day. enteredAt is always the real time the record

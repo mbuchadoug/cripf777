@@ -129,6 +129,19 @@ const _templates = {
   ]),
   daily: (d) => _postTemplate(d.phone, "biz_daily_summary", [
     d.bizBranch, d.date, d.opening, d.cashIn, d.cashOut, d.balance
+  ]),
+  // Optional note attached to an invoice / quote / receipt. Sent as a SEPARATE
+  // alert right after the document notification (see notifyDocumentNote).
+  // Template body to submit in WhatsApp Manager (category: UTILITY):
+  //   A note has been added to a document on your account.
+  //
+  //   Document: {{1}}
+  //   Note: {{2}}
+  //   Recorded {{3}} by {{4}}.
+  //
+  //   Reply menu to open ZimQuote.
+  note: (d) => _postTemplate(d.phone, "biz_document_note", [
+    d.docRef, d.note, d.timeDate, d.clerkPhone
   ])
 };
 
@@ -325,6 +338,44 @@ export async function notifyDocumentCreated({
     ref:        `${doc.number || "-"} | ${biz.name}${branchName ? " | " + branchName : ""}`,
     clientName: doc.clientName || "Walk-in",
     amount:     `${fmt(doc.total, biz.currency)} | ${_balClean(bal)}`,
+    timeDate:   timeDateNow(),
+    clerkPhone: clerkPhone || "-"
+  });
+}
+
+/**
+ * Optional note attached to an invoice / quote / receipt.
+ *
+ * Sent as a SEPARATE alert right AFTER notifyDocumentCreated() so it lands just
+ * below the document notification (exactly like the attached screenshot). Uses
+ * the biz_document_note template first for dormant recipients (delivers outside
+ * the 24h window) and rich free text for the active clerk, via the same fan-out
+ * + fallback machinery as every other business alert.
+ *
+ * No-ops when the note is empty, so callers can call it unconditionally.
+ */
+export async function notifyDocumentNote({
+  biz, doc, docType, note, clerkPhone, branchName
+}) {
+  const clean = String(note == null ? "" : note).trim();
+  if (!clean) return;   // nothing to send
+
+  const label  = docType ? docType.charAt(0).toUpperCase() + docType.slice(1) : "Document";
+  const number = doc?.number || "-";
+  const branch = branchName ? `\n  🏬 Branch: ${branchName}` : "";
+  const clerk  = clerkPhone ? `\n  👤 By: ${clerkPhone}` : "";
+  const docRef = `${label} ${number} | ${biz.name}${branchName ? " | " + branchName : ""}`;
+
+  const message =
+`📝 *Note added - ${biz.name}*
+📅 ${dateNow()} at ${timeNow()}${branch}${clerk}
+
+  🔢 ${label}: *${number}*
+  🗒 Note: ${clean}`;
+
+  await _dispatch(biz, clerkPhone, message, "note", {
+    docRef,
+    note:       clean,
     timeDate:   timeDateNow(),
     clerkPhone: clerkPhone || "-"
   });

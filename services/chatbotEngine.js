@@ -13389,7 +13389,9 @@ if (a.startsWith("doc_") && a !== ACTIONS.VIEW_DOC && a !== ACTIONS.DELETE_DOC) 
 `📄 *${doc.number}*
 Type: ${doc.type} | ${statusEmoji} ${doc.status}
 Total: $${Number(doc.total || 0).toFixed(2)} ${cur}
-Paid: $${Number(doc.amountPaid || 0).toFixed(2)} | Balance: $${Number(doc.balance || 0).toFixed(2)}`;
+Paid: $${Number(doc.amountPaid || 0).toFixed(2)} | Balance: $${Number(doc.balance || 0).toFixed(2)}${doc.note ? `\n🗒 Note: ${doc.note}` : ""}
+
+💬 _Type a note to ${doc.note ? "edit" : "add"} it on this document._`;
 
     // Max 3 buttons - priority: View PDF, Delete (managers only), Back
     if (isManager) {
@@ -21191,6 +21193,19 @@ if (biz) {
     isMetaAction && biz &&
     biz.sessionState === "stock_report_period" &&
     a?.startsWith("stock_period_")
+  ) {
+    const handled = await continueTwilioFlow({ from, text: a });
+    if (handled) return;
+  }
+
+  // ── Document note step: the "⏭ Skip note" button arrives as an interactive
+  // reply (isMetaAction=true) while in creating_invoice_add_note. Forward it to
+  // the state handler in continueTwilioFlow, same pattern as the blocks above,
+  // or the tap would be swallowed here. (Typed notes already fall through.)
+  if (
+    isMetaAction && biz &&
+    biz.sessionState === "creating_invoice_add_note" &&
+    a === "doc_note_skip"
   ) {
     const handled = await continueTwilioFlow({ from, text: a });
     if (handled) return;
