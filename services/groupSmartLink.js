@@ -1036,7 +1036,7 @@ export async function removeTutorFromGroup(slug, phone) {
  * Sends a WhatsApp list of tutors in the group + "List as a Tutor" CTA.
  * Returns true if handled, false if group not found / inactive.
  */
-export async function handleTutorGroupSmartLink({ from, slug, biz, saveBiz }) {
+export async function handleTutorGroupSmartLink({ from, slug, biz, saveBiz, offset = 0 }) {
   try {
     const group = await TutorGroup.findOne({ slug: String(slug).toLowerCase().trim() }).lean();
     if (!group || !group.active) return false;
@@ -1105,9 +1105,16 @@ export async function handleTutorGroupSmartLink({ from, slug, biz, saveBiz }) {
     let tutorSubjectLabel = (id) => id;
     try { ({ tutorSubjectLabel } = await import("./schoolPlans.js")); } catch (_) {}
 
-    // ── Build tutor rows (max 9 tutors + 1 CTA = 10 rows, WA list limit) ───────
-    const maxTutors = ctaRow ? 9 : 10;
-    const tutorRows = orderedTutors.slice(0, maxTutors).map(t => {
+    // ── Paginate so the selection stays sensible as the list grows ────────────
+    // WhatsApp lists cap at 10 rows. Budget: up to 7 tutors + 🔍 Search + ▶ More
+    // + CTA = 10. Parents can page forward or jump into a subject search.
+    const PER_PAGE   = 7;
+    const total      = orderedTutors.length;
+    const startIdx   = Math.min(Math.max(0, offset), Math.max(0, total - 1));
+    const pageTutors = orderedTutors.slice(startIdx, startIdx + PER_PAGE);
+    const hasMore    = total > startIdx + PER_PAGE;
+
+    const tutorRows = pageTutors.map(t => {
       const subj = (t.subjects || []).slice(0, 2).map(tutorSubjectLabel).join(", ");
       const rate = t.hourlyRate > 0 ? `$${t.hourlyRate}/hr` : null;
       const desc = [subj, rate].filter(Boolean).join(" · ")
@@ -1119,10 +1126,32 @@ export async function handleTutorGroupSmartLink({ from, slug, biz, saveBiz }) {
       };
     });
 
-    const tagline = group.tagline || "Tap a tutor to view their subjects, rates and message them directly.";
-    const header  = `🧑‍🏫 *${group.name}*\n\n${tagline}`;
+    // Navigation rows
+    const navRows = [];
+    // 🔍 Search by subject → drops the parent/student into the full tutor search
+    navRows.push({
+      id:          `zqtg_search_${group.slug}`,
+      title:       "🔍 Search by subject",
+      description: "Find a tutor by subject, level or area".slice(0, 72)
+    });
+    // ▶ More tutors → next page (only when there are more)
+    if (hasMore) {
+      navRows.push({
+        id:          `zqtg_more_${group.slug}_${startIdx + PER_PAGE}`,
+        title:       "▶ More tutors",
+        description: `See tutors ${startIdx + PER_PAGE + 1}-${Math.min(total, startIdx + 2 * PER_PAGE)} of ${total}`.slice(0, 72)
+      });
+    }
 
-    const rows = ctaRow ? [...tutorRows, ctaRow] : tutorRows;
+    const shownTo  = startIdx + pageTutors.length;
+    const countLine = total > PER_PAGE
+      ? `\n\n👥 Showing ${startIdx + 1}-${shownTo} of ${total} tutors`
+      : "";
+    const tagline = group.tagline || "Tap a tutor to view their subjects, rates & message them directly.";
+    const header  = `🧑‍🏫 *${group.name}*\n\n${tagline}${countLine}`;
+
+    // Assemble within the 10-row limit (tutors → nav → CTA), CTA never dropped.
+    const rows = [...tutorRows, ...navRows, ...(ctaRow ? [ctaRow] : [])].slice(0, 10);
     await sendList(from, header, rows);
     return true;
 
@@ -1136,17 +1165,43 @@ export async function handleTutorGroupSmartLink({ from, slug, biz, saveBiz }) {
 
 /**
  * Routes tutor group list-row taps.
- *   zqtg_tut_<tutorId>    → showTutorProfile()  (pitch → flyers → brochures → card)
- *   zqtg_register_<slug>  → handleTutorGroupRegFlow()
+ *   zqtg_tut_<tutorId>       → showTutorProfile()  (pitch → flyers → brochures → card → ✉️ Enquiry)
+ *   zqtg_register_<slug>     → handleTutorGroupRegFlow()
+ *   zqtg_search_<slug>       → startTutorSearch()   (type-to-search the full tutor pool)
+ *   zqtg_more_<slug>_<off>   → handleTutorGroupSmartLink({ offset })  (pagination)
  *
- * This is invoked from tutorSearch.handleTutorSearchAction() (which the chatbot
- * engine already routes all tutor action taps through), so NO chatbotEngine
- * change is required to wire the tutor group taps.
+ * Wired from chatbotEngine.js:
+ *   • ZQ:TGROUP:<slug> deep link  → handleTutorGroupSmartLink()  (top-level intercept)
+ *   • zqtg_* list-reply taps       → this handler                 (ZQTG EARLY HANDLER)
+ * plus a?.startsWith("zqtg_") in the isMetaAction whitelist so taps are treated
+ * as actions, not free text.
  *
  * Returns true if handled, false if not.
  */
 export async function handleTutorGroupTap({ from, action, biz, saveBiz }) {
   const actionStr = String(action || "").trim();
+
+  // ── Route: search by subject (into the full tutor type-to-search) ─────────
+  if (/^zqtg_search_/i.test(actionStr)) {
+    try {
+      const { startTutorSearch } = await import("./tutorSearch.js");
+      await startTutorSearch(from, biz, saveBiz);
+      return true;
+    } catch (err) {
+      console.error("[TUTOR GROUP SEARCH ERROR]", err.message);
+      try { await sendText(from, "❌ Could not open tutor search. Type *find tutor* to search."); } catch (_) {}
+      return true;
+    }
+  }
+
+  // ── Route: pagination "More tutors" (zqtg_more_<slug>_<offset>) ────────────
+  if (/^zqtg_more_/i.test(actionStr)) {
+    const rest = actionStr.replace(/^zqtg_more_/i, "");
+    const cut  = rest.lastIndexOf("_");               // slugs never contain "_"
+    const slug   = cut >= 0 ? rest.slice(0, cut) : rest;
+    const offset = cut >= 0 ? (parseInt(rest.slice(cut + 1), 10) || 0) : 0;
+    return handleTutorGroupSmartLink({ from, slug, biz, saveBiz, offset });
+  }
 
   // ── Route: register CTA ───────────────────────────────────────────────────
   if (/^zqtg_register_/i.test(actionStr)) {

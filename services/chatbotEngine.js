@@ -3841,6 +3841,9 @@ a.startsWith("sup_load_preset_") ||
       // zqsg_register_<slug>     = visitor tapped "Add My School Here" CTA
       a.startsWith("zqsg_sch_") ||
       a.startsWith("zqsg_register_") ||
+      // ── Private-tutor GROUP list-reply taps ──────────────────────────────────
+      // zqtg_tut_<id> / zqtg_register_<slug> / zqtg_search_<slug> / zqtg_more_<slug>_<off>
+      a.startsWith("zqtg_") ||
       // ── Business tools dynamic actions ───────────────────────────────────
       a.startsWith("inv_") ||
       a.startsWith("payinv_") ||
@@ -4174,6 +4177,25 @@ if (!isMetaAction && /^ZQ:SGROUP:[a-z0-9_-]{1,60}$/i.test(text.trim())) {
     return;
   }
 }
+
+// ── ZQ:TGROUP:<slug> - private-tutor group smart link (TOP LEVEL) ────────────
+// Tutor group links arrive as plain text, exactly like ZQ:GROUP: / ZQ:SGROUP:.
+// MUST be at depth-1 top level so no session state can intercept them - without
+// this the link falls through to the buyer "⚡ Request Sellers" flow instead of
+// showing the tutors.
+if (!isMetaAction && /^ZQ:TGROUP:[a-z0-9_-]{1,60}$/i.test(text.trim())) {
+  console.log(`[ZQ:TGROUP TOP LEVEL] from=${from} text=${text.trim()}`);
+  const _zqtgTopSlug = text.trim().split(":")[2]?.toLowerCase().trim();
+  if (_zqtgTopSlug) {
+    const { handleTutorGroupSmartLink } = await import("./groupSmartLink.js");
+    const _zqtgTopHandled = await handleTutorGroupSmartLink({
+      from, slug: _zqtgTopSlug, biz, saveBiz: saveBizSafe.bind(null, biz)
+    });
+    if (_zqtgTopHandled) return;
+    try { await sendText(from, "❌ This tutor group link is no longer active. Type *menu* to browse ZimQuote."); } catch(_) {}
+    return;
+  }
+}
 if (!isMetaAction && /^ZQ:S:[a-z0-9_-]{1,60}$/i.test(text.trim())) {
   console.log(`[ZQ:S TOP LEVEL] from=${from} text=${text.trim()}`);
   // ── Staff slugs use the same ZQ:S: prefix as supplier slugs ─────────────────
@@ -4361,6 +4383,20 @@ if (a.startsWith('zqsg_sch_') || a.startsWith('zqsg_register_')) {
     from, action: a, biz, saveBiz: saveBizSafe.bind(null, biz)
   });
   if (_zqsgEarlyHandled) return;
+}
+// ── ZQTG EARLY HANDLER - private-tutor group list-reply taps ─────────────────
+// zqtg_tut_<tutorId>      = tapped a tutor row  → school-style tutor profile
+// zqtg_register_<slug>    = tapped "List as a Tutor" CTA
+// zqtg_search_<slug>      = tapped "Search by subject" → tutor type-to-search
+// zqtg_more_<slug>_<off>  = tapped "More tutors" (pagination)
+// Depth-1 top level so no session state / no-biz gate can swallow the tap.
+if (a.startsWith('zqtg_')) {
+  console.log(`[ZQTG EARLY HANDLER] from=${from} action=${a}`);
+  const { handleTutorGroupTap } = await import("./groupSmartLink.js");
+  const _zqtgEarlyHandled = await handleTutorGroupTap({
+    from, action: a, biz, saveBiz: saveBizSafe.bind(null, biz)
+  });
+  if (_zqtgEarlyHandled) return;
 }
 
 // ── REG TYPE EARLY HANDLER ──────────────────────────────────────────────────
