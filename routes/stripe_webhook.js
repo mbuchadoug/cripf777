@@ -1,4 +1,3 @@
-
 import express from "express";
 import Stripe from "stripe";
 import dotenv from "dotenv";
@@ -6,6 +5,8 @@ import User from "../models/user.js";
 import AuditPurchase from "../models/auditPurchase.js";
 // ── 8QT certificate handler ──────────────────────────────────
 import { handle8QTCertificate } from "./stripe_webhook_8qt.js";
+// ── Grocery order handler (ZimQuote delivery) ─────────────────
+import { markPaidByReference } from "./groceryOrders.js";
 
 dotenv.config();
 
@@ -92,11 +93,11 @@ router.post("/", async (req, res) => {
         // ✨ AUTO-GENERATE PDF
         if (!audit.pdfUrl) {
           console.log(`[PDF Auto-Gen] Generating PDF for audit: ${auditId}`);
-          
+
           const { generateScoiPdf } = await import("../utils/generateScoiPdf.js");
          // const pdf = await generateScoiPdf(audit);
          const pdf = await generateScoiPdf({ audit, req });
-          
+
           audit.pdfUrl = pdf.url;
           audit.isPaid = true;
           await audit.save();
@@ -125,6 +126,17 @@ router.post("/", async (req, res) => {
       } catch (err) {
         // Log but don't fail the webhook - Stripe needs a 200
         console.error("[8qt webhook] certificate handler error:", err.message);
+      }
+    }
+
+    // 5️⃣ GROCERY ORDER (ZimQuote delivery)
+    if (meta.type === "grocery_order" && meta.reference) {
+      try {
+        await markPaidByReference(meta.reference, "stripe");
+        console.log(`✅ Grocery order paid via Stripe: ${meta.reference}`);
+      } catch (err) {
+        // Log but don't fail the webhook — Stripe needs a 200.
+        console.error("[grocery stripe webhook]", err.message);
       }
     }
   }

@@ -30,6 +30,9 @@ import twilioBizRoutes from "./routes/twilio_biz.js";
 
 import privateTeacherRoutes from "./routes/privateTeacher.js";
 
+import groceryOrdersRoutes from "./routes/groceryOrders.js";
+import groceryAdminRoutes  from "./routes/groceryAdmin.js";
+
 //----------------------------------------businessWhtasapp
 import cookieParser from "cookie-parser";
 import webAuthRoutes from "./routes/web_auth.js";
@@ -52,7 +55,7 @@ import {
 import specialScoiImportRoutes from "./routes/admin_special_scoi_import.js";
 
 import metaWebhookRoutes from "./routes/meta_webhook.js";
-
+import boardroomApiRoutes from "./routes/boardroom_api.js";
 // routes & utils
 import lmsLoginRoutes from "./routes/lms_login.js";
 import portalRoutes from "./routes/portal.js";
@@ -200,6 +203,11 @@ app.use(express.urlencoded({ extended: true }));*/
 // 1️⃣ Stripe webhook FIRST (raw body)
 app.use("/stripe/webhook", express.raw({ type: "application/json" }));
 app.use("/stripe/webhook", stripeWebhookRoutes);
+
+ app.use("/api/boardroom", boardroomApiRoutes);
+ // ── ZimQuote grocery commerce (additive, guest checkout, scoped CORS) ──
+app.use("/api/grocery", groceryOrdersRoutes);   // public order + payment API
+app.use("/zq-admin",    groceryAdminRoutes);     // admin API (X-Admin-Key)
 
 
 
