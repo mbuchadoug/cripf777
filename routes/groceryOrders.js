@@ -10,11 +10,10 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 /* ── Scoped CORS: allow ONLY the ZimQuote site to call these guest endpoints.
    Isolated to this router so it never affects your cookie/session flows. ── */
-const ALLOWED = ["https://zimqoute.co.zw", "https://www.zimqoute.co.zw"];
+/* NOTE: the server's proxy already sends `Access-Control-Allow-Origin: *`.
+   We must NOT set that header here too, or the browser sees it twice and blocks
+   the response. We only answer the preflight with the method/header allowances. */
 router.use((req, res, next) => {
-  const origin = req.headers.origin;
-  if (ALLOWED.includes(origin)) res.setHeader("Access-Control-Allow-Origin", origin);
-  res.setHeader("Vary", "Origin");
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   if (req.method === "OPTIONS") return res.sendStatus(204);
