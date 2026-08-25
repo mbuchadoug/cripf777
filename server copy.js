@@ -205,6 +205,9 @@ app.use("/stripe/webhook", express.raw({ type: "application/json" }));
 app.use("/stripe/webhook", stripeWebhookRoutes);
 
  app.use("/api/boardroom", boardroomApiRoutes);
+ // ── ZimQuote grocery commerce (additive, guest checkout, scoped CORS) ──
+app.use("/api/grocery", groceryOrdersRoutes);   // public order + payment API
+app.use("/zq-admin",    groceryAdminRoutes);     // admin API (X-Admin-Key)
 
 
 
@@ -219,10 +222,6 @@ app.use((req, res, next) => {
   if (req.headers['content-type']?.startsWith('multipart/form-data')) return next();
   express.urlencoded({ extended: true, limit: '10mb' })(req, res, next);
 });
-// ── ZimQuote grocery commerce (AFTER body parser so req.body is parsed) ──
-app.use("/api/grocery", groceryOrdersRoutes);
-app.use("/zq-admin",    groceryAdminRoutes);
-
 app.use(express.static(path.join(__dirname, "public")));
 app.use("/docs", express.static(path.join(__dirname, "docs")));
 app.use(cookieParser());
