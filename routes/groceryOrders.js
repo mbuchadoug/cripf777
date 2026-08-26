@@ -103,7 +103,11 @@ router.post("/pay/ecocash", async (req, res) => {
     }
 
     const payRef = `GRP-${crypto.randomUUID()}`;
-    const pr = paynow.createPayment(payRef, order.customer.email || `${normalized}@ecocash.local`);
+    // Paynow requires a VALID email for mobile (EcoCash) payments. Guests often
+    // have none, so fall back to a well-formed address on our own domain
+    // (Paynow only validates the format/domain — it doesn't send mail there).
+    const payerEmail = order.customer.email || `orders+${normalized}@zimqoute.co.zw`;
+    const pr = paynow.createPayment(payRef, payerEmail);
     pr.add(`ZimQuote groceries ${order.reference}`, order.amounts.total);
 
     const response = await paynow.sendMobile(pr, normalized, "ecocash");
