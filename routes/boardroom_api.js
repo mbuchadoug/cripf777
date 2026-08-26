@@ -39,7 +39,7 @@ function requireAdmin(req, res, next) {
   next();
 }
 
-// ── GET /api/boardroom/:slug — everything the web front needs in one call ─────
+// ── GET /api/boardroom/:slug - everything the web front needs in one call ─────
 router.get("/:slug", async (req, res) => {
   try {
     const slug = String(req.params.slug || "").toLowerCase();
@@ -78,7 +78,7 @@ router.get("/:slug", async (req, res) => {
   }
 });
 
-// ── POST /api/boardroom/:slug/opportunity — admin post an opportunity ─────────
+// ── POST /api/boardroom/:slug/opportunity - admin post an opportunity ─────────
 router.post("/:slug/opportunity", requireAdmin, async (req, res) => {
   try {
     const slug = String(req.params.slug || "").toLowerCase();
@@ -100,7 +100,7 @@ router.post("/:slug/opportunity", requireAdmin, async (req, res) => {
   }
 });
 
-// ── POST /api/boardroom/:slug/event — admin post an event ─────────────────────
+// ── POST /api/boardroom/:slug/event - admin post an event ─────────────────────
 router.post("/:slug/event", requireAdmin, async (req, res) => {
   try {
     const slug = String(req.params.slug || "").toLowerCase();

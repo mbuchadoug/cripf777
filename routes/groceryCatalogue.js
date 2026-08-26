@@ -1,5 +1,5 @@
 /* ============================================================================
-   groceryCatalogue.js — the ONE source of truth for grocery prices & fees.
+   groceryCatalogue.js - the ONE source of truth for grocery prices & fees.
    The website only ever shows estimates; every payable total is recomputed
    here on the server. Update SELLING prices as your sourcing cost moves.
    SELLING price already includes your procurement margin.
@@ -74,7 +74,7 @@ export const CATALOGUE = {
   wipes:         ["Baby wipes", "pack", 2.00]
 };
 
-// Delivery zones from Harare CBD — flat fees set ABOVE real rider fuel+time.
+// Delivery zones from Harare CBD - flat fees set ABOVE real rider fuel+time.
 export const ZONES = {
   cbd:   { label: "CBD / Avenues / inner (≤5km)", fee: 3 },
   mid:   { label: "Mid suburbs (Borrowdale, Waterfalls, Mbare, Highfield…)", fee: 5 },

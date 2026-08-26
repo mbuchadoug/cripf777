@@ -870,7 +870,7 @@ router.get("/institutions/new", requireSupplierAdmin, (req, res) => {
     <div class="panel" style="max-width:900px">
       <div class="panel-head">
         <h3>🎓 Register College / Academy / Training Institution</h3>
-        <span style="font-size:12px;color:var(--muted)">Culinary, driving, IT, music, vocational, college… — appears under "College / Course" search</span>
+        <span style="font-size:12px;color:var(--muted)">Culinary, driving, IT, music, vocational, college… - appears under "College / Course" search</span>
       </div>
       <form method="POST" action="/zq-admin/institutions/new" class="edit-form">
         <div style="margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--border)">

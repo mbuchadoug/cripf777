@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 
 /* ============================================================================
-   GroceryOrder — ZimQuote grocery delivery orders.
+   GroceryOrder - ZimQuote grocery delivery orders.
    FULLY ISOLATED from the CRIPFCnt Payment/subscription model. Its own
    collection, its own lifecycle. Nothing here touches parents/quizzes/plans.
    ========================================================================== */

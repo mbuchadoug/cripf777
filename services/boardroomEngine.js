@@ -7,9 +7,9 @@
 // DECOUPLED BY DESIGN: `sendText` / `sendButtons` are INJECTED by the caller so
 // this file never imports engine internals (avoids circular deps and keeps the
 // engine's proven module graph untouched). Returns true if it handled the text,
-// false to let the engine fall through — same contract as handleGroupSmartLink.
+// false to let the engine fall through - same contract as handleGroupSmartLink.
 //
-// Member connect is intentionally NOT handled here — it stays as ZQ:SUPPLIER:<id>
+// Member connect is intentionally NOT handled here - it stays as ZQ:SUPPLIER:<id>
 // so it lands on the existing, tracked supplier card + quote flow.
 
 import { Boardroom, BoardroomOpportunity, BoardroomEvent } from "./boardroomBridge.js";
@@ -20,7 +20,7 @@ export async function handleBoardroomDeepLink({ from, text = "", sendText /*, se
   const t = String(text).trim();
   if (!/^ZQ:BR:/i.test(t)) return false;
 
-  // ── ZQ:BR:OPP:<id> — express interest in an opportunity ────────────────────
+  // ── ZQ:BR:OPP:<id> - express interest in an opportunity ────────────────────
   let m = t.match(/^ZQ:BR:OPP:([a-f0-9]{24})$/i);
   if (m) {
     const opp = await BoardroomOpportunity.findById(m[1]).lean();
@@ -47,7 +47,7 @@ export async function handleBoardroomDeepLink({ from, text = "", sendText /*, se
     return true;
   }
 
-  // ── ZQ:BR:EVT:<id> — reserve a seat / start ticket purchase ────────────────
+  // ── ZQ:BR:EVT:<id> - reserve a seat / start ticket purchase ────────────────
   m = t.match(/^ZQ:BR:EVT:([a-f0-9]{24})$/i);
   if (m) {
     const evt = await BoardroomEvent.findById(m[1]).lean();
@@ -73,7 +73,7 @@ export async function handleBoardroomDeepLink({ from, text = "", sendText /*, se
     return true;
   }
 
-  // ── ZQ:BR:<slug> — open the Boardroom directory on WhatsApp ────────────────
+  // ── ZQ:BR:<slug> - open the Boardroom directory on WhatsApp ────────────────
   m = t.match(/^ZQ:BR:([a-z0-9_-]{1,60})$/i);
   if (m) {
     const board = await Boardroom.findOne({ slug: m[1].toLowerCase(), active: true }).lean();
@@ -84,7 +84,7 @@ export async function handleBoardroomDeepLink({ from, text = "", sendText /*, se
         `👋 Welcome to *${board.name}*`,
         board.tagline ? `_${board.tagline}_` : "",
         "",
-        `Tell me what you need — for example "accountant", "office cleaning", or "PR" — and I'll show you members who can help.`,
+        `Tell me what you need - for example "accountant", "office cleaning", or "PR" - and I'll show you members who can help.`,
         board.ownerName ? `\nCurated by ${board.ownerName}.` : "",
       ]
         .filter(Boolean)

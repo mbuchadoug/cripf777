@@ -195,10 +195,22 @@ const SupplierProfileSchema = new mongoose.Schema({
   //   "in_person" = tutor travels to / hosts the student
   //   "online"    = video / WhatsApp lessons (nationwide reach, no city filter)
   //   "both"      = offers both
+  // LEGACY single field, kept for backward-compatible search/display. It is now
+  // auto-derived from teachingModes[] on save (see the hooks below), so existing
+  // readers keep working while new code uses the multi-select array.
   teachingMode: {
     type:    String,
-    enum:    ["in_person", "online", "both"],
+    enum:    ["in_person", "online", "whatsapp", "both"],
     default: "in_person"
+  },
+
+  // Multi-select delivery modes (the source of truth going forward). Any of:
+  //   "in_person" | "online" | "whatsapp"
+  // A tutor can offer any combination (e.g. in person + online + WhatsApp).
+  teachingModes: {
+    type:    [String],
+    enum:    ["in_person", "online", "whatsapp"],
+    default: []
   },
 
   // Where in-person lessons happen (any combination).
@@ -210,6 +222,9 @@ const SupplierProfileSchema = new mongoose.Schema({
   // Hourly rate is the headline number parents compare on. Kept simple + numeric
   // so it can be range-filtered ("under $10/hr").
   hourlyRate:      { type: Number, default: 0 },
+  // When true, the tutor prefers to quote per student - the profile shows
+  // "Rate on request" instead of a number (even if hourlyRate is set/0).
+  rateOnRequest:   { type: Boolean, default: false },
   hourlyCurrency:  { type: String, enum: ["USD", "ZWL"], default: "USD" },
   groupRate:       { type: Number, default: 0 },   // per-student rate for group lessons (0 = not offered)
   offersGroups:    { type: Boolean, default: false },
@@ -348,11 +363,11 @@ SupplierProfileSchema.index({
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TUTOR INTEGRITY GUARD — "fix it for once"
+// TUTOR INTEGRITY GUARD - "fix it for once"
 // A record with teachingLevels[] is unambiguously a private tutor (a real
 // product/service supplier NEVER has teachingLevels). This guarantees that no
-// code path — self-registration, EcoCash/Paynow activation, a payment webhook,
-// or any future update — can silently save such a record as "product"/"service".
+// code path - self-registration, EcoCash/Paynow activation, a payment webhook,
+// or any future update - can silently save such a record as "product"/"service".
 // It does NOT touch normal suppliers (they have no teachingLevels), so it can't
 // mislabel anyone. To intentionally convert a tutor to another type, clear
 // teachingLevels in the same operation.
@@ -361,11 +376,28 @@ function _looksLikeTutor(levels) {
   return Array.isArray(levels) && levels.length > 0;
 }
 
+// Derive the LEGACY single teachingMode from the multi-select teachingModes[]
+// so existing search/display code keeps working. WhatsApp counts as an
+// online/remote channel for the legacy bucket. Returns null when there is
+// nothing to derive (so we never clobber an existing value with a blank).
+function _deriveTeachingMode(modes) {
+  const m = Array.isArray(modes) ? modes : [];
+  if (!m.length) return null;
+  const hasIn     = m.includes("in_person");
+  const hasRemote = m.includes("online") || m.includes("whatsapp");
+  if (hasIn && hasRemote) return "both";
+  if (hasRemote)          return "online";
+  return "in_person";
+}
+
 // Covers supplier.save() (self-reg finalise + payment activation both use .save()).
 SupplierProfileSchema.pre("save", function (next) {
   if (this.profileType !== "tutor" && _looksLikeTutor(this.teachingLevels)) {
     this.profileType = "tutor";
   }
+  // Keep the legacy single teachingMode in sync with the multi-select array.
+  const _derived = _deriveTeachingMode(this.teachingModes);
+  if (_derived) this.teachingMode = _derived;
   next();
 });
 
@@ -385,6 +417,15 @@ SupplierProfileSchema.pre(["findOneAndUpdate", "updateOne", "updateMany"], async
         if (update.$set) delete update.$set.profileType; else delete update.profileType;
         this.setUpdate(update);
       }
+    }
+  }
+  // Keep the legacy single teachingMode in sync when teachingModes[] is updated.
+  if (set.teachingModes !== undefined) {
+    const _derived = _deriveTeachingMode(set.teachingModes);
+    if (_derived) {
+      if (update.$set) update.$set.teachingMode = _derived;
+      else             update.teachingMode      = _derived;
+      this.setUpdate(update);
     }
   }
 });

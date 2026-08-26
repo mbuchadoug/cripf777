@@ -411,7 +411,7 @@ export async function buildRecurringLedger({ biz, branchId = null, periodStart, 
     rows.push({
       at: new Date(inc.date),
       type: "INCOME", typeLabel: `Other Income${inc.category ? " · " + inc.category : ""}`,
-      entity: incHasAcct ? entityName(inc) : "— (other income)",
+      entity: incHasAcct ? entityName(inc) : "- (other income)",
       entityK: incHasAcct ? `A:${String(inc.accountId)}` : "CASH",
       description: `${inc.description || "Other income"}${inc.method && inc.method !== "cash" ? " · " + inc.method : ""}${inc.reference ? " · " + inc.reference : ""}`,
       recorder: recorderName(staffMap, inc.createdBy),

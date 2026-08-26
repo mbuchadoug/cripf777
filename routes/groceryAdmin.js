@@ -11,7 +11,7 @@ function adminGuard(req, res, next) {
   if (!process.env.GROCERY_ADMIN_KEY || key !== process.env.GROCERY_ADMIN_KEY) {
     return res.status(401).json({ error: "Unauthorized" });
   }
-  // CORS: proxy already sends Access-Control-Allow-Origin: * — do NOT set it again.
+  // CORS: proxy already sends Access-Control-Allow-Origin: * - do NOT set it again.
   res.setHeader("Access-Control-Allow-Headers", "Content-Type,X-Admin-Key");
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
   next();

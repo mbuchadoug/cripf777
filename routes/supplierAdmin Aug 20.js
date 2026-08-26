@@ -9292,7 +9292,7 @@ router.get("/broadcast", requireSupplierAdmin, async (req, res) => {
             <span id="campaignHeaderStatus" style="font-size:12px;color:var(--muted)">or paste a URL below</span>
           </div>
           <input name="headerImageUrl" id="campaignHeaderUrl" type="url"
-            placeholder="(optional) Header image URL — https://…/flyer.jpg"
+            placeholder="(optional) Header image URL - https://…/flyer.jpg"
             style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;margin-bottom:6px" />
           <p style="font-size:11px;color:var(--muted);margin:0 0 12px;line-height:1.6">
             Optional: add a picture to show <b>above</b> your formatted text (like the infographic broadcasts).

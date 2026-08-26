@@ -1168,28 +1168,38 @@ if (state === "supplier_reg_tutor_levels") {
   biz.sessionData.supplierReg.levelsText = raw;
   biz.sessionState = "supplier_reg_tutor_mode";
   await saveBiz(biz);
-  return sendButtons(from, {
-    text: "🖥 *How do you teach?*",
-    buttons: [
-      { id: "sup_tmode_in_person", title: "🏠 In person" },
-      { id: "sup_tmode_online",    title: "💻 Online" },
-      { id: "sup_tmode_both",      title: "🔁 Both" }
+  return sendList(from,
+`🖥 *How do you teach?*
+
+Pick the option that fits. You can offer more than one way - choose "All modes" if you teach every way.`,
+    [
+      { id: "sup_tmode_in_person",        title: "🏠 In person",   description: "You meet students face to face" },
+      { id: "sup_tmode_online",           title: "💻 Online",      description: "Video lessons (Zoom, Meet, etc.)" },
+      { id: "sup_tmode_whatsapp",         title: "💬 WhatsApp",    description: "Lessons / help over WhatsApp" },
+      { id: "sup_tmode_inperson_online",  title: "🏠+💻 Both",     description: "In person and online" },
+      { id: "sup_tmode_all",              title: "🌐 All modes",   description: "In person, online & WhatsApp" }
     ]
-  });
+  );
 }
 
 // Rate per hour (mode button set state here and sent the prompt).
 if (state === "supplier_reg_tutor_rate") {
   const raw = (text || "").trim();
-  if (raw.toLowerCase() === "skip") {
+  const low = raw.toLowerCase();
+  if (low === "skip") {
     biz.sessionData.supplierReg.hourlyRate = 0;
+    biz.sessionData.supplierReg.rateOnRequest = false;
+  } else if (low === "on request" || low === "request" || low === "onrequest" || low === "negotiable") {
+    biz.sessionData.supplierReg.hourlyRate = 0;
+    biz.sessionData.supplierReg.rateOnRequest = true;
   } else {
     const m = raw.match(/(\d+(?:\.\d+)?)/);
     if (!m) {
-      await sendText(from, "❌ Please type your rate as a number, e.g. *8*, or tap Skip.");
+      await sendText(from, "❌ Please type your rate as a number, e.g. *8*, or type *on request*, or tap Skip.");
       return true;
     }
     biz.sessionData.supplierReg.hourlyRate = parseFloat(m[1]) || 0;
+    biz.sessionData.supplierReg.rateOnRequest = false;
   }
   biz.sessionState = "supplier_reg_tutor_about";
   await saveBiz(biz);
@@ -2141,8 +2151,13 @@ async function _finaliseTutorRegistration(from, biz, saveBiz) {
     contactDetails: reg.contactDetails || "",
     subjects:       allSubjects,
     teachingLevels: reg.teachingLevels || [],
+    teachingModes:  (Array.isArray(reg.teachingModes) && reg.teachingModes.length)
+                      ? reg.teachingModes
+                      : (reg.teachingMode === "both" ? ["in_person", "online"]
+                         : reg.teachingMode ? [reg.teachingMode] : ["in_person"]),
     teachingMode:   reg.teachingMode || "in_person",
     hourlyRate:     Number(reg.hourlyRate) || 0,
+    rateOnRequest:  reg.rateOnRequest === true,
     hourlyCurrency: "USD",
     qualifications: reg.qualifications || "",
     smartLinkPitch: reg.smartLinkPitch || "",
@@ -2167,7 +2182,7 @@ async function _finaliseTutorRegistration(from, biz, saveBiz) {
 
 📚 Subjects: ${reg.subjectsText || allSubjects.join(", ") || "-"}
 🎯 Levels: ${reg.levelsText || "-"}
-${(Number(reg.hourlyRate) || 0) > 0 ? "💵 Rate: $" + (Number(reg.hourlyRate)||0) + "/hr\n" : ""}📍 ${reg.area ? reg.area + ", " : ""}${reg.city || ""}
+${reg.rateOnRequest ? "💵 Rate: on request\n" : (Number(reg.hourlyRate) || 0) > 0 ? "💵 Rate: $" + (Number(reg.hourlyRate)||0) + "/hr\n" : ""}📍 ${reg.area ? reg.area + ", " : ""}${reg.city || ""}
 
 To go live and start getting students, choose a plan and pay. Parents will then find you when they search for tutors.
 

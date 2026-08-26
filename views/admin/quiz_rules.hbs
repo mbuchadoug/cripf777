@@ -87,7 +87,7 @@
     <h1>{{#if isCripSchool}}Employee Quiz Rules{{else}}Quiz Rules{{/if}}</h1>
     <span class="qr-chip">{{org.name}}</span>
   </div>
-  <p class="qr-sub">Set up which quizzes reach your {{#if isCripSchool}}employees{{else}}students{{/if}} — import content, then create rules that assign it automatically.</p>
+  <p class="qr-sub">Set up which quizzes reach your {{#if isCripSchool}}employees{{else}}students{{/if}} - import content, then create rules that assign it automatically.</p>
 
   <nav class="qr-nav">
     <a href="#overview">① How it works</a>
@@ -144,7 +144,7 @@
     <div class="b">
       {{#unless stats.passages}}
         <div class="qr-badge b-amber" style="display:block;padding:10px 12px;margin-bottom:14px;font-weight:600">
-          No quizzes/passages found yet. Import content first (see step ② above) — you'll need at least one quiz to create a rule.
+          No quizzes/passages found yet. Import content first (see step ② above) - you'll need at least one quiz to create a rule.
         </div>
       {{/unless}}
       <form method="POST" action="/admin/orgs/{{org.slug}}/quiz-rules">
@@ -204,7 +204,7 @@
           <div class="qr-field full">
             <label for="qr-quiz">Quiz(zes) / comprehension passage(s)</label>
             <select id="qr-quiz" name="quizQuestionId" class="qr-multi" multiple required size="6">
-              {{#each quizzes}}<option value="{{this._id}}">{{this.text}}{{#if this.module}} — {{this.module}}{{/if}}</option>{{/each}}
+              {{#each quizzes}}<option value="{{this._id}}">{{this.text}}{{#if this.module}} - {{this.module}}{{/if}}</option>{{/each}}
             </select>
             <span class="hint">Hold Ctrl (Cmd on Mac) or tap to pick more than one. One rule is created per selected quiz.</span>
           </div>
@@ -236,10 +236,10 @@
             {{#each rules}}
             <tr>
               {{#unless ../isCripSchool}}
-                <td>{{#if (isNull this.grade)}}<span class="qr-badge b-slate">—</span>{{else}}Grade {{this.grade}}{{/if}}</td>
-                <td>{{#if this.subject}}{{capitalize this.subject}}{{else}}<span class="qr-badge b-slate">—</span>{{/if}}</td>
+                <td>{{#if (isNull this.grade)}}<span class="qr-badge b-slate">-</span>{{else}}Grade {{this.grade}}{{/if}}</td>
+                <td>{{#if this.subject}}{{capitalize this.subject}}{{else}}<span class="qr-badge b-slate">-</span>{{/if}}</td>
               {{/unless}}
-              <td>{{#if this.module}}{{this.module}}{{else}}—{{/if}}</td>
+              <td>{{#if this.module}}{{this.module}}{{else}}-{{/if}}</td>
               <td><div class="qr-quiztitle" title="{{this.quizTitle}}">{{#if this.quizTitle}}{{this.quizTitle}}{{else}}<span class="qr-badge b-slate">Untitled</span>{{/if}}</div></td>
               <td>{{#if (eq this.quizType "paid")}}<span class="qr-badge b-amber">Paid</span>{{else}}<span class="qr-badge b-blue">Trial</span>{{/if}}</td>
               <td>{{this.questionCount}}</td>

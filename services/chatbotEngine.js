@@ -4494,23 +4494,51 @@ _Type *cancel* at any time to stop._`
 }
 // ── END REG TYPE EARLY HANDLER ───────────────────────────────────────────────
 
-// ── PRIVATE TUTOR: teaching-mode buttons (during supplier_reg_tutor_mode) ────
-if (a === "sup_tmode_in_person" || a === "sup_tmode_online" || a === "sup_tmode_both") {
+// ── PRIVATE TUTOR: teaching-mode selection (during supplier_reg_tutor_mode) ──
+// Accepts the single modes, the "in person + online" combo, the legacy "both",
+// and "all modes". Stores the multi-select teachingModes[] (the model derives
+// the legacy teachingMode from it on save).
+if (a === "sup_tmode_in_person" || a === "sup_tmode_online" || a === "sup_tmode_whatsapp" ||
+    a === "sup_tmode_both" || a === "sup_tmode_inperson_online" || a === "sup_tmode_all") {
   if (!_bizIsOwnedByUser) biz = null;
   if (biz && biz.sessionData?.supplierReg) {
+    const _modeMap = {
+      sup_tmode_in_person:       ["in_person"],
+      sup_tmode_online:          ["online"],
+      sup_tmode_whatsapp:        ["whatsapp"],
+      sup_tmode_inperson_online: ["in_person", "online"],
+      sup_tmode_both:            ["in_person", "online"],   // legacy label
+      sup_tmode_all:             ["in_person", "online", "whatsapp"]
+    };
+    const _modes = _modeMap[a] || ["in_person"];
+    biz.sessionData.supplierReg.teachingModes = _modes;
+    // legacy single value for any older reader (model also re-derives on save)
     biz.sessionData.supplierReg.teachingMode =
-      a === "sup_tmode_online" ? "online" : a === "sup_tmode_both" ? "both" : "in_person";
+      _modes.length > 1 ? "both" : _modes[0];
     biz.sessionState = "supplier_reg_tutor_rate";
     await saveBizSafe(biz);
     return sendButtons(from, {
       text:
 `💵 *What's your rate per hour?* (USD)
 
-Type a number, e.g. *8* or *10*.
-
-_You can change it later, or tap Skip._`,
-      buttons: [{ id: "sup_tutor_rate_skip", title: "⏭ Skip" }]
+Type a number, e.g. *8* or *10* - or tap *On request* if you prefer to quote per student.`,
+      buttons: [
+        { id: "sup_tutor_rate_onrequest", title: "💬 On request" },
+        { id: "sup_tutor_rate_skip",      title: "⏭ Skip" }
+      ]
     });
+  }
+}
+
+// ── PRIVATE TUTOR: "On request" rate button → finalise-path handler ──────────
+if (a === "sup_tutor_rate_onrequest") {
+  if (!_bizIsOwnedByUser) biz = null;
+  if (biz && biz.sessionState === "supplier_reg_tutor_rate") {
+    const _orHandled = await handleSupplierRegistrationStates({
+      state: "supplier_reg_tutor_rate", from, text: "on request",
+      biz, saveBiz: saveBizSafe.bind(null, biz)
+    });
+    if (_orHandled) return;
   }
 }
 

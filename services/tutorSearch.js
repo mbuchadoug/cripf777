@@ -373,11 +373,16 @@ export async function showTutorProfile(from, tutorId, biz, saveBiz, { source = "
   const featured = t.tierRank >= 3 ? " 🔥 *Featured*" : "";
   const subjects = (t.subjects || []).map(tutorSubjectLabel).join(", ") || "Not specified";
   const levels   = (t.teachingLevels || []).map(tutorLevelLabel).join(", ") || "Not specified";
-  const modeLabel = (TUTOR_MODES.find(m => m.id === t.teachingMode)?.label || "In person")
-                      .replace(/^[^\w]+/, "").trim();
+  // Multi-mode label: prefer teachingModes[]; fall back to the legacy single value.
+  const _MODE_LABELS = { in_person: "In person", online: "Online", whatsapp: "WhatsApp" };
+  const _modes = (Array.isArray(t.teachingModes) && t.teachingModes.length)
+    ? t.teachingModes
+    : (t.teachingMode === "both" ? ["in_person", "online"]
+       : t.teachingMode ? [t.teachingMode] : ["in_person"]);
+  const modeLabel = _modes.map(m => _MODE_LABELS[m] || m).join(", ") || "In person";
   const area     = [t.location?.area, t.location?.city].filter(Boolean).join(", ");
 
-  const rateLine = t.hourlyRate > 0
+  const rateLine = (!t.rateOnRequest && t.hourlyRate > 0)
     ? `💵 *Price:* $${t.hourlyRate} per hour${t.hourlyCurrency && t.hourlyCurrency !== "USD" ? " " + t.hourlyCurrency : ""}`
     : "💵 *Price:* on request";
   const groupLine = t.groupRate > 0 ? `\n👥 *Group lessons:* $${t.groupRate} per student/hour` : "";

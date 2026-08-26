@@ -69,7 +69,7 @@ router.post("/order", async (req, res) => {
       hasCustomItems: priced.hasCustomItems,
       amounts: priced.amounts,
       fulfilment: { status: priced.hasCustomItems ? "quote_pending" : "received", timeline: [
-        { at: new Date(), event: "created", note: priced.hasCustomItems ? "Has custom items — needs quote" : "Order received" }
+        { at: new Date(), event: "created", note: priced.hasCustomItems ? "Has custom items - needs quote" : "Order received" }
       ] }
     });
 
@@ -88,7 +88,7 @@ router.post("/order", async (req, res) => {
   }
 });
 
-/* ── EcoCash (Paynow mobile) — local payers. Mirrors your payments.js flow ── */
+/* ── EcoCash (Paynow mobile) - local payers. Mirrors your payments.js flow ── */
 router.post("/pay/ecocash", async (req, res) => {
   try {
     const { reference, phone } = req.body || {};
@@ -106,7 +106,7 @@ router.post("/pay/ecocash", async (req, res) => {
     // Paynow validates the email for mobile (EcoCash) payments and rejects the
     // whole request if it's missing OR malformed. Use the customer's email only
     // when it's well-formed; otherwise fall back to a valid address we own
-    // (Paynow only checks format/domain — no mail is sent there).
+    // (Paynow only checks format/domain - no mail is sent there).
     const looksValid = (e) => typeof e === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim());
     const payerEmail = looksValid(order.customer.email)
       ? order.customer.email.trim()
@@ -171,7 +171,7 @@ router.post("/pay/ecocash/result", async (req, res) => {
   } catch (err) { console.error("[grocery result]", err); return res.sendStatus(200); }
 });
 
-/* ── Stripe Checkout — diaspora / card payers ────────────────────────────── */
+/* ── Stripe Checkout - diaspora / card payers ────────────────────────────── */
 router.post("/pay/stripe", async (req, res) => {
   try {
     const { reference } = req.body || {};

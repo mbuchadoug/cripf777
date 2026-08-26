@@ -1519,6 +1519,15 @@ router.get("/suppliers/new-tutor", requireSupplierAdmin, async (req, res) => {
     <label style="display:inline-flex;align-items:center;gap:6px;margin:2px 10px 2px 0;font-size:13px">
       <input type="checkbox" name="teachingLevels" value="${esc(l.id)}" /> ${esc(l.label)}</label>`).join("");
   const modeOptions = TUTOR_MODES.map(m => `<option value="${esc(m.id)}">${esc(m.label)}</option>`).join("");
+  // Multi-select delivery modes - a tutor can offer any combination.
+  const TUTOR_MODE_DEFS = [
+    { id: "in_person", label: "🏠 In person" },
+    { id: "online",    label: "💻 Online" },
+    { id: "whatsapp",  label: "💬 WhatsApp" }
+  ];
+  const modeChecks = TUTOR_MODE_DEFS.map(m => `
+    <label style="display:inline-flex;align-items:center;gap:6px;margin:2px 12px 2px 0;font-size:13px">
+      <input type="checkbox" name="teachingModes" value="${esc(m.id)}" /> ${esc(m.label)}</label>`).join("");
 
   res.send(layout("Register Tutor", `
     <a href="/zq-admin/suppliers" class="back-link">← Back to Suppliers</a>
@@ -1563,11 +1572,13 @@ router.get("/suppliers/new-tutor", requireSupplierAdmin, async (req, res) => {
         <div style="margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--border)">
           <p style="font-weight:700;font-size:13px;margin-bottom:14px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">4. Lessons & Rate</p>
           <div class="form-grid">
-            <div class="fg"><label>Teaching Mode</label><select name="teachingMode">${modeOptions}</select></div>
+          <div class="fg" style="grid-column:1/-1"><label>Teaching Mode <span style="font-weight:400;font-size:11px;color:var(--muted);text-transform:none">- tick all that apply</span></label><div>${modeChecks}</div></div>
             <div class="fg"><label>Hourly Rate ($)</label><input name="hourlyRate" type="number" step="0.01" placeholder="e.g. 8" /></div>
             <div class="fg"><label>Group Rate ($/student, optional)</label><input name="groupRate" type="number" step="0.01" placeholder="e.g. 4" /></div>
             <div class="fg"><label>Availability</label><input name="availability" placeholder="e.g. Weekday evenings, Sat AM" /></div>
           </div>
+          <label style="display:inline-flex;align-items:center;gap:8px;margin-top:10px;font-size:13px">
+            <input type="checkbox" name="rateOnRequest" value="true" /> 💬 Rate on request (hide the price, quote per student)</label>
           <label style="display:inline-flex;align-items:center;gap:8px;margin-top:10px;font-size:13px">
             <input type="checkbox" name="offersExamPrep" value="true" /> 🔥 Offers exam-prep / holiday intensives</label>
         </div>
@@ -1634,6 +1645,15 @@ router.post("/suppliers/new-tutor", requireSupplierAdmin,
     const allSubjects = [...new Set([...subjects, ...extra])];
     const teachingLevels = Array.isArray(req.body.teachingLevels) ? req.body.teachingLevels
                          : req.body.teachingLevels ? [req.body.teachingLevels] : [];
+    // Multi-select delivery modes (fall back to legacy single select / in_person).
+    let teachingModes = Array.isArray(req.body.teachingModes) ? req.body.teachingModes
+                       : req.body.teachingModes ? [req.body.teachingModes] : [];
+    teachingModes = teachingModes.filter(m => ["in_person", "online", "whatsapp"].includes(m));
+    if (!teachingModes.length) {
+      teachingModes = teachingMode === "both" ? ["in_person", "online"]
+                    : teachingMode ? [teachingMode] : ["in_person"];
+    }
+    const rateOnRequest = req.body.rateOnRequest === "true";
 
     const now       = new Date();
     const days      = Number(durationDays) || 30;
@@ -1667,8 +1687,10 @@ router.post("/suppliers/new-tutor", requireSupplierAdmin,
       contactDetails: contactDetails?.trim() || "",
       subjects:       allSubjects,
       teachingLevels,
+      teachingModes,
       teachingMode:   teachingMode || "in_person",
       hourlyRate:     parseFloat(hourlyRate) || 0,
+      rateOnRequest,
       hourlyCurrency: "USD",
       groupRate:      parseFloat(groupRate) || 0,
       offersGroups:   (parseFloat(groupRate) || 0) > 0,
@@ -2025,6 +2047,20 @@ router.get("/suppliers/:id/edit", requireSupplierAdmin, async (req, res) => {
       ? new Date(supplier.subscriptionExpiresAt).toISOString().split("T")[0]
       : "";
 
+    // Pre-checked tutor delivery-mode checkboxes (from teachingModes[], falling
+    // back to the legacy single teachingMode).
+    const _curModes = (Array.isArray(supplier.teachingModes) && supplier.teachingModes.length)
+      ? supplier.teachingModes
+      : (supplier.teachingMode === "both" ? ["in_person", "online"]
+         : supplier.teachingMode ? [supplier.teachingMode] : []);
+    const tutorModeChecksEdit = [
+      { id: "in_person", label: "🏠 In person" },
+      { id: "online",    label: "💻 Online" },
+      { id: "whatsapp",  label: "💬 WhatsApp" }
+    ].map(m => `
+      <label style="display:inline-flex;align-items:center;gap:6px;margin:2px 12px 2px 0;font-size:13px">
+        <input type="checkbox" name="teachingModes" value="${esc(m.id)}" ${_curModes.includes(m.id) ? "checked" : ""} /> ${esc(m.label)}</label>`).join("");
+
     res.send(layout(`Edit: ${esc(supplier.businessName)}`, `
       <a href="/zq-admin/suppliers/${supplier._id}" class="back-link">← Back to Profile</a>
       <div class="panel">
@@ -2106,8 +2142,8 @@ router.get("/suppliers/:id/edit", requireSupplierAdmin, async (req, res) => {
   <input name="website" value="${esc(supplier.website || "")}" />
 </div>
 
-${(supplier.categories||[]).includes("tutoring") ? `
-<!-- ── TEACHER / TUTOR FIELDS ──────────────────────────── -->
+${((supplier.categories||[]).includes("tutoring") && supplier.profileType !== "tutor") ? `
+<!-- ── TEACHER / TUTOR FIELDS (legacy category-tagged, non-tutor type) ──── -->
 <div class="fg" style="grid-column:1/-1">
   <label>📚 Subjects Taught
     <span style="font-weight:400;font-size:11px;color:var(--muted);text-transform:none;letter-spacing:0">
@@ -2126,6 +2162,31 @@ ${(supplier.categories||[]).includes("tutoring") ? `
   <input name="gradesOffered" value="${esc((supplier.gradesOffered||[]).join(", "))}"
          placeholder="e.g. O-Level, A-Level, Grade 6, Grade 7" />
 </div>` : ""}
+
+${supplier.profileType === "tutor" ? `
+<!-- ── PRIVATE TUTOR FIELDS (rates, modes, subjects, levels) ───────────── -->
+<div style="grid-column:1/-1;margin-top:4px;padding:14px;background:#faf5ff;border-radius:8px;border-left:3px solid #7c3aed">
+  <strong style="font-size:12px;color:#6d28d9;text-transform:uppercase;letter-spacing:.4px">🧑‍🏫 Private Tutor Fields</strong>
+</div>
+<div class="fg" style="grid-column:1/-1">
+  <label>📚 Subjects <span style="font-weight:400;font-size:11px;color:var(--muted);text-transform:none;letter-spacing:0">- separate with commas</span></label>
+  <input name="subjects" value="${esc((supplier.subjects||[]).join(", "))}" placeholder="e.g. Maths, Physics, English" />
+</div>
+<div class="fg" style="grid-column:1/-1">
+  <label>🎯 Levels <span style="font-weight:400;font-size:11px;color:var(--muted);text-transform:none;letter-spacing:0">- separate with commas (e.g. olevel, alevel)</span></label>
+  <input name="teachingLevels" value="${esc((supplier.teachingLevels||[]).join(", "))}" placeholder="e.g. olevel, alevel, primary" />
+</div>
+<div class="fg" style="grid-column:1/-1">
+  <label>🖥 Teaching Mode <span style="font-weight:400;font-size:11px;color:var(--muted);text-transform:none;letter-spacing:0">- tick all that apply (online + in person + WhatsApp)</span></label>
+  <div style="margin-top:4px">${tutorModeChecksEdit}</div>
+</div>
+<div class="fg"><label>💵 Hourly Rate ($)</label><input name="hourlyRate" type="number" step="0.01" value="${supplier.hourlyRate || 0}" placeholder="e.g. 8" /></div>
+<div class="fg" style="display:flex;align-items:flex-end">
+  <label style="display:inline-flex;align-items:center;gap:8px;font-size:13px">
+    <input type="checkbox" name="rateOnRequest" value="true" ${supplier.rateOnRequest ? "checked" : ""} /> 💬 Rate on request</label>
+</div>
+<div class="fg"><label>👥 Group Rate ($/student, optional)</label><input name="groupRate" type="number" step="0.01" value="${supplier.groupRate || 0}" placeholder="e.g. 4" /></div>
+<div class="fg"><label>🕒 Availability</label><input name="availability" value="${esc(supplier.availability || "")}" placeholder="e.g. Weekday evenings, Sat AM" /></div>` : ""}
 
 ${supplier.profileType === "service" ? `
 <div style="grid-column:1/-1;margin-top:4px;padding:14px;background:#eff6ff;border-radius:8px;border-left:3px solid #3b82f6">
@@ -2433,6 +2494,31 @@ update.notificationContacts = [...new Set(_notifRaw)].filter(
     }
     if (req.body.gradesOffered !== undefined) {
       update.gradesOffered = (req.body.gradesOffered || "").split(",").map(s => s.trim()).filter(Boolean);
+    }
+    // ── Private-tutor fields (rates, delivery modes, levels) ─────────────────
+    if (req.body.teachingLevels !== undefined) {
+      update.teachingLevels = (req.body.teachingLevels || "")
+        .split(",").map(s => s.trim()).filter(Boolean);
+    }
+    if (req.body.teachingModes !== undefined || update.profileType === "tutor") {
+      const _rawModes = req.body.teachingModes || [];
+      update.teachingModes = (Array.isArray(_rawModes) ? _rawModes : [_rawModes])
+        .filter(m => ["in_person", "online", "whatsapp"].includes(m));
+      // the model's pre-update hook derives the legacy teachingMode from this
+    }
+    if (req.body.hourlyRate !== undefined) {
+      update.hourlyRate = parseFloat(req.body.hourlyRate) || 0;
+    }
+    if (req.body.groupRate !== undefined) {
+      update.groupRate    = parseFloat(req.body.groupRate) || 0;
+      update.offersGroups = (parseFloat(req.body.groupRate) || 0) > 0;
+    }
+    if (req.body.availability !== undefined) {
+      update.availability = (req.body.availability || "").trim();
+    }
+    // rateOnRequest checkbox: only present in the tutor edit form
+    if (update.profileType === "tutor" || req.body.rateOnRequest !== undefined) {
+      update.rateOnRequest = req.body.rateOnRequest === "true";
     }
     // ── Hospitality & Tourism fields ─────────────────────────────────────────
     // Always save tourismAreas if present
@@ -9727,7 +9813,7 @@ router.get("/broadcast", requireSupplierAdmin, async (req, res) => {
             <span id="campaignHeaderStatus" style="font-size:12px;color:var(--muted)">or paste a URL below</span>
           </div>
           <input name="headerImageUrl" id="campaignHeaderUrl" type="url"
-            placeholder="(optional) Header image URL — https://…/flyer.jpg"
+            placeholder="(optional) Header image URL - https://…/flyer.jpg"
             style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;margin-bottom:6px" />
           <p style="font-size:11px;color:var(--muted);margin:0 0 12px;line-height:1.6">
             Optional: add a picture to show <b>above</b> your formatted text (like the infographic broadcasts).

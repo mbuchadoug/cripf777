@@ -135,7 +135,7 @@ router.post("/", async (req, res) => {
         await markPaidByReference(meta.reference, "stripe");
         console.log(`✅ Grocery order paid via Stripe: ${meta.reference}`);
       } catch (err) {
-        // Log but don't fail the webhook — Stripe needs a 200.
+        // Log but don't fail the webhook - Stripe needs a 200.
         console.error("[grocery stripe webhook]", err.message);
       }
     }

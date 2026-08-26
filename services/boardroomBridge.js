@@ -4,7 +4,7 @@
 // The Boardroom is NOT a new app or a new chatbot vertical. It is a *branded
 // view* over an existing ZimQuote supplier group, plus two net-new verticals
 // (Opportunities, Events). This module is deliberately DECOUPLED from the
-// chatbot engine — it only touches models + pure serializers, so it can be
+// chatbot engine - it only touches models + pure serializers, so it can be
 // imported by both the web JSON API and the WhatsApp handler with no risk to
 // the running engine.
 //
@@ -16,13 +16,13 @@
 // ADD (net-new):
 //   • Boardroom config doc  (brand, owner, member list, ecosystem pillars)
 //   • BoardroomOpportunity  (Tender / Job / Collaboration / Funding / Service)
-//   • BoardroomEvent        (masterclasses, breakfasts — EcoCash / InnBucks)
+//   • BoardroomEvent        (masterclasses, breakfasts - EcoCash / InnBucks)
 //
 // Deep-link payload families (plain text, handled top-level like ZQ:GROUP):
 //   ZQ:BR:<slug>     → open a Boardroom (directory intro on WhatsApp)
 //   ZQ:BR:OPP:<id>   → express interest in an opportunity
 //   ZQ:BR:EVT:<id>   → reserve a seat / start ticket purchase
-//   (member connect stays as ZQ:SUPPLIER:<id> — proven, tracked, unchanged)
+//   (member connect stays as ZQ:SUPPLIER:<id> - proven, tracked, unchanged)
 
 import mongoose from "mongoose";
 import SupplierProfile from "../models/supplierProfile.js";
@@ -34,7 +34,7 @@ const waLink = (payload) => `${BOT_WA_URL}?text=${encodeURIComponent(payload)}`;
 
 // ─── Models ─────────────────────────────────────────────────────────────────
 // Guarded with mongoose.models.* so hot-reload / repeated imports never throw
-// "OverwriteModelError" — matches the ZimQuote codebase convention.
+// "OverwriteModelError" - matches the ZimQuote codebase convention.
 
 const boardroomSchema = new mongoose.Schema(
   {
