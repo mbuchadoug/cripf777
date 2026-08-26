@@ -4495,13 +4495,43 @@ _Type *cancel* at any time to stop._`
 // ── END REG TYPE EARLY HANDLER ───────────────────────────────────────────────
 
 // ── PRIVATE TUTOR: teaching-mode selection (during supplier_reg_tutor_mode) ──
-// Accepts the single modes, the "in person + online" combo, the legacy "both",
-// and "all modes". Stores the multi-select teachingModes[] (the model derives
-// the legacy teachingMode from it on save).
-if (a === "sup_tmode_in_person" || a === "sup_tmode_online" || a === "sup_tmode_whatsapp" ||
-    a === "sup_tmode_both" || a === "sup_tmode_inperson_online" || a === "sup_tmode_all") {
-  if (!_bizIsOwnedByUser) biz = null;
-  if (biz && biz.sessionData?.supplierReg) {
+// Arrives as an interactive list reply (isMetaAction=true). It MUST resolve the
+// tutor's in-progress registration business and always respond - previously a
+// failed ownership check could null `biz` and the tap fell through silently,
+// stalling the flow right after "How do you teach?".
+if (a.startsWith("sup_tmode_")) {
+  console.log("[TUTOR MODE] action:", a, "biz:", biz?._id, "owned:", _bizIsOwnedByUser, "state:", biz?.sessionState);
+
+  // Resolve the registration business directly from the sender (they always own
+  // their own in-progress tutor registration), independent of the generic
+  // ownership check that may have nulled `biz`.
+  let _regBiz = (biz && (biz.sessionState || "").startsWith("supplier_reg_tutor")) ? biz : null;
+  if (!_regBiz) {
+    try {
+      const _sess = await UserSession.findOne({ phone }).lean();
+      if (_sess?.activeBusinessId) {
+        const _cand = await Business.findById(_sess.activeBusinessId);
+        if (_cand && (_cand.sessionState || "").startsWith("supplier_reg_tutor")) _regBiz = _cand;
+      }
+    } catch (_e) { console.error("[TUTOR MODE] recover(session):", _e.message); }
+  }
+  if (!_regBiz) {
+    try {
+      _regBiz = await Business.findOne({
+        ownerPhone: phone, sessionState: { $regex: "^supplier_reg_tutor" }
+      }).sort({ updatedAt: -1 });
+    } catch (_e) { console.error("[TUTOR MODE] recover(owner):", _e.message); }
+  }
+
+  if (_regBiz) {
+    // Ensure the session points at this registration business so the next steps
+    // (rate/about/pitch) resolve the same record.
+    try {
+      await UserSession.findOneAndUpdate(
+        { phone }, { $set: { activeBusinessId: _regBiz._id } }, { upsert: true }
+      );
+    } catch (_e) { /* non-critical */ }
+
     const _modeMap = {
       sup_tmode_in_person:       ["in_person"],
       sup_tmode_online:          ["online"],
@@ -4511,12 +4541,15 @@ if (a === "sup_tmode_in_person" || a === "sup_tmode_online" || a === "sup_tmode_
       sup_tmode_all:             ["in_person", "online", "whatsapp"]
     };
     const _modes = _modeMap[a] || ["in_person"];
-    biz.sessionData.supplierReg.teachingModes = _modes;
+    _regBiz.sessionData = _regBiz.sessionData || {};
+    _regBiz.sessionData.supplierReg = _regBiz.sessionData.supplierReg || { profileType: "tutor" };
+    _regBiz.sessionData.supplierReg.teachingModes = _modes;
     // legacy single value for any older reader (model also re-derives on save)
-    biz.sessionData.supplierReg.teachingMode =
-      _modes.length > 1 ? "both" : _modes[0];
-    biz.sessionState = "supplier_reg_tutor_rate";
-    await saveBizSafe(biz);
+    _regBiz.sessionData.supplierReg.teachingMode = _modes.length > 1 ? "both" : _modes[0];
+    _regBiz.sessionState = "supplier_reg_tutor_rate";
+    _regBiz.markModified("sessionData");
+    await saveBizSafe(_regBiz);
+    console.log("[TUTOR MODE] modes", _modes, "biz", _regBiz._id, "-> supplier_reg_tutor_rate");
     return sendButtons(from, {
       text:
 `💵 *What's your rate per hour?* (USD)
@@ -4528,15 +4561,30 @@ Type a number, e.g. *8* or *10* - or tap *On request* if you prefer to quote per
       ]
     });
   }
+
+  // Could not resolve a tutor registration in progress - guide the user rather
+  // than leaving them stuck.
+  console.log("[TUTOR MODE] no in-progress tutor registration for", phone, "action", a);
+  return sendText(from, "Let's continue your tutor registration - type *register* to start, or *menu* for the main menu.");
 }
 
 // ── PRIVATE TUTOR: "On request" rate button → finalise-path handler ──────────
 if (a === "sup_tutor_rate_onrequest") {
-  if (!_bizIsOwnedByUser) biz = null;
-  if (biz && biz.sessionState === "supplier_reg_tutor_rate") {
+  let _rb = (biz && (biz.sessionState || "").startsWith("supplier_reg_tutor")) ? biz : null;
+  if (!_rb) {
+    try {
+      const _s = await UserSession.findOne({ phone }).lean();
+      if (_s?.activeBusinessId) {
+        const _c = await Business.findById(_s.activeBusinessId);
+        if (_c && (_c.sessionState || "").startsWith("supplier_reg_tutor")) _rb = _c;
+      }
+      if (!_rb) _rb = await Business.findOne({ ownerPhone: phone, sessionState: { $regex: "^supplier_reg_tutor" } }).sort({ updatedAt: -1 });
+    } catch (_e) { console.error("[TUTOR RATE onrequest] recover:", _e.message); }
+  }
+  if (_rb && _rb.sessionState === "supplier_reg_tutor_rate") {
     const _orHandled = await handleSupplierRegistrationStates({
       state: "supplier_reg_tutor_rate", from, text: "on request",
-      biz, saveBiz: saveBizSafe.bind(null, biz)
+      biz: _rb, saveBiz: saveBizSafe.bind(null, _rb)
     });
     if (_orHandled) return;
   }
@@ -4544,17 +4592,27 @@ if (a === "sup_tutor_rate_onrequest") {
 
 // ── PRIVATE TUTOR: skip buttons for rate / about / pitch → finalise via handler
 if (a === "sup_tutor_rate_skip" || a === "sup_tutor_about_skip" || a === "sup_tutor_pitch_skip") {
-  if (!_bizIsOwnedByUser) biz = null;
   const _tutorSkipStates = {
     sup_tutor_rate_skip:  "supplier_reg_tutor_rate",
     sup_tutor_about_skip: "supplier_reg_tutor_about",
     sup_tutor_pitch_skip: "supplier_reg_tutor_pitch"
   };
   const _wantState = _tutorSkipStates[a];
-  if (biz && biz.sessionState === _wantState) {
+  let _sb = (biz && biz.sessionState === _wantState) ? biz : null;
+  if (!_sb) {
+    try {
+      const _s = await UserSession.findOne({ phone }).lean();
+      if (_s?.activeBusinessId) {
+        const _c = await Business.findById(_s.activeBusinessId);
+        if (_c && _c.sessionState === _wantState) _sb = _c;
+      }
+      if (!_sb) _sb = await Business.findOne({ ownerPhone: phone, sessionState: _wantState }).sort({ updatedAt: -1 });
+    } catch (_e) { console.error("[TUTOR SKIP] recover:", _e.message); }
+  }
+  if (_sb && _sb.sessionState === _wantState) {
     const _tHandled = await handleSupplierRegistrationStates({
       state: _wantState, from, text: "skip",
-      biz, saveBiz: saveBizSafe.bind(null, biz)
+      biz: _sb, saveBiz: saveBizSafe.bind(null, _sb)
     });
     if (_tHandled) return;
   }

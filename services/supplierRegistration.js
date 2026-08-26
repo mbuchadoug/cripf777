@@ -1182,6 +1182,54 @@ Pick the option that fits. You can offer more than one way - choose "All modes" 
   );
 }
 
+// Teaching mode - TYPED fallback. The list taps (sup_tmode_*) are handled in
+// chatbotEngine, but if the user types their mode (or the tap arrives here as
+// text), parse it so the flow never stalls at "How do you teach?".
+if (state === "supplier_reg_tutor_mode") {
+  const raw = (text || "").trim().toLowerCase();
+  const byId = {
+    "sup_tmode_in_person": ["in_person"],
+    "sup_tmode_online": ["online"],
+    "sup_tmode_whatsapp": ["whatsapp"],
+    "sup_tmode_inperson_online": ["in_person", "online"],
+    "sup_tmode_both": ["in_person", "online"],
+    "sup_tmode_all": ["in_person", "online", "whatsapp"]
+  };
+  let modes = byId[raw] || null;
+  if (!modes) {
+    modes = [];
+    if (/\ball\b|every ?way|everything|all modes/.test(raw)) {
+      modes = ["in_person", "online", "whatsapp"];
+    } else {
+      if (/in.?person|face|physical|home|1|one/.test(raw))            modes.push("in_person");
+      if (/online|video|zoom|meet|virtual|remote|2|two/.test(raw))    modes.push("online");
+      if (/whats.?app|wa\b|3|three/.test(raw))                        modes.push("whatsapp");
+      if (/both/.test(raw) && modes.length === 0)                     modes = ["in_person", "online"];
+      modes = [...new Set(modes)];
+    }
+  }
+  if (!modes.length) {
+    await sendText(from,
+      "Please pick from the list, or type one or more: *in person*, *online*, *whatsapp*, *both*, or *all*.");
+    return true;
+  }
+  biz.sessionData.supplierReg = biz.sessionData.supplierReg || { profileType: "tutor" };
+  biz.sessionData.supplierReg.teachingModes = modes;
+  biz.sessionData.supplierReg.teachingMode  = modes.length > 1 ? "both" : modes[0];
+  biz.sessionState = "supplier_reg_tutor_rate";
+  await saveBiz(biz);
+  return sendButtons(from, {
+    text:
+`💵 *What's your rate per hour?* (USD)
+
+Type a number, e.g. *8* or *10* - or tap *On request* if you prefer to quote per student.`,
+    buttons: [
+      { id: "sup_tutor_rate_onrequest", title: "💬 On request" },
+      { id: "sup_tutor_rate_skip",      title: "⏭ Skip" }
+    ]
+  });
+}
+
 // Rate per hour (mode button set state here and sent the prompt).
 if (state === "supplier_reg_tutor_rate") {
   const raw = (text || "").trim();
