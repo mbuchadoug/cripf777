@@ -27,7 +27,7 @@ import adminBattlesRouter from "./routes/adminBattles.js";
 import { startBattleScheduler } from "./services/battleScheduler.js";
 
 import twilioBizRoutes from "./routes/twilio_biz.js";
-
+import tradesApiRoutes from "./routes/tradesApi.js";
 import privateTeacherRoutes from "./routes/privateTeacher.js";
 
 import groceryOrdersRoutes from "./routes/groceryOrders.js";
@@ -206,7 +206,7 @@ app.use("/stripe/webhook", stripeWebhookRoutes);
 
  app.use("/api/boardroom", boardroomApiRoutes);
 
-
+app.use("/api", tradesApiRoutes);
 
 
 // Basic middleware
