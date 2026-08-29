@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { runSupplierSearch } from "./supplierSearch.js";
+import { runSupplierSearch } from "../services/supplierSearch.js";
 import SupplierProfile from "../models/supplierProfile.js";
 
 /* ============================================================================
