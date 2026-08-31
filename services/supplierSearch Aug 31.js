@@ -490,14 +490,6 @@ function _inferCategoriesFromSearch(product, expandedTerms) {
     "transport": "transport", "deliver": "transport", "courier": "transport", "truck": "transport",
     "it support": "it", "computer repair": "it", "tech": "it",
     "mechanic": "automotive", "panel beat": "automotive", "tyre": "automotive",
-    // Vehicle makes / bakkie terms -> car_supplies (the slug car-parts sellers
-    // use). Lets a make/car search surface car-category businesses, ranked last.
-    "isuzu": "car_supplies", "toyota": "car_supplies", "nissan": "car_supplies",
-    "mazda": "car_supplies", "subaru": "car_supplies", "honda": "car_supplies",
-    "mercedes": "car_supplies", "volkswagen": "car_supplies", "hyundai": "car_supplies",
-    "mitsubishi": "car_supplies", "bakkie": "car_supplies", "hilux": "car_supplies",
-    "navara": "car_supplies", "ranger": "car_supplies", "vehicle": "car_supplies",
-    "car spares": "car_supplies", "car parts": "car_supplies",
   };
   const cats = new Set();
   const allTerms = [product, ...(expandedTerms || [])];
@@ -532,10 +524,7 @@ export function scoreSupplierMatch(supplier, searchTerm) {
 
   function _norm(s) { return normalizeProductName(s || ""); }
 
-  // Generic action words ("service","repair"...) must not stem-match, or a
-  // plumber's "general repairs" would match a car "...service repair" search.
-  const _distinctiveTerm = stripGenericSearchWords(term) || term;
-  const _termWords = _distinctiveTerm.split(" ").filter(w => w.length > 3);
+  const _termWords = term.split(" ").filter(w => w.length > 3);
   const _stemHit = (textNorm) => {
     if (!textNorm || !_termWords.length) return false;
     const tw = textNorm.split(" ").filter(w => w.length > 3);
@@ -844,34 +833,6 @@ function getExpandedSearchTerms(searchTerm = "") {
   return [...expanded].filter(Boolean);
 }
 
-// -- Generic action/filler words that must not drive relevance on their own ---
-// A plumber's "general repairs" should NOT count as a strong match for
-// "isuzu bakkie service repair". Distinctive words (isuzu, bakkie, geyser...)
-// drive scoring; these get stripped first. Never strips away the whole query.
-const GENERIC_SEARCH_WORDS = new Set([
-  "service", "services", "servicing", "repair", "repairs", "repairing",
-  "fix", "fixing", "maintenance", "installation", "installations", "install",
-  "installing", "fitting", "fittings", "fitment", "replacement", "replace",
-  "overhaul", "overhauls", "and", "for", "the", "near", "best", "cheap",
-  "affordable", "professional", "quality", "in", "at", "of", "my", "your"
-]);
-function stripGenericSearchWords(norm = "") {
-  const toks = String(norm || "").split(" ").filter(Boolean);
-  const kept = toks.filter(t => !GENERIC_SEARCH_WORDS.has(t));
-  return kept.length ? kept.join(" ") : "";  // keep original if all-generic
-}
-
-// First non-empty catalogue/rate item for a supplier - used to keep a
-// same-domain seller visible with one representative line.
-function _firstRepresentativeItem(s) {
-  const pick = (arr) => (arr || [])
-    .map(x => String(x || "").trim())
-    .find(x => x && x !== "pending_upload" && normalizeProductName(x));
-  return pick(s?.listedProducts) || pick(s?.products) ||
-    ((s?.rates || []).map(r => String(r?.service || "").trim())
-      .find(x => x && normalizeProductName(x))) || "";
-}
-
 function scoreProductMatch(productName = "", searchTerm = "") {
   const productNorm = normalizeProductName(productName);
   const searchNorm = normalizeProductName(searchTerm);
@@ -880,10 +841,7 @@ function scoreProductMatch(productName = "", searchTerm = "") {
 
   if (productNorm === searchNorm) return 100;
 
-  // Score against DISTINCTIVE words so generic action words ("service",
-  // "repair", "installation") can't alone make an unrelated business match.
-  const _effSearch = stripGenericSearchWords(searchNorm) || searchNorm;
-  const expandedTerms = getExpandedSearchTerms(_effSearch);
+  const expandedTerms = getExpandedSearchTerms(searchNorm);
   const productTokens = tokenizeProductName(productNorm);
   const scores = [];
 
@@ -1151,48 +1109,6 @@ export async function runSupplierOfferSearch({ city, category, product, profileT
       }));
   });
 
-  // -- Domain top-in: same-trade sellers with no exact item still surface ------
-  // A car-parts business (category car_supplies) should appear for a make/car
-  // search even if it doesn't list that exact model, ranked LAST. Only fires
-  // for suppliers whose CATEGORY matches the search's inferred domain, so it
-  // can never pull an unrelated trade into results. Also protects same-domain
-  // service sellers (e.g. a plumber who never typed "geyser") from the gate.
-  try {
-    const _domainCats = _inferCategoriesFromSearch(product || "", expandSearchTerms(product || ""));
-    if (_domainCats.length) {
-      const _haveOffer = new Set(offers.map(o => o.supplierId));
-      for (const s of suppliers) {
-        if (_haveOffer.has(String(s._id))) continue;
-        const _sc = (s.categories || []).map(c => (c || "").toLowerCase());
-        if (!_sc.some(c => _domainCats.includes(c))) continue;
-        const _rep = _firstRepresentativeItem(s);
-        if (!_rep) continue;
-        offers.push({
-          supplierId: String(s._id),
-          supplierName: s.businessName || "Supplier",
-          supplierPhone: s.phone || "",
-          supplierLocation: `${s.location?.area || ""}, ${s.location?.city || ""}`.replace(/^,\s*|,\s*$/g, ""),
-          supplierArea: s.location?.area || "",
-          supplierCity: s.location?.city || "",
-          supplierTier: s.tier || "",
-          supplierRating: typeof s.rating === "number" ? s.rating : 0,
-          profileType: s.profileType || "service",
-          deliveryText: s.profileType === "service"
-            ? (s.travelAvailable ? "🚗 Mobile service" : "📍 Visit provider")
-            : (s.delivery?.available ? "🚚 Delivery available" : "🏠 Collection only"),
-          product: _rep,
-          pricePerUnit: null,
-          unit: s.profileType === "service" ? "job" : "each",
-          matchSource: "category",
-          matchScore: 8,
-          sortTierRank: typeof s.tierRank === "number" ? s.tierRank : 0,
-          sortCredibility: typeof s.credibilityScore === "number" ? s.credibilityScore : 0,
-          sortPosition: 99
-        });
-      }
-    }
-  } catch (_dtErr) { console.warn("[DOMAIN TOPIN]", _dtErr.message); }
-
   // ── Nearby top-up: too few local sellers → add sellers from other cities ──
   // "find plumber harare" with only 1-3 Harare sellers now also shows e.g.
   // "noddah plumbers" from another city, ranked BELOW every local seller,
@@ -1238,20 +1154,6 @@ export async function runSupplierOfferSearch({ city, category, product, profileT
     const r = _relBySupplier.get(id) || 0;
     return r >= 45 ? 2 : r >= 20 ? 1 : 0;
   };
-
-  // -- Relevance gate: when genuinely-related sellers exist, drop the
-  // category-only "representative" noise (relevance 0). Prevents a car-service
-  // search listing plumbers/funeral agents that only matched a generic word.
-  // Skipped when nothing scored >=20 (weak query) so we never blank out results.
-  const _relValues = [..._relBySupplier.values()];
-  const _bestRel = _relValues.length ? Math.max(..._relValues) : 0;
-  if (_bestRel >= 20) {
-    const _before = offers.length;
-    offers = offers.filter(o => (_relBySupplier.get(o.supplierId) || 0) > 0);
-    if (offers.length !== _before) {
-      console.log(`[RELEVANCE GATE] "${product}" bestRel=${_bestRel} -> ${_before}->${offers.length} offers (dropped 0-relevance sellers)`);
-    }
-  }
 
   offers.sort((a, b) => {
     if ((a._nonLocal || 0) !== (b._nonLocal || 0)) return (a._nonLocal || 0) - (b._nonLocal || 0);
