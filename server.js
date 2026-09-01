@@ -49,6 +49,10 @@ import webTeam from "./routes/web_team.js";          // ← ADD THIS
 import officeRoutes from "./routes/office.js";   // ← NEW back-office portal (/office)
 //-------------------------------------------------------
 
+import mobileProfessionalRouter from "./routes/mobileProfessional.js";   // near the other mobile imports
+                  // right after the school mount
+
+
 import {
   allowInsecurePrototypeAccess
 } from "@handlebars/allow-prototype-access";
@@ -207,6 +211,9 @@ app.use("/stripe/webhook", stripeWebhookRoutes);
  app.use("/api/boardroom", boardroomApiRoutes);
 
 app.use("/api", tradesApiRoutes);
+
+
+app.use("/api/mobile/pro", mobileProfessionalRouter);  
 
 
 // Basic middleware
