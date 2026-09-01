@@ -18,7 +18,7 @@
 //    import mobileProfessionalRouter from "./routes/mobileProfessional.js";
 //    app.use("/api/mobile/pro", mobileProfessionalRouter);
 
-import { Router } from "express";
+import express, { Router } from "express";
 import crypto from "crypto";
 import mongoose from "mongoose";
 
@@ -30,6 +30,14 @@ import ExamInstance from "../models/examInstance.js";
 import Attempt from "../models/attempt.js";
 
 const router = Router();
+
+// Parse JSON bodies at the ROUTER level. This makes POST endpoints work no
+// matter where the router is mounted in server.js — even if it was mounted
+// before the app-wide express.json(). If a global parser already ran, this is
+// a harmless no-op (express.json skips when the body is already parsed). This
+// is what was breaking submit: the POST body never reached req.body, so the
+// server saw no examId / no answers.
+router.use(express.json({ limit: "2mb" }));
 
 const PASS_THRESHOLD = parseInt(process.env.QUIZ_PASS_THRESHOLD || "60", 10);
 const QUIZ_SIZE = parseInt(process.env.PRO_QUIZ_COUNT || "10", 10);
