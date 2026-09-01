@@ -395,8 +395,31 @@ router.post("/quiz/submit", requireMobileAuth, async (req, res) => {
     if (!examId) return res.status(400).json({ error: "Missing examId." });
     if (!answers.length) return res.status(400).json({ error: "No answers submitted." });
 
-    const exam = await ExamInstance.findOne({ examId, userId: me._id });
-    if (!exam) return res.status(404).json({ error: "Assessment not found." });
+    // Resilience: normally the ExamInstance was created when the quiz loaded.
+    // If it is somehow missing (session expired / cleaned up / edge case) we do
+    // NOT fail a completed attempt. We synthesize a finished record from the
+    // payload so the professional is still marked, recorded, and certified on a
+    // pass. This makes the submit impossible to lose.
+    let exam = await ExamInstance.findOne({ examId, userId: me._id });
+    if (!exam) {
+      const bodyModule = String(req.body?.module || "").trim().toLowerCase();
+      const pillarFb = PILLAR_BY_MODULE[bodyModule] || null;
+      const orgFb = await resolveHomeOrg();
+      const labelFb = pillarFb ? `${pillarFb.name} · Assessment` : "Professional Assessment";
+      exam = new ExamInstance({
+        examId,
+        org: orgFb?._id || me.organization || null,
+        userId: me._id,
+        targetRole: "employee",
+        module: bodyModule || null,
+        quizTitle: labelFb,
+        title: labelFb,
+        status: "started",
+        durationMinutes: 0,
+        questionIds: [],
+        meta: { track: "professional", subject: bodyModule || null, code: pillarFb?.code || null, source: "mobile-app" }
+      });
+    }
 
     const module = exam.module || String(req.body?.module || "").trim().toLowerCase();
     const pillar = PILLAR_BY_MODULE[module] || null;
