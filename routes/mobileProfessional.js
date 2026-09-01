@@ -389,11 +389,18 @@ router.get("/quiz", requireMobileAuth, async (req, res) => {
 router.post("/quiz/submit", requireMobileAuth, async (req, res) => {
   try {
     const me = req.mobileUser;
-    const examId = String(req.body?.examId || "").trim();
+    let examId = String(req.body?.examId || "").trim();
     const answers = Array.isArray(req.body?.answers) ? req.body.answers : [];
+    const bodyModule = String(req.body?.module || "").trim().toLowerCase();
+    const bodyQuizId = String(req.body?.quizId || "").trim().toLowerCase();
 
-    if (!examId) return res.status(400).json({ error: "Missing examId." });
     if (!answers.length) return res.status(400).json({ error: "No answers submitted." });
+
+    // examId is OPTIONAL. Scoring only needs the answers + the question bank, so
+    // even if the client could not carry an examId (load session lost, older
+    // build, mid-deploy), we mint one and synthesize the record below. This
+    // makes a completed assessment impossible to lose.
+    if (!examId) examId = crypto.randomUUID();
 
     // Resilience: normally the ExamInstance was created when the quiz loaded.
     // If it is somehow missing (session expired / cleaned up / edge case) we do
@@ -402,10 +409,14 @@ router.post("/quiz/submit", requireMobileAuth, async (req, res) => {
     // pass. This makes the submit impossible to lose.
     let exam = await ExamInstance.findOne({ examId, userId: me._id });
     if (!exam) {
-      const bodyModule = String(req.body?.module || "").trim().toLowerCase();
       const pillarFb = PILLAR_BY_MODULE[bodyModule] || null;
       const orgFb = await resolveHomeOrg();
-      const labelFb = pillarFb ? `${pillarFb.name} · Assessment` : "Professional Assessment";
+      // Derive a tier label from quizId ("module:tier") when the client sent it.
+      const tierKeyFb = bodyQuizId.includes(":") ? bodyQuizId.split(":")[1] : null;
+      const tierFb = (tierKeyFb && TIER_BY_KEY[tierKeyFb]) || null;
+      const labelFb = pillarFb
+        ? `${pillarFb.name} · ${tierFb ? tierFb.label : "Assessment"}`
+        : "Professional Assessment";
       exam = new ExamInstance({
         examId,
         org: orgFb?._id || me.organization || null,
@@ -417,7 +428,15 @@ router.post("/quiz/submit", requireMobileAuth, async (req, res) => {
         status: "started",
         durationMinutes: 0,
         questionIds: [],
-        meta: { track: "professional", subject: bodyModule || null, code: pillarFb?.code || null, source: "mobile-app" }
+        meta: {
+          track: "professional",
+          subject: bodyModule || null,
+          code: pillarFb?.code || null,
+          quizId: bodyQuizId || (bodyModule ? `${bodyModule}:foundations` : null),
+          tier: tierFb ? tierFb.key : (bodyQuizId.includes(":") ? bodyQuizId.split(":")[1] : "foundations"),
+          quizLabel: labelFb,
+          source: "mobile-app"
+        }
       });
     }
 
