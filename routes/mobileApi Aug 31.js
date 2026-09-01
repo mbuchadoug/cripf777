@@ -205,9 +205,7 @@ router.post("/auth/google/exchange", async (req, res) => {
    ════════════════════════════════════════════════════════════════════ */
 
 // Roles a person may self-select at sign-up. Admin roles are never self-served.
-// "employee" is the PROFESSIONAL persona (see derivePersona in src/auth.js): a
-// person taking the CRIPFCnt framework courses for themselves.
-const SELF_SIGNUP_ROLES = new Set(["parent", "private_teacher", "student", "employee"]);
+const SELF_SIGNUP_ROLES = new Set(["parent", "private_teacher", "student"]);
 
 // Enrol a freshly created user into the right org, mirroring passport.js so
 // the app and web behave identically.
@@ -237,21 +235,6 @@ async function enrolNewUser(user) {
         });
       }
     }
-    // Professionals (employees) join the home org so their attempts/certificates
-    // are never orphaned. If a deployment's OrgMembership role enum rejects
-    // "employee" this throws and is caught below - non-fatal, the account still
-    // works on mobile because the pro course routes don't depend on membership.
-    if (user.role === "employee" && homeOrg) {
-      const exists = await OrgMembership.findOne({ org: homeOrg._id, user: user._id });
-      if (!exists) {
-        await OrgMembership.create({
-          org: homeOrg._id,
-          user: user._id,
-          role: "employee",
-          joinedAt: new Date()
-        });
-      }
-    }
   } catch (err) {
     console.error("[mobile register] enrol failed (non-fatal):", err.message);
   }
@@ -269,7 +252,7 @@ async function createAccount({ role, firstName, lastName, password, email }) {
     username,
     email: email || undefined,
     provider: "password",
-    consumerEnabled: role === "parent" || role === "private_teacher" || role === "employee",
+    consumerEnabled: role === "parent" || role === "private_teacher",
     accountType: role === "parent" ? "parent" : role === "student" ? "student_self" : undefined,
     lastLogin: new Date()
   });
@@ -280,18 +263,13 @@ async function createAccount({ role, firstName, lastName, password, email }) {
     user.aiQuizCredits = 0;
     user.needsProfileSetup = true;
   }
-  if (role === "employee") {
-    // Professional persona. Free trial by default; assessments are free to take.
-    user.employeeSubscriptionStatus = "trial";
-    user.employeeSubscriptionPlan = "none";
-  }
   await user.save();
   await enrolNewUser(user);
   return user;
 }
 
 function validateSignup({ role, firstName, password }) {
-  if (!SELF_SIGNUP_ROLES.has(role)) return "Choose Parent, Private teacher, Student or Professional.";
+  if (!SELF_SIGNUP_ROLES.has(role)) return "Choose Parent, Private teacher or Student.";
   if (!firstName) return "Enter your first name.";
   if (String(password).length < 6) return "Use a password of at least 6 characters.";
   return null;
