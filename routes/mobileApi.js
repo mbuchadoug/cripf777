@@ -625,6 +625,67 @@ router.post("/roles/switch", requireMobileAuth, async (req, res) => {
   }
 });
 
+// ── Self-service: add a NEW persona to this account and switch to it. ──────
+// A parent can become a professional, a professional can add a parent account,
+// etc. - all on the same login. We enrol them in the right org (best-effort),
+// set that persona's trial fields, add it to mobileRoles, and switch to it.
+router.post("/roles/enable", requireMobileAuth, async (req, res) => {
+  try {
+    const role = String(req.body?.role || "").trim().toLowerCase();
+    if (!["parent", "professional", "teacher", "student"].includes(role)) {
+      return res.status(400).json({ error: "Unknown account type." });
+    }
+    const user = await User.findById(req.mobileUser._id);
+    if (!user) return res.status(404).json({ error: "User not found." });
+
+    const now = new Date();
+    // Set the persona's own fields (trial by default - free tier). Never downgrade.
+    if (role === "professional") {
+      if (!user.employeeSubscriptionStatus) user.employeeSubscriptionStatus = "trial";
+      if (!user.employeeSubscriptionPlan) user.employeeSubscriptionPlan = "none";
+    } else if (role === "parent") {
+      user.consumerEnabled = true;
+      if (!user.accountType) user.accountType = "parent";
+    } else if (role === "teacher") {
+      if (!user.teacherSubscriptionStatus) user.teacherSubscriptionStatus = "trial";
+      if (!user.teacherSubscriptionPlan) user.teacherSubscriptionPlan = "none";
+    }
+
+    // Add to the switchable persona list (dedupe).
+    const set = new Set(Array.isArray(user.mobileRoles) ? user.mobileRoles : []);
+    set.add(role);
+    user.mobileRoles = [...set];
+    user.activeMobileRole = role;
+    await user.save();
+
+    // Best-effort org enrolment so the persona's screens have context. Failures
+    // here never block enabling the role (the mobileRoles flag is what matters).
+    try {
+      const homeSlug = "cripfcnt-home";
+      const schoolSlug = "cripfcnt-school";
+      const slug = role === "professional" ? schoolSlug : (role === "student" ? schoolSlug : homeSlug);
+      const membershipRole = role === "professional" ? "employee"
+        : role === "teacher" ? "private_teacher"
+        : role === "student" ? "student" : "parent";
+      const org = await Organization.findOne({ slug }).lean();
+      if (org) {
+        const existing = await OrgMembership.findOne({ org: org._id, user: user._id }).lean();
+        if (!existing) {
+          await OrgMembership.create({ org: org._id, user: user._id, role: membershipRole, joinedAt: now });
+        }
+      }
+    } catch (e) {
+      console.warn("[mobile roles/enable] enrolment skipped:", e.message);
+    }
+
+    const fresh = await User.findById(user._id).lean();
+    return res.json({ ok: true, activeMobileRole: role, user: publicUser(fresh) });
+  } catch (err) {
+    console.error("[mobile roles/enable]", err);
+    return res.status(500).json({ error: "Could not add that account." });
+  }
+});
+
 /* ══════════════════════════════════════════════════════════════════
    SYNC - everything the device needs to work offline.
    Works with or without a token; anonymous callers get public 8QT only.

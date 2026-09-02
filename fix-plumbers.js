@@ -1,5 +1,5 @@
 /* ============================================================================
-   fix-plumbers.js  —  make the real plumbing listings visible
+   fix-plumbers.js  -  make the real plumbing listings visible
    ----------------------------------------------------------------------------
    WHY: runSupplierSearch() (what the tools + "find plumber" use) only returns
    suppliers with  active:true  AND  subscriptionStatus in ["active","trial"]
@@ -30,7 +30,7 @@ printjson(
 
 /* ── B) Data tidy: Tanyatown's area "kadoma" under city "Gweru" is wrong.
    Kadoma is its own city. Set it to a sensible Gweru suburb label. Adjust if
-   you know the real one. (Cosmetic only — affects the card's area label.) */
+   you know the real one. (Cosmetic only - affects the card's area label.) */
 printjson(
   db_[COLL].updateOne(
     { businessName: { $regex: /tanyatown contracting/i } },

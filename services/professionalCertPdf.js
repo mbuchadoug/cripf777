@@ -1,6 +1,6 @@
 // services/professionalCertPdf.js
 // ---------------------------------------------------------------------------
-// Professional certificate — same forest-green / gold design language as the
+// Professional certificate - same forest-green / gold design language as the
 // 8QT certificate (services/eightQTCertTemplate.js), but for a SINGLE-MODULE
 // assessment. A professional who passes, say, the Consciousness assessment does
 // NOT sit the eight-quotient battery, so this certificate does NOT show the

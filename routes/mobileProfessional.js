@@ -32,7 +32,7 @@ import Attempt from "../models/attempt.js";
 const router = Router();
 
 // Parse JSON bodies at the ROUTER level. This makes POST endpoints work no
-// matter where the router is mounted in server.js — even if it was mounted
+// matter where the router is mounted in server.js - even if it was mounted
 // before the app-wide express.json(). If a global parser already ran, this is
 // a harmless no-op (express.json skips when the body is already parsed). This
 // is what was breaking submit: the POST body never reached req.body, so the

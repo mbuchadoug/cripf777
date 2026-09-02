@@ -394,7 +394,7 @@ const MOBILE_ACTIVATE_PLANS = {
   gold: { role: "parent", plan: "gold", maxChildren: 5, durationDays: 30 },
   teacher_starter: { role: "teacher", plan: "starter", maxChildren: 15, aiQuizCredits: 20, durationDays: 30 },
   teacher_professional: { role: "teacher", plan: "professional", maxChildren: 40, aiQuizCredits: 50, durationDays: 30 },
-  // Professional (mobile app) — unlocks every quiz tier on every course.
+  // Professional (mobile app) - unlocks every quiz tier on every course.
   employee_professional: { role: "employee", plan: "full_access", durationDays: 365 }
 };
 

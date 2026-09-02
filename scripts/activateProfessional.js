@@ -1,6 +1,6 @@
 // scripts/activateProfessional.js
 //
-// Manually unlock the full Professionals catalogue for one account — the
+// Manually unlock the full Professionals catalogue for one account - the
 // "activated by admin" path, no payment required. This flips exactly the
 // flags that mobileProfessional.js -> isPaidPro() reads, so the moment the
 // user reopens the Learn tab every tier is unlocked.
