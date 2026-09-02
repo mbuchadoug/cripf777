@@ -290,18 +290,6 @@
                       <button type="submit" class="activate-btn" title="Activate plan">Activate</button>
                     </form>
                   {{/if}}
-                  {{#if isEmployee}}
-                    {{#if planActive}}
-                      <form method="post" action="/admin/users/{{_id}}/deactivate" style="display:inline-flex;margin-right:6px">
-                        <button type="submit" class="activate-btn" title="Revoke full access" style="background:transparent;border:1px solid #1DE9B6;color:#1DE9B6">Deactivate</button>
-                      </form>
-                    {{else}}
-                      <form method="post" action="/admin/users/{{_id}}/activate" style="display:inline-flex;gap:6px;align-items:center;margin-right:6px">
-                        <input type="hidden" name="plan" value="employee_professional">
-                        <button type="submit" class="activate-btn" title="Unlock every quiz on every course">Activate Professional</button>
-                      </form>
-                    {{/if}}
-                  {{/if}}
                   {{#if isStudent}}
                     <a class="attempts-btn" href="/admin/mobile-attempts?userId={{_id}}">Attempts</a>
                   {{/if}}

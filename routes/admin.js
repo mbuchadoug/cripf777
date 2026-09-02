@@ -349,23 +349,31 @@ router.get("/users", ensureAuth, ensureAdmin, async (req, res) => {
     // Add derived plan info the template can show + activate.
     const users = raw.map((u) => {
       const isTeacher = u.role === "private_teacher" || u.role === "teacher";
+      const isEmployee = u.role === "employee"; // professional (mobile app)
+      // A professional counts as "activated" if any of the employee flags say so.
+      const employeeActivated =
+        u.employeeFullAccess === true ||
+        u.employeeSubscriptionStatus === "paid" ||
+        (u.employeeSubscriptionPlan && u.employeeSubscriptionPlan !== "none");
       const planKey = isTeacher
-        ? u.teacherSubscriptionPlan && u.teacherSubscriptionPlan !== "none"
-          ? u.teacherSubscriptionPlan
-          : null
-        : u.subscriptionPlan && u.subscriptionPlan !== "none"
-        ? u.subscriptionPlan
-        : null;
-      const active = u.subscriptionExpiresAt && new Date(u.subscriptionExpiresAt) > now;
+        ? (u.teacherSubscriptionPlan && u.teacherSubscriptionPlan !== "none" ? u.teacherSubscriptionPlan : null)
+        : isEmployee
+        ? (employeeActivated ? (u.employeeSubscriptionPlan && u.employeeSubscriptionPlan !== "none" ? u.employeeSubscriptionPlan : "professional") : null)
+        : (u.subscriptionPlan && u.subscriptionPlan !== "none" ? u.subscriptionPlan : null);
+      const expirySrc = isEmployee ? u.employeeSubscriptionExpiresAt : u.subscriptionExpiresAt;
+      const active = isEmployee
+        ? (expirySrc ? new Date(expirySrc) > now : !!employeeActivated)
+        : (u.subscriptionExpiresAt && new Date(u.subscriptionExpiresAt) > now);
       return {
         ...u,
-        roleLabel: isTeacher ? "teacher" : u.role,
+        roleLabel: isTeacher ? "teacher" : isEmployee ? "professional" : u.role,
         isTeacher,
+        isEmployee,
         isParentOrTeacher: u.role === "parent" || isTeacher,
         isStudent: u.role === "student",
         planLabel: planKey || null,
         planActive: !!active,
-        planExpiry: active ? new Date(u.subscriptionExpiresAt).toLocaleDateString() : null
+        planExpiry: active && expirySrc ? new Date(expirySrc).toLocaleDateString() : null
       };
     });
 
@@ -381,7 +389,9 @@ const MOBILE_ACTIVATE_PLANS = {
   silver: { role: "parent", plan: "silver", maxChildren: 2, durationDays: 30 },
   gold: { role: "parent", plan: "gold", maxChildren: 5, durationDays: 30 },
   teacher_starter: { role: "teacher", plan: "starter", maxChildren: 15, aiQuizCredits: 20, durationDays: 30 },
-  teacher_professional: { role: "teacher", plan: "professional", maxChildren: 40, aiQuizCredits: 50, durationDays: 30 }
+  teacher_professional: { role: "teacher", plan: "professional", maxChildren: 40, aiQuizCredits: 50, durationDays: 30 },
+  // Professional (mobile app) — unlocks every quiz tier on every course.
+  employee_professional: { role: "employee", plan: "professional", durationDays: 365 }
 };
 
 router.post("/users/:id/activate", ensureAuth, ensureAdmin, async (req, res) => {
@@ -394,12 +404,20 @@ router.post("/users/:id/activate", ensureAuth, ensureAdmin, async (req, res) => 
 
     const now = new Date();
     const base =
-      user.subscriptionExpiresAt && new Date(user.subscriptionExpiresAt) > now
-        ? new Date(user.subscriptionExpiresAt)
-        : now;
+      cfg.role === "employee"
+        ? (user.employeeSubscriptionExpiresAt && new Date(user.employeeSubscriptionExpiresAt) > now ? new Date(user.employeeSubscriptionExpiresAt) : now)
+        : (user.subscriptionExpiresAt && new Date(user.subscriptionExpiresAt) > now ? new Date(user.subscriptionExpiresAt) : now);
     const expiresAt = new Date(base.getTime() + cfg.durationDays * 24 * 60 * 60 * 1000);
 
-    if (cfg.role === "teacher") {
+    if (cfg.role === "employee") {
+      // Professional full access. Flips exactly the flags the mobile pro API
+      // (isPaidPro) reads, so every quiz tier on every course unlocks at once.
+      user.employeeSubscriptionStatus = "paid";
+      user.employeeSubscriptionPlan = cfg.plan; // "professional"
+      user.employeeFullAccess = true;
+      user.employeeSubscriptionExpiresAt = expiresAt;
+      user.employeePaidAt = now;
+    } else if (cfg.role === "teacher") {
       user.teacherSubscriptionPlan = cfg.plan;
       user.teacherSubscriptionStatus = "paid"; // was "active" - not a valid enum value (trial|paid)
       user.teacherSubscriptionExpiresAt = expiresAt;
@@ -415,13 +433,30 @@ router.post("/users/:id/activate", ensureAuth, ensureAdmin, async (req, res) => 
       user.paidAt = now;
       user.maxChildren = cfg.maxChildren;
     }
-    user.subscriptionExpiresAt = expiresAt;
+    if (cfg.role !== "employee") user.subscriptionExpiresAt = expiresAt;
     await user.save();
 
     return res.redirect("/admin/users");
   } catch (err) {
     console.error("[admin/users/activate]", err && (err.stack || err));
     return res.status(500).send("Failed to activate plan");
+  }
+});
+
+/* ── Revoke professional full access (back to the free tier). ── */
+router.post("/users/:id/deactivate", ensureAuth, ensureAdmin, async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).send("User not found");
+    user.employeeSubscriptionStatus = "trial";
+    user.employeeSubscriptionPlan = "none";
+    user.employeeFullAccess = false;
+    user.employeeSubscriptionExpiresAt = null;
+    await user.save();
+    return res.redirect("/admin/users");
+  } catch (err) {
+    console.error("[admin/users/deactivate]", err && (err.stack || err));
+    return res.status(500).send("Failed to deactivate");
   }
 });
 

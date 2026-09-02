@@ -559,33 +559,71 @@ async function issueCertificate({ exam, me, req, name }) {
     return { certificateUrl: exam.meta.certificateUrl, certificateStatus: "issued", reused: true };
   }
   const pillar = PILLAR_BY_MODULE[exam.module] || {};
-  let orgName = "CRIPFCNT";
+  let orgName = "CRIPFCnt";
   try {
     if (exam.org) { const o = await Organization.findById(exam.org).lean(); if (o) orgName = o.name || o.title || orgName; }
   } catch {}
 
-  const { generateCertificatePdf } = await import("./lms_api.js");
-  const certResult = await generateCertificatePdf({
-    name: name || me.displayName || [me.firstName, me.lastName].filter(Boolean).join(" ") || "Professional",
-    orgName,
-    quizTitle: exam.meta?.quizLabel || exam.quizTitle || `${pillar.name || exam.module} · Assessment`,
-    moduleName: pillar.name || exam.module,
-    score: exam.meta?.score,
-    percentage: exam.meta?.percentage,
-    date: exam.meta?.finishedAt ? new Date(exam.meta.finishedAt) : new Date(),
-    req
-  });
-  if (!certResult?.filename) throw new Error("Certificate file was not produced.");
+  const recipientName =
+    name || me.displayName || [me.firstName, me.lastName].filter(Boolean).join(" ") || "Professional";
+
+  // Build the eight-dimension profile from the professional's knowledge map so the
+  // certificate renders in the 8QT design (octagonal radar + eight bands). The
+  // eight pillar codes ARE the eight quotient codes, so this maps 1:1.
+  let quotientScores;
+  let dominantQuotient = pillar.code || null;
+  try {
+    const { byModule } = await loadStandings(me._id);
+    quotientScores = PILLARS.map((p) => {
+      const m = byModule[p.module] || {};
+      let score = m.bestScore ?? 0;
+      // Make sure the just-passed course is reflected even if standings lag.
+      if (p.module === exam.module && exam.meta?.percentage != null) {
+        score = Math.max(score, Number(exam.meta.percentage) || 0);
+      }
+      score = Math.max(0, Math.min(100, Math.round(score)));
+      return { code: p.code, name: p.name, score, band: band(score) };
+    });
+    const best = quotientScores.slice().sort((a, b) => b.score - a.score)[0];
+    if (best && best.score > 0) dominantQuotient = best.code;
+  } catch {
+    // Fallback: at least reflect the passed course.
+    quotientScores = PILLARS.map((p) => {
+      const score = p.module === exam.module ? Math.round(Number(exam.meta?.percentage) || 0) : 0;
+      return { code: p.code, name: p.name, score, band: band(score) };
+    });
+  }
+
+  // Feed the exact 8QT certificate builder + PDF pipeline (fonts, QR, Puppeteer
+  // settings all already proven by the web 8QT flow). We only override the wording.
+  const attempt = {
+    certificateName: recipientName,
+    certificateOrg: orgName,
+    certificateIssuedAt: exam.meta?.finishedAt ? new Date(exam.meta.finishedAt) : new Date(),
+    quotientScores,
+    dominantQuotient
+  };
+  const template = {
+    certTitle: "Certificate of Achievement",
+    assessmentName: "CRIPFCnt Professional Assessment",
+    designation: "CRIPFCnt Professional"
+  };
+
+  const { generateEightQTCertPdf } = await import("../services/eightQTCertPdf.js");
+  const certResult = await generateEightQTCertPdf({ attempt, template, archetype: null });
+  if (!certResult?.url) throw new Error("Certificate file was not produced.");
 
   const site = (process.env.SITE_URL || "").replace(/\/$/, "");
   const baseForMedia = site || `${req.protocol}://${req.get("host")}`;
-  const certificateUrl = `${baseForMedia}/docs/certificates/${certResult.filename}`;
+  const rel = certResult.url.startsWith("/") ? certResult.url : `/${certResult.url}`;
+  const certificateUrl = `${baseForMedia}${rel}`;
 
   exam.meta = {
     ...(exam.meta || {}),
     certificateStatus: "issued",
     certificateUrl,
-    certificateName: name || exam.meta?.certificateName || null,
+    certificateVerifyCode: certResult.verifyCode || null,
+    certificateName: recipientName,
     certificateIssuedAt: new Date().toISOString()
   };
   exam.markModified("meta");
