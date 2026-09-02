@@ -153,17 +153,26 @@ function shortCode(label) {
 
 const FREE_PER_COURSE = parseInt(process.env.PRO_FREE_PER_COURSE || "1", 10);
 
+// Category values that are not real Professional Areas (uncategorised junk).
+const JUNK_CATEGORY = /^(undefined|null|none|general|out-of-scope|uncategori[sz]ed|n\/a)$/i;
+function isJunkCategory(cat) {
+  const s = String(cat == null ? "" : cat).trim();
+  return !s || JUNK_CATEGORY.test(s);
+}
+
 async function loadProfessionalAssessments(orgId) {
   if (!orgId) return [];
-  return Question.find({
+  const docs = await Question.find({
     organization: orgId,
     type: "comprehension",
     "meta.isOutOfScope": { $ne: true },
-    category: { $exists: true, $nin: [null, "", "out-of-scope"] }
+    category: { $exists: true, $nin: [null, "", "out-of-scope", "undefined", "null", "none", "general"] }
   })
     .select("_id text quizTitle module modules series category level seriesOrder questionIds")
     .sort({ category: 1, series: 1, seriesOrder: 1, createdAt: -1 })
     .lean();
+  // Belt & braces: also drop any junk-category values the query missed.
+  return docs.filter((d) => !isJunkCategory(d.category));
 }
 
 function buildCategoryCourses(assessments, byQuiz, paid) {
@@ -360,6 +369,15 @@ router.get("/catalog", requireMobileAuth, async (req, res) => {
       passThreshold: PASS_THRESHOLD,
       freePerCourse: FREE_PER_COURSE,
       totalAssessments: assessments.length,
+      // Upgrade routing. iOS never shows an in-app purchase/link (App Store
+      // rule 3.1.1). Android can open the existing web checkout (Stripe/EcoCash)
+      // and is remote-controllable via PRO_ANDROID_UPGRADE so you can switch it
+      // off without an app update if Google Play ever objects.
+      upgrade: {
+        url: process.env.PRO_UPGRADE_URL || "https://cripfcnt.com/upgrade",
+        android: String(process.env.PRO_ANDROID_UPGRADE ?? "true").toLowerCase() === "true",
+        ios: false
+      },
       user: {
         displayName: me.displayName || [me.firstName, me.lastName].filter(Boolean).join(" "),
         email: me.email || null
