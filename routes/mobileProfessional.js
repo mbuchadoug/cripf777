@@ -566,51 +566,32 @@ async function issueCertificate({ exam, me, req, name }) {
 
   const recipientName =
     name || me.displayName || [me.firstName, me.lastName].filter(Boolean).join(" ") || "Professional";
+  const pct = exam.meta?.percentage;
 
-  // Build the eight-dimension profile from the professional's knowledge map so the
-  // certificate renders in the 8QT design (octagonal radar + eight bands). The
-  // eight pillar codes ARE the eight quotient codes, so this maps 1:1.
-  let quotientScores;
-  let dominantQuotient = pillar.code || null;
-  try {
-    const { byModule } = await loadStandings(me._id);
-    quotientScores = PILLARS.map((p) => {
-      const m = byModule[p.module] || {};
-      let score = m.bestScore ?? 0;
-      // Make sure the just-passed course is reflected even if standings lag.
-      if (p.module === exam.module && exam.meta?.percentage != null) {
-        score = Math.max(score, Number(exam.meta.percentage) || 0);
-      }
-      score = Math.max(0, Math.min(100, Math.round(score)));
-      return { code: p.code, name: p.name, score, band: band(score) };
-    });
-    const best = quotientScores.slice().sort((a, b) => b.score - a.score)[0];
-    if (best && best.score > 0) dominantQuotient = best.code;
-  } catch {
-    // Fallback: at least reflect the passed course.
-    quotientScores = PILLARS.map((p) => {
-      const score = p.module === exam.module ? Math.round(Number(exam.meta?.percentage) || 0) : 0;
-      return { code: p.code, name: p.name, score, band: band(score) };
-    });
-  }
-
-  // Feed the exact 8QT certificate builder + PDF pipeline (fonts, QR, Puppeteer
-  // settings all already proven by the web 8QT flow). We only override the wording.
+  // Single-module certificate in the 8QT design. It shows ONLY the module the
+  // professional actually sat (e.g. Consciousness) — a score ring + a result
+  // panel — never the other seven modules' metrics.
   const attempt = {
     certificateName: recipientName,
     certificateOrg: orgName,
     certificateIssuedAt: exam.meta?.finishedAt ? new Date(exam.meta.finishedAt) : new Date(),
-    quotientScores,
-    dominantQuotient
+    moduleName: pillar.name || exam.module || "Assessment",
+    moduleCode: pillar.code || "",
+    quizTitle: exam.meta?.quizLabel || exam.quizTitle || `${pillar.name || exam.module} · Assessment`,
+    score: exam.meta?.score ?? null,
+    total: exam.meta?.total ?? null,
+    percentage: pct != null ? pct : 0,
+    band: band(pct),
+    passed: exam.meta?.passed != null ? !!exam.meta.passed : (pct != null && pct >= PASS_THRESHOLD),
+    passThreshold: PASS_THRESHOLD
   };
   const template = {
     certTitle: "Certificate of Achievement",
-    assessmentName: "CRIPFCnt Professional Assessment",
     designation: "CRIPFCnt Professional"
   };
 
-  const { generateEightQTCertPdf } = await import("../services/eightQTCertPdf.js");
-  const certResult = await generateEightQTCertPdf({ attempt, template, archetype: null });
+  const { generateProfessionalCertPdf } = await import("../services/professionalCertPdf.js");
+  const certResult = await generateProfessionalCertPdf({ attempt, template });
   if (!certResult?.url) throw new Error("Certificate file was not produced.");
 
   const site = (process.env.SITE_URL || "").replace(/\/$/, "");

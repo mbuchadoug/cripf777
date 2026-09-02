@@ -352,13 +352,12 @@ router.get("/users", ensureAuth, ensureAdmin, async (req, res) => {
       const isEmployee = u.role === "employee"; // professional (mobile app)
       // A professional counts as "activated" if any of the employee flags say so.
       const employeeActivated =
-        u.employeeFullAccess === true ||
         u.employeeSubscriptionStatus === "paid" ||
         (u.employeeSubscriptionPlan && u.employeeSubscriptionPlan !== "none");
       const planKey = isTeacher
         ? (u.teacherSubscriptionPlan && u.teacherSubscriptionPlan !== "none" ? u.teacherSubscriptionPlan : null)
         : isEmployee
-        ? (employeeActivated ? (u.employeeSubscriptionPlan && u.employeeSubscriptionPlan !== "none" ? u.employeeSubscriptionPlan : "professional") : null)
+        ? (employeeActivated ? "professional" : null)
         : (u.subscriptionPlan && u.subscriptionPlan !== "none" ? u.subscriptionPlan : null);
       const expirySrc = isEmployee ? u.employeeSubscriptionExpiresAt : u.subscriptionExpiresAt;
       const active = isEmployee
@@ -391,7 +390,7 @@ const MOBILE_ACTIVATE_PLANS = {
   teacher_starter: { role: "teacher", plan: "starter", maxChildren: 15, aiQuizCredits: 20, durationDays: 30 },
   teacher_professional: { role: "teacher", plan: "professional", maxChildren: 40, aiQuizCredits: 50, durationDays: 30 },
   // Professional (mobile app) — unlocks every quiz tier on every course.
-  employee_professional: { role: "employee", plan: "professional", durationDays: 365 }
+  employee_professional: { role: "employee", plan: "full_access", durationDays: 365 }
 };
 
 router.post("/users/:id/activate", ensureAuth, ensureAdmin, async (req, res) => {
@@ -410,11 +409,13 @@ router.post("/users/:id/activate", ensureAuth, ensureAdmin, async (req, res) => 
     const expiresAt = new Date(base.getTime() + cfg.durationDays * 24 * 60 * 60 * 1000);
 
     if (cfg.role === "employee") {
-      // Professional full access. Flips exactly the flags the mobile pro API
-      // (isPaidPro) reads, so every quiz tier on every course unlocks at once.
+      // Professional full access. The User model enum for employeeSubscriptionPlan
+      // is ["none","full_access"], so the plan MUST be "full_access" (not
+      // "professional", which fails validation). isPaidPro() reads
+      // employeeSubscriptionStatus === "paid" and plan !== "none", so this unlocks
+      // every quiz tier on every course at once.
       user.employeeSubscriptionStatus = "paid";
-      user.employeeSubscriptionPlan = cfg.plan; // "professional"
-      user.employeeFullAccess = true;
+      user.employeeSubscriptionPlan = "full_access";
       user.employeeSubscriptionExpiresAt = expiresAt;
       user.employeePaidAt = now;
     } else if (cfg.role === "teacher") {
@@ -450,7 +451,6 @@ router.post("/users/:id/deactivate", ensureAuth, ensureAdmin, async (req, res) =
     if (!user) return res.status(404).send("User not found");
     user.employeeSubscriptionStatus = "trial";
     user.employeeSubscriptionPlan = "none";
-    user.employeeFullAccess = false;
     user.employeeSubscriptionExpiresAt = null;
     await user.save();
     return res.redirect("/admin/users");
