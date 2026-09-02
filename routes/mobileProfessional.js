@@ -573,13 +573,17 @@ router.post("/quiz/submit", requireMobileAuth, async (req, res) => {
     const pillar = PILLAR_BY_MODULE[module] || null;
 
     const qIds = answers.map((a) => String(a.questionId)).filter(Boolean);
-    const docs = await Question.find({ _id: { $in: qIds } }).select("correctIndex module choices text").lean();
+    const docs = await Question.find({ _id: { $in: qIds } }).select("correctIndex module modules choices text").lean();
     const byId = {};
     for (const d of docs) byId[String(d._id)] = d;
 
     let correct = 0;
     const saved = [];
     const attemptAnswers = [];
+    // 8QT scoring: tally correctness per quotient using each question's module
+    // tags. Professional assessments are broad and span several quotients, so
+    // the certificate shows the full eight-dimension profile of THIS attempt.
+    const qTally = {};
     for (const a of answers) {
       const qid = String(a.questionId);
       const qd = byId[qid] || {};
@@ -589,6 +593,12 @@ router.post("/quiz/submit", requireMobileAuth, async (req, res) => {
       const selectedText =
         Array.isArray(qd.choices) && qd.choices[a.choiceIndex] ? qd.choices[a.choiceIndex].text || "" : "";
       saved.push({ questionId: qid, choiceIndex: a.choiceIndex, correctIndex: ci, correct: isCorrect });
+      {
+        const qMods = Array.isArray(qd.modules) && qd.modules.length ? qd.modules : (qd.module ? [qd.module] : []);
+        const codes = new Set();
+        for (const m of qMods) { const c = PILLAR_BY_MODULE[String(m).toLowerCase()]?.code; if (c) codes.add(c); }
+        for (const c of codes) { if (!qTally[c]) qTally[c] = { earned: 0, total: 0 }; qTally[c].total++; if (isCorrect) qTally[c].earned++; }
+      }
       attemptAnswers.push({
         questionId: mongoose.isValidObjectId(qid) ? new mongoose.Types.ObjectId(qid) : qid,
         choiceIndex: a.choiceIndex,
@@ -604,6 +614,15 @@ router.post("/quiz/submit", requireMobileAuth, async (req, res) => {
     const passed = percentage >= PASS_THRESHOLD;
     const now = new Date();
 
+    // Build the eight-quotient profile from the tally (all 8 axes; untested = 0).
+    const quotientScores = PILLARS.map((pp) => {
+      const t = qTally[pp.code] || { earned: 0, total: 0 };
+      const sc = t.total ? Math.round((t.earned / t.total) * 100) : 0;
+      return { code: pp.code, name: pp.name, score: sc, tested: t.total > 0, band: band(sc) };
+    });
+    const testedScores = quotientScores.filter((x) => x.tested);
+    const dominantQuotient = (testedScores.slice().sort((a, b) => b.score - a.score)[0]?.code) || pillar?.code || null;
+
     exam.status = "finished";
     exam.meta = {
       ...(exam.meta || {}),
@@ -616,6 +635,8 @@ router.post("/quiz/submit", requireMobileAuth, async (req, res) => {
       passed,
       certificateEligible: passed,
       answers: saved,
+      quotientScores,
+      dominantQuotient,
       finishedAt: now.toISOString(),
       source: "mobile-app"
     };
@@ -674,12 +695,77 @@ router.post("/quiz/submit", requireMobileAuth, async (req, res) => {
 /* ══════════════════════════════════════════════════════════════════
    ISSUE A REAL PDF CERTIFICATE (shared by /certificate and legacy alias)
    ════════════════════════════════════════════════════════════════════ */
+// 8QT band labels (matches services/eightQTScoring.js getBand thresholds).
+function band8QT(score) {
+  if (score == null) return "Emerging";
+  if (score >= 81) return "Recalibrative";
+  if (score >= 61) return "Structural";
+  if (score >= 41) return "Functional";
+  if (score >= 21) return "Developing";
+  return "Emerging";
+}
+
+// Compute a professional's eight-quotient profile the 8QT way: aggregate every
+// answered question across all their finished professional attempts, bucket each
+// by the quotient(s) its module/modules map to, and score correct/total per
+// quotient. Because the assessments are broad and span quotients, this yields a
+// real radar rather than a single-pillar spike.
+async function computeProfessionalQuotients(userId) {
+  const attempts = await ExamInstance.find({
+    userId, "meta.track": "professional", status: "finished"
+  }).select("questionIds meta").lean();
+
+  const perQ = {}; // questionId -> { correct, total }
+  for (const a of attempts) {
+    const answers = Array.isArray(a.meta?.answers) ? a.meta.answers : [];
+    for (const ans of answers) {
+      const qid = String(ans.questionId || "");
+      if (!qid) continue;
+      if (!perQ[qid]) perQ[qid] = { correct: 0, total: 0 };
+      perQ[qid].total += 1;
+      if (ans.correct) perQ[qid].correct += 1;
+    }
+  }
+
+  const qids = Object.keys(perQ).filter((id) => mongoose.isValidObjectId(id));
+  const qDocs = qids.length
+    ? await Question.find({ _id: { $in: qids } }).select("module modules").lean()
+    : [];
+  const modsById = {};
+  for (const q of qDocs) {
+    const set = new Set();
+    if (q.module) set.add(String(q.module).toLowerCase());
+    for (const m of (q.modules || [])) set.add(String(m).toLowerCase());
+    modsById[String(q._id)] = set;
+  }
+
+  const agg = {};
+  for (const p of PILLARS) agg[p.module] = { correct: 0, total: 0 };
+  for (const [qid, cnt] of Object.entries(perQ)) {
+    const set = modsById[qid];
+    if (!set) continue;
+    for (const p of PILLARS) {
+      if (set.has(p.module)) {
+        agg[p.module].correct += cnt.correct;
+        agg[p.module].total += cnt.total;
+      }
+    }
+  }
+
+  const quotientScores = PILLARS.map((p) => {
+    const { correct, total } = agg[p.module];
+    const score = total > 0 ? Math.round((correct / total) * 100) : 0;
+    return { code: p.code, name: p.name, score, band: band8QT(score) };
+  });
+  const hasData = quotientScores.some((q) => q.score > 0);
+  return { quotientScores, hasData };
+}
+
 async function issueCertificate({ exam, me, req, name }) {
   // Already issued? Return the stored URL (idempotent).
   if (exam.meta?.certificateUrl) {
     return { certificateUrl: exam.meta.certificateUrl, certificateStatus: "issued", reused: true };
   }
-  const pillar = PILLAR_BY_MODULE[exam.module] || {};
   let orgName = "CRIPFCnt";
   try {
     if (exam.org) { const o = await Organization.findById(exam.org).lean(); if (o) orgName = o.name || o.title || orgName; }
@@ -687,32 +773,49 @@ async function issueCertificate({ exam, me, req, name }) {
 
   const recipientName =
     name || me.displayName || [me.firstName, me.lastName].filter(Boolean).join(" ") || "Professional";
-  const pct = exam.meta?.percentage;
 
-  // Single-module certificate in the 8QT design. It shows ONLY the module the
-  // professional actually sat (e.g. Consciousness) — a score ring + a result
-  // panel — never the other seven modules' metrics.
+  // 8QT scoring model: the certificate shows the professional's eight-dimension
+  // profile (radar + bands + dominant quotient), rendered by the real 8QT template.
+  // Prefer THIS assessment's own quotient coverage (computed at submit from the
+  // questions' module tags); fall back to the aggregate profile for older attempts.
+  let scores;
+  const perAttempt = Array.isArray(exam.meta?.quotientScores) ? exam.meta.quotientScores : null;
+  if (perAttempt && perAttempt.some((q) => q.tested || q.score > 0)) {
+    scores = PILLARS.map((p) => {
+      const found = perAttempt.find((q) => q.code === p.code);
+      const sc = found ? Math.max(0, Math.min(100, Math.round(found.score))) : 0;
+      return { code: p.code, name: p.name, score: sc, band: band8QT(sc) };
+    });
+  } else {
+    const { quotientScores, hasData } = await computeProfessionalQuotients(me._id);
+    scores = quotientScores;
+    if (!hasData) {
+      const pillar = PILLAR_BY_MODULE[exam.module] || null;
+      const pct = Math.round(Number(exam.meta?.percentage) || 0);
+      scores = PILLARS.map((p) => {
+        const s = pillar && p.module === pillar.module ? pct : 0;
+        return { code: p.code, name: p.name, score: s, band: band8QT(s) };
+      });
+    }
+  }
+  const best = scores.slice().sort((a, b) => b.score - a.score)[0];
+  const dominant = exam.meta?.dominantQuotient || (best && best.score > 0 ? best.code : (PILLAR_BY_MODULE[exam.module]?.code || null));
+
   const attempt = {
     certificateName: recipientName,
     certificateOrg: orgName,
     certificateIssuedAt: exam.meta?.finishedAt ? new Date(exam.meta.finishedAt) : new Date(),
-    moduleName: pillar.name || (exam.meta?.category ? slugToLabel(exam.meta.category) : null) || exam.module || "Assessment",
-    moduleCode: pillar.code || (exam.meta?.category ? shortCode(slugToLabel(exam.meta.category)) : ""),
-    quizTitle: exam.meta?.quizLabel || exam.quizTitle || `${pillar.name || (exam.meta?.category ? slugToLabel(exam.meta.category) : exam.module)} · Assessment`,
-    score: exam.meta?.score ?? null,
-    total: exam.meta?.total ?? null,
-    percentage: pct != null ? pct : 0,
-    band: band(pct),
-    passed: exam.meta?.passed != null ? !!exam.meta.passed : (pct != null && pct >= PASS_THRESHOLD),
-    passThreshold: PASS_THRESHOLD
+    quotientScores: scores,
+    dominantQuotient: dominant
   };
   const template = {
     certTitle: "Certificate of Achievement",
+    assessmentName: "CRIPFCnt Professional Assessment",
     designation: "CRIPFCnt Professional"
   };
 
-  const { generateProfessionalCertPdf } = await import("../services/professionalCertPdf.js");
-  const certResult = await generateProfessionalCertPdf({ attempt, template });
+  const { generateEightQTCertPdf } = await import("../services/eightQTCertPdf.js");
+  const certResult = await generateEightQTCertPdf({ attempt, template, archetype: null });
   if (!certResult?.url) throw new Error("Certificate file was not produced.");
 
   const site = (process.env.SITE_URL || "").replace(/\/$/, "");

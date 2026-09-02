@@ -305,13 +305,6 @@
                   {{#if isStudent}}
                     <a class="attempts-btn" href="/admin/mobile-attempts?userId={{_id}}">Attempts</a>
                   {{/if}}
-                  <form method="post" action="/admin/users/{{_id}}/personas" style="display:inline-flex;gap:8px;align-items:center;margin-right:6px;flex-wrap:wrap" title="Give this user multiple mobile accounts">
-                    <label style="font-size:11px;display:inline-flex;gap:3px;align-items:center"><input type="checkbox" name="personas" value="parent" {{#if hasParent}}checked{{/if}}>Parent</label>
-                    <label style="font-size:11px;display:inline-flex;gap:3px;align-items:center"><input type="checkbox" name="personas" value="professional" {{#if hasProfessional}}checked{{/if}}>Pro</label>
-                    <label style="font-size:11px;display:inline-flex;gap:3px;align-items:center"><input type="checkbox" name="personas" value="teacher" {{#if hasTeacher}}checked{{/if}}>Teacher</label>
-                    <label style="font-size:11px;display:inline-flex;gap:3px;align-items:center"><input type="checkbox" name="personas" value="student" {{#if hasStudent}}checked{{/if}}>Student</label>
-                    <button type="submit" class="activate-btn" title="Grant these mobile accounts and activate each">Grant access</button>
-                  </form>
                   <form method="post" action="/admin/users/{{_id}}/delete" style="display:inline" onsubmit="return confirmDelete(this);">
                     <button type="submit" class="delete-btn" title="Delete user">Delete</button>
                   </form>

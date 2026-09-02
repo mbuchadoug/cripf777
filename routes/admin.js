@@ -372,7 +372,12 @@ router.get("/users", ensureAuth, ensureAdmin, async (req, res) => {
         isStudent: u.role === "student",
         planLabel: planKey || null,
         planActive: !!active,
-        planExpiry: active && expirySrc ? new Date(expirySrc).toLocaleDateString() : null
+        planExpiry: active && expirySrc ? new Date(expirySrc).toLocaleDateString() : null,
+        mobileRoles: Array.isArray(u.mobileRoles) ? u.mobileRoles : [],
+        hasParent: (u.mobileRoles || []).includes("parent"),
+        hasProfessional: (u.mobileRoles || []).includes("professional"),
+        hasTeacher: (u.mobileRoles || []).includes("teacher"),
+        hasStudent: (u.mobileRoles || []).includes("student")
       };
     });
 
@@ -441,6 +446,49 @@ router.post("/users/:id/activate", ensureAuth, ensureAdmin, async (req, res) => 
   } catch (err) {
     console.error("[admin/users/activate]", err && (err.stack || err));
     return res.status(500).send("Failed to activate plan");
+  }
+});
+
+/* ── Multi-account: grant mobile personas + activate each one. ── */
+router.post("/users/:id/personas", ensureAuth, ensureAdmin, async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).send("User not found");
+    let personas = req.body?.personas;
+    if (!Array.isArray(personas)) personas = personas ? [personas] : [];
+    const valid = ["parent", "professional", "teacher", "student"]
+      .filter((p) => personas.includes(p));
+    user.mobileRoles = valid; // the personas this user may switch to on mobile
+
+    const now = new Date();
+    const oneYear = new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000);
+    // Activate each granted persona's OWN subscription (full access), so the
+    // account is both switchable and paid. Non-destructive: only granted
+    // personas are touched; ungranted ones keep whatever they had.
+    if (valid.includes("professional")) {
+      user.employeeSubscriptionStatus = "paid";
+      user.employeeSubscriptionPlan = "full_access";
+      user.employeeSubscriptionExpiresAt = oneYear;
+      user.employeePaidAt = now;
+    }
+    if (valid.includes("parent")) {
+      user.subscriptionStatus = "paid";
+      if (!user.subscriptionPlan || user.subscriptionPlan === "none") user.subscriptionPlan = "gold";
+      user.subscriptionExpiresAt = oneYear;
+      user.paidAt = now;
+      if (!user.maxChildren) user.maxChildren = 5;
+    }
+    if (valid.includes("teacher")) {
+      user.teacherSubscriptionStatus = "paid";
+      if (!user.teacherSubscriptionPlan || user.teacherSubscriptionPlan === "none") user.teacherSubscriptionPlan = "professional";
+      user.teacherSubscriptionExpiresAt = oneYear;
+      user.teacherPaidAt = now;
+    }
+    await user.save();
+    return res.redirect("/admin/users");
+  } catch (err) {
+    console.error("[admin/users/personas]", err && (err.stack || err));
+    return res.status(500).send("Failed to grant personas");
   }
 });
 

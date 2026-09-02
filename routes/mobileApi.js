@@ -46,7 +46,25 @@ function signToken(user) {
 
 // A compact, app-safe view of a user. One place, so login/refresh/exchange
 // never drift apart.
+// Which personas this user may use in the app. Primary role always counts;
+// paid/active subscriptions and explicit admin grants (mobileRoles) add more.
+export function personasFor(u) {
+  if (!u) return [];
+  const set = new Set();
+  const r = u.role;
+  if (r === "parent" || r === "guardian") set.add("parent");
+  else if (r === "private_teacher" || r === "teacher") set.add("teacher");
+  else if (r === "student") set.add("student");
+  else set.add("professional"); // employee / *_admin
+  if (u.subscriptionStatus === "paid" || (u.subscriptionPlan && u.subscriptionPlan !== "none")) set.add("parent");
+  if (u.teacherSubscriptionStatus === "paid" || (u.teacherSubscriptionPlan && u.teacherSubscriptionPlan !== "none")) set.add("teacher");
+  if (u.employeeSubscriptionStatus === "paid" || (u.employeeSubscriptionPlan && u.employeeSubscriptionPlan !== "none")) set.add("professional");
+  for (const p of (u.mobileRoles || [])) if (p) set.add(p);
+  return [...set];
+}
+
 function publicUser(u) {
+  const personas = personasFor(u);
   return {
     _id: u._id,
     role: u.role,
@@ -62,7 +80,10 @@ function publicUser(u) {
     teacherSubscriptionPlan: u.teacherSubscriptionPlan,
     employeeSubscriptionPlan: u.employeeSubscriptionPlan,
     maxChildren: u.maxChildren,
-    needsPasswordSetup: u.needsPasswordSetup
+    needsPasswordSetup: u.needsPasswordSetup,
+    mobileRoles: u.mobileRoles || [],
+    availablePersonas: personas,
+    activeMobileRole: (u.activeMobileRole && personas.includes(u.activeMobileRole)) ? u.activeMobileRole : null
   };
 }
 
@@ -577,6 +598,31 @@ router.post("/auth/login", async (req, res) => {
 /** GET /api/mobile/auth/me - refresh the cached profile when online. */
 router.get("/auth/me", requireMobileAuth, async (req, res) => {
   return res.json({ user: publicUser(req.mobileUser) });
+});
+
+// ── Multi-role: list + switch the active persona ──────────────────────
+router.get("/roles", requireMobileAuth, (req, res) => {
+  const personas = personasFor(req.mobileUser);
+  const active = (req.mobileUser?.activeMobileRole && personas.includes(req.mobileUser.activeMobileRole))
+    ? req.mobileUser.activeMobileRole : null;
+  return res.json({ availablePersonas: personas, activeMobileRole: active });
+});
+
+router.post("/roles/switch", requireMobileAuth, async (req, res) => {
+  try {
+    const role = String(req.body?.role || "").trim();
+    const personas = personasFor(req.mobileUser);
+    if (!personas.includes(role)) {
+      return res.status(403).json({ error: "You don't have that account yet." });
+    }
+    const updated = await User.findByIdAndUpdate(
+      req.mobileUser._id, { activeMobileRole: role }, { new: true }
+    ).lean();
+    return res.json({ ok: true, activeMobileRole: role, user: publicUser(updated) });
+  } catch (err) {
+    console.error("[mobile roles/switch]", err);
+    return res.status(500).json({ error: "Could not switch account." });
+  }
 });
 
 /* ══════════════════════════════════════════════════════════════════

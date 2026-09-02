@@ -228,6 +228,14 @@ role: {
     default: false
   },
 
+  // ── Multi-role (mobile) ──────────────────────────────────────────────
+  // Personas this user may use in the app beyond their primary role. Granted
+  // by an admin or by paying for that persona. The primary role is always
+  // available; this just ADDS extra personas (parent + professional, etc.).
+  mobileRoles: [{ type: String, enum: ["parent", "professional", "teacher", "student"] }],
+  // The persona currently selected in the app (null = use primary role).
+  activeMobileRole: { type: String, enum: ["parent", "professional", "teacher", "student", null], default: null },
+
   paidAt: { type: Date, default: null }
 }, { strict: true });
 
