@@ -127,6 +127,108 @@ async function resolveHomeOrg() {
   catch { return null; }
 }
 
+// ── Professional LMS mirrors the WEB dashboard: an assessment is a comprehension
+//    Question in the cripfcnt-school org, grouped by `category` (Professional
+//    Area) and `series`. Each comprehension's questionIds are its child MCQ
+//    questions. Same collection as the web => counts match exactly. ──
+let _schoolOrgCache = null;
+async function resolveSchoolOrg() {
+  if (_schoolOrgCache) return _schoolOrgCache;
+  try { _schoolOrgCache = await Organization.findOne({ slug: "cripfcnt-school" }).lean(); }
+  catch { _schoolOrgCache = null; }
+  return _schoolOrgCache;
+}
+
+function slugToLabel(slug) {
+  const s = String(slug || "").split(/[-_]/).filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+  return s || "General";
+}
+function shortCode(label) {
+  const words = String(label || "").split(/\s+/).filter(Boolean);
+  if (!words.length) return "PA";
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+  return (words[0][0] + words[1][0]).toUpperCase();
+}
+
+const FREE_PER_COURSE = parseInt(process.env.PRO_FREE_PER_COURSE || "1", 10);
+
+async function loadProfessionalAssessments(orgId) {
+  if (!orgId) return [];
+  return Question.find({
+    organization: orgId,
+    type: "comprehension",
+    "meta.isOutOfScope": { $ne: true },
+    category: { $exists: true, $nin: [null, "", "out-of-scope"] }
+  })
+    .select("_id text quizTitle module modules series category level seriesOrder questionIds")
+    .sort({ category: 1, series: 1, seriesOrder: 1, createdAt: -1 })
+    .lean();
+}
+
+function buildCategoryCourses(assessments, byQuiz, paid) {
+  const groups = {};
+  for (const a of assessments) {
+    const cat = a.category;
+    if (!groups[cat]) groups[cat] = [];
+    groups[cat].push(a);
+  }
+  const courses = [];
+  for (const [cat, list] of Object.entries(groups)) {
+    const label = slugToLabel(cat);
+    const code = shortCode(label);
+    let totalQuestions = 0;
+    const quizzes = list.map((a, i) => {
+      const qc = Array.isArray(a.questionIds) ? a.questionIds.length : 0;
+      totalQuestions += qc;
+      const quizId = String(a._id);
+      const stat = byQuiz[quizId] || null;
+      const free = i < FREE_PER_COURSE;
+      const locked = !free && !paid;
+      const seriesLabel = a.series ? slugToLabel(a.series) : null;
+      const levelLabel = a.level ? slugToLabel(a.level) : null;
+      return {
+        quizId,
+        module: a.module || "general",
+        code,
+        courseName: label,
+        category: cat,
+        series: a.series || null,
+        seriesLabel,
+        level: a.level || "foundation",
+        label: a.quizTitle || a.text || "Assessment",
+        title: a.quizTitle || a.text || "Assessment",
+        blurb: seriesLabel ? (levelLabel ? `${seriesLabel} \u00b7 ${levelLabel}` : seriesLabel) : (levelLabel || "Assessment"),
+        questionCount: qc,
+        free,
+        locked,
+        bestScore: stat?.bestScore ?? null,
+        passed: !!stat?.passed,
+        attempts: stat?.attempts || 0,
+        status: stat?.passed ? "passed" : stat ? "attempted" : "new"
+      };
+    });
+    courses.push({
+      module: cat,
+      code,
+      name: label,
+      blurb: `${list.length} assessment${list.length === 1 ? "" : "s"} in the ${label} area.`,
+      category: cat,
+      questionsAvailable: totalQuestions,
+      available: list.length > 0,
+      quizzes,
+      quizCount: quizzes.length,
+      freeCount: quizzes.filter((q) => q.free).length,
+      lockedCount: quizzes.filter((q) => q.locked).length,
+      bestScore: null,
+      passed: quizzes.some((q) => q.passed),
+      attempts: quizzes.reduce((s, q) => s + (q.attempts || 0), 0)
+    });
+  }
+  courses.sort((a, b) => b.quizCount - a.quizCount);
+  return courses;
+}
+
 /** Whether this professional is unlocked (paid, or admin-activated).
  *  Trial accounts (employeeSubscriptionStatus "trial", plan "none") are NOT. */
 function isPaidPro(u) {
@@ -246,20 +348,18 @@ router.get("/catalog", requireMobileAuth, async (req, res) => {
   try {
     const me = req.mobileUser;
     const paid = isPaidPro(me);
-    const { byQuiz, byModule } = await loadStandings(me._id);
-
-    const counts = {};
-    for (const p of PILLARS) counts[p.module] = await countModuleQuestions(p.module);
-
-    const courses = buildCourses({ counts, byQuiz, byModule, paid });
-
+    const { byQuiz } = await loadStandings(me._id);
+    const org = await resolveSchoolOrg();
+    const assessments = await loadProfessionalAssessments(org?._id);
+    const courses = buildCategoryCourses(assessments, byQuiz, paid);
     return res.json({
       courses,
       isPaid: paid,
       plan: me.employeeSubscriptionPlan || "none",
       subscriptionStatus: me.employeeSubscriptionStatus || "trial",
       passThreshold: PASS_THRESHOLD,
-      tiers: TIERS.map((t) => ({ key: t.key, label: t.label, free: t.free })),
+      freePerCourse: FREE_PER_COURSE,
+      totalAssessments: assessments.length,
       user: {
         displayName: me.displayName || [me.firstName, me.lastName].filter(Boolean).join(" "),
         email: me.email || null
@@ -280,22 +380,16 @@ router.get("/search", requireMobileAuth, async (req, res) => {
     const me = req.mobileUser;
     const q = String(req.query.q || "").trim().toLowerCase();
     const paid = isPaidPro(me);
-    const { byQuiz, byModule } = await loadStandings(me._id);
-
-    const counts = {};
-    for (const p of PILLARS) counts[p.module] = await countModuleQuestions(p.module);
-    const courses = buildCourses({ counts, byQuiz, byModule, paid });
-
+    const { byQuiz } = await loadStandings(me._id);
+    const org = await resolveSchoolOrg();
+    const assessments = await loadProfessionalAssessments(org?._id);
+    const courses = buildCategoryCourses(assessments, byQuiz, paid);
     const all = [];
     for (const c of courses) for (const qz of c.quizzes) all.push(qz);
-
-    const results = !q
-      ? all
-      : all.filter((qz) => {
-          const hay = `${qz.courseName} ${qz.code} ${qz.label} ${qz.title} ${qz.blurb}`.toLowerCase();
-          return hay.includes(q);
-        });
-
+    const results = !q ? all : all.filter((qz) => {
+      const hay = `${qz.courseName} ${qz.code} ${qz.label} ${qz.title} ${qz.seriesLabel || ""} ${qz.category}`.toLowerCase();
+      return hay.includes(q);
+    });
     return res.json({ query: q, count: results.length, results });
   } catch (err) {
     console.error("[mobile pro/search]", err);
@@ -309,49 +403,56 @@ router.get("/search", requireMobileAuth, async (req, res) => {
 router.get("/quiz", requireMobileAuth, async (req, res) => {
   try {
     const me = req.mobileUser;
-
-    // Resolve module + tier from quizId, falling back to ?module= (free tier).
-    let quizId = String(req.query.quizId || "").trim().toLowerCase();
-    let module, tierKey;
-    if (quizId && quizId.includes(":")) {
-      [module, tierKey] = quizId.split(":");
-    } else {
-      module = String(req.query.module || "").trim().toLowerCase();
-      tierKey = "foundations";
-      quizId = module ? `${module}:foundations` : "";
+    const quizId = String(req.query.quizId || "").trim();
+    if (!quizId || !mongoose.isValidObjectId(quizId)) {
+      return res.status(400).json({ error: "Unknown assessment." });
+    }
+    const org = await resolveSchoolOrg();
+    const parent = await Question.findOne({
+      _id: quizId,
+      type: "comprehension",
+      ...(org?._id ? { organization: org._id } : {})
+    }).lean();
+    if (!parent) {
+      return res.status(404).json({ code: "NO_ASSESSMENT", error: "This assessment is no longer available." });
     }
 
-    const pillar = PILLAR_BY_MODULE[module];
-    if (!pillar) return res.status(400).json({ error: "Unknown course." });
-    const tier = TIER_BY_KEY[tierKey] || TIERS[0];
-
-    // Gate locked tiers for un-upgraded professionals.
-    if (!tier.free && !isPaidPro(me)) {
-      return res.status(402).json({
-        code: "UPGRADE_REQUIRED",
-        error: "This assessment unlocks when your account is upgraded."
-      });
+    let free = true;
+    if (org?._id && parent.category) {
+      const peers = await Question.find({
+        organization: org._id, type: "comprehension",
+        category: parent.category, "meta.isOutOfScope": { $ne: true }
+      }).select("_id").sort({ series: 1, seriesOrder: 1, createdAt: -1 }).lean();
+      const idx = peers.findIndex((x) => String(x._id) === String(parent._id));
+      free = idx > -1 && idx < FREE_PER_COURSE;
+    }
+    if (!free && !isPaidPro(me)) {
+      return res.status(402).json({ code: "UPGRADE_REQUIRED", error: "This assessment unlocks when your account is upgraded." });
     }
 
-    const pool = await findModuleQuestions(module);
-    if (pool.length < TIER_MIN) {
-      return res.status(422).json({ code: "NO_ASSESSMENT", error: "This course has no assessment yet. Check back soon." });
+    const childIds = (parent.questionIds || []).filter((id) => mongoose.isValidObjectId(id));
+    const childDocs = childIds.length
+      ? await Question.find({ _id: { $in: childIds }, correctIndex: { $ne: null }, "choices.1": { $exists: true } })
+          .select("text choices module type passage").lean()
+      : [];
+    const byId = {};
+    for (const d of childDocs) byId[String(d._id)] = d;
+    const ordered = childIds.map((id) => byId[String(id)]).filter(Boolean);
+    if (ordered.length < 1) {
+      return res.status(422).json({ code: "NO_ASSESSMENT", error: "This assessment has no questions yet." });
     }
 
-    // Deterministic, distinct question window for this tier.
-    const tierList = tiersForPool(pool.length);
-    let tIndex = tierList.findIndex((t) => t.key === tier.key);
-    if (tIndex < 0) tIndex = 0;
-    const order = seededOrder(pool.length, `${module}:order`);
-    const size = Math.min(QUIZ_SIZE, pool.length);
-    const start = (tIndex * QUIZ_SIZE) % pool.length;
-    const picked = [];
-    for (let k = 0; k < size; k++) picked.push(pool[order[(start + k) % pool.length]]);
-
-    const questions = picked.map(publicQuestion);
+    const passage = parent.passage || parent.text || null;
+    const questions = ordered.map((q) => {
+      const pub = publicQuestion(q);
+      if (!pub.passage && passage) pub.passage = passage;
+      return pub;
+    });
     const resolvedIds = questions.map((x) => x._id);
-    const org = await resolveHomeOrg();
-    const label = `${pillar.name} · ${tier.label}`;
+    const module = parent.module || "general";
+    const category = parent.category || null;
+    const title = parent.quizTitle || parent.text || "Assessment";
+    const pillar = PILLAR_BY_MODULE[module] || null;
 
     const exam = await ExamInstance.create({
       examId: crypto.randomUUID(),
@@ -359,30 +460,32 @@ router.get("/quiz", requireMobileAuth, async (req, res) => {
       userId: me._id,
       targetRole: "employee",
       module,
-      quizTitle: label,
-      title: label,
+      quizTitle: title,
+      title,
       status: "started",
       durationMinutes: 0,
       questionIds: resolvedIds,
       meta: {
         track: "professional",
         subject: module,
-        code: pillar.code,
-        quizId,
-        tier: tier.key,
-        quizLabel: label,
+        code: pillar?.code || null,
+        quizId: String(parent._id),
+        category,
+        series: parent.series || null,
+        quizLabel: title,
         source: "mobile-app"
       }
     });
 
     return res.json({
       examId: exam.examId,
+      quizId: String(parent._id),
       module,
-      code: pillar.code,
-      quizId,
-      tier: tier.key,
-      title: label,
+      category,
+      code: pillar?.code || null,
+      title,
       questionCount: questions.length,
+      passage,
       questions
     });
   } catch (err) {
@@ -575,9 +678,9 @@ async function issueCertificate({ exam, me, req, name }) {
     certificateName: recipientName,
     certificateOrg: orgName,
     certificateIssuedAt: exam.meta?.finishedAt ? new Date(exam.meta.finishedAt) : new Date(),
-    moduleName: pillar.name || exam.module || "Assessment",
-    moduleCode: pillar.code || "",
-    quizTitle: exam.meta?.quizLabel || exam.quizTitle || `${pillar.name || exam.module} · Assessment`,
+    moduleName: pillar.name || (exam.meta?.category ? slugToLabel(exam.meta.category) : null) || exam.module || "Assessment",
+    moduleCode: pillar.code || (exam.meta?.category ? shortCode(slugToLabel(exam.meta.category)) : ""),
+    quizTitle: exam.meta?.quizLabel || exam.quizTitle || `${pillar.name || (exam.meta?.category ? slugToLabel(exam.meta.category) : exam.module)} · Assessment`,
     score: exam.meta?.score ?? null,
     total: exam.meta?.total ?? null,
     percentage: pct != null ? pct : 0,
