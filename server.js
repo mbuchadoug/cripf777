@@ -51,6 +51,8 @@ import officeRoutes from "./routes/office.js";   // ← NEW back-office portal (
 
 import mobileProfessionalRouter from "./routes/mobileProfessional.js";   // near the other mobile imports
                   // right after the school mount
+import mountHotspot from "./hotspot/index.js";
+// ...after mongoose has connected and `app` exists...
 
 
 import {
@@ -215,7 +217,7 @@ app.use("/api", tradesApiRoutes);
 
 app.use("/api/mobile/pro", mobileProfessionalRouter);  
 
-
+mountHotspot(app);
 // Basic middleware
 // Basic middleware - skip body parsing for multipart (multer handles those)
 app.use((req, res, next) => {

@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>WiFi Vouchers — Lodge Control</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700&family=Inter:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+:root{
+  --ink:#14231d; --bg:#f3f4f0; --surface:#fff; --surface-2:#fafbf8;
+  --pine:#0e5140; --pine-700:#0b3f32; --pine-900:#082a22;
+  --gold:#e0a100; --gold-700:#b37e00;
+  --muted:#6a7972; --line:#e3e6e0; --line-2:#eef0eb;
+  --ok:#1e9e6a; --danger:#c7413b; --warn:#d98a00; --info:#2f6fb0;
+  --r:12px; --r-sm:9px;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:Inter,system-ui,sans-serif;font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:"Bricolage Grotesque",Inter,sans-serif;font-weight:600;letter-spacing:-.01em;margin:0}
+a{color:inherit}
+button{font-family:inherit;cursor:pointer}
+.mono{font-family:"Space Mono",monospace}
+.hide{display:none !important}
+
+/* ---------- Login ---------- */
+#login{min-height:100dvh;display:grid;grid-template-columns:1.1fr 1fr}
+#login .brandside{background:radial-gradient(120% 120% at 0% 0%,var(--pine) 0%,var(--pine-900) 70%);color:#eaf3ee;padding:48px;display:flex;flex-direction:column;justify-content:space-between}
+#login .brandside .logo{display:flex;align-items:center;gap:12px;font-family:"Bricolage Grotesque";font-weight:700;font-size:20px}
+#login .brandside .dot{width:34px;height:34px;border-radius:9px;background:var(--gold);display:grid;place-items:center;color:var(--pine-900);font-weight:700}
+#login .brandside h1{font-size:clamp(28px,4vw,44px);color:#fff;line-height:1.05;max-width:12ch}
+#login .brandside p{color:#a9c6ba;max-width:34ch}
+#login .formside{display:grid;place-items:center;padding:32px}
+#login .card{width:100%;max-width:340px}
+#login h2{font-size:24px;margin-bottom:6px}
+#login .sub{color:var(--muted);margin-bottom:24px;font-size:14px}
+.field{margin-bottom:14px}
+.field label{display:block;font-size:13px;font-weight:500;color:var(--muted);margin-bottom:6px}
+.field input,.field select,.field textarea{width:100%;padding:11px 13px;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--surface);font-size:15px;color:var(--ink);outline:none;transition:border-color .15s}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--pine)}
+.btn{border:0;border-radius:var(--r-sm);padding:11px 16px;font-weight:600;font-size:15px;display:inline-flex;align-items:center;gap:8px;justify-content:center}
+.btn-gold{background:var(--gold);color:var(--pine-900)}
+.btn-gold:hover{background:var(--gold-700);color:#fff}
+.btn-pine{background:var(--pine);color:#fff}
+.btn-pine:hover{background:var(--pine-700)}
+.btn-ghost{background:transparent;border:1px solid var(--line);color:var(--ink)}
+.btn-ghost:hover{border-color:var(--pine);color:var(--pine)}
+.btn-block{width:100%}
+.btn-sm{padding:7px 11px;font-size:13px;border-radius:8px}
+.err{color:var(--danger);font-size:13px;margin-top:10px;min-height:18px}
+
+/* ---------- App shell ---------- */
+#app{display:grid;grid-template-columns:236px 1fr;min-height:100dvh}
+#side{background:var(--pine-900);color:#cfe0d8;display:flex;flex-direction:column;padding:20px 14px;position:sticky;top:0;height:100dvh}
+#side .logo{display:flex;align-items:center;gap:11px;padding:4px 8px 22px;font-family:"Bricolage Grotesque";font-weight:700;font-size:17px;color:#fff}
+#side .logo .dot{width:30px;height:30px;border-radius:8px;background:var(--gold);display:grid;place-items:center;color:var(--pine-900);font-weight:700}
+#side nav{display:flex;flex-direction:column;gap:2px;flex:1}
+.navitem{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:9px;color:#bfd4ca;font-weight:500;font-size:14.5px;border:0;background:transparent;text-align:left;width:100%}
+.navitem:hover{background:rgba(255,255,255,.06);color:#fff}
+.navitem.active{background:var(--pine);color:#fff}
+.navitem .ic{width:18px;text-align:center;opacity:.9}
+#side .whoami{border-top:1px solid rgba(255,255,255,.08);padding-top:14px;font-size:13px;color:#9fbcb0}
+#side .whoami b{color:#fff;font-weight:600;display:block;font-size:14px}
+#side .whoami button{margin-top:10px}
+
+main{min-width:0;display:flex;flex-direction:column}
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 24px;background:var(--surface);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:20}
+.topbar h1{font-size:20px}
+.pill{display:inline-flex;align-items:center;gap:7px;padding:6px 11px;border-radius:20px;font-size:12.5px;font-weight:600;border:1px solid var(--line)}
+.pill .led{width:8px;height:8px;border-radius:50%}
+.pill.on{color:var(--ok);border-color:#bfe6d3;background:#effaf4}
+.pill.on .led{background:var(--ok)}
+.pill.off{color:var(--warn);border-color:#f3e2c2;background:#fdf6e9}
+.pill.off .led{background:var(--warn)}
+.content{padding:24px;flex:1}
+.view{max-width:1080px}
+
+/* ---------- Bits ---------- */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:18px}
+.grid{display:grid;gap:14px}
+.stats{grid-template-columns:repeat(4,1fr)}
+.stat .k{font-size:12.5px;color:var(--muted);font-weight:500}
+.stat .v{font-family:"Space Mono";font-size:30px;font-weight:700;line-height:1.1;margin-top:6px}
+.stat .v small{font-size:14px;color:var(--muted)}
+.section-title{display:flex;align-items:center;justify-content:space-between;margin:26px 0 12px}
+.section-title h2{font-size:17px}
+.muted{color:var(--muted)}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.spread{justify-content:space-between}
+.tag{display:inline-block;padding:3px 9px;border-radius:20px;font-size:12px;font-weight:600}
+.t-unused{background:#eef0eb;color:#5c6a62}
+.t-active{background:#effaf4;color:var(--ok)}
+.t-used{background:#f0f2ee;color:#8a968f}
+.t-expired{background:#fdf6e9;color:var(--warn)}
+.t-disabled{background:#fbecea;color:var(--danger)}
+
+table{width:100%;border-collapse:collapse}
+th{text-align:left;font-size:12px;color:var(--muted);font-weight:600;padding:0 12px 10px;border-bottom:1px solid var(--line)}
+td{padding:13px 12px;border-bottom:1px solid var(--line-2);font-size:14px;vertical-align:middle}
+tr:last-child td{border-bottom:0}
+.tablewrap{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.code-cell{font-family:"Space Mono";font-weight:700;letter-spacing:.02em}
+
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chip{padding:7px 13px;border-radius:20px;border:1px solid var(--line);background:var(--surface);font-size:13px;font-weight:500;color:var(--muted)}
+.chip.active{background:var(--pine);border-color:var(--pine);color:#fff}
+
+.plan-grid{grid-template-columns:repeat(auto-fill,minmax(200px,1fr))}
+.plan{border:1.5px solid var(--line);border-radius:var(--r);padding:16px;background:var(--surface);text-align:left;transition:border-color .12s,transform .12s}
+.plan:hover{border-color:var(--gold)}
+.plan.sel{border-color:var(--pine);background:var(--surface-2)}
+.plan .pl{font-family:"Bricolage Grotesque";font-weight:600;font-size:16px}
+.plan .meta{color:var(--muted);font-size:13px;margin-top:6px;line-height:1.7}
+.plan .price{margin-top:10px;font-family:"Space Mono";font-weight:700;font-size:18px;color:var(--pine)}
+
+/* Drawer */
+.scrim{position:fixed;inset:0;background:rgba(20,35,29,.4);z-index:50;display:none}
+.scrim.show{display:block}
+.drawer{position:fixed;top:0;right:0;height:100dvh;width:min(440px,100%);background:var(--bg);z-index:60;transform:translateX(100%);transition:transform .22s ease;overflow-y:auto;box-shadow:-10px 0 40px rgba(0,0,0,.12)}
+.drawer.show{transform:translateX(0)}
+.drawer-head{position:sticky;top:0;background:var(--surface);border-bottom:1px solid var(--line);padding:16px 18px;display:flex;justify-content:space-between;align-items:center}
+.drawer-body{padding:18px}
+.kv{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--line-2);font-size:14px}
+.kv .k{color:var(--muted)}
+.device{background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:10px 12px;margin-top:8px;font-size:13px}
+.device .mac{font-family:"Space Mono";font-weight:700}
+
+/* Bottom nav (mobile) */
+#tabbar{display:none}
+
+/* Print slips */
+.slips{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px;margin-top:16px}
+.slip{border:1.5px dashed var(--pine);border-radius:var(--r);padding:16px;background:#fff;text-align:center}
+.slip .wifi{font-size:12px;color:var(--muted);font-weight:600}
+.slip .big{font-family:"Space Mono";font-weight:700;font-size:24px;letter-spacing:.04em;margin:6px 0}
+.slip .qr{display:flex;justify-content:center;margin:10px 0}
+.slip .qr img,.slip .qr canvas{width:104px;height:104px}
+.slip .steps{font-size:11.5px;color:var(--muted);text-align:left;line-height:1.5;margin-top:8px}
+.slip .terms{font-size:11px;color:var(--pine);font-weight:600;margin-top:8px}
+
+@media (max-width:820px){
+  #app{grid-template-columns:1fr}
+  #side{display:none}
+  .content{padding:16px 14px 88px}
+  .topbar{padding:14px 16px}
+  .stats{grid-template-columns:1fr 1fr}
+  #login{grid-template-columns:1fr}
+  #login .brandside{padding:32px;min-height:38dvh}
+  #tabbar{display:flex;position:fixed;bottom:0;left:0;right:0;background:var(--surface);border-top:1px solid var(--line);z-index:40;padding:8px 6px calc(8px + env(safe-area-inset-bottom));justify-content:space-around}
+  .tabitem{display:flex;flex-direction:column;align-items:center;gap:3px;background:0;border:0;color:var(--muted);font-size:10.5px;font-weight:600;padding:4px 8px;flex:1}
+  .tabitem .ic{font-size:19px}
+  .tabitem.active{color:var(--pine)}
+  /* responsive tables → cards */
+  thead{display:none}
+  table,tbody,tr,td{display:block;width:100%}
+  tr{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);margin-bottom:10px;padding:6px 4px}
+  td{border:0;padding:8px 14px;display:flex;justify-content:space-between;gap:12px;text-align:right}
+  td::before{content:attr(data-label);color:var(--muted);font-size:12px;font-weight:600;text-align:left}
+  .tablewrap{background:0;border:0}
+}
+
+@media print{
+  #side,#tabbar,.topbar,.noprint{display:none !important}
+  body,#app,main,.content{background:#fff;display:block;padding:0;margin:0}
+  .slips{grid-template-columns:repeat(3,1fr)}
+  .slip{break-inside:avoid}
+}
+</style>
+</head>
+<body>
+
+<!-- ============ LOGIN ============ -->
+<section id="login">
+  <div class="brandside">
+    <div class="logo"><span class="dot">W</span> Lodge WiFi</div>
+    <div>
+      <h1>Vouchers, sold and tracked in seconds.</h1>
+      <p>Generate codes, see who's online, and keep every camera connected — all from your phone.</p>
+    </div>
+    <div style="color:#7fa596;font-size:13px">Reception & restaurant control</div>
+  </div>
+  <div class="formside">
+    <div class="card" style="border:0;background:0;padding:0" >
+      <div style="max-width:340px">
+        <h2>Sign in</h2>
+        <div class="sub">Only admins can generate vouchers.</div>
+        <div class="field"><label>Username</label><input id="lg-user" autocomplete="username" placeholder="owner"></div>
+        <div class="field"><label>Password</label><input id="lg-pass" type="password" autocomplete="current-password" placeholder="••••••••"></div>
+        <button class="btn btn-gold btn-block" onclick="doLogin()">Sign in</button>
+        <div class="err" id="lg-err"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ APP ============ -->
+<div id="app" class="hide">
+  <aside id="side">
+    <div class="logo"><span class="dot">W</span> Lodge WiFi</div>
+    <nav id="nav"></nav>
+    <div class="whoami">
+      <b id="me-name">—</b><span id="me-role" class="muted"></span>
+      <button class="btn btn-ghost btn-sm btn-block" style="color:#cfe0d8;border-color:rgba(255,255,255,.15)" onclick="logout()">Sign out</button>
+    </div>
+  </aside>
+
+  <main>
+    <div class="topbar">
+      <h1 id="page-title">Dashboard</h1>
+      <div class="row">
+        <span class="pill off" id="router-pill"><span class="led"></span><span id="router-text">Router offline</span></span>
+      </div>
+    </div>
+    <div class="content"><div id="view" class="view"></div></div>
+  </main>
+</div>
+
+<nav id="tabbar" class="hide"></nav>
+
+<!-- Drawer -->
+<div class="scrim" id="scrim" onclick="closeDrawer()"></div>
+<div class="drawer" id="drawer">
+  <div class="drawer-head"><h2 id="dr-title">Voucher</h2><button class="btn btn-ghost btn-sm" onclick="closeDrawer()">Close</button></div>
+  <div class="drawer-body" id="dr-body"></div>
+</div>
+
+<script>
+const BASE = location.pathname.replace(/\/(index\.html)?$/,"") || "/hotspot";
+const API = BASE + "/api";
+let TOKEN = localStorage.getItem("hs_token") || "";
+let ME = null;
+let curView = "dashboard";
+
+const NAV = [
+  {id:"dashboard", label:"Dashboard", ic:"◧"},
+  {id:"generate",  label:"Generate",  ic:"＋"},
+  {id:"vouchers",  label:"Vouchers",  ic:"▤"},
+  {id:"live",      label:"Live",      ic:"◉"},
+  {id:"devices",   label:"Devices",   ic:"▣"},
+  {id:"reports",   label:"Reports",   ic:"◱"},
+  {id:"sellers",   label:"Admins",    ic:"☺", owner:true},
+];
+
+// ---------- api helper ----------
+async function api(path, opts={}){
+  const res = await fetch(API+path, {
+    ...opts,
+    headers:{ "Content-Type":"application/json", ...(TOKEN?{Authorization:"Bearer "+TOKEN}:{}), ...(opts.headers||{}) }
+  });
+  let data={}; try{ data = await res.json(); }catch{}
+  if(res.status===401){ logout(); throw new Error(data.error||"Session expired"); }
+  if(!res.ok) throw new Error(data.error||"Something went wrong");
+  return data;
+}
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const fmtDate=d=>d?new Date(d).toLocaleString([], {day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}):"—";
+function dur(mins,type){
+  const h=Math.floor(mins/60), m=mins%60, d=Math.floor(mins/1440);
+  let s = d>=1 ? (d+ (d>6?"":" day"+(d>1?"s":"")) ) : (h?h+"h":"")+(m?m+"m":"");
+  if(d>=7) s = Math.round(d/7)+" week"+(d>=14?"s":"");
+  return s.trim()+(type==="uptime"?" of use":"");
+}
+
+// ---------- auth ----------
+async function doLogin(){
+  const username=document.getElementById("lg-user").value, password=document.getElementById("lg-pass").value;
+  const err=document.getElementById("lg-err"); err.textContent="";
+  try{
+    const d=await fetch(API+"/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username,password})}).then(r=>r.json().then(j=>({ok:r.ok,j})));
+    if(!d.ok) throw new Error(d.j.error||"Login failed");
+    TOKEN=d.j.token; ME=d.j.admin; localStorage.setItem("hs_token",TOKEN);
+    enterApp();
+  }catch(e){ err.textContent=e.message; }
+}
+function logout(){ TOKEN=""; ME=null; localStorage.removeItem("hs_token"); document.getElementById("app").classList.add("hide"); document.getElementById("tabbar").classList.add("hide"); document.getElementById("login").classList.remove("hide"); }
+
+async function enterApp(){
+  document.getElementById("login").classList.add("hide");
+  document.getElementById("app").classList.remove("hide");
+  document.getElementById("tabbar").classList.remove("hide");
+  document.getElementById("me-name").textContent=ME.name;
+  document.getElementById("me-role").textContent=ME.role==="owner"?"Owner":"Admin";
+  buildNav();
+  go("dashboard");
+  refreshRouterPill();
+}
+
+function buildNav(){
+  const items=NAV.filter(n=>!n.owner||ME.role==="owner");
+  document.getElementById("nav").innerHTML=items.map(n=>`<button class="navitem" data-v="${n.id}" onclick="go('${n.id}')"><span class="ic">${n.ic}</span>${n.label}</button>`).join("");
+  document.getElementById("tabbar").innerHTML=items.slice(0,5).map(n=>`<button class="tabitem" data-v="${n.id}" onclick="go('${n.id}')"><span class="ic">${n.ic}</span>${n.label}</button>`).join("");
+}
+
+// ---------- router status ----------
+async function refreshRouterPill(){
+  try{
+    const s=await api("/stats");
+    const p=document.getElementById("router-pill"), t=document.getElementById("router-text");
+    if(s.router?.online){ p.className="pill on"; t.textContent=(s.router.identity||"Router")+" online"; }
+    else { p.className="pill off"; t.textContent="Router offline (queued)"; }
+  }catch{}
+}
+
+// ---------- view router ----------
+function go(v){
+  curView=v;
+  document.querySelectorAll(".navitem,.tabitem").forEach(b=>b.classList.toggle("active",b.dataset.v===v));
+  const n=NAV.find(x=>x.id===v);
+  document.getElementById("page-title").textContent=n?n.label:v;
+  ({dashboard:viewDashboard,generate:viewGenerate,vouchers:viewVouchers,live:viewLive,devices:viewDevices,reports:viewReports,sellers:viewSellers}[v]||viewDashboard)();
+}
+const mount=html=>document.getElementById("view").innerHTML=html;
+
+// ---------- Dashboard ----------
+async function viewDashboard(){
+  mount(`<div class="grid stats" id="stat-row"></div>
+    <div class="section-title"><h2>Online right now</h2><button class="btn btn-ghost btn-sm" onclick="go('live')">See all</button></div>
+    <div class="tablewrap"><table><thead><tr><th>Code</th><th>Phone</th><th>Plan</th></tr></thead><tbody id="live-mini"><tr><td class="muted">Loading…</td></tr></tbody></table></div>
+    <div class="section-title"><h2>Voucher stock left</h2></div>
+    <div class="grid" id="stock" style="grid-template-columns:repeat(auto-fill,minmax(160px,1fr))"></div>`);
+  try{
+    const s=await api("/stats");
+    const rev=(s.revenueToday||[]).map(r=>`${r.total} ${r._id}`).join(" · ")||"0";
+    document.getElementById("stat-row").innerHTML=`
+      ${statCard("Made today",s.madeToday)}
+      ${statCard("Online now",s.activeNow)}
+      ${statCard("Sales today",rev,true)}
+      ${statCard("Unused stock",(s.unusedStock||[]).reduce((a,b)=>a+b.n,0))}`;
+    document.getElementById("stock").innerHTML=(s.unusedStock||[]).length
+      ? s.unusedStock.map(x=>`<div class="card"><div class="muted" style="font-size:13px">${esc(x._id||"—")}</div><div class="mono" style="font-size:26px;font-weight:700">${x.n}</div></div>`).join("")
+      : `<div class="muted">No unused vouchers. Generate a batch.</div>`;
+    const live=await api("/live");
+    document.getElementById("live-mini").innerHTML=(live.online||[]).length
+      ? live.online.slice(0,6).map(o=>`<tr><td data-label="Code" class="code-cell">${esc(o.code||"—")}</td><td data-label="Phone">${esc(o.hostname||o.mac||"—")}</td><td data-label="Plan">${esc(o.planLabel||"")}</td></tr>`).join("")
+      : `<tr><td class="muted">Nobody connected right now.</td></tr>`;
+  }catch(e){ mount(`<div class="card">${esc(e.message)}</div>`); }
+}
+const statCard=(k,v,small)=>`<div class="card stat"><div class="k">${k}</div><div class="v">${small?'<small>'+esc(v)+'</small>':esc(v)}</div></div>`;
+
+// ---------- Generate ----------
+let genPlan=null, plansCache=[];
+async function viewGenerate(){
+  const {plans}=await api("/plans"); plansCache=plans.filter(p=>p.active);
+  genPlan=genPlan||plansCache[0]?.key;
+  mount(`<div class="card">
+      <h2 style="font-size:16px;margin-bottom:12px">Choose a plan</h2>
+      <div class="grid plan-grid" id="plans"></div>
+      <div class="grid" style="grid-template-columns:1fr 1fr;margin-top:16px">
+        <div class="field"><label>How many</label><input id="g-count" type="number" min="1" max="200" value="1"></div>
+        <div class="field"><label>Payment</label><select id="g-pay"><option value="cash">Cash</option><option value="ecocash">EcoCash</option><option value="complimentary">Free / staff</option><option value="other">Other</option></select></div>
+      </div>
+      <div class="field"><label>Note (optional) — e.g. table 4, guest name</label><input id="g-note" placeholder=""></div>
+      <button class="btn btn-gold btn-block" onclick="generate()">Generate vouchers</button>
+      <div class="err" id="g-err"></div>
+    </div>
+    <div id="g-result"></div>`);
+  renderPlanCards();
+}
+function renderPlanCards(){
+  document.getElementById("plans").innerHTML=plansCache.map(p=>`
+    <button class="plan ${p.key===genPlan?'sel':''}" onclick="genPlan='${p.key}';renderPlanCards()">
+      <div class="pl">${esc(p.label)}</div>
+      <div class="meta">${dur(p.durationMinutes,p.durationType)}<br>${p.deviceCap} device${p.deviceCap>1?'s':''}${p.downKbps?` · ${(p.downKbps/1000).toFixed(1)}Mbps`:''}</div>
+      <div class="price">${p.price} ${p.currency}</div>
+    </button>`).join("") || `<div class="muted">No plans yet. ${ME.role==='owner'?'Ask an owner to add one in Admins → Plans.':''}</div>`;
+}
+async function generate(){
+  const err=document.getElementById("g-err"); err.textContent="";
+  try{
+    const body={planKey:genPlan,count:Number(document.getElementById("g-count").value||1),paymentMethod:document.getElementById("g-pay").value,note:document.getElementById("g-note").value};
+    const d=await api("/vouchers/generate",{method:"POST",body:JSON.stringify(body)});
+    renderSlips(d);
+  }catch(e){ err.textContent=e.message; }
+}
+function renderSlips(d){
+  const box=document.getElementById("g-result");
+  box.innerHTML=`<div class="section-title"><h2>${d.vouchers.length} voucher${d.vouchers.length>1?'s':''} ready</h2>
+      <div class="row noprint">${d.routerOnline?'':'<span class="tag t-expired">saved — will sync to router</span>'}<button class="btn btn-ghost btn-sm" onclick="window.print()">Print</button></div></div>
+    <div class="slips" id="slips"></div>`;
+  const wifi=d.wifiName, plan=d.plan;
+  document.getElementById("slips").innerHTML=d.vouchers.map((v,i)=>`
+    <div class="slip">
+      <div class="wifi">Connect to “${esc(wifi)}”</div>
+      <div class="big">${esc(v.code)}</div>
+      <div class="qr" id="qr${i}"></div>
+      <div class="terms">${dur(plan.durationMinutes,plan.durationType)} · ${plan.deviceCap} device${plan.deviceCap>1?'s':''}</div>
+      <div class="steps">1. Connect phone to “${esc(wifi)}”.<br>2. A login page opens by itself.<br>3. Type this code. No data needed.</div>
+    </div>`).join("");
+  d.vouchers.forEach((v,i)=>{ try{ new QRCode(document.getElementById("qr"+i),{text:v.code,width:104,height:104,colorDark:"#0e5140"});}catch{} });
+  go && document.getElementById("g-result").scrollIntoView({behavior:"smooth",block:"nearest"});
+}
+
+// ---------- Vouchers ----------
+let vFilter={status:"",q:"",page:1};
+async function viewVouchers(){
+  mount(`<div class="card noprint" style="margin-bottom:14px">
+      <div class="field" style="margin:0 0 12px"><input id="v-search" placeholder="Search code, phone MAC or note…" value="${esc(vFilter.q)}" oninput="vFilter.q=this.value" onkeydown="if(event.key==='Enter'){vFilter.page=1;loadVouchers()}"></div>
+      <div class="chips" id="v-chips"></div>
+    </div>
+    <div id="v-list"></div><div id="v-pager" class="row noprint" style="justify-content:center;margin-top:14px"></div>`);
+  const chips=[["","All"],["unused","Unused"],["active","Active"],["used","Used"],["expired","Expired"],["disabled","Off"]];
+  document.getElementById("v-chips").innerHTML=chips.map(([k,l])=>`<button class="chip ${vFilter.status===k?'active':''}" onclick="vFilter.status='${k}';vFilter.page=1;loadVouchers()">${l}</button>`).join("");
+  loadVouchers();
+}
+async function loadVouchers(){
+  document.querySelectorAll("#v-chips .chip").forEach(c=>c.classList.toggle("active",c.textContent==="All"?vFilter.status==="":false));
+  viewVouchersChipSync();
+  const p=new URLSearchParams({page:vFilter.page,limit:25});
+  if(vFilter.status)p.set("status",vFilter.status); if(vFilter.q)p.set("q",vFilter.q);
+  try{
+    const d=await api("/vouchers?"+p.toString());
+    document.getElementById("v-list").innerHTML=`<div class="tablewrap"><table>
+      <thead><tr><th>Code</th><th>Plan</th><th>Status</th><th>Made by</th><th>When</th><th>Used by</th></tr></thead>
+      <tbody>${d.vouchers.map(v=>`<tr style="cursor:pointer" onclick="openVoucher('${v.code}')">
+        <td data-label="Code" class="code-cell">${esc(v.code)}</td>
+        <td data-label="Plan">${esc(v.planLabel||"")}</td>
+        <td data-label="Status"><span class="tag t-${v.status}">${v.status}</span></td>
+        <td data-label="Made by">${esc(v.createdByName||"")}</td>
+        <td data-label="When">${fmtDate(v.createdAt)}</td>
+        <td data-label="Used by">${v.deviceCount?`${v.deviceCount} phone${v.deviceCount>1?'s':''}`:'<span class="muted">—</span>'}</td>
+      </tr>`).join("")||`<tr><td class="muted">No vouchers found.</td></tr>`}</tbody></table></div>`;
+    document.getElementById("v-pager").innerHTML=d.pages>1?`
+      <button class="btn btn-ghost btn-sm" ${vFilter.page<=1?'disabled':''} onclick="vFilter.page--;loadVouchers()">Prev</button>
+      <span class="muted" style="padding:0 8px">Page ${d.page} of ${d.pages}</span>
+      <button class="btn btn-ghost btn-sm" ${vFilter.page>=d.pages?'disabled':''} onclick="vFilter.page++;loadVouchers()">Next</button>`:"";
+  }catch(e){ document.getElementById("v-list").innerHTML=`<div class="card">${esc(e.message)}</div>`; }
+}
+function viewVouchersChipSync(){ document.querySelectorAll("#v-chips .chip").forEach((c,i)=>{const keys=["","unused","active","used","expired","disabled"];c.classList.toggle("active",vFilter.status===keys[i]);}); }
+
+// ---------- Voucher drawer ----------
+async function openVoucher(code){
+  openDrawer(); document.getElementById("dr-title").textContent=code;
+  document.getElementById("dr-body").innerHTML=`<div class="muted">Loading…</div>`;
+  try{
+    const {voucher:v}=await api("/vouchers/"+code);
+    const devs=(v.devices||[]).map(dv=>`<div class="device"><div class="mac">${esc(dv.mac||"?")}</div><div class="muted">${esc(dv.hostname||"unknown phone")} · ${esc(dv.ip||"")}<br>first ${fmtDate(dv.firstSeen)} · last ${fmtDate(dv.lastSeen)}</div></div>`).join("")||`<div class="muted">No phone has used this yet.</div>`;
+    document.getElementById("dr-body").innerHTML=`
+      <div class="card" style="text-align:center"><div class="mono" style="font-size:26px;font-weight:700">${esc(v.code)}</div><span class="tag t-${v.status}" style="margin-top:8px;display:inline-block">${v.status}</span></div>
+      <div class="card" style="margin-top:12px">
+        <div class="kv"><span class="k">Plan</span><span>${esc(v.planLabel||"")}</span></div>
+        <div class="kv"><span class="k">Allows</span><span>${dur(v.durationMinutes,v.durationType)} · ${v.deviceCap} device${v.deviceCap>1?'s':''}</span></div>
+        <div class="kv"><span class="k">Made by</span><span>${esc(v.createdByName||"")}</span></div>
+        <div class="kv"><span class="k">Made on</span><span>${fmtDate(v.createdAt)}</span></div>
+        <div class="kv"><span class="k">First used</span><span>${fmtDate(v.firstUsedAt)}</span></div>
+        <div class="kv"><span class="k">Used time</span><span>${v.uptimeUsedMin} min</span></div>
+        ${v.validUntil?`<div class="kv"><span class="k">Valid until</span><span>${fmtDate(v.validUntil)}</span></div>`:""}
+        <div class="kv"><span class="k">Sold for</span><span>${v.price} ${v.currency} · ${v.paymentMethod}</span></div>
+        ${v.note?`<div class="kv"><span class="k">Note</span><span>${esc(v.note)}</span></div>`:""}
+        ${v.syncedToRouter?"":`<div class="kv"><span class="k">Router</span><span class="tag t-expired">not synced yet</span></div>`}
+      </div>
+      <div class="section-title"><h2 style="font-size:15px">Phones that used it</h2></div>${devs}
+      <div class="grid noprint" style="grid-template-columns:1fr 1fr;margin-top:16px;gap:10px">
+        <button class="btn btn-pine" onclick="extendV('${v.code}')">Extend time</button>
+        ${v.status==="disabled"?`<button class="btn btn-ghost" onclick="enableV('${v.code}')">Turn back on</button>`:`<button class="btn btn-ghost" onclick="disableV('${v.code}')">Turn off</button>`}
+      </div>
+      ${ME.role==="owner"?`<button class="btn btn-ghost btn-block noprint" style="margin-top:10px;color:var(--danger);border-color:#f0cfcd" onclick="deleteV('${v.code}')">Delete permanently</button>`:""}`;
+  }catch(e){ document.getElementById("dr-body").innerHTML=`<div class="card">${esc(e.message)}</div>`; }
+}
+async function extendV(code){
+  const mins=prompt("Add how many minutes?","60"); if(!mins)return;
+  try{ await api(`/vouchers/${code}/extend`,{method:"POST",body:JSON.stringify({addMinutes:Number(mins)})}); openVoucher(code); if(curView==="vouchers")loadVouchers(); }catch(e){ alert(e.message); }
+}
+async function disableV(code){ try{ await api(`/vouchers/${code}/disable`,{method:"POST"}); openVoucher(code); if(curView==="vouchers")loadVouchers(); }catch(e){alert(e.message);} }
+async function enableV(code){ try{ await api(`/vouchers/${code}/enable`,{method:"POST"}); openVoucher(code); if(curView==="vouchers")loadVouchers(); }catch(e){alert(e.message);} }
+async function deleteV(code){ if(!confirm("Delete "+code+" for good?"))return; try{ await api(`/vouchers/${code}`,{method:"DELETE"}); closeDrawer(); loadVouchers(); }catch(e){alert(e.message);} }
+
+// ---------- Live ----------
+async function viewLive(){
+  mount(`<div class="row spread noprint" style="margin-bottom:12px"><span class="muted">Updated live from the router</span><button class="btn btn-ghost btn-sm" onclick="viewLive()">Refresh</button></div><div id="live-box"><div class="muted">Loading…</div></div>`);
+  try{
+    const d=await api("/live");
+    document.getElementById("live-box").innerHTML=(d.online||[]).length?`<div class="tablewrap"><table>
+      <thead><tr><th>Code</th><th>Phone</th><th>MAC</th><th>Data</th></tr></thead>
+      <tbody>${d.online.map(o=>`<tr>
+        <td data-label="Code" class="code-cell">${esc(o.code||"—")}</td>
+        <td data-label="Phone">${esc(o.hostname||"—")}</td>
+        <td data-label="MAC" class="mono" style="font-size:12.5px">${esc(o.mac||"—")}</td>
+        <td data-label="Data">${o.bytesIn!=null?(((o.bytesIn+o.bytesOut)/1e6).toFixed(1)+" MB"):"—"}</td>
+      </tr>`).join("")}</tbody></table></div>`:`<div class="card muted">Nobody is connected right now.</div>`;
+  }catch(e){ document.getElementById("live-box").innerHTML=`<div class="card">${esc(e.message)}</div>`; }
+}
+
+// ---------- Devices (bypass) ----------
+async function viewDevices(){
+  mount(`<div class="card noprint" style="margin-bottom:14px">
+      <h2 style="font-size:16px;margin-bottom:4px">Always-allowed devices</h2>
+      <p class="muted" style="font-size:13px;margin:0 0 14px">Cameras, reception and staff go here. They skip the voucher page and stay online 24/7.</p>
+      <div class="grid" style="grid-template-columns:1fr 1fr;gap:10px">
+        <div class="field" style="margin:0"><label>Name</label><input id="d-label" placeholder="Reception camera"></div>
+        <div class="field" style="margin:0"><label>Type</label><select id="d-cat"><option value="camera">Camera</option><option value="reception">Reception</option><option value="staff">Staff</option><option value="other">Other</option></select></div>
+      </div>
+      <div class="field" style="margin-top:10px"><label>MAC address</label><input id="d-mac" placeholder="AA:BB:CC:DD:EE:FF" class="mono"></div>
+      <button class="btn btn-pine btn-block" onclick="addDevice()">Add device</button>
+      <div class="err" id="d-err"></div>
+    </div><div id="d-list"></div>`);
+  loadDevices();
+}
+async function loadDevices(){
+  try{
+    const {devices}=await api("/bypass");
+    document.getElementById("d-list").innerHTML=devices.length?`<div class="tablewrap"><table>
+      <thead><tr><th>Name</th><th>Type</th><th>MAC</th><th></th></tr></thead>
+      <tbody>${devices.map(d=>`<tr>
+        <td data-label="Name">${esc(d.label)}</td><td data-label="Type">${esc(d.category)}</td>
+        <td data-label="MAC" class="mono" style="font-size:12.5px">${esc(d.mac)}${d.syncedToRouter?"":' <span class="tag t-expired">queued</span>'}</td>
+        <td data-label=""><button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="delDevice('${d._id}')">Remove</button></td>
+      </tr>`).join("")}</tbody></table></div>`:`<div class="card muted">No devices yet. Add your cameras so they never lose connection.</div>`;
+  }catch(e){ document.getElementById("d-list").innerHTML=`<div class="card">${esc(e.message)}</div>`; }
+}
+async function addDevice(){
+  const err=document.getElementById("d-err");err.textContent="";
+  try{ await api("/bypass",{method:"POST",body:JSON.stringify({label:document.getElementById("d-label").value,category:document.getElementById("d-cat").value,mac:document.getElementById("d-mac").value})});
+    document.getElementById("d-label").value="";document.getElementById("d-mac").value=""; loadDevices();
+  }catch(e){ err.textContent=e.message; }
+}
+async function delDevice(id){ if(!confirm("Remove this device from the allow list?"))return; try{ await api("/bypass/"+id,{method:"DELETE"}); loadDevices(); }catch(e){alert(e.message);} }
+
+// ---------- Reports ----------
+async function viewReports(){
+  mount(`<div id="rep"><div class="muted">Loading…</div></div>`);
+  try{
+    const d=await api("/reports/sales");
+    const t=(rows,cols)=>`<div class="tablewrap"><table><thead><tr>${cols.map(c=>`<th>${c[0]}</th>`).join("")}</tr></thead><tbody>${rows.length?rows.map(r=>`<tr>${cols.map(c=>`<td data-label="${c[0]}">${esc(c[1](r))}</td>`).join("")}</tr>`).join(""):`<tr><td class="muted">Nothing yet.</td></tr>`}</tbody></table></div>`;
+    document.getElementById("rep").innerHTML=`
+      <div class="section-title"><h2>Who sold what</h2></div>
+      ${t(d.bySeller,[["Seller",r=>r._id.seller||"—"],["Vouchers",r=>r.vouchers],["Total",r=>`${r.total} ${r._id.currency}`]])}
+      <div class="section-title"><h2>By plan</h2></div>
+      ${t(d.byPlan,[["Plan",r=>r._id||"—"],["Vouchers",r=>r.vouchers],["Total",r=>r.total]])}
+      <div class="section-title"><h2>By payment</h2></div>
+      ${t(d.byMethod,[["Method",r=>r._id||"—"],["Vouchers",r=>r.vouchers],["Total",r=>r.total]])}`;
+  }catch(e){ document.getElementById("rep").innerHTML=`<div class="card">${esc(e.message)}</div>`; }
+}
+
+// ---------- Admins + Plans (owner) ----------
+async function viewSellers(){
+  mount(`<div id="adm"><div class="muted">Loading…</div></div>`);
+  try{
+    const {admins}=await api("/admins");
+    const {plans}=await api("/plans");
+    document.getElementById("adm").innerHTML=`
+      <div class="card noprint" style="margin-bottom:14px">
+        <h2 style="font-size:16px;margin-bottom:12px">Add an admin</h2>
+        <div class="grid" style="grid-template-columns:1fr 1fr;gap:10px">
+          <div class="field" style="margin:0"><label>Name</label><input id="a-name" placeholder="Tino at reception"></div>
+          <div class="field" style="margin:0"><label>Username</label><input id="a-user" placeholder="tino"></div>
+          <div class="field" style="margin:0"><label>Password</label><input id="a-pass" type="text" placeholder="give them one"></div>
+          <div class="field" style="margin:0"><label>Role</label><select id="a-role"><option value="admin">Admin</option><option value="owner">Owner</option></select></div>
+        </div>
+        <button class="btn btn-pine btn-block" style="margin-top:12px" onclick="addAdmin()">Add admin</button>
+        <div class="err" id="a-err"></div>
+      </div>
+      <div class="tablewrap"><table><thead><tr><th>Name</th><th>Username</th><th>Role</th><th>Status</th><th></th></tr></thead>
+        <tbody>${admins.map(a=>`<tr>
+          <td data-label="Name">${esc(a.displayName)}</td><td data-label="Username">${esc(a.username)}</td>
+          <td data-label="Role">${a.role}</td><td data-label="Status">${a.active?'<span class="tag t-active">active</span>':'<span class="tag t-disabled">off</span>'}</td>
+          <td data-label=""><button class="btn btn-ghost btn-sm" onclick="toggleAdmin('${a._id}',${!a.active})">${a.active?'Disable':'Enable'}</button></td>
+        </tr>`).join("")}</tbody></table></div>
+
+      <div class="section-title"><h2>Plans</h2></div>
+      <div class="card noprint" style="margin-bottom:14px">
+        <div class="grid" style="grid-template-columns:1fr 1fr;gap:10px">
+          <div class="field" style="margin:0"><label>Name shown</label><input id="p-label" placeholder="Lunch — 2 hours"></div>
+          <div class="field" style="margin:0"><label>Short key</label><input id="p-key" placeholder="lunch2h"></div>
+          <div class="field" style="margin:0"><label>Type</label><select id="p-type"><option value="uptime">Connected time</option><option value="clock">Fixed window</option></select></div>
+          <div class="field" style="margin:0"><label>Minutes</label><input id="p-min" type="number" value="120"></div>
+          <div class="field" style="margin:0"><label>Devices</label><input id="p-dev" type="number" value="1"></div>
+          <div class="field" style="margin:0"><label>Price</label><input id="p-price" type="number" value="1"></div>
+          <div class="field" style="margin:0"><label>Down kbps (0=∞)</label><input id="p-down" type="number" value="4000"></div>
+          <div class="field" style="margin:0"><label>Up kbps (0=∞)</label><input id="p-up" type="number" value="1000"></div>
+        </div>
+        <button class="btn btn-pine btn-block" style="margin-top:12px" onclick="savePlan()">Save plan</button>
+        <div class="err" id="p-err"></div>
+      </div>
+      <div class="tablewrap"><table><thead><tr><th>Plan</th><th>Allows</th><th>Price</th></tr></thead>
+        <tbody>${plans.map(p=>`<tr><td data-label="Plan">${esc(p.label)} <span class="muted mono">${esc(p.key)}</span></td>
+          <td data-label="Allows">${dur(p.durationMinutes,p.durationType)} · ${p.deviceCap}d</td>
+          <td data-label="Price">${p.price} ${p.currency}</td></tr>`).join("")}</tbody></table></div>`;
+  }catch(e){ document.getElementById("adm").innerHTML=`<div class="card">${esc(e.message)}</div>`; }
+}
+async function addAdmin(){
+  const err=document.getElementById("a-err");err.textContent="";
+  try{ await api("/admins",{method:"POST",body:JSON.stringify({displayName:document.getElementById("a-name").value,username:document.getElementById("a-user").value,password:document.getElementById("a-pass").value,role:document.getElementById("a-role").value})}); viewSellers(); }catch(e){ err.textContent=e.message; }
+}
+async function toggleAdmin(id,active){ try{ await api("/admins/"+id,{method:"PATCH",body:JSON.stringify({active})}); viewSellers(); }catch(e){alert(e.message);} }
+async function savePlan(){
+  const err=document.getElementById("p-err");err.textContent="";
+  try{ await api("/plans",{method:"POST",body:JSON.stringify({label:document.getElementById("p-label").value,key:document.getElementById("p-key").value,durationType:document.getElementById("p-type").value,durationMinutes:document.getElementById("p-min").value,deviceCap:document.getElementById("p-dev").value,price:document.getElementById("p-price").value,downKbps:document.getElementById("p-down").value,upKbps:document.getElementById("p-up").value})}); viewSellers(); }catch(e){ err.textContent=e.message; }
+}
+
+// ---------- drawer ----------
+function openDrawer(){ document.getElementById("scrim").classList.add("show"); document.getElementById("drawer").classList.add("show"); }
+function closeDrawer(){ document.getElementById("scrim").classList.remove("show"); document.getElementById("drawer").classList.remove("show"); }
+
+// ---------- boot ----------
+document.getElementById("lg-pass").addEventListener("keydown",e=>{if(e.key==="Enter")doLogin();});
+(async function boot(){
+  if(TOKEN){ try{ ME=await api("/auth/me"); enterApp(); return; }catch{} }
+  document.getElementById("login").classList.remove("hide");
+})();
+setInterval(()=>{ if(ME){ refreshRouterPill(); if(curView==="live") viewLive(); } }, 30000);
+</script>
+</body>
+</html>
