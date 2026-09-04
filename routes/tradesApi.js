@@ -39,7 +39,9 @@ function mapSupplier(s) {
     city: (s.location && s.location.city) || "",
     badge: badgeFor(s),
     rating: s.rating || 0,
-    reviews: s.reviewCount || 0
+    reviews: s.reviewCount || 0,
+    slug: s.zqSlug || "",
+    smartLink: s.zqSlug ? ("https://wa.me/263771143904?text=" + encodeURIComponent("ZQ:S:" + s.zqSlug)) : ""
   };
   // NOTE: phone is deliberately NOT exposed - quote requests route through the
   // chatbot ("find plumber <area>") so the funnel + moderation stay intact.
@@ -54,6 +56,31 @@ router.get("/plumbers", async (req, res) => {
 router.get("/trades", async (req, res) => {
   const trade = String(req.query.trade || "plumber").slice(0, 40);
   await listTrade(req, res, trade);
+});
+
+/* ── Multi-trade suppliers (for the building tool etc.) ─────────────────────
+   ?trades=builder,construction,plumber,painter,hardware&area=Harare
+   Loops runSupplierSearch per trade (same gating as the bot) and merges unique
+   by slug, so one strip can show every relevant provider you've listed.
+   Each card carries the provider's OWN smart link (ZQ:S:<slug>).            */
+router.get("/suppliers", async (req, res) => {
+  try {
+    const area = req.query.area ? String(req.query.area).slice(0, 40) : "";
+    const trades = String(req.query.trades || "builder")
+      .split(",").map(x => x.trim().toLowerCase()).filter(Boolean).slice(0, 8);
+    const seen = {}, out = [];
+    for (const t of trades) {
+      const rs = await runSupplierSearch({ city: area, product: t });
+      (rs || []).forEach(s => {
+        const key = s.zqSlug || s.businessName;
+        if (key && !seen[key]) { seen[key] = 1; out.push(mapSupplier(s)); }
+      });
+    }
+    res.json({ area, count: out.length, suppliers: out.slice(0, 12) });
+  } catch (err) {
+    console.error("[suppliers]", err.message);
+    res.json({ area: "", count: 0, suppliers: [] });
+  }
 });
 
 async function listTrade(req, res, trade) {
