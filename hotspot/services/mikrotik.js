@@ -4,6 +4,10 @@
 // helpers. If the router isn't configured or is unreachable, calls throw
 // a MikrotikError and the caller keeps working in "offline mode" (vouchers
 // are still saved in Mongo and pushed later by the sync loop).
+//
+// NOTE: RouterOS 7.20+ replies "!empty" to query-filtered prints that match
+// nothing, and node-routeros crashes on that reply. So we NEVER use "?query"
+// filters — we print the whole menu and filter in JS. Safe on all versions.
 // ==============================
 
 let RouterOSAPI = null;   // lazy-loaded so the app boots even without the package
@@ -53,6 +57,23 @@ async function withConn(fn) {
   }
 }
 
+// Print a whole menu, always returning an array. Never uses "?query" filters
+// (those trigger the !empty crash). Tolerant of empty/odd replies.
+async function printAll(api, path) {
+  try {
+    const res = await api.write(path);
+    return Array.isArray(res) ? res : (res ? [res] : []);
+  } catch (err) {
+    const msg = String(err?.message || err).toLowerCase();
+    if (msg.includes("empty") || err?.errno === "UNKNOWNREPLY") return [];
+    throw err;
+  }
+}
+
+const byName = (rows, name) => rows.find((r) => r.name === name) || null;
+const byField = (rows, field, val) =>
+  rows.filter((r) => String(r[field] || "").toUpperCase() === String(val || "").toUpperCase());
+
 // Convert minutes → RouterOS time string, e.g. 150 → "02:30:00", 1500 → "1d01:00:00".
 export function minutesToRos(minutes) {
   let secs = Math.max(0, Math.round(minutes * 60));
@@ -67,12 +88,12 @@ export function minutesToRos(minutes) {
 // ── Connection check (for the status pill) ──
 export async function ping() {
   return withConn(async (api) => {
-    const id = await api.write("/system/identity/print");
-    const active = await api.write("/ip/hotspot/active/print", ["=count-only="]);
+    const id = await printAll(api, "/system/identity/print");
+    const active = await printAll(api, "/ip/hotspot/active/print");
     return {
       ok: true,
       identity: id?.[0]?.name || "MikroTik",
-      activeCount: Number(active?.[0]?.ret || active?.length || 0)
+      activeCount: active.length
     };
   });
 }
@@ -80,20 +101,21 @@ export async function ping() {
 // ── Ensure a user-profile exists for a plan (device cap + speed) ──
 export async function ensureProfile({ name, sharedUsers, rateLimit }) {
   return withConn(async (api) => {
-    const existing = await api.write("/ip/hotspot/user/profile/print", [`?name=${name}`]);
+    const rows = await printAll(api, "/ip/hotspot/user/profile/print");
+    const existing = byName(rows, name);
     const params = [
       `=shared-users=${sharedUsers || 1}`,
       "=add-mac-cookie=yes"
     ];
     if (rateLimit) params.push(`=rate-limit=${rateLimit}`);
 
-    if (existing?.length) {
-      await api.write("/ip/hotspot/user/profile/set", [`=.id=${rowId(existing[0])}`, ...params]);
-      return rowId(existing[0]);
+    if (existing) {
+      await api.write("/ip/hotspot/user/profile/set", [`=.id=${rowId(existing)}`, ...params]);
+      return rowId(existing);
     }
     await api.write("/ip/hotspot/user/profile/add", [`=name=${name}`, ...params]);
-    const created = await api.write("/ip/hotspot/user/profile/print", [`?name=${name}`]);
-    return rowId(created?.[0]);
+    const after = await printAll(api, "/ip/hotspot/user/profile/print");
+    return rowId(byName(after, name));
   });
 }
 
@@ -105,37 +127,38 @@ export async function addVoucherUser({ code, profile, limitUptimeMinutes }) {
       params.push(`=limit-uptime=${minutesToRos(limitUptimeMinutes)}`);
     }
     await api.write("/ip/hotspot/user/add", params);
-    const rows = await api.write("/ip/hotspot/user/print", [`?name=${code}`]);
-    return rowId(rows?.[0]);
+    const rows = await printAll(api, "/ip/hotspot/user/print");
+    return rowId(byName(rows, code));
   });
 }
 
 export async function setUptimeLimit(code, totalMinutes) {
   return withConn(async (api) => {
-    const rows = await api.write("/ip/hotspot/user/print", [`?name=${code}`]);
-    if (!rows?.length) throw new MikrotikError(`voucher ${code} not on router`);
+    const rows = await printAll(api, "/ip/hotspot/user/print");
+    const u = byName(rows, code);
+    if (!u) throw new MikrotikError(`voucher ${code} not on router`);
     await api.write("/ip/hotspot/user/set",
-      [`=.id=${rowId(rows[0])}`, `=limit-uptime=${minutesToRos(totalMinutes)}`]);
+      [`=.id=${rowId(u)}`, `=limit-uptime=${minutesToRos(totalMinutes)}`]);
     return true;
   });
 }
 
 export async function setUserDisabled(code, disabled) {
   return withConn(async (api) => {
-    const rows = await api.write("/ip/hotspot/user/print", [`?name=${code}`]);
-    if (!rows?.length) return false;
+    const rows = await printAll(api, "/ip/hotspot/user/print");
+    const u = byName(rows, code);
+    if (!u) return false;
     await api.write("/ip/hotspot/user/set",
-      [`=.id=${rowId(rows[0])}`, `=disabled=${disabled ? "yes" : "no"}`]);
+      [`=.id=${rowId(u)}`, `=disabled=${disabled ? "yes" : "no"}`]);
     return true;
   });
 }
 
 export async function removeVoucherUser(code) {
   return withConn(async (api) => {
-    const rows = await api.write("/ip/hotspot/user/print", [`?name=${code}`]);
-    if (rows?.length) {
-      await api.write("/ip/hotspot/user/remove", [`=.id=${rowId(rows[0])}`]);
-    }
+    const rows = await printAll(api, "/ip/hotspot/user/print");
+    const u = byName(rows, code);
+    if (u) await api.write("/ip/hotspot/user/remove", [`=.id=${rowId(u)}`]);
     return true;
   });
 }
@@ -143,8 +166,8 @@ export async function removeVoucherUser(code) {
 // Kick any live sessions for a code (used on revoke / expiry).
 export async function kick(code) {
   return withConn(async (api) => {
-    const active = await api.write("/ip/hotspot/active/print", [`?user=${code}`]);
-    for (const row of active || []) {
+    const active = await printAll(api, "/ip/hotspot/active/print");
+    for (const row of active.filter((a) => a.user === code)) {
       await api.write("/ip/hotspot/active/remove", [`=.id=${rowId(row)}`]);
     }
     return true;
@@ -155,19 +178,19 @@ export async function kick(code) {
 export async function snapshot() {
   return withConn(async (api) => {
     const [active, users, hosts] = await Promise.all([
-      api.write("/ip/hotspot/active/print"),
-      api.write("/ip/hotspot/user/print"),
-      api.write("/ip/hotspot/host/print")
+      printAll(api, "/ip/hotspot/active/print"),
+      printAll(api, "/ip/hotspot/user/print"),
+      printAll(api, "/ip/hotspot/host/print")
     ]);
 
     const hostByMac = {};
-    for (const h of hosts || []) {
+    for (const h of hosts) {
       const mac = (h["mac-address"] || "").toUpperCase();
       if (mac && h["host-name"]) hostByMac[mac] = h["host-name"];
     }
 
     const usageByCode = {};
-    for (const u of users || []) {
+    for (const u of users) {
       usageByCode[u.name] = {
         uptimeUsedSec: parseRosUptime(u.uptime),
         bytesIn: Number(u["bytes-in"] || 0),
@@ -175,7 +198,7 @@ export async function snapshot() {
       };
     }
 
-    const sessions = (active || []).map((a) => {
+    const sessions = active.map((a) => {
       const mac = (a["mac-address"] || "").toUpperCase();
       return {
         code: a.user,
@@ -195,23 +218,24 @@ export async function snapshot() {
 // ── Bypass devices (cameras, reception) ──
 export async function addBypass(mac, comment) {
   return withConn(async (api) => {
-    const existing = await api.write("/ip/hotspot/ip-binding/print", [`?mac-address=${mac}`]);
-    if (existing?.length) {
+    const rows = await printAll(api, "/ip/hotspot/ip-binding/print");
+    const existing = byField(rows, "mac-address", mac)[0];
+    if (existing) {
       await api.write("/ip/hotspot/ip-binding/set",
-        [`=.id=${rowId(existing[0])}`, "=type=bypassed", `=comment=${comment || ""}`]);
-      return rowId(existing[0]);
+        [`=.id=${rowId(existing)}`, "=type=bypassed", `=comment=${comment || ""}`]);
+      return rowId(existing);
     }
     await api.write("/ip/hotspot/ip-binding/add",
       [`=mac-address=${mac}`, "=type=bypassed", `=comment=${comment || ""}`]);
-    const rows = await api.write("/ip/hotspot/ip-binding/print", [`?mac-address=${mac}`]);
-    return rowId(rows?.[0]);
+    const after = await printAll(api, "/ip/hotspot/ip-binding/print");
+    return rowId(byField(after, "mac-address", mac)[0]);
   });
 }
 
 export async function removeBypass(mac) {
   return withConn(async (api) => {
-    const rows = await api.write("/ip/hotspot/ip-binding/print", [`?mac-address=${mac}`]);
-    for (const row of rows || []) {
+    const rows = await printAll(api, "/ip/hotspot/ip-binding/print");
+    for (const row of byField(rows, "mac-address", mac)) {
       await api.write("/ip/hotspot/ip-binding/remove", [`=.id=${rowId(row)}`]);
     }
     return true;
