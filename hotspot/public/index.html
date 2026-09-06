@@ -343,7 +343,8 @@ const statCard=(k,v,small)=>`<div class="card stat"><div class="k">${k}</div><di
 // ---------- Generate ----------
 let genPlan=null, plansCache=[];
 async function viewGenerate(){
-  const {plans}=await api("/plans"); plansCache=plans.filter(p=>p.active);
+  try{
+  const {plans}=await api("/plans"); plansCache=(plans||[]).filter(p=>p.active);
   genPlan=genPlan||plansCache[0]?.key;
   mount(`<div class="card">
       <h2 style="font-size:16px;margin-bottom:12px">Choose a plan</h2>
@@ -358,9 +359,11 @@ async function viewGenerate(){
     </div>
     <div id="g-result"></div>`);
   renderPlanCards();
+  }catch(e){ mount(`<div class="card">${esc(e.message)}</div>`); }
 }
 function renderPlanCards(){
-  document.getElementById("plans").innerHTML=plansCache.map(p=>`
+  const el=document.getElementById("plans"); if(!el) return;
+  el.innerHTML=plansCache.map(p=>`
     <button class="plan ${p.key===genPlan?'sel':''}" onclick="genPlan='${p.key}';renderPlanCards()">
       <div class="pl">${esc(p.label)}</div>
       <div class="meta">${dur(p.durationMinutes,p.durationType)}<br>${p.deviceCap} device${p.deviceCap>1?'s':''}${p.downKbps?` · ${(p.downKbps/1000).toFixed(1)}Mbps`:''}</div>
@@ -368,20 +371,23 @@ function renderPlanCards(){
     </button>`).join("") || `<div class="muted">No plans yet. ${ME.role==='owner'?'Ask an owner to add one in Admins → Plans.':''}</div>`;
 }
 async function generate(){
-  const err=document.getElementById("g-err"); err.textContent="";
+  const err=document.getElementById("g-err"); if(err) err.textContent="";
+  if(!genPlan){ if(err) err.textContent="Pick a plan first."; return; }
   try{
-    const body={planKey:genPlan,count:Number(document.getElementById("g-count").value||1),paymentMethod:document.getElementById("g-pay").value,note:document.getElementById("g-note").value};
+    const body={planKey:genPlan,count:Number(document.getElementById("g-count")?.value||1),paymentMethod:document.getElementById("g-pay")?.value,note:document.getElementById("g-note")?.value};
     const d=await api("/vouchers/generate",{method:"POST",body:JSON.stringify(body)});
     renderSlips(d);
-  }catch(e){ err.textContent=e.message; }
+  }catch(e){ if(err) err.textContent=e.message; else alert(e.message); }
 }
 function renderSlips(d){
   const box=document.getElementById("g-result");
+  if(!box || !d || !Array.isArray(d.vouchers)) return;
   box.innerHTML=`<div class="section-title"><h2>${d.vouchers.length} voucher${d.vouchers.length>1?'s':''} ready</h2>
       <div class="row noprint">${d.routerOnline?'':'<span class="tag t-expired">saved - will sync to router</span>'}<button class="btn btn-ghost btn-sm" onclick="window.print()">Print</button></div></div>
     <div class="slips" id="slips"></div>`;
-  const wifi=d.wifiName, plan=d.plan;
-  document.getElementById("slips").innerHTML=d.vouchers.map((v,i)=>`
+  const wifi=d.wifiName, plan=d.plan||{};
+  const slipsEl=document.getElementById("slips"); if(!slipsEl) return;
+  slipsEl.innerHTML=d.vouchers.map((v,i)=>`
     <div class="slip">
       <div class="wifi">Connect to “${esc(wifi)}”</div>
       <div class="big">${esc(v.code)}</div>
@@ -389,8 +395,8 @@ function renderSlips(d){
       <div class="terms">${dur(plan.durationMinutes,plan.durationType)} · ${plan.deviceCap} device${plan.deviceCap>1?'s':''}</div>
       <div class="steps">1. Connect phone to “${esc(wifi)}”.<br>2. A login page opens by itself.<br>3. Type this code. No data needed.</div>
     </div>`).join("");
-  d.vouchers.forEach((v,i)=>{ try{ new QRCode(document.getElementById("qr"+i),{text:v.code,width:104,height:104,colorDark:"#0e5140"});}catch{} });
-  go && document.getElementById("g-result").scrollIntoView({behavior:"smooth",block:"nearest"});
+  d.vouchers.forEach((v,i)=>{ try{ const qel=document.getElementById("qr"+i); if(qel && typeof QRCode!=="undefined") new QRCode(qel,{text:v.code,width:104,height:104,colorDark:"#0e5140"});}catch{} });
+  try{ box.scrollIntoView({behavior:"smooth",block:"nearest"}); }catch{}
 }
 
 // ---------- Vouchers ----------
