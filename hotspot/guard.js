@@ -6,7 +6,7 @@
 // script fixes the known cases; this guard is a final safety net so that ANY
 // stray node-routeros socket error is logged and swallowed instead of taking
 // down cripfcnt.com. It ONLY swallows errors that clearly come from
-// node-routeros — everything else still crashes loudly, as it should.
+// node-routeros - everything else still crashes loudly, as it should.
 //
 // Wire it in at the VERY TOP of server.js (first import), before anything else:
 //     import "./hotspot/guard.js";
@@ -27,7 +27,7 @@ process.on("uncaughtException", (err) => {
     console.error("[hotspot guard] swallowed node-routeros socket error:", err?.message || err);
     return; // keep the app alive; the sync loop retries next tick
   }
-  // Not ours — preserve normal fatal behaviour.
+  // Not ours - preserve normal fatal behaviour.
   console.error("[uncaughtException]", err);
   process.exit(1);
 });

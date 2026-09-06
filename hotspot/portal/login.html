@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Central Cyber WiFi - Sign in</title>
+<style>
+  /* Fully self-contained: a guest isn't online yet, so nothing loads from the internet. */
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:20px;background:radial-gradient(120% 120% at 0% 0%,#0B7A34 0%,#043D1A 72%);color:#eafaef}
+  .card{width:100%;max-width:370px;text-align:center}
+  .emblem{width:96px;height:96px;margin:0 auto 16px}
+  .brand{font-family:Georgia,"Times New Roman",serif;font-weight:700;font-size:26px;letter-spacing:.04em;color:#fff}
+  .tag{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#9fd6b0;margin-top:4px;margin-bottom:24px}
+  .box{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.14);border-radius:16px;padding:22px}
+  label{display:block;text-align:left;font-size:13px;color:#9fd6b0;margin-bottom:8px;font-weight:600}
+  input.code{width:100%;padding:15px;border:1.5px solid rgba(255,255,255,.22);border-radius:11px;background:#fff;color:#0B2E17;font-size:20px;font-weight:700;text-align:center;letter-spacing:.08em;text-transform:uppercase;outline:none;font-family:"Courier New",monospace}
+  input.code:focus{border-color:#eafaef}
+  input.code::placeholder{color:#9aa39d;font-weight:400;letter-spacing:.04em}
+  button{width:100%;margin-top:14px;padding:15px;border:0;border-radius:11px;background:#fff;color:#075C27;font-size:16px;font-weight:700;cursor:pointer}
+  button:active{opacity:.85}
+  .buy{margin-top:12px;display:block;text-decoration:none;background:transparent;border:1.5px solid rgba(255,255,255,.35);color:#fff;padding:14px;border-radius:11px;font-weight:600;font-size:15px}
+  .or{margin:16px 0 4px;font-size:12px;color:#7cc091}
+  .err{margin-top:14px;background:rgba(255,120,110,.18);border:1px solid rgba(255,120,110,.5);color:#ffdedb;font-size:13px;padding:10px 12px;border-radius:9px}
+  .foot{margin-top:20px;font-size:12px;color:#7cc091;line-height:1.6}
+</style>
+</head>
+<body>
+  <div class="card">
+    <svg class="emblem" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-label="Central Cyber">
+      <rect x="4" y="4" width="92" height="92" rx="10" fill="#0B7A34"/>
+      <rect x="4" y="4" width="92" height="92" rx="10" fill="none" stroke="#ffffff" stroke-width="3" opacity="0.9"/>
+      <path d="M50 26 C36 26 26 36 26 50 L36 50 C36 42 42 36 50 36 Z" fill="#fff"/>
+      <path d="M50 34 C40 34 34 40 34 50 L44 50 C44 46 46 44 50 44 Z" fill="#fff" opacity="0.85"/>
+      <rect x="30" y="58" width="40" height="7" rx="3.5" fill="#fff"/>
+      <rect x="34" y="69" width="32" height="7" rx="3.5" fill="#fff" opacity="0.9"/>
+    </svg>
+    <div class="brand">CENTRAL CYBER</div>
+    <div class="tag">WiFi Hotspot</div>
+
+    <div class="box">
+      <form name="login" action="$(link-login-only)" method="post" onsubmit="return prep()">
+        <input type="hidden" name="dst" value="$(link-orig)">
+        <input type="hidden" name="popup" value="true">
+        <input type="hidden" name="username" id="u">
+        <input type="hidden" name="password" id="p">
+        <label for="voucher">Enter your voucher code</label>
+        <input class="code" id="voucher" name="voucher" type="text" autocomplete="off"
+               autocapitalize="characters" autocorrect="off" spellcheck="false" placeholder="XXX-XXX" autofocus>
+        <button type="submit">Connect</button>
+      </form>
+
+      <div class="or">- or -</div>
+      <a class="buy" href="http://cripfcnt.com/hotspot/buy">Buy a voucher with EcoCash</a>
+
+      $(if error)
+      <div class="err">$(error)</div>
+      $(endif)
+    </div>
+
+    <div class="foot">Buy at reception, the bar, the restaurant - or with EcoCash above.</div>
+  </div>
+<script>
+  function prep(){
+    var c=document.getElementById('voucher').value.trim().toUpperCase();
+    if(!c) return false;
+    document.getElementById('u').value=c;
+    document.getElementById('p').value=c;
+    return true;
+  }
+</script>
+</body>
+</html>

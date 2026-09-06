@@ -10,10 +10,10 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
 :root{
-  --ink:#14231d; --bg:#f3f4f0; --surface:#fff; --surface-2:#fafbf8;
-  --pine:#0e5140; --pine-700:#0b3f32; --pine-900:#082a22;
-  --gold:#e0a100; --gold-700:#b37e00;
-  --muted:#6a7972; --line:#e3e6e0; --line-2:#eef0eb;
+  --ink:#0d2417; --bg:#f2f5f1; --surface:#fff; --surface-2:#f8faf7;
+  --pine:#0B7A34; --pine-700:#075C27; --pine-900:#043D1A;
+  --gold:#0B7A34; --gold-700:#075C27;
+  --muted:#5f7367; --line:#e2e8e2; --line-2:#eef2ed;
   --ok:#1e9e6a; --danger:#c7413b; --warn:#d98a00; --info:#2f6fb0;
   --r:12px; --r-sm:9px;
 }
@@ -30,7 +30,7 @@ button{font-family:inherit;cursor:pointer}
 #login{min-height:100dvh;display:grid;grid-template-columns:1.1fr 1fr}
 #login .brandside{background:radial-gradient(120% 120% at 0% 0%,var(--pine) 0%,var(--pine-900) 70%);color:#eaf3ee;padding:48px;display:flex;flex-direction:column;justify-content:space-between}
 #login .brandside .logo{display:flex;align-items:center;gap:12px;font-family:"Bricolage Grotesque";font-weight:700;font-size:20px}
-#login .brandside .dot{width:34px;height:34px;border-radius:9px;background:var(--gold);display:grid;place-items:center;color:var(--pine-900);font-weight:700}
+#login .brandside .dot{width:38px;height:34px;border-radius:9px;background:var(--gold);display:grid;place-items:center;color:#fff;font-weight:700;font-size:13px}
 #login .brandside h1{font-size:clamp(28px,4vw,44px);color:#fff;line-height:1.05;max-width:12ch}
 #login .brandside p{color:#a9c6ba;max-width:34ch}
 #login .formside{display:grid;place-items:center;padding:32px}
@@ -42,7 +42,7 @@ button{font-family:inherit;cursor:pointer}
 .field input,.field select,.field textarea{width:100%;padding:11px 13px;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--surface);font-size:15px;color:var(--ink);outline:none;transition:border-color .15s}
 .field input:focus,.field select:focus,.field textarea:focus{border-color:var(--pine)}
 .btn{border:0;border-radius:var(--r-sm);padding:11px 16px;font-weight:600;font-size:15px;display:inline-flex;align-items:center;gap:8px;justify-content:center}
-.btn-gold{background:var(--gold);color:var(--pine-900)}
+.btn-gold{background:var(--gold);color:#fff}
 .btn-gold:hover{background:var(--gold-700);color:#fff}
 .btn-pine{background:var(--pine);color:#fff}
 .btn-pine:hover{background:var(--pine-700)}
@@ -56,7 +56,7 @@ button{font-family:inherit;cursor:pointer}
 #app{display:grid;grid-template-columns:236px 1fr;min-height:100dvh}
 #side{background:var(--pine-900);color:#cfe0d8;display:flex;flex-direction:column;padding:20px 14px;position:sticky;top:0;height:100dvh}
 #side .logo{display:flex;align-items:center;gap:11px;padding:4px 8px 22px;font-family:"Bricolage Grotesque";font-weight:700;font-size:17px;color:#fff}
-#side .logo .dot{width:30px;height:30px;border-radius:8px;background:var(--gold);display:grid;place-items:center;color:var(--pine-900);font-weight:700}
+#side .logo .dot{width:34px;height:30px;border-radius:8px;background:var(--gold);display:grid;place-items:center;color:#fff;font-weight:700;font-size:12px}
 #side nav{display:flex;flex-direction:column;gap:2px;flex:1}
 .navitem{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:9px;color:#bfd4ca;font-weight:500;font-size:14.5px;border:0;background:transparent;text-align:left;width:100%}
 .navitem:hover{background:rgba(255,255,255,.06);color:#fff}
@@ -175,12 +175,12 @@ tr:last-child td{border-bottom:0}
 <!-- ============ LOGIN ============ -->
 <section id="login">
   <div class="brandside">
-    <div class="logo"><span class="dot">W</span> Lodge WiFi</div>
+    <div class="logo"><span class="dot">CC</span> Central Cyber</div>
     <div>
-      <h1>Vouchers, sold and tracked in seconds.</h1>
+      <h1>WiFi vouchers, sold and tracked in seconds.</h1>
       <p>Generate codes, see who's online, and keep every camera connected - all from your phone.</p>
     </div>
-    <div style="color:#7fa596;font-size:13px">Reception & restaurant control</div>
+    <div style="color:#7fa596;font-size:13px">Central Cyber - Weddings · Parties · Conferences · Accommodation</div>
   </div>
   <div class="formside">
     <div class="card" style="border:0;background:0;padding:0" >
@@ -199,7 +199,7 @@ tr:last-child td{border-bottom:0}
 <!-- ============ APP ============ -->
 <div id="app" class="hide">
   <aside id="side">
-    <div class="logo"><span class="dot">W</span> Lodge WiFi</div>
+    <div class="logo"><span class="dot">CC</span> Central Cyber</div>
     <nav id="nav"></nav>
     <div class="whoami">
       <b id="me-name">-</b><span id="me-role" class="muted"></span>
@@ -354,6 +354,7 @@ async function viewGenerate(){
         <div class="field"><label>Payment</label><select id="g-pay"><option value="cash">Cash</option><option value="ecocash">EcoCash</option><option value="complimentary">Free / staff</option><option value="other">Other</option></select></div>
       </div>
       <div class="field"><label>Note (optional) - e.g. table 4, guest name</label><input id="g-note" placeholder=""></div>
+      <div class="field"><label>Custom price ($, optional) - leave blank to use the plan price</label><input id="g-price" type="number" min="0" placeholder=""></div>
       <button class="btn btn-gold btn-block" onclick="generate()">Generate vouchers</button>
       <div class="err" id="g-err"></div>
     </div>
@@ -375,6 +376,8 @@ async function generate(){
   if(!genPlan){ if(err) err.textContent="Pick a plan first."; return; }
   try{
     const body={planKey:genPlan,count:Number(document.getElementById("g-count")?.value||1),paymentMethod:document.getElementById("g-pay")?.value,note:document.getElementById("g-note")?.value};
+    const cp=document.getElementById("g-price")?.value;
+    if(cp!=="" && cp!=null) body.price=Number(cp);
     const d=await api("/vouchers/generate",{method:"POST",body:JSON.stringify(body)});
     renderSlips(d);
   }catch(e){ if(err) err.textContent=e.message; else alert(e.message); }
@@ -571,9 +574,9 @@ async function viewSellers(){
           <div class="field" style="margin:0"><label>Name shown</label><input id="p-label" placeholder="Lunch - 2 hours"></div>
           <div class="field" style="margin:0"><label>Short key</label><input id="p-key" placeholder="lunch2h"></div>
           <div class="field" style="margin:0"><label>Type</label><select id="p-type"><option value="uptime">Connected time</option><option value="clock">Fixed window</option></select></div>
-          <div class="field" style="margin:0"><label>Minutes</label><input id="p-min" type="number" value="120"></div>
-          <div class="field" style="margin:0"><label>Devices</label><input id="p-dev" type="number" value="1"></div>
-          <div class="field" style="margin:0"><label>Price</label><input id="p-price" type="number" value="1"></div>
+          <div class="field" style="margin:0"><label>Minutes</label><input id="p-min" type="number" value="120" oninput="suggestPlanPrice()"></div>
+          <div class="field" style="margin:0"><label>Devices</label><input id="p-dev" type="number" value="1" oninput="suggestPlanPrice()"></div>
+          <div class="field" style="margin:0"><label>Price ($) - <span id="p-suggest" class="muted"></span></label><input id="p-price" type="number" value="1"></div>
           <div class="field" style="margin:0"><label>Down kbps (0=∞)</label><input id="p-down" type="number" value="4000"></div>
           <div class="field" style="margin:0"><label>Up kbps (0=∞)</label><input id="p-up" type="number" value="1000"></div>
         </div>
@@ -584,6 +587,7 @@ async function viewSellers(){
         <tbody>${plans.map(p=>`<tr><td data-label="Plan">${esc(p.label)} <span class="muted mono">${esc(p.key)}</span></td>
           <td data-label="Allows">${dur(p.durationMinutes,p.durationType)} · ${p.deviceCap}d</td>
           <td data-label="Price">${p.price} ${p.currency}</td></tr>`).join("")}</tbody></table></div>`;
+    suggestPlanPrice();
   }catch(e){ document.getElementById("adm").innerHTML=`<div class="card">${esc(e.message)}</div>`; }
 }
 async function addAdmin(){
@@ -591,6 +595,16 @@ async function addAdmin(){
   try{ await api("/admins",{method:"POST",body:JSON.stringify({displayName:document.getElementById("a-name").value,username:document.getElementById("a-user").value,password:document.getElementById("a-pass").value,role:document.getElementById("a-role").value})}); viewSellers(); }catch(e){ err.textContent=e.message; }
 }
 async function toggleAdmin(id,active){ try{ await api("/admins/"+id,{method:"PATCH",body:JSON.stringify({active})}); viewSellers(); }catch(e){alert(e.message);} }
+async function suggestPlanPrice(){
+  const min=Number(document.getElementById("p-min")?.value||0);
+  const dev=Number(document.getElementById("p-dev")?.value||1);
+  const hint=document.getElementById("p-suggest");
+  if(!min){ if(hint) hint.textContent=""; return; }
+  try{
+    const r=await api(`/price/suggest?durationMinutes=${min}&devices=${dev}`);
+    if(hint){ hint.innerHTML=`suggested <b style="color:var(--pine)">$${r.price}</b> <a href="#" onclick="document.getElementById('p-price').value=${r.price};return false" style="color:var(--pine)">use</a>`; }
+  }catch{ if(hint) hint.textContent=""; }
+}
 async function savePlan(){
   const err=document.getElementById("p-err");err.textContent="";
   try{ await api("/plans",{method:"POST",body:JSON.stringify({label:document.getElementById("p-label").value,key:document.getElementById("p-key").value,durationType:document.getElementById("p-type").value,durationMinutes:document.getElementById("p-min").value,deviceCap:document.getElementById("p-dev").value,price:document.getElementById("p-price").value,downKbps:document.getElementById("p-down").value,upKbps:document.getElementById("p-up").value})}); viewSellers(); }catch(e){ err.textContent=e.message; }

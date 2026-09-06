@@ -17,15 +17,18 @@ import express from "express";
 import HotspotAdmin from "./models/hotspotAdmin.js";
 import HotspotPlan from "./models/hotspotPlan.js";
 import hotspotApi from "./routes/hotspotApi.js";
+import publicPay from "./routes/publicPay.js";
 import { startSync } from "./services/voucherSync.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Starter plans - tweak or delete from the UI later.
 const DEFAULT_PLANS = [
-  { key: "lunch2h",   label: "Lunch - 2 hours",   durationType: "uptime", durationMinutes: 120,  deviceCap: 1, downKbps: 4000, upKbps: 1000, price: 1,  sortOrder: 1 },
-  { key: "day",       label: "Day pass - 1 day",  durationType: "clock",  durationMinutes: 1440, deviceCap: 2, downKbps: 6000, upKbps: 1500, price: 2,  sortOrder: 2 },
-  { key: "week",      label: "Week - 7 days",     durationType: "clock",  durationMinutes: 10080, deviceCap: 3, downKbps: 8000, upKbps: 2000, price: 8,  sortOrder: 3 }
+  { key: "lunch2h",  label: "2 hours",          durationType: "uptime", durationMinutes: 120,   deviceCap: 1, downKbps: 4000, upKbps: 1000, price: 1,  sortOrder: 1 },
+  { key: "evening",  label: "Evening - 5 hours",durationType: "uptime", durationMinutes: 300,   deviceCap: 1, downKbps: 5000, upKbps: 1500, price: 2,  sortOrder: 2 },
+  { key: "day",      label: "Day pass - 1 day", durationType: "clock",  durationMinutes: 1440,  deviceCap: 2, downKbps: 6000, upKbps: 1500, price: 3,  sortOrder: 3 },
+  { key: "week",     label: "Week - 7 days",    durationType: "clock",  durationMinutes: 10080, deviceCap: 2, downKbps: 8000, upKbps: 2000, price: 6,  sortOrder: 4 },
+  { key: "month",    label: "Month - 30 days",  durationType: "clock",  durationMinutes: 43200, deviceCap: 3, downKbps: 8000, upKbps: 2000, price: 20, sortOrder: 5 }
 ];
 
 async function seed() {
@@ -52,8 +55,13 @@ export default function mountHotspot(app, opts = {}) {
   const base = opts.base || "/hotspot";
 
   app.use(express.json());                             // safe: parses only /hotspot bodies it sees
-  app.use(`${base}/api`, hotspotApi);                  // JSON API
-  app.use(base, express.static(path.join(__dirname, "public")));  // serves hotspot-admin.html as index
+  app.use(`${base}/api`, hotspotApi);                  // admin JSON API
+  app.use(`${base}/pay`, publicPay);                   // PUBLIC self-service EcoCash API
+
+  // PUBLIC self-service purchase page (must be reachable via router Walled Garden).
+  app.get(`${base}/buy`, (req, res) => res.sendFile(path.join(__dirname, "portal", "buy.html")));
+
+  app.use(base, express.static(path.join(__dirname, "public")));  // admin panel (index.html)
 
   seed().catch((e) => console.error("[hotspot seed]", e));
   startSync();

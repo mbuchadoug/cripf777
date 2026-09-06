@@ -2,7 +2,7 @@
 // 🩹 PATCH: node-routeros crashes on RouterOS 7.20+
 //
 // RouterOS 7.20+ sends reply sequences the node-routeros library doesn't
-// expect, and it THROWS on raw socket events — which escape every try/catch
+// expect, and it THROWS on raw socket events - which escape every try/catch
 // and kill the whole Node process. Two spots need fixing:
 //
 //   1. Channel.js   → "!empty" reply falls into default: and throws.
@@ -13,7 +13,7 @@
 // repeatedly) and prints what it changed.
 //
 // Run once:   node hotspot/patch-node-routeros.js
-// Make permanent — add to package.json "scripts":
+// Make permanent - add to package.json "scripts":
 //     "postinstall": "node hotspot/patch-node-routeros.js"
 // ==============================
 
@@ -35,10 +35,10 @@ function findLib(rel) {
 
 let changed = 0;
 
-// ── Patch 1: Channel.js — treat "!empty" like "!done" ──
+// ── Patch 1: Channel.js - treat "!empty" like "!done" ──
 (() => {
   const target = findLib("Channel.js");
-  if (!target) { console.log("[patch] Channel.js not found — skipping"); return; }
+  if (!target) { console.log("[patch] Channel.js not found - skipping"); return; }
   let src = fs.readFileSync(target, "utf8");
   if (src.includes("/* !empty patched */")) { console.log("[patch] Channel.js already patched"); return; }
 
@@ -56,16 +56,16 @@ let changed = 0;
                 this.close();
                 break;`;
 
-  if (!src.includes(needle)) { console.log("[patch] Channel.js shape differs — not changed"); return; }
+  if (!src.includes(needle)) { console.log("[patch] Channel.js shape differs - not changed"); return; }
   fs.writeFileSync(target, src.replace(needle, replacement), "utf8");
   console.log("[patch] Channel.js patched for !empty");
   changed++;
 })();
 
-// ── Patch 2: Receiver.js — ignore orphan/unregistered-tag replies ──
+// ── Patch 2: Receiver.js - ignore orphan/unregistered-tag replies ──
 (() => {
   const target = findLib("connector/Receiver.js");
-  if (!target) { console.log("[patch] Receiver.js not found — skipping"); return; }
+  if (!target) { console.log("[patch] Receiver.js not found - skipping"); return; }
   let src = fs.readFileSync(target, "utf8");
   if (src.includes("/* unregistered tag patched */")) { console.log("[patch] Receiver.js already patched"); return; }
 
@@ -77,10 +77,10 @@ let changed = 0;
             return;
         }`;
 
-  if (!src.includes(needle)) { console.log("[patch] Receiver.js shape differs — not changed"); return; }
+  if (!src.includes(needle)) { console.log("[patch] Receiver.js shape differs - not changed"); return; }
   fs.writeFileSync(target, src.replace(needle, replacement), "utf8");
   console.log("[patch] Receiver.js patched for unregistered tag");
   changed++;
 })();
 
-console.log(changed ? `[patch] done — ${changed} file(s) patched` : "[patch] nothing to change (already patched)");
+console.log(changed ? `[patch] done - ${changed} file(s) patched` : "[patch] nothing to change (already patched)");

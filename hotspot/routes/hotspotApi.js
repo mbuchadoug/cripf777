@@ -11,11 +11,20 @@ import HotspotPlan from "../models/hotspotPlan.js";
 import Voucher from "../models/voucher.js";
 import BypassDevice from "../models/bypassDevice.js";
 import * as mt from "../services/mikrotik.js";
+import { suggestPrice } from "../services/pricing.js";
 import { signToken, authRequired, ownerRequired } from "../middleware/hotspotAuth.js";
 
 const router = Router();
 
-const WIFI_NAME = process.env.HOTSPOT_WIFI_NAME || "Lodge WiFi";
+// Auto price for a duration + devices (whole-dollar). Used by the plan editor.
+router.get("/price/suggest", authRequired, (req, res) => {
+  res.json(suggestPrice({
+    durationMinutes: Number(req.query.durationMinutes || 0),
+    devices: Number(req.query.devices || 1)
+  }));
+});
+
+const WIFI_NAME = process.env.HOTSPOT_WIFI_NAME || "Central Cyber WiFi";
 const CODE_PREFIX = (process.env.HOTSPOT_CODE_PREFIX || "").toUpperCase();
 
 // Unambiguous alphabet - no 0/O/1/I/L to avoid customer typos.

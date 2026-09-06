@@ -7,7 +7,7 @@
 //
 // NOTE: RouterOS 7.20+ replies "!empty" to query-filtered prints that match
 // nothing, and node-routeros crashes on that reply. So we NEVER use "?query"
-// filters — we print the whole menu and filter in JS. Safe on all versions.
+// filters - we print the whole menu and filter in JS. Safe on all versions.
 // ==============================
 
 let RouterOSAPI = null;   // lazy-loaded so the app boots even without the package
