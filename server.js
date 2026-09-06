@@ -48,7 +48,7 @@ import webSettings from "./routes/web_settings.js"; // ← ADD THIS
 import webTeam from "./routes/web_team.js";          // ← ADD THIS
 import officeRoutes from "./routes/office.js";   // ← NEW back-office portal (/office)
 //-------------------------------------------------------
-
+import "./hotspot/guard.js";
 import mobileProfessionalRouter from "./routes/mobileProfessional.js";   // near the other mobile imports
                   // right after the school mount
 import mountHotspot from "./hotspot/index.js";
