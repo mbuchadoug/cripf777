@@ -10,7 +10,7 @@
 //
 // This script replicates that read path directly against Mongo. It is
 // self-contained (loose schemas, strict:false) so it does NOT depend on your
-// model file paths — drop it anywhere in the project and run with node.
+// model file paths - drop it anywhere in the project and run with node.
 //
 // USAGE
 //   node extract-assessments.js                         # list all areas + counts
@@ -214,7 +214,7 @@ function renderText(slug, bySeries) {
   const label = slugToLabel(slug);
   const lines = [];
   const total = Object.values(bySeries).reduce((n, s) => n + s.quizzes.length, 0);
-  lines.push(`CRIPFCnt — ${label}`);
+  lines.push(`CRIPFCnt - ${label}`);
   lines.push(`${total} assessment${total === 1 ? "" : "s"}`);
   lines.push("=".repeat(60));
   lines.push("");
@@ -278,7 +278,7 @@ function renderHtml(slug, bySeries) {
     return `<section><h2>${esc(s.seriesLabel)} <small>${s.level} · ${s.quizzes.length}</small></h2>${quizHtml}</section>`;
   }).join("");
 
-  return `<!doctype html><html><head><meta charset="utf-8"><title>CRIPFCnt — ${esc(label)}</title>
+  return `<!doctype html><html><head><meta charset="utf-8"><title>CRIPFCnt - ${esc(label)}</title>
 <style>
   :root{--ink:#0f172a;--mut:#64748b;--line:#e2e8f0;--accent:#2563eb;--ok:#16a34a}
   *{box-sizing:border-box}
@@ -293,7 +293,7 @@ function renderHtml(slug, bySeries) {
   .ch li.correct{color:var(--ok);font-weight:600}
   @media print{body{margin:0;max-width:none}.quiz{break-inside:avoid}}
 </style></head><body>
-<h1>CRIPFCnt — ${esc(label)}</h1>
+<h1>CRIPFCnt - ${esc(label)}</h1>
 <p class="sub">${total} assessment${total === 1 ? "" : "s"}${WANT_FULL ? " · with passages & answers" : ""}</p>
 ${blocks}
 </body></html>`;
@@ -305,7 +305,7 @@ async function renderPdf(html, filepath) {
   try {
     puppeteer = (await import("puppeteer")).default;
   } catch {
-    console.warn("⚠️  puppeteer not installed — skipping PDF. (npm install puppeteer)");
+    console.warn("⚠️  puppeteer not installed - skipping PDF. (npm install puppeteer)");
     return false;
   }
   const browser = await puppeteer.launch({
