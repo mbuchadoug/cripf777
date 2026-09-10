@@ -63,14 +63,18 @@ input{width:100%;padding:12px 13px;border:1px solid var(--line);border-radius:10
       {{#if pending}}
         {{#if (eq course.accessType "paid")}}
           <div class="lead">Complete payment to unlock the course.</div>
+          {{#if pay.ecocash}}
           <div style="margin-bottom:14px">
-            <label style="font-size:12px;font-weight:700;color:var(--mut)">Pay with EcoCash</label>
+            <label style="font-size:12px;font-weight:700;color:var(--mut)">Pay with EcoCash {{#if ecoDefault}}· recommended{{/if}}</label>
             <input id="eco-phone" type="tel" placeholder="0771234567" inputmode="numeric">
             <button class="btn block" onclick="payEco()">Send EcoCash prompt</button>
             <div id="eco-status"></div>
           </div>
-          <div class="or">or</div>
-          <form method="POST" action="/courses/{{course.slug}}/pay/stripe"><button class="btn ghost block" type="submit">Pay by card (Visa/Mastercard)</button></form>
+          {{/if}}
+          {{#if (and pay.ecocash pay.stripe)}}<div class="or">or</div>{{/if}}
+          {{#if pay.stripe}}
+          <form method="POST" action="/courses/{{course.slug}}/pay/stripe"><button class="btn ghost block" type="submit">Pay by card (Visa/Mastercard){{#unless ecoDefault}} · recommended{{/unless}}</button></form>
+          {{/if}}
         {{else}}
           <div class="msg">This course is invite-only. An administrator will grant you access shortly.</div>
         {{/if}}

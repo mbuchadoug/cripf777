@@ -152,7 +152,7 @@ export async function syncModuleTracks({ orgId = null, settings = null, createdB
   for (const [pillar, courseIds] of Object.entries(byPillar)) {
     const mod = (settings.moduleSettings || []).find(m => m.pillar === pillar);
     if (mod && mod.enabled === false) continue;
-    const title = `${slugToLabel(pillar)} — Module Mastery`;
+    const title = `${slugToLabel(pillar)} - Module Mastery`;
     let track = await ModuleTrack.findOne({ pillar, ...(orgId ? { org: orgId } : { org: null }) });
     const rules = { minCoursesToComplete: mod?.minCoursesToComplete ?? null,
       gradeBands: [{ label: "Pass", min: 70 }, { label: "Merit", min: 80 }, { label: "Mastery", min: 90 }] };

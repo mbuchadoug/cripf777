@@ -1,0 +1,94 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{{learner.name}} · Learner</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--navy:#12203f;--forest:#0b3a2a;--gold:#c9a765;--ink:#16241d;--mut:#66756c;--line:#e7ebe6;--bg:#f4f7f3;--ok:#1f9d6b}
+*{box-sizing:border-box;margin:0}body{font-family:Archivo,system-ui,sans-serif;color:var(--ink);background:var(--bg)}
+a{color:inherit}
+.nav{background:var(--navy);color:#fff;padding:14px clamp(16px,4vw,24px);display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px}
+.nav a{color:#dbe4f5;text-decoration:none;font-weight:600;font-size:13.5px}
+.wrap{max-width:1000px;margin:0 auto;padding:clamp(18px,4vw,26px) clamp(16px,4vw,24px)}
+h1{font-family:Fraunces,serif;font-size:25px;font-weight:600}
+.who{color:var(--mut);margin-bottom:16px}
+.top{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+@media(max-width:760px){.top{grid-template-columns:1fr}}
+.card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:18px}
+.card h2{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);margin-bottom:12px}
+.mapwrap{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+.mapwrap svg{width:min(240px,70vw);height:auto}
+.plist{flex:1;min-width:170px;display:flex;flex-direction:column;gap:6px;font-size:12.5px}
+.pr{display:flex;gap:8px;align-items:center}.pr .nm{width:110px;font-weight:600}.pr .track{flex:1;height:6px;background:#eef2ee;border-radius:5px;overflow:hidden}.pr .track span{display:block;height:100%;background:linear-gradient(90deg,#1f9d6b,#3fbf87)}.pr .vv{width:28px;text-align:right;font-weight:700}
+.stat{display:inline-block;margin-right:18px}.stat .v{font-family:Fraunces,serif;font-size:24px;font-weight:600}.stat .k{font-size:11px;color:var(--mut);text-transform:uppercase}
+.tablewrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;min-width:640px}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);font-size:13px;white-space:nowrap}
+th{font-size:11px;text-transform:uppercase;color:var(--mut)}
+.pill{font-size:11px;font-weight:700;padding:2px 9px;border-radius:20px}
+.pill.active{background:#e7f6ee;color:#1f7a4d}.pill.completed{background:#e7eefb;color:#2456b8}.pill.pending{background:#fbf1dc;color:#9a6b12}.pill.suspended{background:#fdeaea;color:#a13}
+.btn{background:var(--navy);color:#fff;border:0;font:inherit;font-weight:600;font-size:12.5px;padding:7px 12px;border-radius:8px;cursor:pointer;text-decoration:none;display:inline-block}
+.btn.g{background:#fff;color:var(--navy);border:1px solid var(--line)}.btn.d{color:#a13}
+form.inl{display:inline;margin:0}
+.assign{display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin-top:8px}
+select,input{padding:9px 11px;border:1px solid var(--line);border-radius:9px;font:inherit}
+label{display:block;font-size:12px;font-weight:700;color:var(--mut);margin-bottom:4px}
+.sect{font-family:Fraunces,serif;font-size:18px;font-weight:600;margin:20px 0 10px}
+</style></head><body>
+<div class="nav"><a href="/admin/learners">← Learners</a><a href="/admin/enrollments">Enrollments</a></div>
+<div class="wrap">
+  <h1>{{learner.name}}</h1>
+  <div class="who">{{learner.email}} · {{learner.role}}</div>
+
+  <div class="top">
+    <div class="card"><h2>Knowledge map</h2>
+      <div class="mapwrap">
+        <svg viewBox="0 0 {{map.radar.size}} {{map.radar.size}}" xmlns="http://www.w3.org/2000/svg">
+          {{#each map.radar.rings}}<polygon points="{{this}}" fill="none" stroke="#e7ebe6"/>{{/each}}
+          {{#each map.radar.axes}}<line x1="{{../map.radar.cx}}" y1="{{../map.radar.cy}}" x2="{{this.x2}}" y2="{{this.y2}}" stroke="#e7ebe6"/>{{/each}}
+          <polygon points="{{map.radar.valuePoints}}" fill="rgba(201,167,101,.28)" stroke="#c9a765" stroke-width="2"/>
+          {{#each map.radar.axes}}<text x="{{this.lx}}" y="{{this.ly}}" text-anchor="{{this.anchor}}" font-family="Archivo" font-size="8" font-weight="600" fill="#66756c" dominant-baseline="middle">{{this.label}}</text>{{/each}}
+        </svg>
+        <div class="plist">
+          {{#each map.pillars}}<div class="pr"><span class="nm">{{this.label}}</span><span class="track"><span style="width:{{this.value}}%"></span></span><span class="vv">{{this.value}}</span></div>{{/each}}
+        </div>
+      </div>
+    </div>
+    <div class="card"><h2>At a glance</h2>
+      <div><span class="stat"><span class="v">{{map.overall}}%</span><span class="k">Overall</span></span>
+      <span class="stat"><span class="v">{{map.counts.enrolled}}</span><span class="k">Enrolled</span></span>
+      <span class="stat"><span class="v">{{map.counts.completed}}</span><span class="k">Completed</span></span></div>
+      <div class="sect" style="font-size:15px;margin:16px 0 8px">Assign</div>
+      <form class="assign" method="POST" action="/admin/learners/{{learner.id}}/assign">
+        <div><label>Add a course</label><select name="courseId">{{#each allCourses}}<option value="{{this.id}}">{{this.title}}</option>{{/each}}</select></div>
+        <button class="btn" type="submit">Assign course</button>
+      </form>
+      <form class="assign" method="POST" action="/admin/learners/{{learner.id}}/module-assign">
+        <div><label>Assign a whole module</label><select name="pillar">{{#each pillars}}<option value="{{this.slug}}">{{this.label}}</option>{{/each}}</select></div>
+        <button class="btn" type="submit">Assign module</button>
+      </form>
+      <form class="assign" method="POST" action="/admin/learners/{{learner.id}}/module-unassign" onsubmit="return confirm('Remove all of this module\'s courses from this learner?')">
+        <div><label>Reverse a module</label><select name="pillar">{{#each pillars}}<option value="{{this.slug}}">{{this.label}}</option>{{/each}}</select></div>
+        <button class="btn d g" type="submit">Un-assign module</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="sect">Enrollments</div>
+  <div class="card tablewrap">
+    <table>
+      <tr><th>Course</th><th>Module</th><th>Status</th><th>Progress</th><th>Source</th><th>Actions</th></tr>
+      {{#each enrollments}}
+      <tr>
+        <td><b>{{this.course}}</b></td><td>{{this.pillar}}</td>
+        <td><span class="pill {{this.status}}">{{this.status}}</span></td>
+        <td>{{this.overall}}%{{#if this.classification}} · {{this.classification}}{{/if}}</td>
+        <td>{{this.source}}</td>
+        <td>
+          {{#unless (eq this.status "active")}}<form class="inl" method="POST" action="/admin/enrollments/{{this.id}}/activate"><input type="hidden" name="back" value="/admin/learners/{{../learner.id}}"><button class="btn g">Activate</button></form>{{/unless}}
+          {{#unless (eq this.status "suspended")}}<form class="inl" method="POST" action="/admin/enrollments/{{this.id}}/suspend"><input type="hidden" name="back" value="/admin/learners/{{../learner.id}}"><button class="btn g">Suspend</button></form>{{/unless}}
+          <form class="inl" method="POST" action="/admin/enrollments/{{this.id}}/remove" onsubmit="return confirm('Remove this course from the learner?')"><input type="hidden" name="back" value="/admin/learners/{{../learner.id}}"><button class="btn g d">Remove</button></form>
+        </td>
+      </tr>
+      {{else}}<tr><td colspan="6" style="color:var(--mut)">No enrollments yet.</td></tr>{{/each}}
+    </table>
+  </div>
+</div></body></html>

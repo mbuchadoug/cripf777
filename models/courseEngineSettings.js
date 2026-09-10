@@ -29,6 +29,14 @@ const CourseEngineSettingsSchema = new mongoose.Schema({
   defaultPrice: { type: Number, default: 0 },
   autoPublish: { type: Boolean, default: true },
 
+  // Which payment rails are offered on paid courses, and the default shown first
+  payments: {
+    ecocash: { type: Boolean, default: true },
+    stripe: { type: Boolean, default: true },
+    defaultMethod: { type: String, enum: ["ecocash", "stripe"], default: "ecocash" },
+    currency: { type: String, default: "USD" }
+  },
+
   // Per-module overrides (seeded with the 8 pillars)
   moduleSettings: { type: [ModuleSettingSchema], default: [] }
 }, { timestamps: true });

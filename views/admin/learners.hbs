@@ -1,0 +1,35 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Learners · Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--navy:#12203f;--ink:#16241d;--mut:#66756c;--line:#e7ebe6;--bg:#f4f7f3}
+*{box-sizing:border-box;margin:0}body{font-family:Archivo,system-ui,sans-serif;color:var(--ink);background:var(--bg)}
+a{color:inherit}
+.nav{background:var(--navy);color:#fff;padding:14px clamp(16px,4vw,24px);display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px}
+.nav a{color:#dbe4f5;text-decoration:none;font-weight:600;font-size:13.5px;margin-left:14px}
+.wrap{max-width:1000px;margin:0 auto;padding:clamp(18px,4vw,28px) clamp(16px,4vw,24px)}
+h1{font-family:Fraunces,serif;font-size:26px;font-weight:600;margin-bottom:14px}
+.search{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap}
+.search input{flex:1;min-width:200px;padding:11px 13px;border:1px solid var(--line);border-radius:10px;font:inherit}
+.btn{background:var(--navy);color:#fff;border:0;font:inherit;font-weight:600;font-size:14px;padding:11px 18px;border-radius:10px;cursor:pointer;text-decoration:none;display:inline-block}
+.btn.g{background:#fff;color:var(--navy);border:1px solid var(--line);padding:7px 14px;font-size:13px}
+.tablewrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--line);border-radius:12px;overflow:hidden;min-width:620px}
+th,td{text-align:left;padding:12px 14px;border-bottom:1px solid var(--line);font-size:13.5px}
+th{background:#f0f2f6;font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--mut)}
+</style></head><body>
+<div class="nav"><b>CRIPFCnt · Learners</b><div><a href="/admin/course-engine">Engine</a><a href="/admin/courses">Courses</a><a href="/admin/enrollments">Enrollments</a></div></div>
+<div class="wrap"><h1>Learner progress</h1>
+<form class="search" method="GET" action="/admin/learners">
+  <input name="q" value="{{q}}" placeholder="Search by name or email…"><button class="btn" type="submit">Search</button>
+</form>
+<div class="tablewrap"><table>
+  <tr><th>Learner</th><th>Role</th><th>Enrolled</th><th>Completed</th><th></th></tr>
+  {{#each rows}}
+  <tr>
+    <td><b>{{this.name}}</b><br><span style="color:var(--mut);font-size:12px">{{this.email}}</span></td>
+    <td>{{this.role}}</td><td>{{this.enrolled}}</td><td>{{this.completed}}</td>
+    <td><a class="btn g" href="/admin/learners/{{this.id}}">View progress →</a></td>
+  </tr>
+  {{else}}<tr><td colspan="5" style="color:var(--mut)">No learners found{{#if q}} for “{{q}}”{{/if}}.</td></tr>{{/each}}
+</table></div></div></body></html>

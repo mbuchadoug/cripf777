@@ -36,11 +36,11 @@ form.inl{display:inline-flex;gap:5px;align-items:center;margin:0}
 form.inl input{width:64px;padding:6px 8px}
 .count{font-family:Fraunces,serif;font-weight:600}
 </style></head><body>
-<div class="nav"><b>CRIPFCnt · Course Engine</b><div><a href="/admin/courses">Courses</a><a href="/admin/enrollments">Enrollments</a><a href="/admin/module-tracks">Capstones</a><a href="/admin/course-engine" class="on">Engine</a></div></div>
+<div class="nav"><b>CRIPFCnt · Course Engine</b><div><a href="/admin/courses">Courses</a><a href="/admin/enrollments">Enrollments</a><a href="/admin/module-tracks">Capstones</a><a href="/admin/course-engine" class="on">Engine</a><a href="/admin/learners">Learners</a></div></div>
 <div class="wrap">
   <h1>Course Engine control center</h1>
-  <div class="lead">The engine reads your assessment bank, turns each professional area into a course, files it under its module (one of the 8 CRIPFCnt pillars), and auto-selects default quizzes. Set the defaults here — the system fills the rest, and you override only where you want.</div>
-  {{#if synced}}<div class="flash">✅ Sync complete — {{synced}}.</div>{{/if}}
+  <div class="lead">The engine reads your assessment bank, turns each professional area into a course, files it under its module (one of the 8 CRIPFCnt pillars), and auto-selects default quizzes. Set the defaults here - the system fills the rest, and you override only where you want.</div>
+  {{#if synced}}<div class="flash">✅ Sync complete - {{synced}}.</div>{{/if}}
 
   {{!-- SETTINGS + PER-MODULE --}}
   <form method="POST" action="/admin/course-engine/settings">
@@ -69,6 +69,16 @@ form.inl input{width:64px;padding:6px 8px}
   </div>
 
   <div class="panel">
+    <h2>Payment methods</h2>
+    <div class="grid">
+      <div><label>EcoCash</label><select name="pay_ecocash"><option value="on" {{#if settings.payments.ecocash}}selected{{/if}}>Enabled</option><option value="false" {{#unless settings.payments.ecocash}}selected{{/unless}}>Off</option></select></div>
+      <div><label>Card (Stripe)</label><select name="pay_stripe"><option value="on" {{#if settings.payments.stripe}}selected{{/if}}>Enabled</option><option value="false" {{#unless settings.payments.stripe}}selected{{/unless}}>Off</option></select></div>
+      <div><label>Default method</label><select name="pay_default"><option value="ecocash" {{#if (eq settings.payments.defaultMethod "ecocash")}}selected{{/if}}>EcoCash</option><option value="stripe" {{#if (eq settings.payments.defaultMethod "stripe")}}selected{{/if}}>Card</option></select></div>
+      <div><label>Currency</label><input name="pay_currency" value="{{settings.payments.currency}}" placeholder="USD"></div>
+    </div>
+  </div>
+
+  <div class="panel">
     <h2>Per-module overrides (the 8 CRIPFCnt modules)</h2>
     <div class="mrow"><div class="mini">MODULE</div><div class="mini">QUIZZES / COURSE</div><div class="mini">MIN COURSES (capstone)</div><div class="mini">ENABLED</div></div>
     {{#each modules}}
@@ -86,7 +96,7 @@ form.inl input{width:64px;padding:6px 8px}
   {{!-- SYNC --}}
   <div class="panel">
     <h2>Build / re-sync the catalog</h2>
-    <p style="font-size:14px;color:var(--mut);margin-bottom:12px">Generates a course for every mapped area and rebuilds the 8 module capstones. Safe to run repeatedly — hand-locked courses are left untouched unless you force a resync.</p>
+    <p style="font-size:14px;color:var(--mut);margin-bottom:12px">Generates a course for every mapped area and rebuilds the 8 module capstones. Safe to run repeatedly - hand-locked courses are left untouched unless you force a resync.</p>
     <form method="POST" action="/admin/course-engine/sync" style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
       <button class="btn forest" type="submit">⚙️ Build / Re-sync from question bank</button>
       <label style="margin:0;font-size:13px"><input type="checkbox" name="force" style="width:auto"> Force (overwrite locked courses)</label>
@@ -121,7 +131,7 @@ form.inl input{width:64px;padding:6px 8px}
             <a class="btn g" href="/admin/courses/{{this.id}}/edit">Edit</a>
           </td>
         </tr>
-        {{else}}<tr><td colspan="6" class="mini">No courses yet — run a sync.</td></tr>{{/each}}
+        {{else}}<tr><td colspan="6" class="mini">No courses yet - run a sync.</td></tr>{{/each}}
       </table>
     </div>
   </details>

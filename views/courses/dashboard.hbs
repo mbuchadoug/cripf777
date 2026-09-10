@@ -1,0 +1,120 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>My Dashboard · CRIPFCnt Academy</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--forest:#0b3a2a;--forest2:#0f4a35;--gold:#c9a765;--ink:#16241d;--mut:#66756c;--line:#e7ebe6;--bg:#f4f7f3;--card:#fff;--ok:#1f9d6b}
+*{box-sizing:border-box;margin:0}body{font-family:Archivo,system-ui,sans-serif;color:var(--ink);background:var(--bg);line-height:1.5}
+a{color:inherit}
+.nav{position:sticky;top:0;z-index:20;background:rgba(11,58,42,.98);color:#eafff4;padding:14px clamp(16px,4vw,28px);display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px}
+.nav .brand{font-family:Fraunces,serif;font-weight:600;font-size:19px}
+.nav .links a{color:#cfe9dc;text-decoration:none;font-size:13.5px;font-weight:600;margin-left:14px}
+.wrap{max-width:1060px;margin:0 auto;padding:clamp(20px,4vw,32px) clamp(16px,4vw,26px)}
+.hello{font-family:Fraunces,serif;font-size:clamp(24px,4.5vw,34px);font-weight:600;margin-bottom:4px}
+.sub{color:var(--mut);margin-bottom:22px}
+.top{display:grid;grid-template-columns:1.3fr 1fr;gap:16px;margin-bottom:16px}
+@media(max-width:760px){.top{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:clamp(16px,3vw,22px)}
+.card h2{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);margin-bottom:14px}
+.mapwrap{display:flex;gap:18px;align-items:center;flex-wrap:wrap}
+.mapwrap svg{flex:0 0 auto;width:min(280px,72vw);height:auto}
+.plist{flex:1;min-width:200px;display:flex;flex-direction:column;gap:7px}
+.pr{display:flex;align-items:center;gap:10px;font-size:13px}
+.pr .nm{width:120px;color:var(--ink);font-weight:600}
+.pr .track{flex:1;height:7px;background:#eef2ee;border-radius:6px;overflow:hidden}
+.pr .track span{display:block;height:100%;background:linear-gradient(90deg,#1f9d6b,#3fbf87)}
+.pr .vv{width:34px;text-align:right;font-weight:700;color:var(--forest)}
+.pr .dot{width:8px;height:8px;border-radius:50%;background:#cfd8d1}
+.pr .dot.m{background:var(--gold)}.pr .dot.p{background:var(--ok)}
+.ring{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;height:100%}
+.ring .big{font-family:Fraunces,serif;font-size:46px;font-weight:600;line-height:1}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:14px;width:100%}
+.stat{background:#f7faf7;border:1px solid var(--line);border-radius:12px;padding:12px;text-align:center}
+.stat .v{font-family:Fraunces,serif;font-size:22px;font-weight:600}.stat .k{font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+.chip{font-size:12px;font-weight:700;padding:5px 11px;border-radius:20px}
+.chip.s{background:#e7f6ee;color:#1f7a4d}.chip.g{background:#fbf1dc;color:#9a6b12}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,260px),1fr));gap:14px;margin-top:8px}
+.pc{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:8px}
+.pc .area{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold);font-weight:700}
+.pc .t{font-family:Fraunces,serif;font-size:18px;font-weight:600}
+.bar{height:7px;background:#eef2ee;border-radius:6px;overflow:hidden}.bar span{display:block;height:100%;background:linear-gradient(90deg,#1f9d6b,#3fbf87)}
+.go{background:var(--forest);color:#fff;text-decoration:none;font-size:13px;font-weight:600;padding:8px 15px;border-radius:9px;align-self:flex-start}
+.reco{background:linear-gradient(135deg,var(--forest),#072519);color:#eafff4;border-radius:18px;padding:20px;margin-top:16px;display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap}
+.reco .l .k{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold);font-weight:700}
+.reco .l .t{font-family:Fraunces,serif;font-size:21px;font-weight:600}
+.reco a{background:var(--gold);color:#3a2c07;text-decoration:none;font-weight:700;padding:11px 18px;border-radius:10px;font-size:14px}
+.sect{font-family:Fraunces,serif;font-size:19px;font-weight:600;margin:22px 0 10px}
+.empty{color:var(--mut)}
+</style></head><body>
+<div class="nav">
+  <div class="brand">CRIPFCnt Academy</div>
+  <div class="links"><a href="/courses">Courses</a><a href="/modules">Modules</a><a href="/me/learning">My Learning</a><a href="/me/credentials">Certificates</a><a href="/auth/logout">Sign out</a></div>
+</div>
+<div class="wrap">
+  <div class="hello">Welcome back, {{name}}.</div>
+  <div class="sub">Your knowledge map across the 8 CRIPFCnt modules.</div>
+
+  <div class="top">
+    <div class="card">
+      <h2>Knowledge map</h2>
+      <div class="mapwrap">
+        <svg viewBox="0 0 {{map.radar.size}} {{map.radar.size}}" xmlns="http://www.w3.org/2000/svg">
+          {{#each map.radar.rings}}<polygon points="{{this}}" fill="none" stroke="#e7ebe6" stroke-width="1"/>{{/each}}
+          {{#each map.radar.axes}}<line x1="{{../map.radar.cx}}" y1="{{../map.radar.cy}}" x2="{{this.x2}}" y2="{{this.y2}}" stroke="#e7ebe6" stroke-width="1"/>{{/each}}
+          <polygon points="{{map.radar.valuePoints}}" fill="rgba(201,167,101,.28)" stroke="#c9a765" stroke-width="2"/>
+          {{#each map.radar.axes}}<text x="{{this.lx}}" y="{{this.ly}}" text-anchor="{{this.anchor}}" font-family="Archivo" font-size="8.5" font-weight="600" fill="#66756c" dominant-baseline="middle">{{this.label}}</text>{{/each}}
+        </svg>
+        <div class="plist">
+          {{#each map.pillars}}
+          <div class="pr"><span class="dot {{#if (eq this.status "mastered")}}m{{else if (eq this.status "in_progress")}}p{{/if}}"></span>
+            <span class="nm">{{this.label}}</span><span class="track"><span style="width:{{this.value}}%"></span></span><span class="vv">{{this.value}}</span></div>
+          {{/each}}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Overall mastery</h2>
+      <div class="ring">
+        <svg width="130" height="130" viewBox="0 0 130 130">
+          <circle cx="65" cy="65" r="54" fill="none" stroke="#eef2ee" stroke-width="12"/>
+          <circle cx="65" cy="65" r="54" fill="none" stroke="#c9a765" stroke-width="12" stroke-linecap="round"
+            stroke-dasharray="339.3" stroke-dashoffset="{{map.radarDash}}" transform="rotate(-90 65 65)"
+            style="stroke-dashoffset:calc(339.3 - (339.3 * {{map.overall}} / 100))"/>
+          <text x="65" y="72" text-anchor="middle" font-family="Fraunces" font-size="30" font-weight="600" fill="#0b3a2a">{{map.overall}}%</text>
+        </svg>
+        <div class="stats">
+          <div class="stat"><div class="v">{{map.counts.enrolled}}</div><div class="k">Enrolled</div></div>
+          <div class="stat"><div class="v">{{map.counts.completed}}</div><div class="k">Completed</div></div>
+          <div class="stat"><div class="v">{{map.counts.completed}}</div><div class="k">Certs</div></div>
+        </div>
+        <div class="chips">
+          {{#each map.strengths}}<span class="chip s">▲ {{this}}</span>{{/each}}
+          {{#each map.gaps}}<span class="chip g">△ {{this}}</span>{{/each}}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {{#if map.recommendation}}
+  <div class="reco">
+    <div class="l"><div class="k">Recommended next · {{map.recommendation.reason}}</div><div class="t">{{map.recommendation.title}}</div></div>
+    <a href="/courses/{{map.recommendation.slug}}">Continue →</a>
+  </div>
+  {{/if}}
+
+  <div class="sect">Continue learning</div>
+  <div class="grid">
+    {{#each inProgress}}
+    <div class="pc">
+      <div class="area">{{this.area}}</div>
+      <div class="t">{{this.title}}</div>
+      <div class="bar"><span style="width:{{this.overall}}%"></span></div>
+      <div style="font-size:12px;color:var(--mut)">{{this.passed}}/{{this.total}} assessments · {{this.overall}}%</div>
+      <a class="go" href="/courses/{{this.slug}}">Resume →</a>
+    </div>
+    {{else}}
+    <p class="empty">Nothing in progress. <a href="/courses" style="color:var(--forest);font-weight:600">Browse courses →</a></p>
+    {{/each}}
+  </div>
+</div></body></html>

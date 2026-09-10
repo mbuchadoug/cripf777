@@ -7,7 +7,7 @@
 // issues the Certificate of Competence.
 //
 // This model sits ON TOP of your existing Question/Attempt data. It never
-// changes how a single quiz is taken — it only defines which quizzes form a
+// changes how a single quiz is taken - it only defines which quizzes form a
 // course and what standard passes it.
 //
 // Legacy note: this is standalone. It does NOT use the old Quiz/Lesson models.

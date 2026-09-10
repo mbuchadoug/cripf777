@@ -1,4 +1,4 @@
-// routes/courseEngine.js — full course engine: enrollment, signup, payments, progress, admin
+// routes/courseEngine.js - full course engine: enrollment, signup, payments, progress, admin
 import { Router } from "express";
 import mongoose from "mongoose";
 import { ensureAuth } from "../middleware/authGuard.js";
@@ -17,6 +17,7 @@ import { recomputeCourseProgress } from "../services/courseGrading.js";
 import { PILLAR_CATEGORIES, ALL_PILLARS, slugToLabel, pillarOf } from "../services/courseTaxonomy.js";
 import { enroll, enrollmentIntent, computeStages, canAccessCourse, activateEnrollment, suspendEnrollment } from "../services/enrollmentService.js";
 import { initCourseEcocash, pollCourseEcocash, createCourseCheckout } from "../services/coursePayments.js";
+import { getKnowledgeMap } from "../services/knowledgeMap.js";
 import CourseEngineSettings from "../models/courseEngineSettings.js";
 import { syncCoursesFromAssessments, refillCourse, getSettings } from "../services/courseProvisioning.js";
 
@@ -44,7 +45,7 @@ router.post("/learn/signup", async (req, res) => {
     if (!em || !password || String(password).length < 6)
       return res.render("courses/signup", { layout: false, next: next || "/courses", error: "Enter an email and a password of at least 6 characters." });
     if (await User.findOne({ email: emailRe(em) }))
-      return res.render("courses/signup", { layout: false, next: next || "/courses", error: "An account with that email already exists — please sign in." });
+      return res.render("courses/signup", { layout: false, next: next || "/courses", error: "An account with that email already exists - please sign in." });
     const isStudent = role === "student";
     const primaryRole = isStudent ? "student" : "parent"; // "professional" is a mobile persona, not a primary-role enum value
     const persona = isStudent ? "student" : "professional";
@@ -128,9 +129,12 @@ router.get("/courses/:slug", async (req, res) => {
     const access = authed ? await canAccessCourse({ user: req.user, courseId: course._id }) : { ok: false, reason: "auth" };
     if (!access.ok) {
       const intent = enrollmentIntent(course, access.enrollment);
+      const st = await getSettings(course.org || null).catch(() => null);
+      const pay = st?.payments || { ecocash: true, stripe: true, defaultMethod: "ecocash" };
       return res.render("courses/detail", { ...base, mode: "locked",
         signupUrl: `/learn/signup?next=${encodeURIComponent("/courses/" + course.slug)}`,
         googleUrl: `/auth/google?returnTo=${encodeURIComponent("/courses/" + course.slug)}`,
+        pay, ecoDefault: pay.defaultMethod === "ecocash",
         intent, pending: access.enrollment?.status === "pending" ? access.enrollment : null, reason: access.reason });
     }
 
@@ -198,6 +202,38 @@ router.get("/courses/:slug/certificate", ensureAuth, async (req, res) => {
   return res.redirect(cert.pdfUrl);
 });
 
+// ── LEARNER DASHBOARD (/me) - knowledge map + at-a-glance ────────────────────
+router.get("/me", ensureAuth, async (req, res) => {
+  try {
+    const map = await getKnowledgeMap(req.user._id);
+    // in-progress + recent for the dashboard body
+    const enrs = await Enrollment.find({ user: req.user._id, status: { $in: ["active", "completed"] } }).lean();
+    const courseIds = enrs.map(e => e.course);
+    const [courses, progresses] = await Promise.all([
+      Course.find({ _id: { $in: courseIds } }).select("_id title slug professionalArea areaLabel level pillar units").lean(),
+      CourseProgress.find({ user: req.user._id, course: { $in: courseIds } }).lean()
+    ]);
+    const cById = {}; for (const c of courses) cById[String(c._id)] = c;
+    const pById = {}; for (const p of progresses) pById[String(p.course)] = p;
+    const inProgress = enrs
+      .filter(e => (pById[String(e.course)]?.status !== "completed"))
+      .map(e => {
+        const c = cById[String(e.course)]; if (!c) return null;
+        const p = pById[String(e.course)];
+        const total = (c.units || []).reduce((n, u) => n + (u.quizIds || []).length, 0);
+        return { slug: c.slug, title: c.title, area: c.areaLabel || slugToLabel(c.professionalArea),
+          overall: p?.overallPercentage || 0, passed: p?.passedCount || 0, total };
+      }).filter(Boolean)
+      .sort((a, b) => b.overall - a.overall).slice(0, 4);
+
+    res.render("courses/dashboard", {
+      layout: false, user: req.user,
+      name: req.user.displayName || req.user.firstName || (req.user.email || "").split("@")[0],
+      map, inProgress
+    });
+  } catch (e) { console.error("[me dashboard]", e); res.status(500).send("Error"); }
+});
+
 // ── MY LEARNING + CREDENTIALS ────────────────────────────────────────────────
 router.get("/me/learning", ensureAuth, async (req, res) => {
   try {
@@ -234,7 +270,7 @@ router.get("/me/credentials", ensureAuth, async (req, res) => {
 router.get("/verify/course/:code", async (req, res) => {
   const c = await CourseCertificate.findOne({ verifyCode: String(req.params.code || "").toUpperCase() }).lean();
   if (!c) return res.status(404).send("Credential not found or invalid.");
-  res.send(`<pre>VALID CREDENTIAL — Certificate of Competence
+  res.send(`<pre>VALID CREDENTIAL - Certificate of Competence
 Recipient : ${c.recipientName}
 Course    : ${c.courseTitle}
 Area      : ${c.moduleName}
@@ -245,7 +281,7 @@ Issued    : ${new Date(c.issuedAt).toDateString()}</pre>`);
 router.get("/verify/module/:code", async (req, res) => {
   const c = await ModuleCertificate.findOne({ verifyCode: String(req.params.code || "").toUpperCase() }).lean();
   if (!c) return res.status(404).send("Credential not found or invalid.");
-  res.send(`<pre>VALID CREDENTIAL — Certificate of Mastery
+  res.send(`<pre>VALID CREDENTIAL - Certificate of Mastery
 Recipient : ${c.recipientName}
 Module    : ${c.moduleName}
 Grade     : ${c.classification} (${c.overallPercentage}%)
@@ -264,7 +300,7 @@ router.post("/courses/module/:pillar/enroll", ensureAuth, async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// ADMIN — Course Engine control center (auto-provisioning)
+// ADMIN - Course Engine control center (auto-provisioning)
 // ════════════════════════════════════════════════════════════════════════════
 router.get("/admin/course-engine", ensureAuth, ensureAdminEmails, async (req, res) => {
   const orgId = req.user?.organization || null;
@@ -286,7 +322,7 @@ router.get("/admin/course-engine", ensureAuth, ensureAdminEmails, async (req, re
     return { pillar: p, label: slugToLabel(p), quizzesPerCourse: ms.quizzesPerCourse ?? "", minCoursesToComplete: ms.minCoursesToComplete ?? "", enabled: ms.enabled !== false, courses: byPillar[p] || [] };
   });
   res.render("admin/course_engine", { layout: false, user: req.user,
-    settings: { defaultQuizzesPerCourse: settings.defaultQuizzesPerCourse, selectionStrategy: settings.selectionStrategy, defaultLevel: settings.defaultLevel, defaultAccessType: settings.defaultAccessType, defaultPrice: settings.defaultPrice, autoPublish: settings.autoPublish },
+    settings: { defaultQuizzesPerCourse: settings.defaultQuizzesPerCourse, selectionStrategy: settings.selectionStrategy, defaultLevel: settings.defaultLevel, defaultAccessType: settings.defaultAccessType, defaultPrice: settings.defaultPrice, autoPublish: settings.autoPublish, payments: settings.payments || { ecocash: true, stripe: true, defaultMethod: "ecocash", currency: "USD" } },
     modules, synced: req.query.synced || null, courseCount: courses.length });
 });
 router.post("/admin/course-engine/settings", ensureAuth, ensureAdminEmails, async (req, res) => {
@@ -299,6 +335,12 @@ router.post("/admin/course-engine/settings", ensureAuth, ensureAdminEmails, asyn
     settings.defaultAccessType = ["free", "paid", "invite"].includes(b.defaultAccessType) ? b.defaultAccessType : "free";
     settings.defaultPrice = Number(b.defaultPrice) || 0;
     settings.autoPublish = b.autoPublish === "on" || b.autoPublish === "true";
+    settings.payments = {
+      ecocash: b.pay_ecocash === "on" || b.pay_ecocash === "true",
+      stripe: b.pay_stripe === "on" || b.pay_stripe === "true",
+      defaultMethod: ["ecocash", "stripe"].includes(b.pay_default) ? b.pay_default : "ecocash",
+      currency: b.pay_currency || "USD"
+    };
     const pillars = [].concat(b.m_pillar || []); const qpc = [].concat(b.m_quizzesPerCourse || []); const minc = [].concat(b.m_minCourses || []);
     const enabled = new Set([].concat(b.m_enabled || []));
     settings.moduleSettings = pillars.map((p, i) => ({ pillar: p, quizzesPerCourse: qpc[i] === "" || qpc[i] == null ? null : Number(qpc[i]), minCoursesToComplete: minc[i] === "" || minc[i] == null ? null : Number(minc[i]), enabled: enabled.has(p) }));
@@ -355,7 +397,7 @@ async function renderBuilder(req, res, course) {
   const bySeries = {};
   for (const p of passages) { const key = p.series || "general";
     (bySeries[key] = bySeries[key] || { seriesSlug: key, seriesLabel: slugToLabel(key), quizzes: [] });
-    bySeries[key].quizzes.push({ id: String(p._id), title: p.quizTitle || p.text || "Assessment", band: p.meta?.difficultyBand || "—", qCount: (p.questionIds || []).length, checked: selected.has(String(p._id)) }); }
+    bySeries[key].quizzes.push({ id: String(p._id), title: p.quizTitle || p.text || "Assessment", band: p.meta?.difficultyBand || "-", qCount: (p.questionIds || []).length, checked: selected.has(String(p._id)) }); }
   res.render("admin/course_form", { layout: false, user: req.user, isEdit: !!course, area, areaLabel: slugToLabel(area),
     areas: Object.values(PILLAR_CATEGORIES).flat().sort().map(c => ({ slug: c, label: slugToLabel(c) })), series: Object.values(bySeries),
     course: course ? { id: String(course._id), title: course.title, slug: course.slug, description: course.description, level: course.level, rules: course.rules, weighting: course.weighting, accessType: course.accessType, price: course.price, currency: course.currency, enrollmentOpen: course.enrollmentOpen }
@@ -407,7 +449,7 @@ router.get("/admin/enrollments", ensureAuth, ensureAdminEmails, async (req, res)
   const courses = await Course.find({}).select("_id title").lean();
   res.render("admin/enrollments", { layout: false, user: req.user, courses: courses.map(c => ({ id: String(c._id), title: c.title })),
     filterStatus: req.query.status || "", filterCourse: req.query.course || "",
-    rows: enrs.map(e => ({ id: String(e._id), who: e.user?.displayName || e.user?.email || "—", email: e.user?.email || "", course: e.course?.title || "—",
+    rows: enrs.map(e => ({ id: String(e._id), who: e.user?.displayName || e.user?.email || "-", email: e.user?.email || "", course: e.course?.title || "-",
       status: e.status, access: e.access, source: e.source, pay: e.payment?.status || "none", ref: e.payment?.reference || "", when: new Date(e.updatedAt).toLocaleDateString() })) });
 });
 router.post("/admin/enrollments/manual", ensureAuth, ensureAdminEmails, async (req, res) => {
@@ -427,7 +469,87 @@ router.post("/admin/enrollments/:id/activate", ensureAuth, ensureAdminEmails, as
   await activateEnrollment({ enrollmentId: req.params.id, adminId: req.user._id, provider: "manual" }); res.redirect("/admin/enrollments");
 });
 router.post("/admin/enrollments/:id/suspend", ensureAuth, ensureAdminEmails, async (req, res) => {
-  await suspendEnrollment({ enrollmentId: req.params.id, adminId: req.user._id }); res.redirect("/admin/enrollments");
+  await suspendEnrollment({ enrollmentId: req.params.id, adminId: req.user._id }); res.redirect(req.body.back || "/admin/enrollments");
+});
+// Reverse a course assignment entirely (remove access)
+router.post("/admin/enrollments/:id/remove", ensureAuth, ensureAdminEmails, async (req, res) => {
+  await Enrollment.deleteOne({ _id: req.params.id }); res.redirect(req.body.back || "/admin/enrollments");
+});
+
+// ── ADMIN: learner tracker (progress + knowledge map + assign/reverse) ───────
+router.get("/admin/learners", ensureAuth, ensureAdminEmails, async (req, res) => {
+  const q = String(req.query.q || "").trim();
+  const filter = q ? { $or: [{ email: emailRe(q) }, { displayName: new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i") }] } : {};
+  const users = await User.find(filter).select("_id displayName email role").sort({ createdAt: -1 }).limit(200).lean();
+  const ids = users.map(u => u._id);
+  const agg = await Enrollment.aggregate([
+    { $match: { user: { $in: ids } } },
+    { $group: { _id: "$user", enrolled: { $sum: 1 }, completed: { $sum: { $cond: [{ $eq: ["$status", "completed"] }, 1, 0] } } } }
+  ]);
+  const byUser = {}; for (const a of agg) byUser[String(a._id)] = a;
+  res.render("admin/learners", {
+    layout: false, user: req.user, q,
+    rows: users.map(u => ({ id: String(u._id), name: u.displayName || "-", email: u.email || "", role: u.role,
+      enrolled: byUser[String(u._id)]?.enrolled || 0, completed: byUser[String(u._id)]?.completed || 0 }))
+  });
+});
+router.get("/admin/learners/:id", ensureAuth, ensureAdminEmails, async (req, res) => {
+  try {
+    const learner = await User.findById(req.params.id).select("_id displayName email role mobileRoles").lean();
+    if (!learner) return res.status(404).send("Learner not found");
+    const map = await getKnowledgeMap(learner._id);
+    const enrs = await Enrollment.find({ user: learner._id }).populate("course", "title slug pillar professionalArea").sort({ updatedAt: -1 }).lean();
+    const progresses = await CourseProgress.find({ user: learner._id }).lean();
+    const pByCourse = {}; for (const p of progresses) pByCourse[String(p.course)] = p;
+    const enrollments = enrs.map(e => {
+      const pr = e.course ? pByCourse[String(e.course._id)] : null;
+      return { id: String(e._id), course: e.course?.title || "-", slug: e.course?.slug || "",
+        pillar: e.course?.pillar || (e.course ? pillarOf(e.course.professionalArea) : "") || "",
+        status: e.status, access: e.access, source: e.source,
+        overall: pr?.overallPercentage || 0, classification: pr?.classification || null,
+        completed: pr?.status === "completed" };
+    });
+    const allCourses = await Course.find({ published: true }).select("_id title pillar").sort({ pillar: 1, title: 1 }).lean();
+    res.render("admin/learner_detail", {
+      layout: false, user: req.user,
+      learner: { id: String(learner._id), name: learner.displayName || "-", email: learner.email, role: learner.role },
+      map, enrollments,
+      pillars: ALL_PILLARS.map(p => ({ slug: p, label: slugToLabel(p) })),
+      allCourses: allCourses.map(c => ({ id: String(c._id), title: c.title, pillar: c.pillar }))
+    });
+  } catch (e) { console.error("[learner detail]", e); res.status(500).send("Error"); }
+});
+// Assign a single course to a learner (admin, instant active)
+router.post("/admin/learners/:id/assign", ensureAuth, ensureAdminEmails, async (req, res) => {
+  try {
+    const course = await Course.findById(req.body.courseId).lean();
+    if (!course) return res.status(400).send("Course not found");
+    let e = await Enrollment.findOne({ user: req.params.id, course: course._id });
+    if (!e) e = new Enrollment({ user: req.params.id, course: course._id, org: course.org, access: course.accessType, source: "admin" });
+    e.status = "active"; e.activatedAt = new Date(); e.activatedBy = req.user._id; e.source = "admin";
+    await e.save();
+    res.redirect(`/admin/learners/${req.params.id}`);
+  } catch (e) { console.error("[assign]", e); res.status(500).send("Failed: " + e.message); }
+});
+// Assign / reverse a whole module (all its published courses)
+router.post("/admin/learners/:id/module-assign", ensureAuth, ensureAdminEmails, async (req, res) => {
+  try {
+    const courses = await Course.find({ published: true, pillar: req.body.pillar }).lean();
+    for (const c of courses) {
+      let e = await Enrollment.findOne({ user: req.params.id, course: c._id });
+      if (!e) e = new Enrollment({ user: req.params.id, course: c._id, org: c.org, access: c.accessType, source: "admin" });
+      e.status = "active"; e.activatedAt = new Date(); e.activatedBy = req.user._id; e.source = "admin";
+      await e.save();
+    }
+    res.redirect(`/admin/learners/${req.params.id}`);
+  } catch (e) { console.error("[module-assign]", e); res.status(500).send("Failed: " + e.message); }
+});
+router.post("/admin/learners/:id/module-unassign", ensureAuth, ensureAdminEmails, async (req, res) => {
+  try {
+    const courses = await Course.find({ pillar: req.body.pillar }).select("_id").lean();
+    await Enrollment.deleteMany({ user: req.params.id, course: { $in: courses.map(c => c._id) } });
+    res.redirect(`/admin/learners/${req.params.id}`);
+  } catch (e) { console.error("[module-unassign]", e); res.status(500).send("Failed: " + e.message); }
 });
 
 // ── ADMIN: module capstones ─────────────────────────────────────────────────
@@ -442,7 +564,7 @@ router.post("/admin/module-tracks", ensureAuth, ensureAdminEmails, async (req, r
   try {
     const b = req.body;
     const courseIds = (Array.isArray(b.courseIds) ? b.courseIds : [b.courseIds]).filter(Boolean).filter(id => mongoose.isValidObjectId(id));
-    const doc = { pillar: b.pillar, title: b.title || `${slugToLabel(b.pillar)} — Module Mastery`, slug: slugify(b.slug || b.title || (b.pillar + "-mastery")), description: b.description || "",
+    const doc = { pillar: b.pillar, title: b.title || `${slugToLabel(b.pillar)} - Module Mastery`, slug: slugify(b.slug || b.title || (b.pillar + "-mastery")), description: b.description || "",
       org: req.user?.organization || null, role: "professional", courseIds,
       rules: { minCoursesToComplete: b.minCoursesToComplete ? Number(b.minCoursesToComplete) : null, gradeBands: [{ label: "Pass", min: Number(b.bandPass) || 70 }, { label: "Merit", min: Number(b.bandMerit) || 80 }, { label: "Mastery", min: Number(b.bandMastery) || 90 }] },
       published: b.published === "on" || b.published === "true", createdBy: req.user._id };
