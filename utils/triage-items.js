@@ -41,7 +41,11 @@ const OUT_DIR = path.resolve(val("--out", "./exports/triage"));
 
 // House-style pattern: questions that ask for the answer FROM the CRIPFCnt
 // framework's viewpoint. Ambiguous flags matching this are almost always fine.
-const FRAMEWORK_RE = /\b(according to|in|from|within|per)\s+(the\s+)?cripfcnt\b|\bcripfcnt\s+(defines|logic|perspective|framework|pillar|prioritis|view|model|approach)/i;
+// (1) Any question that leans on your framework's specific viewpoint.
+const FRAMEWORK_RE = /\bcripfcnt\b|\bthe (framework|model|doctrine|pillars?)\b|\bwhich (cripfcnt )?pillar\b/i;
+// (2) Any question that depends on a passage the classifier never saw
+//     (comprehension items — ambiguous ONLY because context was missing).
+const PASSAGE_RE = /\b(the|this|above|following)\s+(passage|text|story|author'?s?|case study|case|scenario|extract|excerpt|article|paragraph|writer'?s?|reading)\b|\bmain (idea|message|point|theme)\b|\bwhat is the (author|passage|text|story|writer)/i;
 
 const Organization =
   mongoose.models.Organization ||
@@ -101,7 +105,7 @@ async function main() {
         .select("_id text choices correctIndex difficulty topic meta").lean()
     : [];
 
-  const buckets = { out_of_scope: [], wrong_key: [], multiple_correct: [], ambiguous_real: [], framework_style: [] };
+  const buckets = { out_of_scope: [], wrong_key: [], multiple_correct: [], ambiguous_real: [], framework_style: [], passage_dependent: [] };
   const diffHist = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, unrated: 0 };
   const perArea = {}; // category -> { passages, qCount, diffSum, diffN }
 
@@ -145,7 +149,9 @@ async function main() {
     else if (aq === "wrong_key") buckets.wrong_key.push(row);
     else if (aq === "multiple_correct") buckets.multiple_correct.push(row);
     else if (aq === "ambiguous") {
-      if (FRAMEWORK_RE.test(c.text || "")) buckets.framework_style.push(row);
+      const t = c.text || "";
+      if (FRAMEWORK_RE.test(t)) buckets.framework_style.push(row);
+      else if (PASSAGE_RE.test(t)) buckets.passage_dependent.push(row);
       else buckets.ambiguous_real.push(row);
     }
   }
@@ -178,7 +184,8 @@ async function main() {
       wrong_key: buckets.wrong_key.length,
       multiple_correct: buckets.multiple_correct.length,
       ambiguous_real: buckets.ambiguous_real.length,
-      framework_style_false_positives: buckets.framework_style.length
+      framework_style_false_positives: buckets.framework_style.length,
+      passage_dependent_false_positives: buckets.passage_dependent.length
     },
     difficultyHistogram: diffHist,
     perArea: areaSummary
@@ -192,7 +199,9 @@ async function main() {
   console.log(`   wrong_key        ${summary.totals.wrong_key.toString().padStart(5)}  (FIX FIRST)`);
   console.log(`   multiple_correct ${summary.totals.multiple_correct.toString().padStart(5)}  (fix options)`);
   console.log(`   ambiguous_real   ${summary.totals.ambiguous_real.toString().padStart(5)}  (tighten wording)`);
-  console.log(`\nProbably fine (house style): framework_style ${summary.totals.framework_style_false_positives}`);
+  console.log(`\nProbably fine (context the AI couldn't see):`);
+  console.log(`   framework_style     ${summary.totals.framework_style_false_positives.toString().padStart(5)}  (answer from your framework)`);
+  console.log(`   passage_dependent   ${summary.totals.passage_dependent_false_positives.toString().padStart(5)}  (needs the passage — not broken)`);
   console.log(`\nDifficulty spread:`, diffHist);
   console.log(`\nsummary.json has per-area passage counts + avg difficulty (for grade bands).`);
 
