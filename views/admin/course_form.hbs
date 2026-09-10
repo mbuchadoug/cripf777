@@ -91,15 +91,74 @@ small.k{color:var(--mut)}
 
   <div class="panel">
     <h2>Select assessments ({{areaLabel}})</h2>
-    {{#each series}}
-    <div class="series">
-      <h3><span>{{this.seriesLabel}}</span><span class="b">{{this.quizzes.length}} available</span></h3>
-      {{#each this.quizzes}}
-      <label class="qz"><input type="checkbox" name="quizIds" value="{{this.id}}" {{#if this.checked}}checked{{/if}}>
-        <span>{{this.title}}</span><span class="b">{{this.band}} · {{this.qCount}}q</span></label>
-      {{/each}}
+    <style>
+      .qtoolbar{position:sticky;top:0;z-index:5;background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+      .qtoolbar input.q{flex:1;min-width:170px;padding:9px 12px;border:1px solid var(--line);border-radius:8px;font:inherit}
+      .qtoolbar .cnt{font-size:12px;font-weight:700;color:var(--navy);white-space:nowrap}
+      .qtoolbar button{background:#fff;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:12px;font-weight:600;padding:8px 11px;cursor:pointer}
+      .qtoolbar button.on{background:#e7efff;border-color:#b9cdf0}
+      details.series{border:1px solid var(--line);border-radius:10px;margin-bottom:8px;overflow:hidden}
+      details.series>summary{list-style:none;cursor:pointer;padding:10px 12px;background:#f0f2ef;display:flex;align-items:center;gap:10px;font-size:13px;font-weight:700}
+      details.series>summary::-webkit-details-marker{display:none}
+      details.series>summary .b{margin-left:auto;font-weight:600;color:var(--mut)}
+      .selall{font-size:11px;font-weight:600;color:var(--navy);display:flex;align-items:center;gap:4px;cursor:pointer}
+      .qempty{font-size:12px;color:var(--mut);padding:8px 12px;display:none}
+    </style>
+    <div class="qtoolbar">
+      <input class="q" id="qsearch" type="search" placeholder="Search assessments by title or series..." oninput="qfilter()">
+      <span class="cnt" id="qcount">0 selected</span>
+      <button type="button" id="qonly" onclick="qselectedOnly()">Selected only</button>
+      <button type="button" onclick="qexpand(true)">Expand all</button>
+      <button type="button" onclick="qexpand(false)">Collapse all</button>
+      <button type="button" onclick="qclear()">Clear</button>
     </div>
+    <div id="qlist">
+    {{#each series}}
+    <details class="series" data-series="{{this.seriesLabel}}">
+      <summary>
+        <label class="selall" onclick="event.stopPropagation()"><input type="checkbox" onchange="qtoggleSeries(this)"> all</label>
+        <span>{{this.seriesLabel}}</span><span class="b">{{this.quizzes.length}} available</span>
+      </summary>
+      <div class="sbody">
+      {{#each this.quizzes}}
+      <label class="qz" data-title="{{this.title}}"><input type="checkbox" name="quizIds" value="{{this.id}}" {{#if this.checked}}checked{{/if}} onchange="qcountUpdate()">
+        <span>{{this.title}}</span><span class="b">{{this.band}} - {{this.qCount}}q</span></label>
+      {{/each}}
+      <div class="qempty">No matches in this series.</div>
+      </div>
+    </details>
     {{else}}<p class="hint">No in-scope assessments in this area.</p>{{/each}}
+    </div>
+    <script>
+    function qcountUpdate(){document.getElementById('qcount').textContent=document.querySelectorAll('#qlist input[name=quizIds]:checked').length+' selected';}
+    function qfilter(){
+      var term=(document.getElementById('qsearch').value||'').trim().toLowerCase();
+      document.querySelectorAll('#qlist details.series').forEach(function(d){
+        var series=(d.getAttribute('data-series')||'').toLowerCase(),any=false;
+        d.querySelectorAll('.qz').forEach(function(l){
+          var t=(l.getAttribute('data-title')||'').toLowerCase();
+          var match=!term||t.indexOf(term)>-1||series.indexOf(term)>-1;
+          l.style.display=match?'':'none'; if(match)any=true;
+        });
+        d.style.display=any?'':'none';
+        if(term&&any)d.open=true;
+        d.querySelector('.qempty').style.display=any?'none':'';
+      });
+    }
+    function qtoggleSeries(cb){cb.closest('details').querySelectorAll('.qz').forEach(function(l){if(l.style.display!=='none'){l.querySelector('input[name=quizIds]').checked=cb.checked;}});qcountUpdate();}
+    function qselectedOnly(){
+      var btn=document.getElementById('qonly');var on=btn.classList.toggle('on');
+      document.querySelectorAll('#qlist details.series').forEach(function(d){
+        var any=false;
+        d.querySelectorAll('.qz').forEach(function(l){var c=l.querySelector('input').checked;var show=!on||c;l.style.display=show?'':'none';if(show)any=true;});
+        d.style.display=any?'':'none'; if(on)d.open=true;
+      });
+    }
+    function qexpand(v){document.querySelectorAll('#qlist details.series').forEach(function(d){d.open=v;});}
+    function qclear(){document.querySelectorAll('#qlist input[name=quizIds]').forEach(function(i){i.checked=false;});qcountUpdate();}
+    document.querySelectorAll('#qlist details.series').forEach(function(d){ if(d.querySelector('input[name=quizIds]:checked')) d.open=true; });
+    qcountUpdate();
+    </script>
   </div>
 
   <button class="btn" type="submit">{{#if isEdit}}Save changes{{else}}Create course{{/if}}</button>
