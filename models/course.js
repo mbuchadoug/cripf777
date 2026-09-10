@@ -7,7 +7,7 @@
 // issues the Certificate of Competence.
 //
 // This model sits ON TOP of your existing Question/Attempt data. It never
-// changes how a single quiz is taken - it only defines which quizzes form a
+// changes how a single quiz is taken — it only defines which quizzes form a
 // course and what standard passes it.
 //
 // Legacy note: this is standalone. It does NOT use the old Quiz/Lesson models.
@@ -85,7 +85,13 @@ const CourseSchema = new mongoose.Schema({
   price: { type: Number, default: 0 },
   currency: { type: String, default: "USD" },
   // Master switch for self-enrollment (admins can always enroll people)
-  enrollmentOpen: { type: Boolean, default: true }
+  enrollmentOpen: { type: Boolean, default: true },
+
+  // ── Auto-provisioning bookkeeping ────────────────────────────────────────
+  pillar: { type: String, default: null, index: true },   // the module this area rolls up to
+  autoManaged: { type: Boolean, default: true },          // created/maintained by the provisioning engine
+  customized: { type: Boolean, default: false },          // admin hand-edited the quiz set → resync won't clobber
+  quizTarget: { type: Number, default: null }             // per-course override of the default quiz count
 }, { timestamps: true });
 
 // Total number of selected quizzes across all units

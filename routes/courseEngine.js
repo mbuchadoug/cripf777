@@ -1,4 +1,4 @@
-// routes/courseEngine.js - full course engine: enrollment, signup, payments, progress, admin
+// routes/courseEngine.js — full course engine: enrollment, signup, payments, progress, admin
 import { Router } from "express";
 import mongoose from "mongoose";
 import { ensureAuth } from "../middleware/authGuard.js";
@@ -17,6 +17,8 @@ import { recomputeCourseProgress } from "../services/courseGrading.js";
 import { PILLAR_CATEGORIES, ALL_PILLARS, slugToLabel, pillarOf } from "../services/courseTaxonomy.js";
 import { enroll, enrollmentIntent, computeStages, canAccessCourse, activateEnrollment, suspendEnrollment } from "../services/enrollmentService.js";
 import { initCourseEcocash, pollCourseEcocash, createCourseCheckout } from "../services/coursePayments.js";
+import CourseEngineSettings from "../models/courseEngineSettings.js";
+import { syncCoursesFromAssessments, refillCourse, getSettings } from "../services/courseProvisioning.js";
 
 const router = Router();
 
@@ -42,7 +44,7 @@ router.post("/learn/signup", async (req, res) => {
     if (!em || !password || String(password).length < 6)
       return res.render("courses/signup", { layout: false, next: next || "/courses", error: "Enter an email and a password of at least 6 characters." });
     if (await User.findOne({ email: emailRe(em) }))
-      return res.render("courses/signup", { layout: false, next: next || "/courses", error: "An account with that email already exists - please sign in." });
+      return res.render("courses/signup", { layout: false, next: next || "/courses", error: "An account with that email already exists — please sign in." });
     const isStudent = role === "student";
     const primaryRole = isStudent ? "student" : "parent"; // "professional" is a mobile persona, not a primary-role enum value
     const persona = isStudent ? "student" : "professional";
@@ -75,10 +77,38 @@ router.get("/courses", async (req, res) => {
     const view = courses.map(c => {
       const e = enrByCourse[String(c._id)];
       return { slug: c.slug, title: c.title, area: c.areaLabel || slugToLabel(c.professionalArea), level: slugToLabel(c.level || "foundation"),
+        pillar: c.pillar || pillarOf(c.professionalArea) || "general",
         price: money(c), accessType: c.accessType, totalQuizzes: (c.units || []).reduce((n, u) => n + (u.quizIds || []).length, 0), state: e ? e.status : "browse" };
     });
-    res.render("courses/index", { layout: false, user: req.user || null, authed, courses: view });
+    // group by module (pillar) for the 8-module layout
+    const groups = {};
+    for (const c of view) { (groups[c.pillar] = groups[c.pillar] || []).push(c); }
+    const modules = ALL_PILLARS.filter(p => groups[p]).map(p => ({ pillar: p, label: slugToLabel(p), courses: groups[p] }));
+    res.render("courses/index", { layout: false, user: req.user || null, authed, courses: view, modules });
   } catch (e) { console.error("[catalog]", e); res.status(500).send("Error"); }
+});
+
+// ── Browse by MODULE (8 pillars) + one-click module enrolment ────────────────
+router.get("/modules", async (req, res) => {
+  try {
+    const courses = await Course.find({ published: true }).lean();
+    const authed = req.isAuthenticated && req.isAuthenticated();
+    const byPillar = {};
+    for (const c of courses) { const p = c.pillar || pillarOf(c.professionalArea) || "general"; (byPillar[p] = byPillar[p] || []).push(c); }
+    const modules = ALL_PILLARS.filter(p => byPillar[p]?.length).map(p => ({
+      pillar: p, label: slugToLabel(p), courseCount: byPillar[p].length,
+      quizzes: byPillar[p].reduce((n, c) => n + (c.units || []).reduce((m, u) => m + (u.quizIds || []).length, 0), 0),
+      courses: byPillar[p].map(c => ({ slug: c.slug, title: c.title }))
+    }));
+    res.render("courses/modules", { layout: false, user: req.user || null, authed, modules });
+  } catch (e) { console.error("[modules]", e); res.status(500).send("Error"); }
+});
+router.post("/modules/:pillar/enroll", ensureAuth, async (req, res) => {
+  try {
+    const courses = await Course.find({ published: true, pillar: req.params.pillar }).lean();
+    for (const c of courses) { try { await enroll({ userId: req.user._id, course: c, source: "self" }); } catch (_) {} }
+    res.redirect("/me/learning");
+  } catch (e) { console.error("[module enroll]", e); res.status(500).send("Error"); }
 });
 
 // ── DETAIL (locked / learning) ──────────────────────────────────────────────
@@ -204,7 +234,7 @@ router.get("/me/credentials", ensureAuth, async (req, res) => {
 router.get("/verify/course/:code", async (req, res) => {
   const c = await CourseCertificate.findOne({ verifyCode: String(req.params.code || "").toUpperCase() }).lean();
   if (!c) return res.status(404).send("Credential not found or invalid.");
-  res.send(`<pre>VALID CREDENTIAL - Certificate of Competence
+  res.send(`<pre>VALID CREDENTIAL — Certificate of Competence
 Recipient : ${c.recipientName}
 Course    : ${c.courseTitle}
 Area      : ${c.moduleName}
@@ -215,12 +245,95 @@ Issued    : ${new Date(c.issuedAt).toDateString()}</pre>`);
 router.get("/verify/module/:code", async (req, res) => {
   const c = await ModuleCertificate.findOne({ verifyCode: String(req.params.code || "").toUpperCase() }).lean();
   if (!c) return res.status(404).send("Credential not found or invalid.");
-  res.send(`<pre>VALID CREDENTIAL - Certificate of Mastery
+  res.send(`<pre>VALID CREDENTIAL — Certificate of Mastery
 Recipient : ${c.recipientName}
 Module    : ${c.moduleName}
 Grade     : ${c.classification} (${c.overallPercentage}%)
 Serial    : ${c.serial}
 Issued    : ${new Date(c.issuedAt).toDateString()}</pre>`);
+});
+
+// ── Module enrolment: enrol in every published course in a pillar at once ────
+router.post("/courses/module/:pillar/enroll", ensureAuth, async (req, res) => {
+  try {
+    const pillar = req.params.pillar;
+    const courses = await Course.find({ published: true, $or: [{ pillar }, { professionalArea: { $in: PILLAR_CATEGORIES[pillar] || [] } }] }).lean();
+    for (const c of courses) { try { await enroll({ userId: req.user._id, course: c, source: "self" }); } catch (e) { /* keep going */ } }
+    res.redirect("/me/learning");
+  } catch (e) { console.error("[module enroll]", e); res.status(500).send("Enroll failed"); }
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// ADMIN — Course Engine control center (auto-provisioning)
+// ════════════════════════════════════════════════════════════════════════════
+router.get("/admin/course-engine", ensureAuth, ensureAdminEmails, async (req, res) => {
+  const orgId = req.user?.organization || null;
+  const settings = await getSettings(orgId);
+  const courses = await Course.find(orgId ? { org: orgId } : {}).sort({ pillar: 1, title: 1 }).lean();
+  const match = { type: "comprehension", "meta.isOutOfScope": { $ne: true } };
+  if (orgId) match.organization = orgId;
+  const poolAgg = await Question.aggregate([{ $match: match }, { $group: { _id: "$category", n: { $sum: 1 } } }]);
+  const poolByCat = {}; for (const r of poolAgg) poolByCat[r._id] = r.n;
+  const byPillar = {};
+  for (const c of courses) {
+    const p = c.pillar || pillarOf(c.professionalArea) || "general";
+    (byPillar[p] = byPillar[p] || []).push({ id: String(c._id), title: c.title, area: c.professionalArea,
+      selected: (c.units || []).reduce((n, u) => n + (u.quizIds || []).length, 0), pool: poolByCat[c.professionalArea] || 0,
+      target: c.quizTarget, customized: c.customized, published: c.published, access: c.accessType });
+  }
+  const modules = ALL_PILLARS.map(p => {
+    const ms = (settings.moduleSettings || []).find(m => m.pillar === p) || {};
+    return { pillar: p, label: slugToLabel(p), quizzesPerCourse: ms.quizzesPerCourse ?? "", minCoursesToComplete: ms.minCoursesToComplete ?? "", enabled: ms.enabled !== false, courses: byPillar[p] || [] };
+  });
+  res.render("admin/course_engine", { layout: false, user: req.user,
+    settings: { defaultQuizzesPerCourse: settings.defaultQuizzesPerCourse, selectionStrategy: settings.selectionStrategy, defaultLevel: settings.defaultLevel, defaultAccessType: settings.defaultAccessType, defaultPrice: settings.defaultPrice, autoPublish: settings.autoPublish },
+    modules, synced: req.query.synced || null, courseCount: courses.length });
+});
+router.post("/admin/course-engine/settings", ensureAuth, ensureAdminEmails, async (req, res) => {
+  try {
+    const orgId = req.user?.organization || null;
+    const settings = await getSettings(orgId); const b = req.body;
+    settings.defaultQuizzesPerCourse = Number(b.defaultQuizzesPerCourse) || 12;
+    settings.selectionStrategy = ["balanced", "first", "random"].includes(b.selectionStrategy) ? b.selectionStrategy : "balanced";
+    settings.defaultLevel = ["foundation", "intermediate", "advanced"].includes(b.defaultLevel) ? b.defaultLevel : "foundation";
+    settings.defaultAccessType = ["free", "paid", "invite"].includes(b.defaultAccessType) ? b.defaultAccessType : "free";
+    settings.defaultPrice = Number(b.defaultPrice) || 0;
+    settings.autoPublish = b.autoPublish === "on" || b.autoPublish === "true";
+    const pillars = [].concat(b.m_pillar || []); const qpc = [].concat(b.m_quizzesPerCourse || []); const minc = [].concat(b.m_minCourses || []);
+    const enabled = new Set([].concat(b.m_enabled || []));
+    settings.moduleSettings = pillars.map((p, i) => ({ pillar: p, quizzesPerCourse: qpc[i] === "" || qpc[i] == null ? null : Number(qpc[i]), minCoursesToComplete: minc[i] === "" || minc[i] == null ? null : Number(minc[i]), enabled: enabled.has(p) }));
+    await settings.save();
+    res.redirect("/admin/course-engine");
+  } catch (e) { console.error("[ce settings]", e); res.status(500).send("Failed: " + e.message); }
+});
+router.post("/admin/course-engine/sync", ensureAuth, ensureAdminEmails, async (req, res) => {
+  try {
+    const orgId = req.user?.organization || null;
+    const force = req.body.force === "on" || req.body.force === "true";
+    const s = await syncCoursesFromAssessments({ orgId, force, createdBy: req.user._id });
+    res.redirect(`/admin/course-engine?synced=${encodeURIComponent(`${s.created} created, ${s.updated} updated, ${s.skipped} skipped`)}`);
+  } catch (e) { console.error("[ce sync]", e); res.status(500).send("Sync failed: " + e.message); }
+});
+router.post("/admin/courses/:id/quiz-target", ensureAuth, ensureAdminEmails, async (req, res) => {
+  try {
+    const t = req.body.target === "" || req.body.target == null ? null : Number(req.body.target);
+    await refillCourse({ courseId: req.params.id, target: t, orgId: req.user?.organization || null });
+    res.redirect("/admin/course-engine");
+  } catch (e) { console.error("[quiz target]", e); res.status(500).send("Failed: " + e.message); }
+});
+// Lock/unlock a course from auto-resync (customized=true means "hand-curated, leave alone")
+router.post("/admin/courses/:id/lock", ensureAuth, ensureAdminEmails, async (req, res) => {
+  const c = await Course.findById(req.params.id);
+  if (!c) return res.status(404).send("Not found");
+  c.customized = !c.customized; await c.save();
+  res.redirect("/admin/course-engine");
+});
+// Publish/unpublish from the control center
+router.post("/admin/course-engine/:id/publish", ensureAuth, ensureAdminEmails, async (req, res) => {
+  const c = await Course.findById(req.params.id);
+  if (!c) return res.status(404).send("Not found");
+  c.published = !c.published; await c.save();
+  res.redirect("/admin/course-engine");
 });
 
 // ── ADMIN: courses ──────────────────────────────────────────────────────────
@@ -242,7 +355,7 @@ async function renderBuilder(req, res, course) {
   const bySeries = {};
   for (const p of passages) { const key = p.series || "general";
     (bySeries[key] = bySeries[key] || { seriesSlug: key, seriesLabel: slugToLabel(key), quizzes: [] });
-    bySeries[key].quizzes.push({ id: String(p._id), title: p.quizTitle || p.text || "Assessment", band: p.meta?.difficultyBand || "-", qCount: (p.questionIds || []).length, checked: selected.has(String(p._id)) }); }
+    bySeries[key].quizzes.push({ id: String(p._id), title: p.quizTitle || p.text || "Assessment", band: p.meta?.difficultyBand || "—", qCount: (p.questionIds || []).length, checked: selected.has(String(p._id)) }); }
   res.render("admin/course_form", { layout: false, user: req.user, isEdit: !!course, area, areaLabel: slugToLabel(area),
     areas: Object.values(PILLAR_CATEGORIES).flat().sort().map(c => ({ slug: c, label: slugToLabel(c) })), series: Object.values(bySeries),
     course: course ? { id: String(course._id), title: course.title, slug: course.slug, description: course.description, level: course.level, rules: course.rules, weighting: course.weighting, accessType: course.accessType, price: course.price, currency: course.currency, enrollmentOpen: course.enrollmentOpen }
@@ -273,6 +386,7 @@ router.post("/admin/courses", ensureAuth, ensureAdminEmails, async (req, res) =>
       weighting: b.weighting === "by_difficulty" ? "by_difficulty" : "equal",
       accessType: ["free", "paid", "invite"].includes(b.accessType) ? b.accessType : "free",
       price: Number(b.price) || 0, currency: b.currency || "USD",
+      pillar: pillarOf(b.area) || null, customized: true, autoManaged: false,
       enrollmentOpen: b.enrollmentOpen === "on" || b.enrollmentOpen === "true", published: b.published === "on" || b.published === "true", createdBy: req.user._id };
     if (b.id && mongoose.isValidObjectId(b.id)) await Course.findByIdAndUpdate(b.id, doc); else await Course.create(doc);
     res.redirect("/admin/courses");
@@ -293,7 +407,7 @@ router.get("/admin/enrollments", ensureAuth, ensureAdminEmails, async (req, res)
   const courses = await Course.find({}).select("_id title").lean();
   res.render("admin/enrollments", { layout: false, user: req.user, courses: courses.map(c => ({ id: String(c._id), title: c.title })),
     filterStatus: req.query.status || "", filterCourse: req.query.course || "",
-    rows: enrs.map(e => ({ id: String(e._id), who: e.user?.displayName || e.user?.email || "-", email: e.user?.email || "", course: e.course?.title || "-",
+    rows: enrs.map(e => ({ id: String(e._id), who: e.user?.displayName || e.user?.email || "—", email: e.user?.email || "", course: e.course?.title || "—",
       status: e.status, access: e.access, source: e.source, pay: e.payment?.status || "none", ref: e.payment?.reference || "", when: new Date(e.updatedAt).toLocaleDateString() })) });
 });
 router.post("/admin/enrollments/manual", ensureAuth, ensureAdminEmails, async (req, res) => {
@@ -328,7 +442,7 @@ router.post("/admin/module-tracks", ensureAuth, ensureAdminEmails, async (req, r
   try {
     const b = req.body;
     const courseIds = (Array.isArray(b.courseIds) ? b.courseIds : [b.courseIds]).filter(Boolean).filter(id => mongoose.isValidObjectId(id));
-    const doc = { pillar: b.pillar, title: b.title || `${slugToLabel(b.pillar)} - Module Mastery`, slug: slugify(b.slug || b.title || (b.pillar + "-mastery")), description: b.description || "",
+    const doc = { pillar: b.pillar, title: b.title || `${slugToLabel(b.pillar)} — Module Mastery`, slug: slugify(b.slug || b.title || (b.pillar + "-mastery")), description: b.description || "",
       org: req.user?.organization || null, role: "professional", courseIds,
       rules: { minCoursesToComplete: b.minCoursesToComplete ? Number(b.minCoursesToComplete) : null, gradeBands: [{ label: "Pass", min: Number(b.bandPass) || 70 }, { label: "Merit", min: Number(b.bandMerit) || 80 }, { label: "Mastery", min: Number(b.bandMastery) || 90 }] },
       published: b.published === "on" || b.published === "true", createdBy: req.user._id };

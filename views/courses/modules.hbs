@@ -1,0 +1,45 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Modules · CRIPFCnt Academy</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--forest:#0b3a2a;--forest2:#0f4a35;--gold:#c9a765;--ink:#16241d;--mut:#66756c;--line:#e7ebe6;--bg:#f4f7f3}
+*{box-sizing:border-box;margin:0}body{font-family:Archivo,system-ui,sans-serif;color:var(--ink);background:var(--bg);line-height:1.5}
+a{color:inherit}
+.nav{position:sticky;top:0;z-index:20;background:rgba(11,58,42,.98);color:#eafff4;padding:14px clamp(16px,4vw,28px);display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px}
+.nav .brand{font-family:Fraunces,serif;font-weight:600;font-size:19px}
+.nav a{color:#cfe9dc;text-decoration:none;font-size:13.5px;font-weight:600;margin-left:14px}
+.hero{background:linear-gradient(160deg,var(--forest),var(--forest2));color:#eafff4;padding:clamp(26px,5vw,48px) clamp(16px,4vw,28px)}
+.hero .in{max-width:1000px;margin:0 auto}
+.hero h1{font-family:Fraunces,serif;font-weight:600;font-size:clamp(24px,5vw,36px);margin-bottom:8px}
+.hero p{color:#bfe0d1;max-width:600px}
+.wrap{max-width:1000px;margin:0 auto;padding:clamp(20px,4vw,32px) clamp(16px,4vw,28px)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,280px),1fr));gap:16px}
+.card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:20px;display:flex;flex-direction:column;gap:10px}
+.mn{font-family:Fraunces,serif;font-size:22px;font-weight:600}
+.meta{font-size:13px;color:var(--mut)}
+.courses{font-size:13px;color:var(--ink);display:flex;flex-direction:column;gap:4px;margin:2px 0}
+.courses a{text-decoration:none;color:var(--forest);font-weight:600}
+.row{display:flex;gap:8px;margin-top:auto;flex-wrap:wrap}
+.btn{background:var(--forest);color:#fff;border:0;text-decoration:none;font:inherit;font-weight:600;font-size:13px;padding:9px 15px;border-radius:9px;cursor:pointer}
+.btn.g{background:#fff;border:1px solid var(--line);color:var(--ink)}
+</style></head><body>
+<div class="nav"><div class="brand">CRIPFCnt Academy</div><div><a href="/courses">All courses</a>{{#if authed}}<a href="/me/learning">My Learning</a>{{else}}<a href="/learn/signup?next=/modules">Sign in</a>{{/if}}</div></div>
+<div class="hero"><div class="in"><h1>The 8 Modules</h1><p>Each module is a pillar of the CRIPFCnt framework. Enrol in a whole module to take every area course inside it and work toward the Certificate of Mastery.</p></div></div>
+<div class="wrap"><div class="grid">
+{{#each modules}}
+  <div class="card">
+    <div class="mn">{{this.label}}</div>
+    <div class="meta">{{this.courseCount}} courses · {{this.quizzes}} assessments</div>
+    <div class="courses">{{#each this.courses}}<a href="/courses/{{this.slug}}">{{this.title}}</a>{{/each}}</div>
+    <div class="row">
+      {{#if ../authed}}
+        <form method="POST" action="/modules/{{this.pillar}}/enroll"><button class="btn" type="submit">Enrol in module</button></form>
+      {{else}}
+        <a class="btn" href="/learn/signup?next=/modules">Join to enrol</a>
+      {{/if}}
+    </div>
+  </div>
+{{else}}
+  <p class="meta">No modules published yet.</p>
+{{/each}}
+</div></div></body></html>
