@@ -3,13 +3,13 @@
 // Turn the classifier's 3,314 flags into an ACTIONABLE, sorted to-do list, and
 // produce the difficulty statistics needed to set course grade bands.
 //
-// READ-ONLY. It writes nothing to Mongo and calls no API — it only reads the
+// READ-ONLY. It writes nothing to Mongo and calls no API - it only reads the
 // fields classify-items.js already saved (difficulty, topic, meta.bloom,
 // meta.answerQuality, meta.isOutOfScope) and writes CSV/JSON files to disk.
 //
 // It splits flagged questions into buckets, and CRUCIALLY separates genuine
 // defects from your house style. A question like "According to CRIPFCnt, X
-// primarily results from…" is not broken — it asks the learner to answer from
+// primarily results from…" is not broken - it asks the learner to answer from
 // your framework's viewpoint. Those land in framework_style.csv (low priority),
 // so the real defects (wrong_key, multiple_correct) aren't buried.
 //
@@ -44,7 +44,7 @@ const OUT_DIR = path.resolve(val("--out", "./exports/triage"));
 // (1) Any question that leans on your framework's specific viewpoint.
 const FRAMEWORK_RE = /\bcripfcnt\b|\bthe (framework|model|doctrine|pillars?)\b|\bwhich (cripfcnt )?pillar\b/i;
 // (2) Any question that depends on a passage the classifier never saw
-//     (comprehension items — ambiguous ONLY because context was missing).
+//     (comprehension items - ambiguous ONLY because context was missing).
 const PASSAGE_RE = /\b(the|this|above|following)\s+(passage|text|story|author'?s?|case study|case|scenario|extract|excerpt|article|paragraph|writer'?s?|reading)\b|\bmain (idea|message|point|theme)\b|\bwhat is the (author|passage|text|story|writer)/i;
 
 const Organization =
@@ -201,7 +201,7 @@ async function main() {
   console.log(`   ambiguous_real   ${summary.totals.ambiguous_real.toString().padStart(5)}  (tighten wording)`);
   console.log(`\nProbably fine (context the AI couldn't see):`);
   console.log(`   framework_style     ${summary.totals.framework_style_false_positives.toString().padStart(5)}  (answer from your framework)`);
-  console.log(`   passage_dependent   ${summary.totals.passage_dependent_false_positives.toString().padStart(5)}  (needs the passage — not broken)`);
+  console.log(`   passage_dependent   ${summary.totals.passage_dependent_false_positives.toString().padStart(5)}  (needs the passage - not broken)`);
   console.log(`\nDifficulty spread:`, diffHist);
   console.log(`\nsummary.json has per-area passage counts + avg difficulty (for grade bands).`);
 

@@ -19,7 +19,7 @@ import { buildCourseCertHtml } from "./courseCertTemplate.js";
 
 export { buildCourseCertHtml };
 
-const OUTPUT_DIR = path.join(process.cwd(), "public", "certificates", "course");
+const BASE_DIR = path.join(process.cwd(), "public", "certificates");
 
 /**
  * @param {Object} p
@@ -28,6 +28,8 @@ const OUTPUT_DIR = path.join(process.cwd(), "public", "certificates", "course");
  * @returns {Promise<{url:string, verifyCode:string}>}
  */
 export async function generateCourseCertPdf({ cert, template = {} }) {
+  const tier = template?.tier === "module" ? "module" : "course";
+  const OUTPUT_DIR = path.join(BASE_DIR, tier);
   if (!fs.existsSync(OUTPUT_DIR)) {
     fs.mkdirSync(OUTPUT_DIR, { recursive: true });
   }
@@ -57,7 +59,7 @@ export async function generateCourseCertPdf({ cert, template = {} }) {
     await page.setContent(html, { waitUntil: "networkidle0", timeout: 45000 });
     await new Promise(r => setTimeout(r, 1200));
 
-    const filename   = `course-cert-${verifyCode}.pdf`;
+    const filename   = `${tier}-cert-${verifyCode}.pdf`;
     const outputPath = `${OUTPUT_DIR}/${filename}`;
 
     await page.pdf({
@@ -68,8 +70,8 @@ export async function generateCourseCertPdf({ cert, template = {} }) {
       margin:          { top: "0", bottom: "0", left: "0", right: "0" }
     });
 
-    const url = `/certificates/course/${filename}`;
-    console.log(`[course cert] ✅ Generated: ${url} (verify: ${verifyCode})`);
+    const url = `/certificates/${tier}/${filename}`;
+    console.log(`[${tier} cert] ✅ Generated: ${url} (verify: ${verifyCode})`);
     return { url, verifyCode };
   } finally {
     try { await browser.close(); } catch (_) {}

@@ -1,0 +1,40 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>My Learning · CRIPFCnt</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--forest:#0b3a2a;--forest2:#0f4a35;--gold:#c9a765;--ink:#16241d;--mut:#66756c;--line:#e7ebe6;--bg:#f4f7f3;--ok:#1f9d6b}
+*{box-sizing:border-box;margin:0}body{font-family:Archivo,system-ui,sans-serif;color:var(--ink);background:var(--bg);line-height:1.5}
+a{color:inherit}
+.nav{position:sticky;top:0;z-index:20;background:rgba(11,58,42,.98);color:#eafff4;padding:13px clamp(16px,4vw,28px);display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px}
+.nav a{color:#cfe9dc;text-decoration:none;font-size:13.5px;font-weight:600}
+.wrap{max-width:900px;margin:0 auto;padding:clamp(20px,4vw,32px) clamp(16px,4vw,24px)}
+h1{font-family:Fraunces,serif;font-size:clamp(24px,4vw,30px);font-weight:600;margin-bottom:16px}
+.card{background:#fff;border:1px solid var(--line);border-radius:15px;padding:18px;margin-bottom:14px;display:flex;flex-wrap:wrap;gap:14px;align-items:center}
+.card .main{flex:1;min-width:200px}
+.area{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold);font-weight:700}
+.ct{font-family:Fraunces,serif;font-size:19px;font-weight:600}
+.bar{height:8px;background:#eaefe9;border-radius:6px;overflow:hidden;margin:8px 0 4px;max-width:340px}
+.bar span{display:block;height:100%;background:linear-gradient(90deg,#1f9d6b,#3fbf87)}
+.metrics{font-size:12.5px;color:var(--mut)}
+.st{font-size:12px;font-weight:700;padding:4px 11px;border-radius:20px}
+.st.active{background:#e7f6ee;color:#1f7a4d}.st.completed{background:#e7eefb;color:#2456b8}.st.pending{background:#fbf1dc;color:#9a6b12}.st.suspended{background:#fdeaea;color:#a13}
+.go{background:var(--forest);color:#fff;text-decoration:none;font-size:13px;font-weight:600;padding:9px 16px;border-radius:9px}
+.empty{color:var(--mut);text-align:center;padding:40px 0}
+</style></head><body>
+<div class="nav"><a href="/courses">← Courses</a><div><a href="/me/credentials">Certificates</a></div></div>
+<div class="wrap"><h1>My Learning</h1>
+{{#each rows}}
+  <div class="card">
+    <div class="main">
+      <div class="area">{{this.area}} · {{this.level}}</div>
+      <div class="ct">{{this.title}}</div>
+      <div class="bar"><span style="width:{{this.completion}}%"></span></div>
+      <div class="metrics">Stage {{this.stage}} of {{this.stagesTotal}} · {{this.completion}}% complete · {{this.attempts}} attempts{{#if this.classification}} · {{this.classification}}{{/if}}</div>
+    </div>
+    <span class="st {{this.status}}">{{this.status}}</span>
+    <a class="go" href="/courses/{{this.slug}}">Open →</a>
+  </div>
+{{else}}
+  <div class="empty">You haven't enrolled in any courses yet. <a href="/courses" style="color:var(--forest);font-weight:600">Browse courses →</a></div>
+{{/each}}
+</div></body></html>

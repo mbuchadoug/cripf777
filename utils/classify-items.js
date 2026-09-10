@@ -95,7 +95,7 @@ candidates who answer correctly:
  4 = hard        (~45%)
  5 = very hard   (~30% or fewer)
 Judge difficulty from cognitive load, number of reasoning steps, and how
-plausible the distractors are — NOT from topic obscurity alone.
+plausible the distractors are - NOT from topic obscurity alone.
 
 answer_quality flags item defects:
  "wrong_key"        the indicated correct answer looks incorrect
@@ -298,7 +298,7 @@ async function main() {
   const rpt = path.join(OUT_DIR, `classification-report-${Date.now().toString(36)}.json`);
   fs.writeFileSync(rpt, JSON.stringify(report, null, 2));
 
-  console.log(`\n${DRY ? "DRY RUN — nothing written." : "Done."}`);
+  console.log(`\n${DRY ? "DRY RUN - nothing written." : "Done."}`);
   console.log(`Classified: ${report.classified} questions · passage bands: ${report.passageBandsWritten}`);
   console.log(`Tokens: in ${report.tokensIn} · out ${report.tokensOut}${report.estCostUsd != null ? ` · ≈ $${report.estCostUsd}` : ""}`);
   console.log(`Item-quality flags (review these): ${report.flagged.length}`);

@@ -1,0 +1,152 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{{course.title}} · CRIPFCnt</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--forest:#0b3a2a;--forest2:#0f4a35;--gold:#c9a765;--ink:#16241d;--mut:#66756c;--line:#e7ebe6;--bg:#f4f7f3;--card:#fff;--ok:#1f9d6b}
+*{box-sizing:border-box;margin:0}body{font-family:Archivo,system-ui,sans-serif;color:var(--ink);background:var(--bg);line-height:1.5}
+a{color:inherit}
+.nav{position:sticky;top:0;z-index:20;background:rgba(11,58,42,.98);color:#eafff4;padding:13px clamp(16px,4vw,28px);display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px}
+.nav a{color:#cfe9dc;text-decoration:none;font-size:13.5px;font-weight:600}
+.wrap{max-width:920px;margin:0 auto;padding:clamp(20px,4vw,32px) clamp(16px,4vw,24px)}
+.area{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--gold);font-weight:700}
+h1{font-family:Fraunces,serif;font-size:clamp(26px,5vw,36px);font-weight:600;line-height:1.1;margin:6px 0 10px}
+.desc{color:var(--mut);margin-bottom:18px;max-width:640px}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:clamp(16px,3vw,22px);margin-bottom:16px}
+.btn{display:inline-block;background:var(--forest);color:#fff;border:0;text-decoration:none;font:inherit;font-weight:600;font-size:15px;padding:13px 22px;border-radius:11px;cursor:pointer;text-align:center}
+.btn:hover{background:var(--forest2)}.btn.gold{background:var(--gold);color:#3a2c07}.btn.ghost{background:#fff;border:1px solid var(--line);color:var(--ink)}
+.btn.block{display:block;width:100%}
+.price{font-family:Fraunces,serif;font-size:30px;font-weight:600}
+.lead{font-size:15px;color:var(--mut);margin-bottom:14px}
+input{width:100%;padding:12px 13px;border:1px solid var(--line);border-radius:10px;font:inherit;margin-bottom:10px}
+.or{display:flex;align-items:center;gap:10px;color:var(--mut);font-size:12px;margin:14px 0}.or:before,.or:after{content:"";flex:1;height:1px;background:var(--line)}
+/* learning */
+.big{font-family:Fraunces,serif;font-size:34px;font-weight:600}
+.statgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px}
+.stat{background:#f7faf7;border:1px solid var(--line);border-radius:12px;padding:14px}
+.stat .k{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);font-weight:700}
+.stat .v{font-family:Fraunces,serif;font-size:24px;font-weight:600;margin-top:2px}
+.bar{height:10px;background:#eaefe9;border-radius:6px;overflow:hidden;margin:10px 0}
+.bar span{display:block;height:100%;background:linear-gradient(90deg,#1f9d6b,#3fbf87)}
+.gates{display:flex;gap:16px;flex-wrap:wrap;font-size:13px;color:var(--mut);margin-top:4px}
+.gates b{color:var(--ink)}
+.stage{display:flex;align-items:center;gap:10px;margin:16px 0 8px}
+.badge{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font-weight:700;font-size:13px;flex-shrink:0}
+.badge.done{background:var(--ok);color:#fff}.badge.cur{background:var(--gold);color:#3a2c07}.badge.lock{background:#e7ebe6;color:var(--mut)}
+.stage h3{font-family:Fraunces,serif;font-size:18px;font-weight:600}
+.stage .s{font-size:12px;color:var(--mut);margin-left:auto}
+.q{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--line)}
+.q .t .n{font-weight:600;font-size:14px}.q .t{flex:1}
+.q .sc{font-family:Fraunces,serif;font-size:18px;font-weight:600;width:52px;text-align:right}
+.tick{color:var(--ok);font-weight:700}
+.take{background:var(--forest);color:#fff;text-decoration:none;font-size:12px;font-weight:600;padding:8px 15px;border-radius:8px}.take.g{background:#fff;border:1px solid var(--line);color:var(--ink)}
+.cert{display:block;text-align:center;background:linear-gradient(135deg,var(--forest),#072519);color:var(--gold);text-decoration:none;font-family:Fraunces,serif;font-size:18px;font-weight:600;padding:18px;border-radius:16px;border:1px solid var(--gold)}
+.msg{background:#fbf1dc;border:1px solid #ecd9a8;color:#8a6100;border-radius:10px;padding:12px 14px;font-size:14px}
+#eco-status{font-size:14px;margin-top:8px;color:var(--mut)}
+</style></head><body>
+<div class="nav"><a href="/courses">← All courses</a><div>{{#if authed}}<a href="/me/learning">My Learning</a>{{else}}<a href="{{signupUrl}}">Sign in</a>{{/if}}</div></div>
+<div class="wrap">
+  <div class="area">{{course.area}} · {{course.level}}</div>
+  <h1>{{course.title}}</h1>
+  {{#if course.description}}<div class="desc">{{course.description}}</div>{{/if}}
+
+{{#if (eq mode "locked")}}
+  {{!-- ENROLL / PAY --}}
+  <div class="panel">
+    <div class="price">{{course.price}}</div>
+    <div class="lead">{{course.totalQuizzes}} assessments · {{course.stagesTotal}} stages · Certificate of Competence on completion.</div>
+
+    {{#unless authed}}
+      <a class="btn block" href="{{signupUrl}}">Create account / Sign in to enrol</a>
+      <div class="or">or</div>
+      <a class="btn ghost block" href="{{googleUrl}}">Continue with Google</a>
+    {{else}}
+      {{#if pending}}
+        {{#if (eq course.accessType "paid")}}
+          <div class="lead">Complete payment to unlock the course.</div>
+          <div style="margin-bottom:14px">
+            <label style="font-size:12px;font-weight:700;color:var(--mut)">Pay with EcoCash</label>
+            <input id="eco-phone" type="tel" placeholder="0771234567" inputmode="numeric">
+            <button class="btn block" onclick="payEco()">Send EcoCash prompt</button>
+            <div id="eco-status"></div>
+          </div>
+          <div class="or">or</div>
+          <form method="POST" action="/courses/{{course.slug}}/pay/stripe"><button class="btn ghost block" type="submit">Pay by card (Visa/Mastercard)</button></form>
+        {{else}}
+          <div class="msg">This course is invite-only. An administrator will grant you access shortly.</div>
+        {{/if}}
+      {{else}}
+        {{#if (eq intent.action "activate")}}
+          <form method="POST" action="/courses/{{course.slug}}/enroll"><button class="btn block" type="submit">Enrol for free</button></form>
+        {{else if (eq intent.action "needs_payment")}}
+          <form method="POST" action="/courses/{{course.slug}}/enroll"><button class="btn block" type="submit">Enrol - {{course.price}}</button></form>
+        {{else if (eq intent.action "needs_admin")}}
+          <form method="POST" action="/courses/{{course.slug}}/enroll"><button class="btn block" type="submit">Request access</button></form>
+        {{else if (eq intent.action "blocked")}}
+          <div class="msg">Your enrolment is suspended. Please contact support.</div>
+        {{/if}}
+      {{/if}}
+    {{/unless}}
+  </div>
+{{else}}
+  {{!-- LEARNING --}}
+  <div class="panel">
+    <div class="statgrid">
+      <div class="stat"><div class="k">Completion</div><div class="v">{{progress.overall}}%</div></div>
+      <div class="stat"><div class="k">Stage</div><div class="v">{{stagesInfo.currentStage}}/{{stagesInfo.totalStages}}</div></div>
+      <div class="stat"><div class="k">Level</div><div class="v" style="font-size:18px">{{course.level}}</div></div>
+      <div class="stat"><div class="k">Passed</div><div class="v">{{progress.passedCount}}/{{progress.total}}</div></div>
+      <div class="stat"><div class="k">Attempts</div><div class="v">{{stagesInfo.totalAttempts}}</div></div>
+    </div>
+    <div class="bar"><span style="width:{{progress.overall}}%"></span></div>
+    <div class="gates">
+      <span>Breadth gate: <b>{{#if progress.breadthOk}}met{{else}}not yet{{/if}}</b></span>
+      <span>Depth gate (≥{{course.rules.overallPassMark}}%): <b>{{#if progress.depthOk}}met{{else}}not yet{{/if}}</b></span>
+      <span>Pass mark / assessment: <b>{{course.rules.perQuizPassMark}}%</b></span>
+    </div>
+  </div>
+
+  {{#if progress.complete}}
+    <a class="cert" href="{{#if certificateUrl}}{{certificateUrl}}{{else}}/courses/{{course.slug}}/certificate{{/if}}">🏆 Download your Certificate of Competence - {{progress.classification}}</a>
+    <div style="height:16px"></div>
+  {{/if}}
+
+  {{#each units}}
+  <div class="panel">
+    <div class="stage">
+      <div class="badge {{#if this.stage.complete}}done{{else if (eq this.index ../stagesInfo.currentStage)}}cur{{else}}lock{{/if}}">{{#if this.stage.complete}}✓{{else}}{{this.index}}{{/if}}</div>
+      <h3>{{this.title}}</h3>
+      <span class="s">{{this.stage.passed}}/{{this.stage.total}} passed</span>
+    </div>
+    {{#each this.quizzes}}
+    <div class="q">
+      <div class="t"><div class="n">{{this.title}}</div><div style="font-size:11px;color:var(--mut)">{{this.attempts}} attempt(s)</div></div>
+      <div class="sc">{{#if this.attempts}}{{this.best}}%{{else}}-{{/if}}</div>
+      {{#if this.passed}}<span class="tick">✓</span>{{/if}}
+      <a class="take {{#if this.attempts}}g{{/if}}" href="{{this.takeUrl}}">{{#if this.passed}}Retake{{else if this.attempts}}Retry{{else}}Start{{/if}}</a>
+    </div>
+    {{/each}}
+  </div>
+  {{/each}}
+{{/if}}
+</div>
+<script>
+async function payEco(){
+  var phone=document.getElementById('eco-phone').value.trim();
+  var s=document.getElementById('eco-status');
+  s.textContent='Sending prompt…';
+  try{
+    var r=await fetch('/courses/{{course.slug}}/pay/ecocash',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:phone})});
+    var d=await r.json();
+    if(!r.ok){s.textContent=d.error||'Failed to send prompt.';return;}
+    s.textContent=d.message||'Approve the prompt on your phone…';
+    var ref=d.reference, tries=0;
+    var iv=setInterval(async function(){
+      tries++; if(tries>40){clearInterval(iv);s.textContent='Timed out - if you paid, refresh this page.';return;}
+      var pr=await fetch('/courses/{{course.slug}}/pay/ecocash/poll/'+ref); var pd=await pr.json();
+      if(pd.status==='paid'){clearInterval(iv);s.textContent='Payment received - unlocking…';location.reload();}
+      else if(pd.status==='failed'||pd.status==='cancelled'){clearInterval(iv);s.textContent='Payment '+pd.status+'. Try again.';}
+    },4000);
+  }catch(e){s.textContent='Network error. Try again.';}
+}
+</script>
+</body></html>

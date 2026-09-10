@@ -120,7 +120,11 @@ async function qrDataUrl(text, provided) {
 export async function buildCourseCertHtml({ cert = {}, template = {}, verifyCode = null, qrDataUrl: qrProvided = null } = {}) {
   const recipient = esc(cert.recipientName || "Recipient");
 
-  const certTitle   = esc(template?.certTitle || "Certificate of Competence");
+  const tier = (template?.tier === "module") ? "module" : "area";
+  const L = tier === "module"
+    ? { subtitle: "MODULE CERTIFICATION", attainCap: "MODULE ATTAINMENT", countLabel: "COURSES PASSED", resultsHead: "COURSES COMPLETED", sealTop: "MASTERY", verifyKind: "module" }
+    : { subtitle: "PROFESSIONAL CERTIFICATION", attainCap: "OVERALL ATTAINMENT", countLabel: "ASSESSMENTS PASSED", resultsHead: "ASSESSMENT RESULTS", sealTop: "CERTIFIED", verifyKind: "course" };
+  const certTitle   = esc(template?.certTitle || (tier === "module" ? "Certificate of Mastery" : "Certificate of Competence"));
   const orgName     = esc(cert.orgName || "CRIPFCnt");
   const issuedBy    = "CRIPFCnt";
   const dateSrc     = cert.issuedAt || new Date();
@@ -138,8 +142,8 @@ export async function buildCourseCertHtml({ cert = {}, template = {}, verifyCode
   const cc          = classColour(cert.classification || bandFor(overall));
 
   const vCode = (verifyCode || cert.verifyCode || "").toString().toUpperCase() || "PENDING";
-  const verifyPath = `cripfcnt.com/verify/course/${vCode}`;
-  const verifyUrl  = `https://cripfcnt.com/verify/course/${vCode}`;
+  const verifyPath = `cripfcnt.com/verify/${L.verifyKind}/${vCode}`;
+  const verifyUrl  = `https://cripfcnt.com/verify/${L.verifyKind}/${vCode}`;
 
   const nameKey = (cert.recipientName || recipient || "X").replace(/\s+/g, "").toUpperCase().slice(0, 6).padEnd(6, "0");
   const credId  = `CRIPFCnt-${ymd(dateSrc)}-${esc(nameKey)}`;
@@ -269,16 +273,16 @@ body{font-family:${FF_SANS};color:var(--ink);background:#fff;}
   <div class="mast">
     <div class="brandrow">
       <div class="mono">C</div>
-      <div><div class="wm">CRIPFCnt</div><div class="wsub">PROFESSIONAL CERTIFICATION</div></div>
+      <div><div class="wm">CRIPFCnt</div><div class="wsub">${L.subtitle}</div></div>
     </div>
     <div class="mdiv"></div>
     ${ring}
-    <div class="emblemcap">OVERALL ATTAINMENT</div>
+    <div class="emblemcap">${L.attainCap}</div>
     <div class="mfoot">
       <div class="mrow"><div class="mlabel">CLASSIFICATION</div>
         <div class="mval">${esc(classification)}<small>Overall grade across the course</small></div></div>
-      <div class="mrow"><div class="mlabel">ASSESSMENTS PASSED</div>
-        <div class="mval" style="font-size:13px">${passed} of ${totalA}<small>${totalQ} questions in total</small></div></div>
+      <div class="mrow"><div class="mlabel">${L.countLabel}</div>
+        <div class="mval" style="font-size:13px">${passed} of ${totalA}<small>${tier === "module" ? "area courses completed" : `${totalQ} questions in total`}</small></div></div>
       <div class="qrbox">
         ${qrImg}
         <div class="qrtxt"><b>VERIFY AUTHENTICITY</b>Scan to validate this credential at<br>${esc(verifyPath)}</div>
@@ -294,13 +298,12 @@ body{font-family:${FF_SANS};color:var(--ink);background:#fff;}
     <div class="certify">THIS IS TO CERTIFY THAT</div>
     <div class="name">${recipient}</div>
     <div class="arche">${courseTitle}</div>
-    <div class="cite">has successfully completed the <b>${courseTitle}</b> course within the
-      <b>${moduleName}</b> professional area, meeting the required standard of competence across
-      <b>${totalA} assessments</b> (${totalQ} questions) with an overall attainment of
-      <b>${overall}%</b> &mdash; classified as <b>${esc(classification)}</b>.</div>
+    <div class="cite">${tier === "module"
+      ? `has demonstrated mastery of the <b>${moduleName}</b> module by completing <b>${totalA} area courses</b>, with an overall attainment of <b>${overall}%</b> &mdash; classified as <b>${esc(classification)}</b>.`
+      : `has successfully completed the <b>${courseTitle}</b> course within the <b>${moduleName}</b> professional area, meeting the required standard of competence across <b>${totalA} assessments</b> (${totalQ} questions) with an overall attainment of <b>${overall}%</b> &mdash; classified as <b>${esc(classification)}</b>.`}</div>
     <div class="framework"><div class="fl">PROFESSIONAL AREA &middot; LEVEL</div>
       <div class="fv">${moduleName} &mdash; ${level}</div></div>
-    <div class="profhead"><div class="ph">ASSESSMENT RESULTS</div><div class="phline"></div></div>
+    <div class="profhead"><div class="ph">${L.resultsHead}</div><div class="phline"></div></div>
     <div class="meters">${meters}</div>
     <div class="foot">
       <div class="sig">
@@ -315,7 +318,7 @@ body{font-family:${FF_SANS};color:var(--ink);background:#fff;}
           <circle cx="50" cy="50" r="40" fill="none" stroke="rgba(166,133,63,.5)" stroke-width="0.6"/>
           <circle cx="50" cy="50" r="26" fill="#0b3a2a"/>
           <path d="M40 50 l7 7 l14 -16" fill="none" stroke="#c9a765" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
-          <text x="50" y="20" text-anchor="middle" font-family="Archivo" font-size="6" letter-spacing="1.4" fill="#a6853f" font-weight="700">CERTIFIED</text>
+          <text x="50" y="20" text-anchor="middle" font-family="Archivo" font-size="6" letter-spacing="1.4" fill="#a6853f" font-weight="700">${L.sealTop}</text>
           <text x="50" y="86" text-anchor="middle" font-family="Archivo" font-size="5.4" letter-spacing="1.2" fill="#a6853f" font-weight="700">CRIPFCnt</text>
         </svg>
       </div>

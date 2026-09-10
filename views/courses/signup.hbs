@@ -1,0 +1,54 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Join CRIPFCnt Academy</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--forest:#0b3a2a;--forest2:#0f4a35;--gold:#c9a765;--ink:#16241d;--mut:#66756c;--line:#e7ebe6;--bg:#f4f7f3}
+*{box-sizing:border-box;margin:0}body{font-family:Archivo,system-ui,sans-serif;color:var(--ink);background:var(--bg);min-height:100vh;display:grid;place-items:center;padding:20px}
+.card{background:#fff;border:1px solid var(--line);border-radius:18px;padding:clamp(22px,5vw,34px);width:100%;max-width:420px;box-shadow:0 18px 50px rgba(11,58,42,.08)}
+.brand{font-family:Fraunces,serif;font-size:22px;font-weight:600;color:var(--forest);text-align:center;margin-bottom:4px}
+.sub{text-align:center;color:var(--mut);font-size:14px;margin-bottom:20px}
+.tabs{display:flex;background:#eef3ee;border-radius:10px;padding:4px;margin-bottom:18px}
+.tabs button{flex:1;border:0;background:none;font:inherit;font-weight:600;font-size:14px;padding:9px;border-radius:8px;cursor:pointer;color:var(--mut)}
+.tabs button.on{background:#fff;color:var(--ink);box-shadow:0 1px 4px rgba(0,0,0,.06)}
+label{display:block;font-size:12px;font-weight:700;color:var(--mut);margin:0 0 5px}
+input,select{width:100%;padding:12px 13px;border:1px solid var(--line);border-radius:10px;font:inherit;margin-bottom:13px}
+.btn{width:100%;background:var(--forest);color:#fff;border:0;font:inherit;font-weight:600;font-size:15px;padding:13px;border-radius:11px;cursor:pointer}
+.btn:hover{background:var(--forest2)}
+.g{width:100%;background:#fff;border:1px solid var(--line);color:var(--ink);font:inherit;font-weight:600;font-size:15px;padding:12px;border-radius:11px;text-align:center;text-decoration:none;display:block}
+.or{display:flex;align-items:center;gap:10px;color:var(--mut);font-size:12px;margin:16px 0}.or:before,.or:after{content:"";flex:1;height:1px;background:var(--line)}
+.err{background:#fdeaea;border:1px solid #f2c4c4;color:#a13;padding:10px 12px;border-radius:9px;font-size:13px;margin-bottom:14px}
+.hide{display:none}
+</style></head><body>
+<div class="card">
+  <div class="brand">CRIPFCnt Academy</div>
+  <div class="sub">Enrol in professional courses and earn verifiable certificates.</div>
+  {{#if error}}<div class="err">{{error}}</div>{{/if}}
+  <div class="tabs"><button id="t-join" class="on" onclick="show('join')">Create account</button><button id="t-in" onclick="show('in')">Sign in</button></div>
+
+  <form id="f-join" method="POST" action="/learn/signup">
+    <input type="hidden" name="next" value="{{next}}">
+    <label>Full name</label><input name="name" placeholder="Your name" required>
+    <label>I am a…</label><select name="role"><option value="professional">Professional</option><option value="student">Student</option><option value="professional">Other</option></select>
+    <label>Email</label><input name="email" type="email" placeholder="you@email.com" required>
+    <label>Password</label><input name="password" type="password" placeholder="At least 6 characters" required>
+    <button class="btn" type="submit">Create account &amp; continue</button>
+  </form>
+
+  <form id="f-in" class="hide" method="POST" action="/learn/login">
+    <input type="hidden" name="next" value="{{next}}">
+    <label>Email</label><input name="email" type="email" placeholder="you@email.com" required>
+    <label>Password</label><input name="password" type="password" placeholder="Your password" required>
+    <button class="btn" type="submit">Sign in</button>
+  </form>
+
+  <div class="or">or</div>
+  <a class="g" href="/auth/google?returnTo={{next}}">Continue with Google</a>
+</div>
+<script>
+function show(w){
+  document.getElementById('f-join').classList.toggle('hide',w!=='join');
+  document.getElementById('f-in').classList.toggle('hide',w!=='in');
+  document.getElementById('t-join').classList.toggle('on',w==='join');
+  document.getElementById('t-in').classList.toggle('on',w==='in');
+}
+</script></body></html>

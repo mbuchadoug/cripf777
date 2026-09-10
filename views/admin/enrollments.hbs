@@ -1,0 +1,65 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Enrollments · Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--navy:#12203f;--ink:#16241d;--mut:#66756c;--line:#e7ebe6;--bg:#f4f7f3;--ok:#1f9d6b}
+*{box-sizing:border-box;margin:0}body{font-family:Archivo,system-ui,sans-serif;color:var(--ink);background:var(--bg)}
+a{color:inherit}
+.nav{background:var(--navy);color:#fff;padding:14px clamp(16px,4vw,24px);display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px}
+.nav a{color:#dbe4f5;text-decoration:none;font-weight:600;font-size:13.5px;margin-left:14px}
+.wrap{max-width:1080px;margin:0 auto;padding:clamp(18px,4vw,28px) clamp(16px,4vw,24px)}
+h1{font-family:Fraunces,serif;font-size:24px;font-weight:600;margin-bottom:14px}
+.panel{background:#fff;border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:16px}
+.panel h2{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);margin-bottom:12px}
+form.inline{display:flex;gap:10px;flex-wrap:wrap;align-items:end}
+label{display:block;font-size:12px;font-weight:700;color:var(--mut);margin:0 0 4px}
+input,select{padding:10px 12px;border:1px solid var(--line);border-radius:9px;font:inherit;min-width:180px}
+.btn{background:var(--navy);color:#fff;border:0;font:inherit;font-weight:600;font-size:14px;padding:10px 16px;border-radius:9px;cursor:pointer;text-decoration:none;display:inline-block}
+.btn.g{background:#fff;color:var(--navy);border:1px solid var(--line)}
+.tablewrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--line);border-radius:12px;overflow:hidden;min-width:720px}
+th,td{text-align:left;padding:11px 13px;border-bottom:1px solid var(--line);font-size:13.5px;white-space:nowrap}
+th{background:#f0f2f6;font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--mut)}
+.pill{font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px}
+.pill.active{background:#e7f6ee;color:#1f7a4d}.pill.completed{background:#e7eefb;color:#2456b8}.pill.pending{background:#fbf1dc;color:#9a6b12}.pill.suspended{background:#fdeaea;color:#a13}
+.filters a{font-size:12.5px;text-decoration:none;padding:6px 11px;border:1px solid var(--line);border-radius:20px;background:#fff;margin-right:6px}
+.filters a.on{background:var(--navy);color:#fff;border-color:var(--navy)}
+</style></head><body>
+<div class="nav"><b>CRIPFCnt · Enrollments</b><div><a href="/admin/courses">Courses</a><a href="/admin/module-tracks">Capstones</a></div></div>
+<div class="wrap"><h1>Enrollments</h1>
+
+<div class="panel">
+  <h2>Manually enrol a learner (activates instantly)</h2>
+  <form class="inline" method="POST" action="/admin/enrollments/manual">
+    <div><label>Learner email</label><input name="email" type="email" placeholder="learner@email.com" required></div>
+    <div><label>Course</label><select name="courseId" required>{{#each courses}}<option value="{{this.id}}">{{this.title}}</option>{{/each}}</select></div>
+    <button class="btn" type="submit">Enrol &amp; activate</button>
+  </form>
+  <p style="font-size:12px;color:var(--mut);margin-top:8px">The learner must have signed up (or signed in with Google) at least once first.</p>
+</div>
+
+<div class="filters" style="margin-bottom:12px">
+  <a class="{{#unless filterStatus}}on{{/unless}}" href="/admin/enrollments">All</a>
+  <a class="{{#if (eq filterStatus 'pending')}}on{{/if}}" href="/admin/enrollments?status=pending">Pending</a>
+  <a class="{{#if (eq filterStatus 'active')}}on{{/if}}" href="/admin/enrollments?status=active">Active</a>
+  <a class="{{#if (eq filterStatus 'completed')}}on{{/if}}" href="/admin/enrollments?status=completed">Completed</a>
+  <a class="{{#if (eq filterStatus 'suspended')}}on{{/if}}" href="/admin/enrollments?status=suspended">Suspended</a>
+</div>
+
+<div class="tablewrap"><table>
+  <tr><th>Learner</th><th>Course</th><th>Status</th><th>Access</th><th>Source</th><th>Payment</th><th>Updated</th><th>Actions</th></tr>
+  {{#each rows}}
+  <tr>
+    <td><b>{{this.who}}</b><br><span style="color:var(--mut);font-size:12px">{{this.email}}</span></td>
+    <td>{{this.course}}</td>
+    <td><span class="pill {{this.status}}">{{this.status}}</span></td>
+    <td>{{this.access}}</td><td>{{this.source}}</td>
+    <td>{{this.pay}}</td><td>{{this.when}}</td>
+    <td>
+      {{#unless (eq this.status "active")}}<form method="POST" action="/admin/enrollments/{{this.id}}/activate" style="display:inline"><button class="btn g">Activate</button></form>{{/unless}}
+      {{#unless (eq this.status "suspended")}}<form method="POST" action="/admin/enrollments/{{this.id}}/suspend" style="display:inline"><button class="btn g" style="color:#a13">Suspend</button></form>{{/unless}}
+    </td>
+  </tr>
+  {{else}}<tr><td colspan="8" style="color:var(--mut)">No enrollments{{#if filterStatus}} with status “{{filterStatus}}”{{/if}} yet.</td></tr>{{/each}}
+</table></div>
+</div></body></html>

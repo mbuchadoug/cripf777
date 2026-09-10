@@ -1,0 +1,47 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Module Capstones · Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=Archivo:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--navy:#12203f;--gold:#b8860b;--ink:#16241d;--mut:#6b7a72;--line:#e5e9e4;--bg:#f6f8f5}
+*{box-sizing:border-box;margin:0}body{font-family:Archivo,sans-serif;color:var(--ink);background:var(--bg)}
+.top{background:var(--navy);color:#fff;padding:14px 24px}.top a{color:#fff;text-decoration:none}
+.wrap{max-width:900px;margin:0 auto;padding:24px}
+h1{font-family:Fraunces,serif;font-size:24px;font-weight:600;margin-bottom:6px}
+.hint{color:var(--mut);font-size:13px;margin-bottom:16px}
+.panel{background:#fff;border:1px solid var(--line);border-radius:12px;padding:18px;margin-bottom:16px}
+label{display:block;font-size:12px;font-weight:600;color:var(--mut);margin:0 0 4px}
+input,select{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px;font:inherit}
+.row{margin-bottom:12px}.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+.ck{display:flex;align-items:center;gap:8px;font-size:14px;padding:6px 0}.ck input{width:auto}
+.btn{background:var(--navy);color:#fff;border:0;font-weight:600;padding:11px 20px;border-radius:9px;cursor:pointer}
+table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);font-size:14px}th{background:#f0f2ef;font-size:12px;color:var(--mut)}
+</style></head><body>
+<div class="top"><a href="/admin/courses">← Courses</a></div>
+<div class="wrap">
+<h1>Module Capstones</h1>
+<div class="hint">A capstone issues the “Certificate of Mastery” when a learner completes the area courses you select for a module/pillar.</div>
+
+<div class="panel"><h2 style="font-family:Fraunces,serif;font-size:17px;margin-bottom:12px">Existing capstones</h2>
+<table><tr><th>Module</th><th>Title</th><th>Courses</th><th>Status</th></tr>
+{{#each tracks}}<tr><td>{{this.pillar}}</td><td>{{this.title}}</td><td>{{this.courses}}</td><td>{{#if this.published}}Published{{else}}Draft{{/if}}</td></tr>
+{{else}}<tr><td colspan="4" style="color:var(--mut)">None yet.</td></tr>{{/each}}
+</table></div>
+
+<form method="POST" action="/admin/module-tracks" class="panel">
+  <h2 style="font-family:Fraunces,serif;font-size:17px;margin-bottom:12px">Create / update capstone</h2>
+  <div class="grid2">
+    <div class="row"><label>Module / pillar</label><select name="pillar">{{#each pillars}}<option value="{{this.slug}}">{{this.label}}</option>{{/each}}</select></div>
+    <div class="row"><label>Title</label><input name="title" placeholder="Consciousness - Module Mastery"></div>
+  </div>
+  <div class="row"><label>Member courses (tick the area courses that count)</label>
+    {{#each courses}}<label class="ck"><input type="checkbox" name="courseIds" value="{{this.id}}"> {{this.title}} <span style="color:var(--mut)">· {{this.pillar}}</span></label>{{/each}}
+  </div>
+  <div class="grid3">
+    <div class="row"><label>Min courses to complete <small>(blank = all)</small></label><input type="number" name="minCoursesToComplete" min="1"></div>
+    <div class="row"><label>Mastery band ≥</label><input type="number" name="bandMastery" value="90"></div>
+    <div class="row"><label><input type="checkbox" name="published" style="width:auto"> Publish</label></div>
+  </div>
+  <button class="btn" type="submit">Save capstone</button>
+</form>
+</div></body></html>

@@ -49,6 +49,8 @@ import webTeam from "./routes/web_team.js";          // ← ADD THIS
 import officeRoutes from "./routes/office.js";   // ← NEW back-office portal (/office)
 //-------------------------------------------------------
 import "./hotspot/guard.js";
+import courseEngineRouter from "./routes/courseEngine.js";
+
 import mobileProfessionalRouter from "./routes/mobileProfessional.js";   // near the other mobile imports
                   // right after the school mount
 import mountHotspot from "./hotspot/index.js";
@@ -613,7 +615,7 @@ app.use(orgManagementRoutes);
 //app.use("/stripe/webhook", stripeWebhookRoutes);
 app.use("/billing", billingRoutes);
 app.use("/payments", paymentsRouter);
-
+app.use("/", courseEngineRouter);
 app.use(adminBattlesRouter);
 app.use(employeeUpgradeRoutes);
 app.use("/api/org", apiOrgQuizRoutes);
