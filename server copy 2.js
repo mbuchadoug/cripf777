@@ -130,7 +130,6 @@ import configurePassport from "./config/passport.js";
 import authRoutes from "./routes/auth.js";
 import mobileApiRouter from "./routes/mobileApi.js"; // ← mobile app JSON API
 import mobileSchoolRouter from "./routes/mobileSchool.js"; // ← mobile learning platform
-import reseAdminRouter from "./routes/reseAdmin.js"; // Rese Rese admin panel
 import placementAuditRoutes from "./routes/admin_placement_audits.js";
 import adminOrganizationRoutes from "./routes/admin_organizations.js";
 import orgManagementRoutes from "./routes/org_management.js";
@@ -557,9 +556,6 @@ app.use("/", schoolApplyRouter);          // Public apply form: /apply/school/:i
 app.use("/", steuritApplyRouter);         // St Eurit website: /apply/steurit/web, /apply/steurit/ping
 app.use("/zq-admin", schoolAdminRoutes);
 app.use("/zq-admin", supplierAdminRoutes);
-
-// ── RESE RESE admin panel (own session gate + body parsing) ──
-app.use("/rese-admin", reseAdminRouter);
 // API routes - keep LMS API on /api/lms so quiz UI fetches work
 app.use("/api/lms", lmsApiRoutes);
 app.use("/", creatorCampaignRoutes);
