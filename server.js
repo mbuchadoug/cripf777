@@ -51,7 +51,8 @@ import officeRoutes from "./routes/office.js";   // ← NEW back-office portal (
 import "./hotspot/guard.js";
 import courseEngineRouter from "./routes/courseEngine.js";
 
-import mobileProfessionalRouter from "./routes/mobileProfessional.js";   // near the other mobile imports
+import mobileProfessionalRouter from "./routes/mobileProfessional.js";
+import mobileCoursesRouter from "./routes/mobileCourses.js";   // course engine JSON API for the app   // near the other mobile imports
                   // right after the school mount
 import mountHotspot from "./hotspot/index.js";
 // ...after mongoose has connected and `app` exists...
@@ -217,6 +218,7 @@ app.use("/stripe/webhook", stripeWebhookRoutes);
 app.use("/api", tradesApiRoutes);
 
 
+app.use("/api/mobile/pro/courses", mobileCoursesRouter);  // must precede /api/mobile/pro
 app.use("/api/mobile/pro", mobileProfessionalRouter);  
 
 mountHotspot(app);
