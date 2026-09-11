@@ -1,4 +1,4 @@
-// routes/courseEngine.js — full course engine: enrollment, signup, payments, progress, admin
+// routes/courseEngine.js - full course engine: enrollment, signup, payments, progress, admin
 import { Router } from "express";
 import mongoose from "mongoose";
 import crypto from "crypto";
@@ -47,7 +47,7 @@ router.post("/learn/signup", async (req, res) => {
     if (!em || !password || String(password).length < 6)
       return res.render("courses/signup", { layout: false, next: next || "/courses", error: "Enter an email and a password of at least 6 characters." });
     if (await User.findOne({ email: emailRe(em) }))
-      return res.render("courses/signup", { layout: false, next: next || "/courses", error: "An account with that email already exists — please sign in." });
+      return res.render("courses/signup", { layout: false, next: next || "/courses", error: "An account with that email already exists - please sign in." });
     const isStudent = role === "student";
     const primaryRole = isStudent ? "student" : "parent"; // "professional" is a mobile persona, not a primary-role enum value
     const persona = isStudent ? "student" : "professional";
@@ -200,7 +200,7 @@ router.get("/courses/:slug/take/:quizId", ensureAuth, async (req, res) => {
     const course = await Course.findOne({ slug: req.params.slug }).lean();
     if (!course) return res.status(404).send("Course not found");
 
-    // Gate on ENROLLMENT (not org membership) — this is a learner action
+    // Gate on ENROLLMENT (not org membership) - this is a learner action
     const access = await canAccessCourse({ user: req.user, courseId: course._id });
     if (!access.ok) return res.redirect(`/courses/${course.slug}`);
 
@@ -268,7 +268,7 @@ router.get("/courses/:slug/certificate", ensureAuth, async (req, res) => {
   return res.redirect(cert.pdfUrl);
 });
 
-// ── LEARNER DASHBOARD (/me) — knowledge map + at-a-glance ────────────────────
+// ── LEARNER DASHBOARD (/me) - knowledge map + at-a-glance ────────────────────
 router.get("/me", ensureAuth, async (req, res) => {
   try {
     const map = await getKnowledgeMap(req.user._id);
@@ -336,7 +336,7 @@ router.get("/me/credentials", ensureAuth, async (req, res) => {
 router.get("/verify/course/:code", async (req, res) => {
   const c = await CourseCertificate.findOne({ verifyCode: String(req.params.code || "").toUpperCase() }).lean();
   if (!c) return res.status(404).send("Credential not found or invalid.");
-  res.send(`<pre>VALID CREDENTIAL — Certificate of Competence
+  res.send(`<pre>VALID CREDENTIAL - Certificate of Competence
 Recipient : ${c.recipientName}
 Course    : ${c.courseTitle}
 Area      : ${c.moduleName}
@@ -347,7 +347,7 @@ Issued    : ${new Date(c.issuedAt).toDateString()}</pre>`);
 router.get("/verify/module/:code", async (req, res) => {
   const c = await ModuleCertificate.findOne({ verifyCode: String(req.params.code || "").toUpperCase() }).lean();
   if (!c) return res.status(404).send("Credential not found or invalid.");
-  res.send(`<pre>VALID CREDENTIAL — Certificate of Mastery
+  res.send(`<pre>VALID CREDENTIAL - Certificate of Mastery
 Recipient : ${c.recipientName}
 Module    : ${c.moduleName}
 Grade     : ${c.classification} (${c.overallPercentage}%)
@@ -366,7 +366,7 @@ router.post("/courses/module/:pillar/enroll", ensureAuth, async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// ADMIN — Course Engine control center (auto-provisioning)
+// ADMIN - Course Engine control center (auto-provisioning)
 // ════════════════════════════════════════════════════════════════════════════
 router.get("/admin/course-engine", ensureAuth, ensureAdminEmails, async (req, res) => {
   const orgId = req.user?.organization || null;
@@ -463,7 +463,7 @@ async function renderBuilder(req, res, course) {
   const bySeries = {};
   for (const p of passages) { const key = p.series || "general";
     (bySeries[key] = bySeries[key] || { seriesSlug: key, seriesLabel: slugToLabel(key), quizzes: [] });
-    bySeries[key].quizzes.push({ id: String(p._id), title: p.quizTitle || p.text || "Assessment", band: p.meta?.difficultyBand || "—", qCount: (p.questionIds || []).length, checked: selected.has(String(p._id)) }); }
+    bySeries[key].quizzes.push({ id: String(p._id), title: p.quizTitle || p.text || "Assessment", band: p.meta?.difficultyBand || "-", qCount: (p.questionIds || []).length, checked: selected.has(String(p._id)) }); }
   res.render("admin/course_form", { layout: false, user: req.user, isEdit: !!course, area, areaLabel: slugToLabel(area),
     areas: Object.values(PILLAR_CATEGORIES).flat().sort().map(c => ({ slug: c, label: slugToLabel(c) })), series: Object.values(bySeries),
     course: course ? { id: String(course._id), title: course.title, slug: course.slug, description: course.description, level: course.level, rules: course.rules, weighting: course.weighting, accessType: course.accessType, price: course.price, currency: course.currency, enrollmentOpen: course.enrollmentOpen }
@@ -515,7 +515,7 @@ router.get("/admin/enrollments", ensureAuth, ensureAdminEmails, async (req, res)
   const courses = await Course.find({}).select("_id title").lean();
   res.render("admin/enrollments", { layout: false, user: req.user, courses: courses.map(c => ({ id: String(c._id), title: c.title })),
     filterStatus: req.query.status || "", filterCourse: req.query.course || "",
-    rows: enrs.map(e => ({ id: String(e._id), who: e.user?.displayName || e.user?.email || "—", email: e.user?.email || "", course: e.course?.title || "—",
+    rows: enrs.map(e => ({ id: String(e._id), who: e.user?.displayName || e.user?.email || "-", email: e.user?.email || "", course: e.course?.title || "-",
       status: e.status, access: e.access, source: e.source, pay: e.payment?.status || "none", ref: e.payment?.reference || "", when: new Date(e.updatedAt).toLocaleDateString() })) });
 });
 router.post("/admin/enrollments/manual", ensureAuth, ensureAdminEmails, async (req, res) => {
@@ -555,7 +555,7 @@ router.get("/admin/learners", ensureAuth, ensureAdminEmails, async (req, res) =>
   const byUser = {}; for (const a of agg) byUser[String(a._id)] = a;
   res.render("admin/learners", {
     layout: false, user: req.user, q,
-    rows: users.map(u => ({ id: String(u._id), name: u.displayName || "—", email: u.email || "", role: u.role,
+    rows: users.map(u => ({ id: String(u._id), name: u.displayName || "-", email: u.email || "", role: u.role,
       enrolled: byUser[String(u._id)]?.enrolled || 0, completed: byUser[String(u._id)]?.completed || 0 }))
   });
 });
@@ -569,7 +569,7 @@ router.get("/admin/learners/:id", ensureAuth, ensureAdminEmails, async (req, res
     const pByCourse = {}; for (const p of progresses) pByCourse[String(p.course)] = p;
     const enrollments = enrs.map(e => {
       const pr = e.course ? pByCourse[String(e.course._id)] : null;
-      return { id: String(e._id), course: e.course?.title || "—", slug: e.course?.slug || "",
+      return { id: String(e._id), course: e.course?.title || "-", slug: e.course?.slug || "",
         pillar: e.course?.pillar || (e.course ? pillarOf(e.course.professionalArea) : "") || "",
         status: e.status, access: e.access, source: e.source,
         overall: pr?.overallPercentage || 0, classification: pr?.classification || null,
@@ -578,7 +578,7 @@ router.get("/admin/learners/:id", ensureAuth, ensureAdminEmails, async (req, res
     const allCourses = await Course.find({ published: true }).select("_id title pillar").sort({ pillar: 1, title: 1 }).lean();
     res.render("admin/learner_detail", {
       layout: false, user: req.user,
-      learner: { id: String(learner._id), name: learner.displayName || "—", email: learner.email, role: learner.role },
+      learner: { id: String(learner._id), name: learner.displayName || "-", email: learner.email, role: learner.role },
       map, enrollments,
       pillars: ALL_PILLARS.map(p => ({ slug: p, label: slugToLabel(p) })),
       allCourses: allCourses.map(c => ({ id: String(c._id), title: c.title, pillar: c.pillar }))
@@ -630,7 +630,7 @@ router.post("/admin/module-tracks", ensureAuth, ensureAdminEmails, async (req, r
   try {
     const b = req.body;
     const courseIds = (Array.isArray(b.courseIds) ? b.courseIds : [b.courseIds]).filter(Boolean).filter(id => mongoose.isValidObjectId(id));
-    const doc = { pillar: b.pillar, title: b.title || `${slugToLabel(b.pillar)} — Module Mastery`, slug: slugify(b.slug || b.title || (b.pillar + "-mastery")), description: b.description || "",
+    const doc = { pillar: b.pillar, title: b.title || `${slugToLabel(b.pillar)} - Module Mastery`, slug: slugify(b.slug || b.title || (b.pillar + "-mastery")), description: b.description || "",
       org: req.user?.organization || null, role: "professional", courseIds,
       rules: { minCoursesToComplete: b.minCoursesToComplete ? Number(b.minCoursesToComplete) : null, gradeBands: [{ label: "Pass", min: Number(b.bandPass) || 70 }, { label: "Merit", min: Number(b.bandMerit) || 80 }, { label: "Mastery", min: Number(b.bandMastery) || 90 }] },
       published: b.published === "on" || b.published === "true", createdBy: req.user._id };

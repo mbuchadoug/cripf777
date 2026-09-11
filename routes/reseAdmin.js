@@ -82,6 +82,15 @@ function jobStatusBadge(s) {
   return `<span class="pill ${cls}">${label}</span>`;
 }
 
+function accessLabel(u) {
+  const a = u.access || {};
+  if (a.status === "suspended") return '<span class="pill red">Suspended</span>';
+  if (a.status === "free") return '<span class="pill green">Free access</span>';
+  if (a.expiresAt && new Date(a.expiresAt) > new Date())
+    return `<span class="pill green">Paid · until ${fmtDate(a.expiresAt)}</span>`;
+  return '<span class="pill orange">Expired</span>';
+}
+
 function bucket() {
   return new mongoose.mongo.GridFSBucket(mongoose.connection.db, { bucketName: "rese_uploads" });
 }
@@ -395,11 +404,20 @@ router.get("/users/:id", requireReseAdmin, async (req, res) => {
           <div class="kv"><span>Age</span><b>${u.age != null ? u.age + " yrs" : "unknown"} ${u.adultConfirmed ? "✅ adult" : ""}</b></div>
           <div class="kv"><span>Joined</span><b>${fmtDate(u.createdAt)}</b></div>
           <div class="kv"><span>Jobs done</span><b>${doneCount}</b></div>
+          <div class="kv"><span>Access</span><b>${accessLabel(u)}</b></div>
+          <div class="kv"><span>Credits</span><b>${(u.access && u.access.credits) || 0}</b></div>
 
           <div class="actions" style="margin-top:16px">
             ${u.status !== "active" ? `<form method="post" action="/rese-admin/users/${u._id}/approve"><button class="btn green sm">✔ Approve account</button></form>` : ""}
             ${u.status !== "suspended" ? `<form method="post" action="/rese-admin/users/${u._id}/suspend"><button class="btn red sm">⛔ Suspend</button></form>` : `<form method="post" action="/rese-admin/users/${u._id}/approve"><button class="btn green sm">↺ Reactivate</button></form>`}
             <form method="post" action="/rese-admin/users/${u._id}/set-adult" onsubmit="return true"><input type="hidden" name="adult" value="${u.adultConfirmed ? "0" : "1"}"><button class="btn sm ghost">${u.adultConfirmed ? "Mark under-age" : "Confirm 18+"}</button></form>
+          </div>
+          <div class="muted" style="margin-top:14px;font-size:12px;text-transform:uppercase;letter-spacing:.5px">Manual activation (no payment)</div>
+          <div class="actions" style="margin-top:8px">
+            <form method="post" action="/rese-admin/users/${u._id}/activate?days=7"><button class="btn green sm">✔ +1 week free</button></form>
+            <form method="post" action="/rese-admin/users/${u._id}/activate?days=30"><button class="btn green sm">✔ +1 month free</button></form>
+            <form method="post" action="/rese-admin/users/${u._id}/credits?add=10"><button class="btn blue sm">+10 credits</button></form>
+            <form method="post" action="/rese-admin/users/${u._id}/access-suspend"><button class="btn red sm">Suspend access</button></form>
           </div>
         </div>
 
@@ -482,6 +500,31 @@ router.post("/users/:id/reject", requireReseAdmin, async (req, res) => {
 });
 router.post("/users/:id/set-adult", requireReseAdmin, async (req, res) => {
   await setUser(req.params.id, { adultConfirmed: String(req.body?.adult) === "1" });
+  res.redirect(`/rese-admin/users/${req.params.id}`);
+});
+
+// Manual activation: grant free access for N days (extends if still active).
+router.post("/users/:id/activate", requireReseAdmin, async (req, res) => {
+  const days = Math.max(1, Number(req.query.days) || 7);
+  const u = await ReseUser.findById(req.params.id);
+  if (u) {
+    const now = new Date();
+    const base = u.access?.expiresAt && new Date(u.access.expiresAt) > now ? new Date(u.access.expiresAt) : now;
+    u.access = u.access || {};
+    u.access.status = "paid"; // "paid" = active-until-expiry (manually granted here)
+    u.access.expiresAt = new Date(base.getTime() + days * 86400000);
+    u.access.lastPaymentRef = "manual";
+    await u.save();
+  }
+  res.redirect(`/rese-admin/users/${req.params.id}`);
+});
+router.post("/users/:id/credits", requireReseAdmin, async (req, res) => {
+  const add = Number(req.query.add) || 10;
+  await ReseUser.findByIdAndUpdate(req.params.id, { $inc: { "access.credits": add } });
+  res.redirect(`/rese-admin/users/${req.params.id}`);
+});
+router.post("/users/:id/access-suspend", requireReseAdmin, async (req, res) => {
+  await setUser(req.params.id, { "access.status": "suspended" });
   res.redirect(`/rese-admin/users/${req.params.id}`);
 });
 

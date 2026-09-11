@@ -4,7 +4,7 @@
 // requester, a worker, or both. Everything the admin panel governs lives here:
 // account status, worker approval, ID verification, and adult-age confirmation.
 //
-// Photos (avatar, selfie, national ID) are NOT stored inline — only the GridFS
+// Photos (avatar, selfie, national ID) are NOT stored inline - only the GridFS
 // file id is kept here, and the bytes live in the `rese_uploads` bucket. The
 // admin streams them through a gated route; they are never public.
 
@@ -67,6 +67,17 @@ const ReseUserSchema = new mongoose.Schema({
   dob: { type: Date, default: null },
   adultConfirmed: { type: Boolean, default: false },
 
+  // ── Access / "corner fee" (payment OR manual activation) ──────────
+  // free      : MVP default - can receive jobs at no charge
+  // paid      : paid the corner fee; active until access.expiresAt
+  // suspended : blocked from receiving jobs
+  access: {
+    status: { type: String, enum: ["free", "paid", "suspended"], default: "free" },
+    expiresAt: { type: Date, default: null },
+    credits: { type: Number, default: 0 },
+    lastPaymentRef: { type: String, default: "" }
+  },
+
   createdAt: { type: Date, default: Date.now, index: true },
   lastActiveAt: { type: Date, default: Date.now }
 });
@@ -76,6 +87,14 @@ ReseUserSchema.virtual("age").get(function () {
   if (!this.dob) return null;
   const diff = Date.now() - new Date(this.dob).getTime();
   return Math.floor(diff / (365.25 * 24 * 3600 * 1000));
+});
+
+// Whether this worker may currently receive jobs.
+ReseUserSchema.virtual("accessActive").get(function () {
+  const a = this.access || {};
+  if (a.status === "suspended") return false;
+  if (a.status === "free") return true;
+  return a.expiresAt ? new Date(a.expiresAt) > new Date() : false;
 });
 
 ReseUserSchema.set("toJSON", { virtuals: true });

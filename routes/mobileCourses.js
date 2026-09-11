@@ -49,7 +49,7 @@ const platformOf = req => String(req.query.platform || req.body?.platform || "io
 async function paymentCapability(platform, course) {
   if (course.accessType !== "paid") return { required: false };
   if (platform !== "android") {
-    // iOS (and unknown) — never present a purchase path inside the app
+    // iOS (and unknown) - never present a purchase path inside the app
     return { required: true, available: false, reason: "Paid courses are enrolled on our website. Visit cripfcnt.com to complete enrolment, then it appears here automatically." };
   }
   const s = await CourseEngineSettings.getSettings().catch(() => null);
@@ -197,7 +197,7 @@ router.post("/:slug/enroll", requireMobileAuth, async (req, res) => {
     if (!course) return res.status(404).json({ error: "Not found" });
     const platform = platformOf(req);
 
-    // Block the iOS paid path entirely — never create a purchase expectation in-app
+    // Block the iOS paid path entirely - never create a purchase expectation in-app
     if (course.accessType === "paid" && platform !== "android") {
       return res.json({ status: "web_only", message: "Enrol in this paid course on cripfcnt.com; it will appear here automatically.", url: `${SITE_URL}/courses/${course.slug}` });
     }
