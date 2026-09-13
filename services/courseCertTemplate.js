@@ -299,10 +299,10 @@ body{font-family:${FF_SANS};color:var(--ink);background:#fff;}
     <div class="name">${recipient}</div>
     <div class="arche">${courseTitle}</div>
     <div class="cite">${tier === "module"
-      ? `has demonstrated mastery of the <b>${moduleName}</b> module by completing <b>${totalA} area courses</b>, with an overall attainment of <b>${overall}%</b> &mdash; classified as <b>${esc(classification)}</b>.`
-      : `has successfully completed the <b>${courseTitle}</b> course within the <b>${moduleName}</b> professional area, meeting the required standard of competence across <b>${totalA} assessments</b> (${totalQ} questions) with an overall attainment of <b>${overall}%</b> &mdash; classified as <b>${esc(classification)}</b>.`}</div>
+      ? `has demonstrated mastery of the <b>${moduleName}</b> module by completing <b>${totalA} area courses</b>, with an overall attainment of <b>${overall}%</b> - classified as <b>${esc(classification)}</b>.`
+      : `has successfully completed the <b>${courseTitle}</b> course within the <b>${moduleName}</b> professional area, meeting the required standard of competence across <b>${totalA} assessments</b> (${totalQ} questions) with an overall attainment of <b>${overall}%</b> - classified as <b>${esc(classification)}</b>.`}</div>
     <div class="framework"><div class="fl">PROFESSIONAL AREA &middot; LEVEL</div>
-      <div class="fv">${moduleName} &mdash; ${level}</div></div>
+      <div class="fv">${moduleName} - ${level}</div></div>
     <div class="profhead"><div class="ph">${L.resultsHead}</div><div class="phline"></div></div>
     <div class="meters">${meters}</div>
     <div class="foot">

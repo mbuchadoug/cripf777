@@ -311,10 +311,10 @@ body{font-family:${FF_SANS};color:var(--ink);background:#fff;}
     <div class="name">${recipient}</div>
     <div class="arche">${designation}</div>
     <div class="cite">has completed the <b>${assessmentName}</b> and has been mapped across the eight
-      dimensions of Placement Intelligence &mdash; the framework developed by Donald Mataranyika for locating an
+      dimensions of Placement Intelligence - the framework developed by Donald Mataranyika for locating an
       individual&rsquo;s optimal contribution within an organisation.</div>
     <div class="framework"><div class="fl">ASSESSMENT INSTRUMENT</div>
-      <div class="fv">Placement Intelligence Framework &mdash; CRIPFCnt</div></div>
+      <div class="fv">Placement Intelligence Framework - CRIPFCnt</div></div>
     <div class="profhead"><div class="ph">EIGHT-DIMENSION PROFILE</div><div class="phline"></div></div>
     <div class="meters">${meters}</div>
     <div class="foot">

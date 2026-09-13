@@ -149,7 +149,7 @@ async function sendCertificateEmail({ to, participantName, archetypeName, verify
   <div class="verify">${verifyCode}</div>
   <p>Verify at: <a href="${verifyUrl}" style="color:#0B4F45">${verifyUrl}</a></p>
   <div class="footer">
-    CRIPFCnt &mdash; Recalibrating Intelligence &amp; Society<br>
+    CRIPFCnt - Recalibrating Intelligence &amp; Society<br>
     This certificate represents a mapping of placement intelligence orientation.
   </div>
 </div>

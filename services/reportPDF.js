@@ -577,7 +577,7 @@ function buildLedgerHTML({ biz, periodLabel, branchName, ledgerRows, openingBala
     dayHTML += `
     <tr style="background:#dbeafe;border-top:1px solid #93c5fd">
       <td colspan="3" style="padding:6px 10px;font-size:11px;color:#1e40af;font-weight:600">
-        End of ${dayKey.split(",")[0].trim()} &mdash; ${rows.length} transaction${rows.length === 1 ? "" : "s"}
+        End of ${dayKey.split(",")[0].trim()} - ${rows.length} transaction${rows.length === 1 ? "" : "s"}
       </td>
       <td style="padding:6px 8px;font-size:11px;color:#1e40af"></td>
       <td style="text-align:right;padding:6px 8px;font-size:11px;color:#15803d;font-weight:600">${money(dayIn, cur)}</td>
@@ -628,7 +628,7 @@ function buildLedgerHTML({ biz, periodLabel, branchName, ledgerRows, openingBala
   </div>
 
   <!-- PERIOD LEDGER TABLE - grouped by day -->
-  <div class="section-title">Transaction Ledger &mdash; ${esc(periodLabel)}</div>
+  <div class="section-title">Transaction Ledger - ${esc(periodLabel)}</div>
 
   <table>
     <thead>
@@ -646,7 +646,7 @@ function buildLedgerHTML({ biz, periodLabel, branchName, ledgerRows, openingBala
       ${dayHTML}
       <!-- PERIOD GRAND TOTAL -->
       <tr class="grand-total">
-        <td colspan="4">CLOSING BALANCE &mdash; End of ${esc(periodLabel)}</td>
+        <td colspan="4">CLOSING BALANCE - End of ${esc(periodLabel)}</td>
         <td class="r" style="color:#15803d">${money(totalIn, cur)}</td>
         <td class="r" style="color:#be123c">(${money(totalOut, cur)})</td>
         <td class="r">${money(closingBalance, cur)}</td>
@@ -768,16 +768,16 @@ function buildClerkStatementHTML({ biz, periodLabel, branchName, clerkData, logo
   let reconcileHTML;
   if (handedOver !== null) {
     if (Math.abs(discrepancy) < 0.01) {
-      reconcileHTML = `<div class="verdict profit">&#x2705; BALANCED &mdash; Expected ${money(expectedAtHandover, cur)}, Counted ${money(handedOver, cur)}</div>`;
+      reconcileHTML = `<div class="verdict profit">&#x2705; BALANCED - Expected ${money(expectedAtHandover, cur)}, Counted ${money(handedOver, cur)}</div>`;
     } else if (discrepancy > 0) {
       reconcileHTML = `<div class="verdict" style="background:#fffbeb;color:#b45309;border-left:4px solid #d97706">
-        &#x26A0;&#xFE0F; SURPLUS +${money(discrepancy, cur)} &mdash; Counted ${money(handedOver, cur)}, Expected ${money(expectedAtHandover, cur)}
+        &#x26A0;&#xFE0F; SURPLUS +${money(discrepancy, cur)} - Counted ${money(handedOver, cur)}, Expected ${money(expectedAtHandover, cur)}
       </div>`;
     } else {
-      reconcileHTML = `<div class="verdict loss">&#x274C; SHORT ${money(Math.abs(discrepancy), cur)} &mdash; Counted ${money(handedOver, cur)}, Expected ${money(expectedAtHandover, cur)}</div>`;
+      reconcileHTML = `<div class="verdict loss">&#x274C; SHORT ${money(Math.abs(discrepancy), cur)} - Counted ${money(handedOver, cur)}, Expected ${money(expectedAtHandover, cur)}</div>`;
     }
   } else {
-    reconcileHTML = `<div class="verdict even">&#x23F3; Shift still open &mdash; Cash at hand should be ${money(expectedClosing, cur)}. No handover recorded yet.</div>`;
+    reconcileHTML = `<div class="verdict even">&#x23F3; Shift still open - Cash at hand should be ${money(expectedClosing, cur)}. No handover recorded yet.</div>`;
   }
 
   // ── Handovers in table ──────────────────────────────────────────────────────
@@ -858,7 +858,7 @@ function buildClerkStatementHTML({ biz, periodLabel, branchName, clerkData, logo
   </table>
 
   <!-- ALL TRANSACTIONS - grouped by day with running balance -->
-  <div class="section-title">All Transactions by ${esc(clerkName)} &mdash; ${esc(periodLabel)}</div>
+  <div class="section-title">All Transactions by ${esc(clerkName)} - ${esc(periodLabel)}</div>
   <table>
     <thead>
       <tr>
@@ -873,7 +873,7 @@ function buildClerkStatementHTML({ biz, periodLabel, branchName, clerkData, logo
     <tbody>
       ${dayHTML}
       <tr class="grand-total">
-        <td colspan="3">Closing Balance &mdash; End of Period</td>
+        <td colspan="3">Closing Balance - End of Period</td>
         <td class="r" style="color:#15803d">+${money(totalIn, cur)}</td>
         <td class="r" style="color:#be123c">&minus;${money(totalOut, cur)}</td>
         <td class="r">${money(expectedClosing, cur)}</td>

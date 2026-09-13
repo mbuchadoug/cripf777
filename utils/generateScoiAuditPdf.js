@@ -142,7 +142,7 @@ export async function generateScoiAuditPdf({ audit, req }) {
       headerTemplate: `
         <div style="font-family:Arial,sans-serif;font-size:9px;color:#94A3B8;
                     width:100%;padding:0 40px;box-sizing:border-box;text-align:right;">
-          CRIPFCnt SCOI Framework &mdash; Confidential Intelligence Report
+          CRIPFCnt SCOI Framework - Confidential Intelligence Report
         </div>`,
       footerTemplate: `
         <div style="font-family:Arial,sans-serif;font-size:9px;color:#94A3B8;

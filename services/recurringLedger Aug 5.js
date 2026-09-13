@@ -578,7 +578,7 @@ export async function generateRecurringLedgerPDF({ biz, stmt, periodLabel: pl, b
         <div class="kpi-sub">All tenants, right now</div></div>
     </div>
 
-    <div class="section-title">Cumulative Ledger &mdash; every charge, payment &amp; expense with running balances</div>
+    <div class="section-title">Cumulative Ledger - every charge, payment &amp; expense with running balances</div>
     <table>
       <thead><tr>
         <th style="width:44px">Time</th>
@@ -599,7 +599,7 @@ export async function generateRecurringLedgerPDF({ biz, stmt, periodLabel: pl, b
         </tr>
         ${bodyHtml}
         <tr class="closing-row">
-          <td colspan="5" class="bold">CLOSING &mdash; End of Period</td>
+          <td colspan="5" class="bold">CLOSING - End of Period</td>
           <td class="r bold credit">+${fmtMoney(stmt.totalCollected, cur)}</td>
           <td class="r bold debit">&minus;${fmtMoney(stmt.totalExpenses, cur)}</td>
           <td class="r bold">${fmtMoney(stmt.closingCash, cur)}</td>

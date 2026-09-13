@@ -2704,7 +2704,7 @@ router.get("/schools/:id/brochures", requireSupplierAdmin, async (req, res) => {
           All files uploaded here are sent directly to parents on WhatsApp when they open your school link.
           <strong>PDFs</strong> are sent as downloadable documents parents can open and save.
           <strong>Images</strong> (JPG/PNG/WEBP) are sent as WhatsApp photos displayed inline.
-          All files are stored on the ZimQuote server &mdash; no Google Drive or external hosting needed.
+          All files are stored on the ZimQuote server - no Google Drive or external hosting needed.
         </p>
 
         <div style="overflow-x:auto;margin-bottom:28px">
@@ -2734,7 +2734,7 @@ router.get("/schools/:id/brochures", requireSupplierAdmin, async (req, res) => {
               </div>
               <div>
                 <label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;color:#16a34a">
-                  File &mdash; PDF, JPG, PNG or WEBP (max 10MB)
+                  File - PDF, JPG, PNG or WEBP (max 10MB)
                 </label>
                 <input name="brochureFile" type="file"
                        accept=".pdf,application/pdf,image/jpeg,image/png,image/webp"
@@ -2745,8 +2745,8 @@ router.get("/schools/:id/brochures", requireSupplierAdmin, async (req, res) => {
               </div>
             </div>
             <p style="font-size:11px;color:#64748b;margin-top:10px;line-height:1.6">
-              &#x1F4C4; PDFs sent as downloadable documents &mdash; parents can open and save them.<br>
-              &#x1F5BC; Images (JPG/PNG/WEBP) sent as WhatsApp photos &mdash; shown inline, no download tap needed.<br>
+              &#x1F4C4; PDFs sent as downloadable documents - parents can open and save them.<br>
+              &#x1F5BC; Images (JPG/PNG/WEBP) sent as WhatsApp photos - shown inline, no download tap needed.<br>
               &#x26A0; Keep PDFs under 5MB and images under 3MB for reliable WhatsApp delivery.
             </p>
           </form>

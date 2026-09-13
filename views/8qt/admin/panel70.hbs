@@ -1597,7 +1597,7 @@ function durationText(start, end) {
 // place without another round trip to the server.
 function timeCell(v, extra) {
   const d = v ? new Date(v) : null;
-  if (!d || isNaN(d.getTime())) return '<div class="ts-none">&mdash;</div>';
+  if (!d || isNaN(d.getTime())) return '<div class="ts-none">-</div>';
   return `<div class="ts-rel" data-ts="${d.toISOString()}">${relTime(d)}</div>` +
          `<div class="ts-abs">${catStamp(d)}</div>` +
          (extra ? `<div class="ts-dur">${extra}</div>` : '');

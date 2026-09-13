@@ -238,7 +238,7 @@ body{font-family:${FF_SANS};color:var(--ink);background:#fff;}
       <b>${moduleName}</b> module of the CRIPFCnt Professional programme, achieving a ${esc(band.toLowerCase())}
       standing.</div>
     <div class="framework"><div class="fl">ASSESSMENT INSTRUMENT</div>
-      <div class="fv">${moduleName} Module &mdash; CRIPFCnt Professional</div></div>
+      <div class="fv">${moduleName} Module - CRIPFCnt Professional</div></div>
     <div class="profhead"><div class="ph">ASSESSMENT RESULT</div><div class="phline"></div></div>
     <div class="result">${resultCards}</div>
     <div class="foot">
