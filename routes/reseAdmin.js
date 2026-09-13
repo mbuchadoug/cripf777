@@ -1,6 +1,6 @@
 // routes/reseAdmin.js
 //
-// Rese Rese admin panel — same idiom as your ZimQuote admin: a layout() shell
+// Rese Rese admin panel - same idiom as your ZimQuote admin: a layout() shell
 // with a dark off-canvas sidebar, light content, a session-flag password gate,
 // per-router body parsing, and GridFS for the verification images.
 //
@@ -9,7 +9,7 @@
 //    app.use("/rese-admin", reseAdminRouter);
 //
 // Then visit:  https://cripfcnt.com/rese-admin
-// Password:    process.env.RESE_ADMIN_PASSWORD  (default below — change it)
+// Password:    process.env.RESE_ADMIN_PASSWORD  (default below - change it)
 
 import { Router } from "express";
 import express from "express";
@@ -46,14 +46,14 @@ const CATS = {
   build: { e: "🧱", l: "Building help" },
   any: { e: "➕", l: "Anything else" }
 };
-const cat = (id) => CATS[id] || { e: "•", l: id || "—" };
+const cat = (id) => CATS[id] || { e: "•", l: id || "-" };
 
 function fmtDate(d) {
-  if (!d) return "—";
+  if (!d) return "-";
   return new Date(d).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
 }
 function timeAgo(d) {
-  if (!d) return "—";
+  if (!d) return "-";
   const s = Math.floor((Date.now() - new Date(d).getTime()) / 1000);
   if (s < 60) return "just now";
   if (s < 3600) return `${Math.floor(s / 60)}m ago`;
@@ -66,19 +66,19 @@ function verifyBadge(v) {
     approved: ["✅ Verified", "green"],
     pending: ["⏳ Pending", "orange"],
     rejected: ["✕ Rejected", "red"],
-    unverified: ["— Unverified", "muted"]
+    unverified: ["- Unverified", "muted"]
   };
   const [label, cls] = map[v?.status || "unverified"] || map.unverified;
   return `<span class="pill ${cls}">${label}</span>`;
 }
 function statusBadge(s) {
   const map = { active: ["Active", "green"], pending: ["Pending", "orange"], suspended: ["Suspended", "red"] };
-  const [label, cls] = map[s] || ["—", "muted"];
+  const [label, cls] = map[s] || ["-", "muted"];
   return `<span class="pill ${cls}">${label}</span>`;
 }
 function jobStatusBadge(s) {
   const map = { open: ["Open", "orange"], accepted: ["Taken", "blue"], done: ["Done", "green"], cancelled: ["Cancelled", "muted"], expired: ["Expired", "muted"] };
-  const [label, cls] = map[s] || ["—", "muted"];
+  const [label, cls] = map[s] || ["-", "muted"];
   return `<span class="pill ${cls}">${label}</span>`;
 }
 
@@ -267,7 +267,7 @@ router.get("/", requireReseAdmin, async (req, res) => {
     const recentRows = recent
       .map(
         (u) => `<tr>
-        <td>${u.avatarFileId ? `<img class="avatar" src="/rese-admin/media/${u.avatarFileId}">` : "🙂"} <b>${esc(u.name || "—")}</b></td>
+        <td>${u.avatarFileId ? `<img class="avatar" src="/rese-admin/media/${u.avatarFileId}">` : "🙂"} <b>${esc(u.name || "-")}</b></td>
         <td class="muted">${esc(u.phone)}</td>
         <td>${u.isWorker ? "💪 Worker" : "🙋 Requester"}</td>
         <td>${statusBadge(u.status)}</td>
@@ -293,8 +293,8 @@ router.get("/", requireReseAdmin, async (req, res) => {
       ${
         pendingVerify > 0 || pendingApproval > 0
           ? `<div class="card"><h3>Needs your attention</h3>
-              ${pendingApproval > 0 ? `<p style="margin-bottom:8px">🟠 <b>${pendingApproval}</b> worker(s) waiting for account approval — <a style="color:var(--brand);font-weight:700" href="/rese-admin/users?status=pending">review</a></p>` : ""}
-              ${pendingVerify > 0 ? `<p>🪪 <b>${pendingVerify}</b> ID verification(s) pending — <a style="color:var(--brand);font-weight:700" href="/rese-admin/verifications">review</a></p>` : ""}
+              ${pendingApproval > 0 ? `<p style="margin-bottom:8px">🟠 <b>${pendingApproval}</b> worker(s) waiting for account approval - <a style="color:var(--brand);font-weight:700" href="/rese-admin/users?status=pending">review</a></p>` : ""}
+              ${pendingVerify > 0 ? `<p>🪪 <b>${pendingVerify}</b> ID verification(s) pending - <a style="color:var(--brand);font-weight:700" href="/rese-admin/verifications">review</a></p>` : ""}
             </div>`
           : ""
       }
@@ -332,11 +332,11 @@ router.get("/users", requireReseAdmin, async (req, res) => {
     const rows = users
       .map(
         (u) => `<tr>
-        <td>${u.avatarFileId ? `<img class="avatar" src="/rese-admin/media/${u.avatarFileId}">` : "🙂"} <b>${esc(u.name || "—")}</b></td>
+        <td>${u.avatarFileId ? `<img class="avatar" src="/rese-admin/media/${u.avatarFileId}">` : "🙂"} <b>${esc(u.name || "-")}</b></td>
         <td class="muted">${esc(u.phone)}</td>
         <td>${u.isWorker ? "💪 Worker" : "🙋 Requester"}</td>
         <td>${statusBadge(u.status)}</td>
-        <td>${u.isWorker ? verifyBadge(u.verification) : '<span class="muted">—</span>'}</td>
+        <td>${u.isWorker ? verifyBadge(u.verification) : '<span class="muted">-</span>'}</td>
         <td class="muted">${timeAgo(u.createdAt)}</td>
         <td><a class="btn sm ghost" href="/rese-admin/users/${u._id}">Open</a></td>
       </tr>`
@@ -374,8 +374,8 @@ router.get("/users/:id", requireReseAdmin, async (req, res) => {
     if (!u) return res.send(layout("User", `<div class="alert red">User not found.</div>`, "users"));
 
     const w = u.worker || {};
-    const skills = (w.skills || []).map((id) => `<label class="chk">${cat(id).e} ${esc(cat(id).l)}</label>`).join("") || '<span class="muted">—</span>';
-    const areas = (w.suburbs || []).map((s) => `<label class="chk">📍 ${esc(s)}</label>`).join("") || '<span class="muted">—</span>';
+    const skills = (w.skills || []).map((id) => `<label class="chk">${cat(id).e} ${esc(cat(id).l)}</label>`).join("") || '<span class="muted">-</span>';
+    const areas = (w.suburbs || []).map((s) => `<label class="chk">📍 ${esc(s)}</label>`).join("") || '<span class="muted">-</span>';
 
     const [recentJobs, doneCount] = await Promise.all([
       JobRequest.find({ $or: [{ poster: u._id }, { worker: u._id }] }).sort({ createdAt: -1 }).limit(10).lean(),
@@ -397,7 +397,7 @@ router.get("/users/:id", requireReseAdmin, async (req, res) => {
           <h3>Account</h3>
           <div style="display:flex;align-items:center;gap:14px;margin-bottom:12px">
             ${u.avatarFileId ? `<img class="avatar" style="width:64px;height:64px" src="/rese-admin/media/${u.avatarFileId}">` : '<div class="avatar" style="width:64px;height:64px;display:flex;align-items:center;justify-content:center;font-size:30px">🙂</div>'}
-            <div><div style="font-size:19px;font-weight:800">${esc(u.name || "—")}</div><div class="muted">${esc(u.phone)}</div></div>
+            <div><div style="font-size:19px;font-weight:800">${esc(u.name || "-")}</div><div class="muted">${esc(u.phone)}</div></div>
           </div>
           <div class="kv"><span>Type</span><b>${u.isWorker ? "💪 Worker" : ""} ${u.isRequester ? "🙋 Requester" : ""}</b></div>
           <div class="kv"><span>Status</span><b>${statusBadge(u.status)}</b></div>
@@ -426,8 +426,8 @@ router.get("/users/:id", requireReseAdmin, async (req, res) => {
           ${
             w.selfieFileId || w.idFileId
               ? `<div class="row2">
-                  <div><div class="muted" style="margin-bottom:6px">Selfie</div>${w.selfieFileId ? `<img class="docimg" src="/rese-admin/media/${w.selfieFileId}">` : '<span class="muted">—</span>'}</div>
-                  <div><div class="muted" style="margin-bottom:6px">National ID</div>${w.idFileId ? `<img class="docimg" src="/rese-admin/media/${w.idFileId}">` : '<span class="muted">—</span>'}</div>
+                  <div><div class="muted" style="margin-bottom:6px">Selfie</div>${w.selfieFileId ? `<img class="docimg" src="/rese-admin/media/${w.selfieFileId}">` : '<span class="muted">-</span>'}</div>
+                  <div><div class="muted" style="margin-bottom:6px">National ID</div>${w.idFileId ? `<img class="docimg" src="/rese-admin/media/${w.idFileId}">` : '<span class="muted">-</span>'}</div>
                 </div>`
               : '<p class="muted">No documents uploaded yet.</p>'
           }
@@ -537,12 +537,12 @@ router.get("/verifications", requireReseAdmin, async (req, res) => {
       .map(
         (u) => `<div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-          <b>${esc(u.name || "—")} · <span class="muted">${esc(u.phone)}</span></b>
+          <b>${esc(u.name || "-")} · <span class="muted">${esc(u.phone)}</span></b>
           <a class="btn sm ghost" href="/rese-admin/users/${u._id}">Open</a>
         </div>
         <div class="row2">
-          <div><div class="muted" style="margin-bottom:6px">Selfie</div>${u.worker?.selfieFileId ? `<img class="docimg" src="/rese-admin/media/${u.worker.selfieFileId}">` : '<span class="muted">—</span>'}</div>
-          <div><div class="muted" style="margin-bottom:6px">National ID</div>${u.worker?.idFileId ? `<img class="docimg" src="/rese-admin/media/${u.worker.idFileId}">` : '<span class="muted">—</span>'}</div>
+          <div><div class="muted" style="margin-bottom:6px">Selfie</div>${u.worker?.selfieFileId ? `<img class="docimg" src="/rese-admin/media/${u.worker.selfieFileId}">` : '<span class="muted">-</span>'}</div>
+          <div><div class="muted" style="margin-bottom:6px">National ID</div>${u.worker?.idFileId ? `<img class="docimg" src="/rese-admin/media/${u.worker.idFileId}">` : '<span class="muted">-</span>'}</div>
         </div>
         <div class="actions" style="margin-top:12px">
           <form method="post" action="/rese-admin/users/${u._id}/verify"><button class="btn green sm">✅ Approve</button></form>
