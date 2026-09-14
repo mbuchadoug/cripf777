@@ -1,6 +1,7 @@
 // routes/courseEngine.js - full course engine: enrollment, signup, payments, progress, admin
 import { Router } from "express";
 import mongoose from "mongoose";
+import { GridFSBucket } from "mongodb";
 import crypto from "crypto";
 import { ensureAuth } from "../middleware/authGuard.js";
 import ExamInstance from "../models/examInstance.js";
@@ -11,6 +12,7 @@ import CourseCertificate from "../models/courseCertificate.js";
 import ModuleTrack from "../models/moduleTrack.js";
 import ModuleCertificate from "../models/moduleCertificate.js";
 import Enrollment from "../models/enrollment.js";
+import CourseLesson from "../models/courseLesson.js";
 import Question from "../models/question.js";
 import Organization from "../models/organization.js";
 import User from "../models/user.js";
@@ -152,7 +154,9 @@ router.get("/courses/:slug", async (req, res) => {
       quizzes: (u.quizIds || []).map(qid => { const id = String(qid); const b = bestById[id] || {};
         return { id, title: titleById[id] || "Assessment", best: b.bestPercentage || 0, attempts: b.attempts || 0, passed: !!b.passed,
           takeUrl: `/courses/${course.slug}/take/${id}` }; }) }));
-    res.render("courses/detail", { ...base, mode: "learning", stagesInfo: st, units,
+    const lessonDocs = await CourseLesson.find({ course: course._id, published: true }).sort({ order: 1, createdAt: 1 }).lean();
+    const lessons = lessonDocs.map(l => ({ title: l.title, caption: l.caption || "", unitTitle: l.unitTitle || null, videoUrl: l.videoFilename ? ("/videos/" + l.videoFilename) : null }));
+    res.render("courses/detail", { ...base, mode: "learning", stagesInfo: st, units, lessons,
       progress: { overall: ev?.overallPercentage || 0, passedCount: ev?.passedCount || 0, total: ev?.totalQuizzes || 0,
         complete: !!ev?.complete, classification: ev?.classification || null, breadthOk: !!ev?.breadthOk, depthOk: !!ev?.depthOk },
       certificateUrl: result?.certificate?.pdfUrl || null });
@@ -435,6 +439,53 @@ router.post("/admin/courses/:id/lock", ensureAuth, ensureAdminEmails, async (req
   if (!c) return res.status(404).send("Not found");
   c.customized = !c.customized; await c.save();
   res.redirect("/admin/course-engine");
+});
+
+// ── ADMIN: course learning materials (lessons = GridFS video + caption) ──────
+async function listBucketVideos() {
+  try {
+    const db = mongoose.connection.db;
+    if (!db) return [];
+    const bucket = new GridFSBucket(db, { bucketName: "videos" });
+    const files = await bucket.find({}).sort({ uploadDate: -1 }).toArray();
+    return files.map(f => ({ filename: f.filename, title: f.metadata?.title || f.filename }));
+  } catch (_) { return []; }
+}
+router.get("/admin/courses/:id/lessons", ensureAuth, ensureAdminEmails, async (req, res) => {
+  const course = await Course.findById(req.params.id).lean();
+  if (!course) return res.status(404).send("Not found");
+  const [lessons, videos] = await Promise.all([
+    CourseLesson.find({ course: course._id }).sort({ order: 1, createdAt: 1 }).lean(),
+    listBucketVideos()
+  ]);
+  res.render("admin/course_lessons", {
+    layout: false, user: req.user,
+    course: { id: String(course._id), title: course.title, slug: course.slug, units: (course.units || []).map(u => u.title) },
+    lessons: lessons.map(l => ({ id: String(l._id), title: l.title, caption: l.caption, videoFilename: l.videoFilename, unitTitle: l.unitTitle, order: l.order, published: l.published })),
+    videos
+  });
+});
+router.post("/admin/courses/:id/lessons", ensureAuth, ensureAdminEmails, async (req, res) => {
+  try {
+    const b = req.body;
+    if (!b.title) return res.status(400).send("Title required");
+    await CourseLesson.create({
+      course: req.params.id, title: b.title,
+      videoFilename: b.videoFilename || null, caption: b.caption || "",
+      unitTitle: b.unitTitle || null, order: Number(b.order) || 0,
+      published: b.published === "on" || b.published === "true", createdBy: req.user._id
+    });
+    res.redirect(`/admin/courses/${req.params.id}/lessons`);
+  } catch (e) { console.error("[lesson create]", e); res.status(500).send("Failed: " + e.message); }
+});
+router.post("/admin/courses/:id/lessons/:lessonId/publish", ensureAuth, ensureAdminEmails, async (req, res) => {
+  const l = await CourseLesson.findById(req.params.lessonId);
+  if (l) { l.published = !l.published; await l.save(); }
+  res.redirect(`/admin/courses/${req.params.id}/lessons`);
+});
+router.post("/admin/courses/:id/lessons/:lessonId/delete", ensureAuth, ensureAdminEmails, async (req, res) => {
+  await CourseLesson.deleteOne({ _id: req.params.lessonId });
+  res.redirect(`/admin/courses/${req.params.id}/lessons`);
 });
 // Publish/unpublish from the control center
 router.post("/admin/course-engine/:id/publish", ensureAuth, ensureAdminEmails, async (req, res) => {

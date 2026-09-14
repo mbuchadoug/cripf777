@@ -20,6 +20,12 @@ h1{font-family:Fraunces,serif;font-size:clamp(26px,5vw,36px);font-weight:600;lin
 input{width:100%;padding:12px 13px;border:1px solid var(--line);border-radius:10px;font:inherit;margin-bottom:10px}
 .or{display:flex;align-items:center;gap:10px;color:var(--mut);font-size:12px;margin:14px 0}.or:before,.or:after{content:"";flex:1;height:1px;background:var(--line)}
 /* learning */
+.lessons{margin-top:16px}
+.lesson-card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:12px}
+.lesson-card .lt{font-family:Fraunces,serif;font-size:17px;font-weight:600;margin-bottom:8px}
+.lesson-card video{width:100%;border-radius:10px;background:#000;display:block}
+.lesson-card .lcap{font-size:14px;color:var(--mut);margin-top:10px;line-height:1.6;white-space:pre-wrap}
+.lessons-h{font-family:Fraunces,serif;font-size:19px;font-weight:600;margin:20px 0 10px}
 .big{font-family:Fraunces,serif;font-size:34px;font-weight:600}
 .statgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px}
 .stat{background:#f7faf7;border:1px solid var(--line);border-radius:12px;padding:14px}
@@ -114,6 +120,24 @@ input{width:100%;padding:12px 13px;border:1px solid var(--line);border-radius:10
     <div style="height:16px"></div>
   {{/if}}
 
+  {{#if lessons.length}}
+  <div class="lessons-h">Course materials</div>
+  <div class="lessons">
+  {{#each lessons}}
+    <div class="lesson-card">
+      <div class="lt">{{this.title}}</div>
+      {{#if this.videoUrl}}
+      <video controls preload="metadata" playsinline>
+        <source src="{{this.videoUrl}}" type="video/mp4">
+        Your browser can't play this video.
+      </video>
+      {{/if}}
+      {{#if this.caption}}<div class="lcap">{{this.caption}}</div>{{/if}}
+    </div>
+  {{/each}}
+  </div>
+  <div class="lessons-h">Assessments</div>
+{{/if}}
   {{#each units}}
   <div class="panel">
     <div class="stage">

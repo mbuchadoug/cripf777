@@ -34,6 +34,7 @@ form{display:inline}
     <td>{{#if this.published}}<span class="pub y">Published</span>{{else}}<span class="pub n">Draft</span>{{/if}}</td>
     <td>
       <a class="btn g" href="/admin/courses/{{this.id}}/edit">Edit</a>
+      <a class="btn g" href="/admin/courses/{{this.id}}/lessons">Lessons</a>
       <form method="POST" action="/admin/courses/{{this.id}}/publish"><button class="btn g">{{#if this.published}}Unpublish{{else}}Publish{{/if}}</button></form>
       <form method="POST" action="/admin/courses/{{this.id}}/delete" onsubmit="return confirm('Delete course?')"><button class="btn g" style="color:#a35">Delete</button></form>
     </td>

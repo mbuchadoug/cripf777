@@ -1,0 +1,64 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lessons · {{course.title}}</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--navy:#12203f;--ink:#16241d;--mut:#66756c;--line:#e7ebe6;--bg:#f4f7f3;--ok:#1f9d6b}
+*{box-sizing:border-box;margin:0}body{font-family:Archivo,system-ui,sans-serif;color:var(--ink);background:var(--bg)}
+a{color:inherit}
+.nav{background:var(--navy);color:#fff;padding:14px clamp(16px,4vw,24px);display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px}
+.nav a{color:#dbe4f5;text-decoration:none;font-weight:600;font-size:13.5px;margin-left:14px}
+.wrap{max-width:920px;margin:0 auto;padding:clamp(18px,4vw,28px) clamp(16px,4vw,24px)}
+h1{font-family:Fraunces,serif;font-size:24px;font-weight:600;margin-bottom:4px}
+.sub{color:var(--mut);font-size:14px;margin-bottom:18px}
+.panel{background:#fff;border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:16px}
+.panel h2{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);margin-bottom:12px}
+label{display:block;font-size:12px;font-weight:700;color:var(--mut);margin:0 0 5px}
+input,select,textarea{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font:inherit;background:#fff}
+.grid{display:grid;grid-template-columns:2fr 1fr;gap:14px}.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+.row{margin-bottom:12px}
+.btn{background:var(--navy);color:#fff;border:0;font:inherit;font-weight:600;font-size:14px;padding:10px 16px;border-radius:9px;cursor:pointer;text-decoration:none;display:inline-block}
+.btn.g{background:#fff;color:var(--navy);border:1px solid var(--line);font-size:12.5px;padding:7px 12px}
+.lesson{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--line)}
+.lesson .t{flex:1}.lesson .t .n{font-weight:600;font-size:14px}.lesson .t .m{font-size:12px;color:var(--mut)}
+.tag{font-size:10.5px;font-weight:700;padding:2px 9px;border-radius:20px}.tag.y{background:#e7f6ee;color:#1f7a4d}.tag.n{background:#f3e7e7;color:#a35}
+form.inl{display:inline;margin:0}
+.hint{font-size:12.5px;color:var(--mut)}
+</style></head><body>
+<div class="nav"><b>Lessons · {{course.title}}</b><div><a href="/admin/courses">← Courses</a><a href="/admin/videos">Upload video →</a><a href="/courses/{{course.slug}}" target="_blank">Preview</a></div></div>
+<div class="wrap">
+  <h1>Learning materials</h1>
+  <div class="sub">Videos and notes that enrolled learners see on this course. Upload a video under “Upload video”, then add it as a lesson here with a caption.</div>
+
+  <div class="panel">
+    <h2>Lessons in order</h2>
+    {{#each lessons}}
+    <div class="lesson">
+      <div class="t"><div class="n">{{this.order}}. {{this.title}}</div>
+        <div class="m">{{#if this.videoFilename}}🎬 {{this.videoFilename}}{{else}}Text only{{/if}}{{#if this.unitTitle}} · {{this.unitTitle}}{{/if}}</div></div>
+      {{#if this.published}}<span class="tag y">Live</span>{{else}}<span class="tag n">Hidden</span>{{/if}}
+      <form class="inl" method="POST" action="/admin/courses/{{../course.id}}/lessons/{{this.id}}/publish"><button class="btn g">{{#if this.published}}Hide{{else}}Publish{{/if}}</button></form>
+      <form class="inl" method="POST" action="/admin/courses/{{../course.id}}/lessons/{{this.id}}/delete" onsubmit="return confirm('Delete this lesson?')"><button class="btn g" style="color:#a35">Delete</button></form>
+    </div>
+    {{else}}<p class="hint">No lessons yet. Add the first one below.</p>{{/each}}
+  </div>
+
+  <form method="POST" action="/admin/courses/{{course.id}}/lessons" class="panel">
+    <h2>Add a lesson</h2>
+    <div class="grid">
+      <div class="row"><label>Lesson title</label><input name="title" placeholder="e.g. Introduction to Structural Responsibility" required></div>
+      <div class="row"><label>Order</label><input type="number" name="order" value="{{lessons.length}}" min="0"></div>
+    </div>
+    <div class="grid">
+      <div class="row"><label>Video</label><select name="videoFilename">
+        <option value="">— none (text only) —</option>
+        {{#each videos}}<option value="{{this.filename}}">{{this.title}} ({{this.filename}})</option>{{/each}}
+      </select></div>
+      <div class="row"><label>Group under stage (optional)</label><select name="unitTitle"><option value="">— ungrouped —</option>{{#each course.units}}<option value="{{this}}">{{this}}</option>{{/each}}</select></div>
+    </div>
+    <div class="row"><label>Caption / notes (shown under the video)</label><textarea name="caption" rows="4" placeholder="A short explanation, transcript, or key points for this lesson."></textarea></div>
+    <div class="row"><label><input type="checkbox" name="published" checked style="width:auto"> Publish immediately</label></div>
+    <button class="btn" type="submit">Add lesson</button>
+  </form>
+
+  {{#unless videos.length}}<p class="hint">No videos uploaded yet — use “Upload video →” in the top bar first, then come back and attach it.</p>{{/unless}}
+</div></body></html>
