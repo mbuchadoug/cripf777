@@ -48,6 +48,27 @@ input{width:100%;padding:12px 13px;border:1px solid var(--line);border-radius:10
 .cert{display:block;text-align:center;background:linear-gradient(135deg,var(--forest),#072519);color:var(--gold);text-decoration:none;font-family:Fraunces,serif;font-size:18px;font-weight:600;padding:18px;border-radius:16px;border:1px solid var(--gold)}
 .msg{background:#fbf1dc;border:1px solid #ecd9a8;color:#8a6100;border-radius:10px;padding:12px 14px;font-size:14px}
 #eco-status{font-size:14px;margin-top:8px;color:var(--mut)}
+
+/* course learning UI */
+.tabs{position:sticky;top:0;z-index:10;display:flex;gap:8px;background:var(--bg);padding:10px 0;margin-bottom:12px}
+.tab{flex:1;max-width:240px;border:1px solid var(--line);background:#fff;color:var(--mut);font:inherit;font-weight:700;font-size:14px;padding:11px 14px;border-radius:10px;cursor:pointer;transition:.15s}
+.tab.active{background:var(--forest);color:#fff;border-color:var(--forest)}
+.pane[hidden]{display:none}
+.lesson{background:var(--card);border:1px solid var(--line);border-radius:14px;margin-bottom:10px;overflow:hidden}
+.lesson-head{width:100%;display:flex;align-items:center;gap:10px;background:none;border:0;font:inherit;text-align:left;padding:15px 16px;cursor:pointer}
+.lesson-ttl{flex:1;font-family:Fraunces,serif;font-size:16px;font-weight:600;color:var(--ink)}
+.lesson-tag{font-size:11px;font-weight:700;color:var(--gold);white-space:nowrap}
+.chev{color:var(--mut);transition:transform .2s}
+.lesson.open .chev{transform:rotate(180deg)}
+.lesson-body{display:none;padding:0 16px 16px}
+.lesson.open .lesson-body{display:block}
+.video-wrap{position:relative;width:100%;aspect-ratio:16/9;background:#000;border-radius:12px;overflow:hidden}
+.video-wrap video{position:absolute;inset:0;width:100%;height:100%;display:block}
+.lesson-cap{font-size:14px;color:var(--mut);line-height:1.65;white-space:pre-wrap;margin-top:12px}
+.lesson-cap.clamp{display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
+.more{background:none;border:0;color:var(--forest);font:inherit;font-weight:700;font-size:13px;cursor:pointer;padding:6px 0;margin-top:2px}
+.more[hidden]{display:none}
+@media(max-width:520px){.tab{font-size:13px;padding:10px 8px}}
 </style></head><body>
 <div class="nav"><a href="/courses">← All courses</a><div>{{#if authed}}<a href="/me/learning">My Learning</a>{{else}}<a href="{{signupUrl}}">Sign in</a>{{/if}}</div></div>
 <div class="wrap">
@@ -120,41 +141,57 @@ input{width:100%;padding:12px 13px;border:1px solid var(--line);border-radius:10
     <div style="height:16px"></div>
   {{/if}}
 
-  {{#if lessons.length}}
-  <div class="lessons-h">Course materials</div>
-  <div class="lessons">
-  {{#each lessons}}
-    <div class="lesson-card">
-      <div class="lt">{{this.title}}</div>
-      {{#if this.videoUrl}}
-      <video controls preload="metadata" playsinline>
-        <source src="{{this.videoUrl}}" type="video/mp4">
-        Your browser can't play this video.
-      </video>
-      {{/if}}
-      {{#if this.caption}}<div class="lcap">{{this.caption}}</div>{{/if}}
-    </div>
-  {{/each}}
+  <div class="tabs" role="tablist">
+    <button type="button" class="tab {{#if lessons.length}}active{{/if}}" id="tb-materials" onclick="showTab('materials')">Materials{{#if lessons.length}} · {{lessons.length}}{{/if}}</button>
+    <button type="button" class="tab {{#unless lessons.length}}active{{/unless}}" id="tb-assessments" onclick="showTab('assessments')">Assessments</button>
   </div>
-  <div class="lessons-h">Assessments</div>
-{{/if}}
-  {{#each units}}
-  <div class="panel">
-    <div class="stage">
-      <div class="badge {{#if this.stage.complete}}done{{else if (eq this.index ../stagesInfo.currentStage)}}cur{{else}}lock{{/if}}">{{#if this.stage.complete}}✓{{else}}{{this.index}}{{/if}}</div>
-      <h3>{{this.title}}</h3>
-      <span class="s">{{this.stage.passed}}/{{this.stage.total}} passed</span>
-    </div>
-    {{#each this.quizzes}}
-    <div class="q">
-      <div class="t"><div class="n">{{this.title}}</div><div style="font-size:11px;color:var(--mut)">{{this.attempts}} attempt(s)</div></div>
-      <div class="sc">{{#if this.attempts}}{{this.best}}%{{else}}-{{/if}}</div>
-      {{#if this.passed}}<span class="tick">✓</span>{{/if}}
-      <a class="take {{#if this.attempts}}g{{/if}}" href="{{this.takeUrl}}">{{#if this.passed}}Retake{{else if this.attempts}}Retry{{else}}Start{{/if}}</a>
+
+  <div id="pane-materials" class="pane" {{#unless lessons.length}}hidden{{/unless}}>
+    {{#if lessons.length}}
+      {{#each lessons}}
+      <div class="lesson">
+        <button type="button" class="lesson-head" onclick="toggleLesson(this)" aria-expanded="false">
+          <span class="lesson-ttl">{{this.title}}</span>
+          <span class="lesson-tag">{{#if this.videoUrl}}▶ Video{{else}}Reading{{/if}}</span>
+          <span class="chev">▾</span>
+        </button>
+        <div class="lesson-body">
+          {{#if this.videoUrl}}
+          <div class="video-wrap">
+            <video class="lz" controls preload="none" playsinline data-src="{{this.videoUrl}}"></video>
+          </div>
+          {{/if}}
+          {{#if this.caption}}
+          <div class="lesson-cap clamp">{{this.caption}}</div>
+          <button type="button" class="more" onclick="toggleClamp(this)">Show more</button>
+          {{/if}}
+        </div>
+      </div>
+      {{/each}}
+    {{else}}
+      <p class="lead">No learning materials for this course yet - open Assessments to begin.</p>
+    {{/if}}
+  </div>
+
+  <div id="pane-assessments" class="pane" {{#if lessons.length}}hidden{{/if}}>
+    {{#each units}}
+    <div class="panel">
+      <div class="stage">
+        <div class="badge {{#if this.stage.complete}}done{{else if (eq this.index ../stagesInfo.currentStage)}}cur{{else}}lock{{/if}}">{{#if this.stage.complete}}✓{{else}}{{this.index}}{{/if}}</div>
+        <h3>{{this.title}}</h3>
+        <span class="s">{{this.stage.passed}}/{{this.stage.total}} passed</span>
+      </div>
+      {{#each this.quizzes}}
+      <div class="q">
+        <div class="t"><div class="n">{{this.title}}</div><div style="font-size:11px;color:var(--mut)">{{this.attempts}} attempt(s)</div></div>
+        <div class="sc">{{#if this.attempts}}{{this.best}}%{{else}}-{{/if}}</div>
+        {{#if this.passed}}<span class="tick">✓</span>{{/if}}
+        <a class="take {{#if this.attempts}}g{{/if}}" href="{{this.takeUrl}}">{{#if this.passed}}Retake{{else if this.attempts}}Retry{{else}}Start{{/if}}</a>
+      </div>
+      {{/each}}
     </div>
     {{/each}}
   </div>
-  {{/each}}
 {{/if}}
 </div>
 <script>
@@ -176,5 +213,36 @@ async function payEco(){
     },4000);
   }catch(e){s.textContent='Network error. Try again.';}
 }
+
+function showTab(name){
+  ['materials','assessments'].forEach(function(n){
+    var pane=document.getElementById('pane-'+n); if(pane) pane.hidden=(n!==name);
+    var b=document.getElementById('tb-'+n); if(b) b.classList.toggle('active', n===name);
+  });
+}
+function toggleLesson(btn){
+  var l=btn.closest('.lesson'); var open=l.classList.toggle('open');
+  btn.setAttribute('aria-expanded', open?'true':'false');
+  var v=l.querySelector('video.lz');
+  if(open){
+    if(v && !v.getAttribute('src') && v.dataset.src) v.setAttribute('src', v.dataset.src);
+    var cap=l.querySelector('.lesson-cap.clamp'), more=l.querySelector('.more');
+    if(cap && more && cap.scrollHeight<=cap.clientHeight+2) more.hidden=true;
+  } else if(v){ try{ v.pause(); }catch(e){} }
+}
+function toggleClamp(btn){
+  var cap=btn.previousElementSibling;
+  if(cap && cap.classList.contains('lesson-cap')){ cap.classList.remove('clamp'); btn.hidden=true; }
+}
+document.addEventListener('DOMContentLoaded', function(){
+  var first=document.querySelector('#pane-materials .lesson');
+  if(first){
+    first.classList.add('open');
+    var hb=first.querySelector('.lesson-head'); if(hb) hb.setAttribute('aria-expanded','true');
+    var v=first.querySelector('video.lz'); if(v && v.dataset.src) v.setAttribute('src', v.dataset.src);
+    var cap=first.querySelector('.lesson-cap.clamp'), more=first.querySelector('.more');
+    if(cap && more && cap.scrollHeight<=cap.clientHeight+2) more.hidden=true;
+  }
+});
 </script>
 </body></html>
