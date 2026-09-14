@@ -77,6 +77,8 @@ router.post(
     const episode = (req.body.episode || "").trim();
     // content can be very long (20,000+ lines of essay text)
     const content = (req.body.content || "").trim();
+    // "website" (default, shows on homepage) | "course" (course-only, hidden from homepage)
+    const kind    = ((req.body.kind || "website").trim().toLowerCase() === "course") ? "course" : "website";
 
     if (!slug) return res.status(400).json({ error: "slug is required." });
 
@@ -91,7 +93,7 @@ router.post(
       // Open upload stream
       const uploadStream = bucket.openUploadStream(filename, {
         contentType: req.file.mimetype,
-        metadata: { slug, title, episode, content, uploadedAt: new Date(), uploadedBy: req.user._id },
+        metadata: { slug, title, episode, content, kind, uploadedAt: new Date(), uploadedBy: req.user._id },
       });
 
       // Pipe buffer → GridFS
@@ -110,6 +112,7 @@ router.post(
           slug,
           title,
           content,
+          kind,
           streamUrl: `/videos/${filename}`,
           fileId:    uploadStream.id,
         });
@@ -137,6 +140,7 @@ router.get("/admin/videos", adminOnly, async (req, res) => {
       episode:     f.metadata?.episode || "",
       slug:        f.metadata?.slug  || f.filename.replace(/\.[^.]+$/, ""),
       content:     f.metadata?.content || "",
+      kind:        f.metadata?.kind || "website",
       streamUrl:   `/videos/${f.filename}`,
       size_mb:     (f.length / 1024 / 1024).toFixed(2),
       uploadedAt:  f.uploadDate,

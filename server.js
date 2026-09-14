@@ -790,6 +790,16 @@ app.get("/", async (req, res) => {
       const bucket = new GridFSBucket(db, { bucketName: "videos" });
       const files  = await bucket.find({}).sort({ uploadDate: 1 }).toArray();
 
+      // Course-lesson videos must NOT appear on the public site. Build the set of
+      // filenames used inside courses so we can filter them out below. (Automatic:
+      // the moment a video is attached to a lesson, it drops off the homepage.)
+      let courseLessonFilenames = new Set();
+      try {
+        const CourseLesson = (await import("./models/courseLesson.js")).default;
+        const usedInCourses = await CourseLesson.find({ videoFilename: { $ne: null } }).select("videoFilename").lean();
+        courseLessonFilenames = new Set(usedInCourses.map(l => l.videoFilename).filter(Boolean));
+      } catch (_) { /* model not present yet - nothing to exclude */ }
+
       // These two slugs are hardcoded in index.hbs (Episodes 01 & 02).
       // Exclude them here so they never render twice.
       const HARDCODED_SLUGS = new Set([
@@ -800,7 +810,10 @@ app.get("/", async (req, res) => {
       featuredVideos = files
         .filter(f => {
           const slug = f.metadata?.slug || f.filename.replace(/\.[^.]+$/, "");
-          return !HARDCODED_SLUGS.has(slug);
+          if (HARDCODED_SLUGS.has(slug)) return false;
+          if (courseLessonFilenames.has(f.filename)) return false;      // used inside a course
+          if ((f.metadata?.kind || "") === "course") return false;       // uploaded as course-only
+          return true;
         })
         .map(f => ({
           filename:  f.filename,
