@@ -84,7 +84,7 @@ router.post("/init", async (req, res) => {
       durationType: plan.durationType, durationMinutes: plan.durationMinutes,
       deviceCap: plan.deviceCap, downKbps: plan.downKbps, upKbps: plan.upKbps,
       price: plan.price, currency: plan.currency, paymentMethod: "ecocash",
-      createdByName: "self-service", note: `EcoCash ${normalizedPhone}`,
+      createdByName: "self-service", note: `EcoCash ${normalizedPhone}`, phone: normalizedPhone,
       syncedToRouter: false
     });
 
@@ -142,6 +142,116 @@ router.get("/poll/:reference", async (req, res) => {
     res.json({ status: "pending" });
   } catch (err) {
     console.error("[hotspot pay poll]", err);
+    res.json({ status: "pending" });
+  }
+});
+
+// ── remaining minutes for a voucher (uptime pauses; clock is wall-clock) ──
+function remainingMinutes(v) {
+  if (v.durationType === "uptime") {
+    return Math.max(0, v.durationMinutes - Math.floor((v.uptimeUsedSec || 0) / 60));
+  }
+  if (v.validUntil) return Math.max(0, Math.round((new Date(v.validUntil) - new Date()) / 60000));
+  return v.durationMinutes; // clock, not yet started
+}
+function shape(v) {
+  return {
+    code: v.code, planLabel: v.planLabel, status: v.status,
+    durationType: v.durationType, deviceCap: v.deviceCap,
+    deviceCount: v.devices?.length || 0,
+    remainingMinutes: remainingMinutes(v),
+    startsOnLogin: v.durationType === "clock" && !v.firstUsedAt,
+    validUntil: v.validUntil || null
+  };
+}
+
+// ── STATUS / RETRIEVE: by code or by phone ──
+router.get("/status", async (req, res) => {
+  try {
+    const code = String(req.query.code || "").toUpperCase().trim();
+    const phone = String(req.query.phone || "").replace(/\s|-/g, "").replace(/^\+263/, "0").replace(/^263/, "0").trim();
+
+    if (code) {
+      const v = await Voucher.findOne({ code });
+      if (!v) return res.status(404).json({ error: "Code not found. Check and try again." });
+      return res.json({ vouchers: [shape(v)] });
+    }
+    if (/^07[7-8]\d{7}$/.test(phone)) {
+      const vs = await Voucher.find({ phone, status: { $in: ["unused", "active"] } }).sort({ createdAt: -1 }).limit(10);
+      if (!vs.length) return res.status(404).json({ error: "No active codes found for that number." });
+      return res.json({ vouchers: vs.map(shape) });
+    }
+    return res.status(400).json({ error: "Enter your code or your EcoCash number." });
+  } catch (err) {
+    console.error("[hotspot status]", err);
+    res.status(500).json({ error: "Could not check status." });
+  }
+});
+
+// ── TOP-UP: pay EcoCash to add a plan's worth of time to an EXISTING code ──
+router.post("/topup/init", async (req, res) => {
+  try {
+    const code = String(req.body?.code || "").toUpperCase().trim();
+    const planKey = String(req.body?.planKey || "").toLowerCase();
+    const v = await Voucher.findOne({ code });
+    if (!v) return res.status(404).json({ error: "Code not found." });
+    const plan = await HotspotPlan.findOne({ key: planKey, active: true });
+    if (!plan) return res.status(400).json({ error: "Choose a valid top-up." });
+
+    const phone = String(req.body?.phone || v.phone || "").replace(/\s|-/g, "").replace(/^\+263/, "0").replace(/^263/, "0");
+    if (!/^07[7-8]\d{7}$/.test(phone)) return res.status(400).json({ error: "Enter a valid EcoCash number." });
+
+    const reference = `HT-${crypto.randomUUID()}`;
+    const paymentRequest = paynow.createPayment(reference, `${phone}@cripfcnt.com`);
+    paymentRequest.add(`Top-up ${plan.label} on ${code}`, plan.price);
+    const response = await paynow.sendMobile(paymentRequest, phone, "ecocash");
+    if (!response.success) return res.status(400).json({ error: response.error || "Could not send EcoCash prompt." });
+
+    await HotspotPayment.create({
+      reference, amount: plan.price, currency: plan.currency, planKey: plan.key,
+      voucherCode: code, phone, pollUrl: response.pollUrl, method: "ecocash-topup", status: "pending"
+    });
+    res.json({ reference, message: `Check ${phone} and approve the EcoCash prompt.` });
+  } catch (err) {
+    console.error("[hotspot topup init]", err);
+    res.status(500).json({ error: "Top-up error. Please try again." });
+  }
+});
+
+router.get("/topup/poll/:reference", async (req, res) => {
+  try {
+    const payment = await HotspotPayment.findOne({ reference: req.params.reference });
+    if (!payment) return res.status(404).json({ status: "not_found" });
+    if (payment.status === "paid") return res.json({ status: "paid", code: payment.voucherCode });
+    if (["failed", "cancelled"].includes(payment.status)) return res.json({ status: payment.status });
+
+    if (payment.pollUrl) {
+      const pollResult = await paynow.pollTransaction(payment.pollUrl);
+      const statusStr = String(pollResult.status || "").toLowerCase();
+      if (statusStr === "paid") {
+        payment.status = "paid"; payment.paidAt = new Date(); await payment.save();
+        const plan = await HotspotPlan.findOne({ key: payment.planKey });
+        const v = await Voucher.findOne({ code: payment.voucherCode });
+        if (v && plan) {
+          const add = plan.durationMinutes;
+          if (v.durationType === "uptime") {
+            v.durationMinutes += add;
+            if (mt.isConfigured()) { try { await mt.setUptimeLimit(v.code, v.durationMinutes); await mt.setUserDisabled(v.code, false); } catch {} }
+          } else {
+            const base = (v.validUntil && new Date(v.validUntil) > new Date()) ? new Date(v.validUntil) : new Date();
+            v.validUntil = new Date(base.getTime() + add * 60000);
+            if (mt.isConfigured()) { try { await mt.setUserDisabled(v.code, false); } catch {} }
+          }
+          if (["used", "expired"].includes(v.status)) v.status = v.firstUsedAt ? "active" : "unused";
+          await v.save();
+        }
+        return res.json({ status: "paid", code: payment.voucherCode });
+      }
+      if (["failed", "cancelled"].includes(statusStr)) { payment.status = statusStr; await payment.save(); return res.json({ status: statusStr }); }
+    }
+    res.json({ status: "pending" });
+  } catch (err) {
+    console.error("[hotspot topup poll]", err);
     res.json({ status: "pending" });
   }
 });

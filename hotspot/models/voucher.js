@@ -58,6 +58,7 @@ const VoucherSchema = new mongoose.Schema({
   currency:      { type: String, default: "USD" },
   paymentMethod: { type: String, enum: ["cash", "ecocash", "complimentary", "other"], default: "cash" },
   note:          { type: String, default: "" },        // e.g. table number, guest name
+  phone:         { type: String, default: "", index: true }, // buyer/holder phone for retrieval + top-up
 
   // ── Usage (filled in by the sync loop from the router) ─────
   firstUsedAt:  { type: Date, default: null, index: true },

@@ -60,6 +60,7 @@ export default function mountHotspot(app, opts = {}) {
 
   // PUBLIC self-service purchase page (must be reachable via router Walled Garden).
   app.get(`${base}/buy`, (req, res) => res.sendFile(path.join(__dirname, "portal", "buy.html")));
+  app.get(`${base}/status`, (req, res) => res.sendFile(path.join(__dirname, "portal", "status.html")));
 
   app.use(base, express.static(path.join(__dirname, "public")));  // admin panel (index.html)
 

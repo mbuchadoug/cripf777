@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Central Cyber WiFi - My WiFi</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;min-height:100dvh;background:radial-gradient(120% 90% at 0% 0%,#0B7A34 0%,#043D1A 75%);color:#eafaef;padding:20px;display:flex;justify-content:center}
+  .wrap{width:100%;max-width:400px}
+  .head{text-align:center;margin:6px 0 18px}
+  .brand{font-family:Georgia,serif;font-weight:700;font-size:22px;letter-spacing:.04em;color:#fff}
+  .tag{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#9fd6b0;margin-top:3px}
+  .box{background:rgba(255,255,255,.07);border:1.5px solid rgba(255,255,255,.14);border-radius:16px;padding:18px;margin-bottom:12px}
+  label{display:block;font-size:13px;color:#9fd6b0;margin-bottom:8px;font-weight:600}
+  input{width:100%;padding:14px;border:1.5px solid rgba(255,255,255,.22);border-radius:11px;background:#fff;color:#0B2E17;font-size:16px;outline:none}
+  input:focus{border-color:#fff}
+  button{width:100%;margin-top:12px;padding:14px;border:0;border-radius:11px;background:#fff;color:#075C27;font-size:16px;font-weight:700;cursor:pointer}
+  button:disabled{opacity:.5}
+  .btn-ghost{background:transparent;border:1.5px solid rgba(255,255,255,.35);color:#fff}
+  .row{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.1);font-size:14px}
+  .row:last-child{border-bottom:0}
+  .k{color:#9fd6b0}
+  .code{font-family:"Courier New",monospace;font-weight:700;font-size:24px;letter-spacing:.06em;color:#fff;text-align:center;margin:4px 0 12px}
+  .big{font-family:"Courier New",monospace;font-weight:700;font-size:30px;color:#fff;text-align:center}
+  .msg{margin-top:12px;font-size:14px;padding:11px;border-radius:10px;text-align:center;line-height:1.5}
+  .msg.err{background:rgba(255,120,110,.18);border:1px solid rgba(255,120,110,.5);color:#ffdedb}
+  .msg.ok{background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.3);color:#fff}
+  .plan{background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.14);border-radius:12px;padding:12px 14px;margin-bottom:8px;cursor:pointer;display:flex;justify-content:space-between;align-items:center}
+  .plan.sel{border-color:#fff;background:rgba(255,255,255,.14)}
+  .plan .pr{font-family:"Courier New",monospace;font-weight:700}
+  a.back{display:block;text-align:center;margin-top:14px;color:#9fd6b0;font-size:13px;text-decoration:none}
+  .hide{display:none}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="head"><div class="brand">CENTRAL CYBER</div><div class="tag">My WiFi</div></div>
+
+    <div class="box" id="lookup">
+      <label>Enter your voucher code or EcoCash number</label>
+      <input id="q" placeholder="XXX-XXX  or  0771234567" autocomplete="off">
+      <button onclick="check()">Check my time</button>
+      <div id="lmsg"></div>
+    </div>
+
+    <div id="result" class="hide"></div>
+    <div id="topup" class="hide"></div>
+    <a class="back" href="/hotspot/status" onclick="location.reload();return false;">Start over</a>
+  </div>
+<script>
+  var API="/hotspot/pay", current=null, plans=[], selPlan=null, poll=null;
+  function fmt(mins){ if(mins<=0) return "0 min"; var d=Math.floor(mins/1440),h=Math.floor((mins%1440)/60),m=mins%60; return (d?d+"d ":"")+(h?h+"h ":"")+(m&&!d?m+"m":"").trim() || (h+"h"); }
+
+  function check(){
+    var q=document.getElementById("q").value.trim();
+    var msg=document.getElementById("lmsg"); msg.className=""; msg.textContent="";
+    if(!q){ msg.className="msg err"; msg.textContent="Enter your code or number."; return; }
+    var isPhone=/^0?7/.test(q.replace(/\D/g,"")) && q.replace(/\D/g,"").length>=9;
+    var url=API+"/status?"+(isPhone?"phone="+encodeURIComponent(q):"code="+encodeURIComponent(q));
+    fetch(url).then(r=>r.json().then(j=>({ok:r.ok,j}))).then(d=>{
+      if(!d.ok){ msg.className="msg err"; msg.textContent=d.j.error||"Not found."; return; }
+      show(d.j.vouchers);
+    }).catch(()=>{ msg.className="msg err"; msg.textContent="Something went wrong."; });
+  }
+
+  function show(vouchers){
+    current=vouchers[0];
+    var box=document.getElementById("result"); box.className="";
+    box.innerHTML=vouchers.map(function(v){
+      var statusTxt = v.status==="expired"?"Expired":v.status==="used"?"Used up":v.startsOnLogin?"Not started yet":"Active";
+      var timeTxt = v.startsOnLogin ? "Starts when you connect" : fmt(v.remainingMinutes)+" left";
+      return '<div class="box"><div class="code">'+v.code+'</div>'+
+        '<div class="big">'+ (v.startsOnLogin? "-" : fmt(v.remainingMinutes)) +'</div>'+
+        '<div style="text-align:center;color:#9fd6b0;font-size:13px;margin-bottom:10px">'+ (v.startsOnLogin?"Time starts on first connect":"remaining") +'</div>'+
+        '<div class="row"><span class="k">Plan</span><span>'+v.planLabel+'</span></div>'+
+        '<div class="row"><span class="k">Status</span><span>'+statusTxt+'</span></div>'+
+        '<div class="row"><span class="k">Devices</span><span>'+v.deviceCount+' / '+v.deviceCap+'</span></div>'+
+        '<button onclick="startTopup(\''+v.code+'\')">Add more time</button></div>';
+    }).join("");
+    document.getElementById("lookup").classList.add("hide");
+  }
+
+  function startTopup(code){
+    current={code:code};
+    var box=document.getElementById("topup"); box.className="";
+    box.innerHTML='<div class="box"><label>Add time to '+code+'</label><div id="plans">Loading…</div>'+
+      '<label style="margin-top:12px">EcoCash number</label><input id="tphone" type="tel" inputmode="numeric" placeholder="0771234567">'+
+      '<button id="tbtn" onclick="payTopup()">Pay with EcoCash</button><div id="tmsg"></div></div>';
+    fetch(API+"/plans").then(r=>r.json()).then(d=>{
+      plans=d.plans||[];
+      document.getElementById("plans").innerHTML=plans.map(function(p,i){
+        return '<div class="plan" data-i="'+i+'" onclick="pickP('+i+')"><span>'+p.label+'</span><span class="pr">$'+p.price+'</span></div>';
+      }).join("");
+      pickP(0);
+    });
+    box.scrollIntoView({behavior:"smooth"});
+  }
+  function pickP(i){ selPlan=i; document.querySelectorAll("#plans .plan").forEach(function(el){el.classList.toggle("sel",Number(el.dataset.i)===i);}); }
+
+  function payTopup(){
+    var phone=document.getElementById("tphone").value.trim();
+    var msg=document.getElementById("tmsg"); msg.className=""; msg.textContent="";
+    if(selPlan===null){ msg.className="msg err"; msg.textContent="Pick an amount."; return; }
+    if(!phone){ msg.className="msg err"; msg.textContent="Enter your EcoCash number."; return; }
+    var btn=document.getElementById("tbtn"); btn.disabled=true; btn.textContent="Sending prompt…";
+    fetch(API+"/topup/init",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({code:current.code,planKey:plans[selPlan].key,phone:phone})})
+      .then(r=>r.json()).then(d=>{
+        if(d.error){ msg.className="msg err"; msg.textContent=d.error; btn.disabled=false; btn.textContent="Pay with EcoCash"; return; }
+        msg.className="msg ok"; msg.innerHTML="📲 "+(d.message||"Approve the prompt.")+"<br><br>Waiting for payment…";
+        watch(d.reference);
+      }).catch(()=>{ msg.className="msg err"; msg.textContent="Something went wrong."; btn.disabled=false; btn.textContent="Pay with EcoCash"; });
+  }
+  function watch(ref){
+    var msg=document.getElementById("tmsg"), tries=0;
+    poll=setInterval(function(){ tries++;
+      fetch(API+"/topup/poll/"+ref).then(r=>r.json()).then(d=>{
+        if(d.status==="paid"){ clearInterval(poll); msg.className="msg ok"; msg.innerHTML="✅ Time added to <b>"+d.code+"</b>! You can keep using the same code."; }
+        else if(["failed","cancelled"].includes(d.status)){ clearInterval(poll); msg.className="msg err"; msg.textContent="Payment "+d.status+". Try again."; document.getElementById("tbtn").disabled=false; document.getElementById("tbtn").textContent="Pay with EcoCash"; }
+        if(tries>40) clearInterval(poll);
+      }).catch(()=>{});
+    },5000);
+  }
+</script>
+</body>
+</html>

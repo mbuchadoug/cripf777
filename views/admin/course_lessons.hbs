@@ -50,15 +50,15 @@ form.inl{display:inline;margin:0}
     </div>
     <div class="grid">
       <div class="row"><label>Video</label><select name="videoFilename">
-        <option value="">— none (text only) —</option>
+        <option value="">- none (text only) -</option>
         {{#each videos}}<option value="{{this.filename}}">{{this.title}} ({{this.filename}})</option>{{/each}}
       </select></div>
-      <div class="row"><label>Group under stage (optional)</label><select name="unitTitle"><option value="">— ungrouped —</option>{{#each course.units}}<option value="{{this}}">{{this}}</option>{{/each}}</select></div>
+      <div class="row"><label>Group under stage (optional)</label><select name="unitTitle"><option value="">- ungrouped -</option>{{#each course.units}}<option value="{{this}}">{{this}}</option>{{/each}}</select></div>
     </div>
     <div class="row"><label>Caption / notes (shown under the video)</label><textarea name="caption" rows="4" placeholder="A short explanation, transcript, or key points for this lesson."></textarea></div>
     <div class="row"><label><input type="checkbox" name="published" checked style="width:auto"> Publish immediately</label></div>
     <button class="btn" type="submit">Add lesson</button>
   </form>
 
-  {{#unless videos.length}}<p class="hint">No videos uploaded yet — use “Upload video →” in the top bar first, then come back and attach it.</p>{{/unless}}
+  {{#unless videos.length}}<p class="hint">No videos uploaded yet - use “Upload video →” in the top bar first, then come back and attach it.</p>{{/unless}}
 </div></body></html>
