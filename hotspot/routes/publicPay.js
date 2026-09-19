@@ -14,7 +14,7 @@ import { Router } from "express";
 import crypto from "crypto";
 
 import paynow from "../../services/paynow.js";       // your existing Paynow service
-import Payment from "../../models/payment.js";        // your existing Payment model
+import HotspotPayment from "../models/hotspotPayment.js";  // dedicated hotspot payments
 import HotspotPlan from "../models/hotspotPlan.js";
 import Voucher from "../models/voucher.js";
 import * as mt from "../services/mikrotik.js";
@@ -98,9 +98,10 @@ router.post("/init", async (req, res) => {
       return res.status(400).json({ error: response.error || "Could not send EcoCash prompt. Check your number." });
     }
 
-    await Payment.create({
-      reference, amount: plan.price, plan: plan.key, pollUrl: response.pollUrl,
-      status: "pending", meta: { method: "hotspot_ecocash", phone: normalizedPhone, voucherCode: code }
+    await HotspotPayment.create({
+      reference, amount: plan.price, currency: plan.currency, planKey: plan.key,
+      voucherCode: code, phone: normalizedPhone, pollUrl: response.pollUrl,
+      method: "ecocash", status: "pending"
     });
 
     res.json({ reference, message: `Check ${normalizedPhone} and approve the EcoCash prompt.` });
@@ -113,11 +114,11 @@ router.post("/init", async (req, res) => {
 // Poll for payment; on success, activate the voucher and return the code.
 router.get("/poll/:reference", async (req, res) => {
   try {
-    const payment = await Payment.findOne({ reference: req.params.reference });
+    const payment = await HotspotPayment.findOne({ reference: req.params.reference });
     if (!payment) return res.status(404).json({ status: "not_found" });
 
     if (payment.status === "paid") {
-      const v = await Voucher.findOne({ code: payment.meta?.voucherCode });
+      const v = await Voucher.findOne({ code: payment.voucherCode });
       return res.json({ status: "paid", code: v?.code, wifiName: WIFI_NAME });
     }
     if (["failed", "cancelled"].includes(payment.status)) return res.json({ status: payment.status });
@@ -128,13 +129,13 @@ router.get("/poll/:reference", async (req, res) => {
 
       if (statusStr === "paid") {
         payment.status = "paid"; payment.paidAt = new Date(); await payment.save();
-        const v = await Voucher.findOne({ code: payment.meta?.voucherCode });
+        const v = await Voucher.findOne({ code: payment.voucherCode });
         if (v) await activateVoucher(v);
         return res.json({ status: "paid", code: v?.code, wifiName: WIFI_NAME });
       }
       if (["failed", "cancelled"].includes(statusStr)) {
         payment.status = statusStr; await payment.save();
-        await Voucher.deleteOne({ code: payment.meta?.voucherCode });   // release reserved code
+        await Voucher.deleteOne({ code: payment.voucherCode });   // release reserved code
         return res.json({ status: statusStr });
       }
     }
