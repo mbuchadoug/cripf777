@@ -89,7 +89,7 @@ router.post("/init", async (req, res) => {
     });
 
     const reference = `HS-${crypto.randomUUID()}`;
-    const paymentRequest = paynow.createPayment(reference, `${normalizedPhone}@ecocash.local`);
+    const paymentRequest = paynow.createPayment(reference, `${normalizedPhone}@cripfcnt.com`);
     paymentRequest.add(`${plan.label} - Central Cyber WiFi`, plan.price);
 
     const response = await paynow.sendMobile(paymentRequest, normalizedPhone, "ecocash");
