@@ -238,9 +238,9 @@ const NAV = [
   {id:"dashboard", label:"Dashboard", ic:"◧"},
   {id:"generate",  label:"Generate",  ic:"＋"},
   {id:"vouchers",  label:"Vouchers",  ic:"▤"},
-  {id:"live",      label:"Live",      ic:"◉"},
-  {id:"devices",   label:"Devices",   ic:"▣"},
-  {id:"reports",   label:"Reports",   ic:"◱"},
+  {id:"live",      label:"Live",      ic:"◉", admin:true},
+  {id:"devices",   label:"Devices",   ic:"▣", admin:true},
+  {id:"reports",   label:"Reports",   ic:"◱", admin:true},
   {id:"sellers",   label:"Admins",    ic:"☺", owner:true},
 ];
 
@@ -289,7 +289,7 @@ async function enterApp(){
 }
 
 function buildNav(){
-  const items=NAV.filter(n=>!n.owner||ME.role==="owner");
+  const items=NAV.filter(n=>(!n.owner||ME.role==="owner") && (!n.admin||["owner","admin"].includes(ME.role)));
   document.getElementById("nav").innerHTML=items.map(n=>`<button class="navitem" data-v="${n.id}" onclick="go('${n.id}')"><span class="ic">${n.ic}</span>${n.label}</button>`).join("");
   document.getElementById("tabbar").innerHTML=items.slice(0,5).map(n=>`<button class="tabitem" data-v="${n.id}" onclick="go('${n.id}')"><span class="ic">${n.ic}</span>${n.label}</button>`).join("");
 }
@@ -346,7 +346,7 @@ async function viewGenerate(){
   try{
   const {plans}=await api("/plans"); plansCache=(plans||[]).filter(p=>p.active);
   genPlan=genPlan||plansCache[0]?.key;
-  mount(`<div class="card">
+  mount(`<div id="allowance"></div><div class="card">
       <h2 style="font-size:16px;margin-bottom:12px">Choose a plan</h2>
       <div class="grid plan-grid" id="plans"></div>
       <div class="grid" style="grid-template-columns:1fr 1fr;margin-top:16px">
@@ -360,6 +360,7 @@ async function viewGenerate(){
     </div>
     <div id="g-result"></div>`);
   renderPlanCards();
+  loadAllowance();
   }catch(e){ mount(`<div class="card">${esc(e.message)}</div>`); }
 }
 function renderPlanCards(){
@@ -371,6 +372,18 @@ function renderPlanCards(){
       <div class="price">${p.price} ${p.currency}</div>
     </button>`).join("") || `<div class="muted">No plans yet. ${ME.role==='owner'?'Ask an owner to add one in Admins → Plans.':''}</div>`;
 }
+async function loadAllowance(){
+  try{
+    const a=await api("/me/allowance");
+    const el=document.getElementById("allowance"); if(!el) return;
+    if(a.role==="issuer" && a.dailyLimitUsd>0){
+      const low = a.remainingUsd<=0;
+      el.innerHTML=`<div class="card" style="margin-bottom:12px;border-color:${low?'#f0cfcd':'var(--line)'}"><b>Today:</b> issued $${a.todayIssuedUsd} of $${a.dailyLimitUsd} · <b style="color:${low?'var(--danger)':'var(--pine)'}">$${a.remainingUsd} left</b></div>`;
+    } else if(a.role==="issuer"){
+      el.innerHTML=`<div class="card" style="margin-bottom:12px"><b>Today:</b> issued $${a.todayIssuedUsd} (no daily limit)</div>`;
+    } else { el.innerHTML=""; }
+  }catch{}
+}
 async function generate(){
   const err=document.getElementById("g-err"); if(err) err.textContent="";
   if(!genPlan){ if(err) err.textContent="Pick a plan first."; return; }
@@ -379,7 +392,7 @@ async function generate(){
     const cp=document.getElementById("g-price")?.value;
     if(cp!=="" && cp!=null) body.price=Number(cp);
     const d=await api("/vouchers/generate",{method:"POST",body:JSON.stringify(body)});
-    renderSlips(d);
+    renderSlips(d); loadAllowance();
   }catch(e){ if(err) err.textContent=e.message; else alert(e.message); }
 }
 function renderSlips(d){
@@ -556,16 +569,20 @@ async function viewSellers(){
           <div class="field" style="margin:0"><label>Name</label><input id="a-name" placeholder="Tino at reception"></div>
           <div class="field" style="margin:0"><label>Username</label><input id="a-user" placeholder="tino"></div>
           <div class="field" style="margin:0"><label>Password</label><input id="a-pass" type="text" placeholder="give them one"></div>
-          <div class="field" style="margin:0"><label>Role</label><select id="a-role"><option value="admin">Admin</option><option value="owner">Owner</option></select></div>
+          <div class="field" style="margin:0"><label>Role</label><select id="a-role" onchange="toggleLimitField()"><option value="issuer">Issuer (generate only)</option><option value="admin">Admin</option><option value="owner">Owner</option></select></div>
+          <div class="field" style="margin:0" id="a-limit-wrap"><label>Daily limit $ (0 = no limit)</label><input id="a-limit" type="number" min="0" value="20"></div>
         </div>
         <button class="btn btn-pine btn-block" style="margin-top:12px" onclick="addAdmin()">Add admin</button>
         <div class="err" id="a-err"></div>
       </div>
-      <div class="tablewrap"><table><thead><tr><th>Name</th><th>Username</th><th>Role</th><th>Status</th><th></th></tr></thead>
+      <div class="tablewrap"><table><thead><tr><th>Name</th><th>Role</th><th>Daily $ limit</th><th>Today</th><th>Status</th><th></th></tr></thead>
         <tbody>${admins.map(a=>`<tr>
-          <td data-label="Name">${esc(a.displayName)}</td><td data-label="Username">${esc(a.username)}</td>
-          <td data-label="Role">${a.role}</td><td data-label="Status">${a.active?'<span class="tag t-active">active</span>':'<span class="tag t-disabled">off</span>'}</td>
-          <td data-label=""><button class="btn btn-ghost btn-sm" onclick="toggleAdmin('${a._id}',${!a.active})">${a.active?'Disable':'Enable'}</button></td>
+          <td data-label="Name">${esc(a.displayName)} <span class="muted mono">${esc(a.username)}</span></td>
+          <td data-label="Role">${a.role}</td>
+          <td data-label="Daily $ limit">${a.role==="issuer"?`$${a.dailyLimitUsd||0} <a href="#" onclick="setLimit('${a._id}',${a.dailyLimitUsd||0});return false" style="color:var(--pine)">edit</a>`:'<span class="muted">-</span>'}</td>
+          <td data-label="Today">$${a.todayIssuedUsd||0} · ${a.todayIssuedCount||0}</td>
+          <td data-label="Status">${a.active?'<span class="tag t-active">active</span>':'<span class="tag t-disabled">off</span>'}</td>
+          <td data-label=""><button class="btn btn-ghost btn-sm" onclick="toggleAdmin('${a._id}',${!a.active})">${a.active?'Suspend':'Activate'}</button></td>
         </tr>`).join("")}</tbody></table></div>
 
       <div class="section-title"><h2>Plans</h2></div>
@@ -592,8 +609,10 @@ async function viewSellers(){
 }
 async function addAdmin(){
   const err=document.getElementById("a-err");err.textContent="";
-  try{ await api("/admins",{method:"POST",body:JSON.stringify({displayName:document.getElementById("a-name").value,username:document.getElementById("a-user").value,password:document.getElementById("a-pass").value,role:document.getElementById("a-role").value})}); viewSellers(); }catch(e){ err.textContent=e.message; }
+  try{ await api("/admins",{method:"POST",body:JSON.stringify({displayName:document.getElementById("a-name").value,username:document.getElementById("a-user").value,password:document.getElementById("a-pass").value,role:document.getElementById("a-role").value,dailyLimitUsd:Number(document.getElementById("a-limit")?.value||0)})}); viewSellers(); }catch(e){ err.textContent=e.message; }
 }
+function toggleLimitField(){ const r=document.getElementById("a-role")?.value; const w=document.getElementById("a-limit-wrap"); if(w) w.style.display = r==="issuer" ? "block" : "none"; }
+async function setLimit(id,current){ const v=prompt("Daily $ limit for this issuer (0 = no limit):",current); if(v===null)return; try{ await api("/admins/"+id,{method:"PATCH",body:JSON.stringify({dailyLimitUsd:Number(v)})}); viewSellers(); }catch(e){alert(e.message);} }
 async function toggleAdmin(id,active){ try{ await api("/admins/"+id,{method:"PATCH",body:JSON.stringify({active})}); viewSellers(); }catch(e){alert(e.message);} }
 async function suggestPlanPrice(){
   const min=Number(document.getElementById("p-min")?.value||0);

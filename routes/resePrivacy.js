@@ -61,18 +61,18 @@ router.get("/rese-rese/privacy", (req, res) => {
 
     <h2>Information we collect</h2>
     <ul>
-      <li><b>Phone number</b> — used to create your account and sign you in.</li>
+      <li><b>Phone number</b> - used to create your account and sign you in.</li>
       <li><b>Your name</b> and an optional <b>profile photo</b>.</li>
-      <li><b>Your area</b> — the suburb(s) you select, so jobs can be matched locally.</li>
-      <li><b>Job information</b> — the requests you post or the offers you make (category, description, price).</li>
-      <li><b>Worker verification (workers only)</b> — a <b>selfie</b> and a photo of your <b>national ID</b>, used only to confirm you are a real person before you receive jobs.</li>
-      <li><b>Notification token</b> — a device token so we can send you job alerts.</li>
+      <li><b>Your area</b> - the suburb(s) you select, so jobs can be matched locally.</li>
+      <li><b>Job information</b> - the requests you post or the offers you make (category, description, price).</li>
+      <li><b>Worker verification (workers only)</b> - a <b>selfie</b> and a photo of your <b>national ID</b>, used only to confirm you are a real person before you receive jobs.</li>
+      <li><b>Notification token</b> - a device token so we can send you job alerts.</li>
       <li><b>Basic technical data</b> needed to run the service (e.g. app version).</li>
     </ul>
 
     <h2>How we use your information</h2>
     <ul>
-      <li>To run the marketplace — post jobs, match requesters with nearby workers, and let a matched pair contact each other.</li>
+      <li>To run the marketplace - post jobs, match requesters with nearby workers, and let a matched pair contact each other.</li>
       <li>To sign you in, we send a one-time code to your phone <b>over WhatsApp</b>.</li>
       <li>To send you notifications about jobs and offers.</li>
       <li>To verify workers' identity and keep the community safe and trustworthy.</li>
@@ -80,7 +80,7 @@ router.get("/rese-rese/privacy", (req, res) => {
 
     <h2>How contact details are shared</h2>
     <p>Your phone number is <b>not public</b>. It is shared <b>only</b> with the other
-    person once a job is matched — that is, after a requester chooses a worker — so the
+    person once a job is matched - that is, after a requester chooses a worker - so the
     two of you can arrange the work. We do <b>not</b> sell your personal information or
     share it for advertising.</p>
 
@@ -134,7 +134,7 @@ router.get("/rese-rese/delete-account", (req, res) => {
     <h1>Delete your Rese Rese account</h1>
     <p class="eff">Effective ${EFFECTIVE_DATE}</p>
     <p>You can ask us to delete your Rese Rese account and the personal information
-    linked to it — your name, phone number, area, job history, and any verification
+    linked to it - your name, phone number, area, job history, and any verification
     images (selfie and national ID).</p>
     <h2>How to request deletion</h2>
     <ul>

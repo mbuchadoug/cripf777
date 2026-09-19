@@ -6,6 +6,7 @@ import bcrypt from "bcryptjs";
 // The people who log in to generate & manage vouchers.
 //   owner → full control, incl. adding/removing other admins & plans
 //   admin → generate vouchers, manage vouchers/bypass, view reports
+//   issuer → ONLY generate vouchers (within a daily $ limit) + see own sales
 // Every voucher stores which admin created it (accountability).
 // ==============================
 
@@ -23,7 +24,7 @@ const HotspotAdminSchema = new mongoose.Schema({
 
   role: {
     type: String,
-    enum: ["owner", "admin"],
+    enum: ["owner", "admin", "issuer"],
     default: "admin",
     index: true
   },
@@ -31,6 +32,9 @@ const HotspotAdminSchema = new mongoose.Schema({
   passwordHash: { type: String, default: null },
 
   active: { type: Boolean, default: true, index: true },
+
+  // Daily value cap for issuers ($). 0 = unlimited. Owner/admin ignore this.
+  dailyLimitUsd: { type: Number, default: 0 },
 
   createdBy:     { type: mongoose.Schema.Types.ObjectId, ref: "HotspotAdmin", default: null },
   createdByName: { type: String, default: "system" },

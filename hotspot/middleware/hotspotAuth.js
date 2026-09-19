@@ -47,3 +47,11 @@ export function ownerRequired(req, res, next) {
   }
   next();
 }
+
+// Owner OR admin (not issuer) - managing vouchers, devices, reports.
+export function adminRequired(req, res, next) {
+  if (!["owner", "admin"].includes(req.hsAdmin?.role)) {
+    return res.status(403).json({ error: "You don't have access to that" });
+  }
+  next();
+}

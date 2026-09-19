@@ -12,7 +12,7 @@ import Voucher from "../models/voucher.js";
 import BypassDevice from "../models/bypassDevice.js";
 import * as mt from "../services/mikrotik.js";
 import { suggestPrice } from "../services/pricing.js";
-import { signToken, authRequired, ownerRequired } from "../middleware/hotspotAuth.js";
+import { signToken, authRequired, ownerRequired, adminRequired } from "../middleware/hotspotAuth.js";
 
 const router = Router();
 
@@ -26,6 +26,17 @@ router.get("/price/suggest", authRequired, (req, res) => {
 
 const WIFI_NAME = process.env.HOTSPOT_WIFI_NAME || "Central Cyber WiFi";
 const CODE_PREFIX = (process.env.HOTSPOT_CODE_PREFIX || "").toUpperCase();
+
+// How much value an admin has issued today (excludes complimentary).
+async function issuedTodayUsd(adminId) {
+  const start = new Date(); start.setHours(0, 0, 0, 0);
+  const agg = await Voucher.aggregate([
+    { $match: { createdBy: adminId, createdAt: { $gte: start }, paymentMethod: { $ne: "complimentary" } } },
+    { $group: { _id: null, total: { $sum: "$price" }, n: { $sum: 1 } } }
+  ]);
+  return { total: agg[0]?.total || 0, count: agg[0]?.n || 0 };
+}
+
 
 // Unambiguous alphabet - no 0/O/1/I/L to avoid customer typos.
 const ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
@@ -124,6 +135,17 @@ router.post("/vouchers/generate", authRequired, async (req, res) => {
     const admin = req.hsAdmin;
     const profileName = plan.rosProfile();
 
+    // Issuer daily value cap.
+    const unitPrice = b.price != null ? Number(b.price) : plan.price;
+    if (admin.role === "issuer" && admin.dailyLimitUsd > 0) {
+      const { total } = await issuedTodayUsd(admin._id);
+      const batchValue = unitPrice * count;
+      if (total + batchValue > admin.dailyLimitUsd) {
+        const left = Math.max(0, admin.dailyLimitUsd - total);
+        return res.status(403).json({ error: `Daily limit reached. You've issued $${total} of $${admin.dailyLimitUsd} today ($${left} left). This batch is $${batchValue}.` });
+      }
+    }
+
     // Ensure profile once for the whole batch.
     let routerOnline = true;
     try { await mt.ensureProfile({ name: profileName, sharedUsers: plan.deviceCap, rateLimit: plan.rateLimitString() }); }
@@ -188,6 +210,7 @@ router.get("/vouchers", authRequired, async (req, res) => {
     if (req.query.planKey) q.planKey = req.query.planKey;
     if (req.query.batchId) q.batchId = req.query.batchId;
     if (req.query.createdBy) q.createdBy = req.query.createdBy;
+    if (req.hsAdmin.role === "issuer") q.createdBy = req.hsAdmin._id;   // issuers see only their own
     if (req.query.from || req.query.to) {
       q.createdAt = {};
       if (req.query.from) q.createdAt.$gte = new Date(req.query.from);
@@ -218,7 +241,7 @@ router.get("/vouchers/:code", authRequired, async (req, res) => {
 });
 
 // Extend duration.
-router.post("/vouchers/:code/extend", authRequired, async (req, res) => {
+router.post("/vouchers/:code/extend", authRequired, adminRequired, async (req, res) => {
   try {
     const add = Math.max(1, Number(req.body?.addMinutes || 0));
     const v = await Voucher.findOne({ code: req.params.code.toUpperCase() });
@@ -246,7 +269,7 @@ router.post("/vouchers/:code/extend", authRequired, async (req, res) => {
 });
 
 // Revoke (disable) / restore.
-router.post("/vouchers/:code/disable", authRequired, async (req, res) => {
+router.post("/vouchers/:code/disable", authRequired, adminRequired, async (req, res) => {
   const v = await Voucher.findOne({ code: req.params.code.toUpperCase() });
   if (!v) return res.status(404).json({ error: "Voucher not found" });
   v.status = "disabled";
@@ -255,7 +278,7 @@ router.post("/vouchers/:code/disable", authRequired, async (req, res) => {
   res.json({ voucher: shapeVoucher(v, true) });
 });
 
-router.post("/vouchers/:code/enable", authRequired, async (req, res) => {
+router.post("/vouchers/:code/enable", authRequired, adminRequired, async (req, res) => {
   const v = await Voucher.findOne({ code: req.params.code.toUpperCase() });
   if (!v) return res.status(404).json({ error: "Voucher not found" });
   v.status = v.firstUsedAt ? "active" : "unused";
@@ -275,12 +298,12 @@ router.delete("/vouchers/:code", authRequired, ownerRequired, async (req, res) =
 // ============================================================
 // 🎥 BYPASS DEVICES
 // ============================================================
-router.get("/bypass", authRequired, async (req, res) => {
+router.get("/bypass", authRequired, adminRequired, async (req, res) => {
   const devices = await BypassDevice.find().sort({ category: 1, label: 1 }).lean();
   res.json({ devices });
 });
 
-router.post("/bypass", authRequired, async (req, res) => {
+router.post("/bypass", authRequired, adminRequired, async (req, res) => {
   try {
     const mac = BypassDevice.normaliseMac(req.body?.mac);
     if (!mac) return res.status(400).json({ error: "That MAC address doesn't look right" });
@@ -304,7 +327,7 @@ router.post("/bypass", authRequired, async (req, res) => {
   }
 });
 
-router.delete("/bypass/:id", authRequired, async (req, res) => {
+router.delete("/bypass/:id", authRequired, adminRequired, async (req, res) => {
   const device = await BypassDevice.findById(req.params.id);
   if (!device) return res.status(404).json({ error: "Device not found" });
   if (mt.isConfigured()) { try { await mt.removeBypass(device.mac); } catch { /* ignore */ } }
@@ -351,7 +374,7 @@ router.get("/stats", authRequired, async (req, res) => {
 });
 
 // Seller accountability + sales.
-router.get("/reports/sales", authRequired, async (req, res) => {
+router.get("/reports/sales", authRequired, adminRequired, async (req, res) => {
   const match = { paymentMethod: { $ne: "complimentary" } };
   if (req.query.from || req.query.to) {
     match.createdAt = {};
@@ -380,7 +403,25 @@ router.get("/reports/sales", authRequired, async (req, res) => {
 // ============================================================
 router.get("/admins", authRequired, ownerRequired, async (req, res) => {
   const admins = await HotspotAdmin.find().select("-passwordHash").sort({ createdAt: 1 }).lean();
+  for (const a of admins) {
+    const t = await issuedTodayUsd(a._id);
+    a.todayIssuedUsd = t.total;
+    a.todayIssuedCount = t.count;
+  }
   res.json({ admins });
+});
+
+// Issuer's own allowance (for the "today: $X of $Y" banner). Any logged-in user.
+router.get("/me/allowance", authRequired, async (req, res) => {
+  const a = req.hsAdmin;
+  const t = await issuedTodayUsd(a._id);
+  res.json({
+    role: a.role,
+    dailyLimitUsd: a.dailyLimitUsd || 0,
+    todayIssuedUsd: t.total,
+    todayIssuedCount: t.count,
+    remainingUsd: a.dailyLimitUsd > 0 ? Math.max(0, a.dailyLimitUsd - t.total) : null
+  });
 });
 
 router.post("/admins", authRequired, ownerRequired, async (req, res) => {
@@ -392,13 +433,14 @@ router.post("/admins", authRequired, ownerRequired, async (req, res) => {
     const admin = new HotspotAdmin({
       username,
       displayName: b.displayName || username,
-      role: b.role === "owner" ? "owner" : "admin",
+      role: ["owner", "admin", "issuer"].includes(b.role) ? b.role : "admin",
+      dailyLimitUsd: Math.max(0, Number(b.dailyLimitUsd || 0)),
       createdBy: req.hsAdmin._id,
       createdByName: req.hsAdmin.displayName
     });
     await admin.setPassword(b.password);
     await admin.save();
-    res.json({ admin: { id: admin._id, username: admin.username, displayName: admin.displayName, role: admin.role, active: admin.active } });
+    res.json({ admin: { id: admin._id, username: admin.username, displayName: admin.displayName, role: admin.role, active: admin.active, dailyLimitUsd: admin.dailyLimitUsd } });
   } catch (err) {
     console.error("[hotspot admin add]", err);
     res.status(500).json({ error: "Could not add admin" });
@@ -411,7 +453,8 @@ router.patch("/admins/:id", authRequired, ownerRequired, async (req, res) => {
   const b = req.body || {};
   if (typeof b.active === "boolean") admin.active = b.active;
   if (b.displayName) admin.displayName = b.displayName;
-  if (b.role && ["owner", "admin"].includes(b.role)) admin.role = b.role;
+  if (b.role && ["owner", "admin", "issuer"].includes(b.role)) admin.role = b.role;
+  if (b.dailyLimitUsd != null) admin.dailyLimitUsd = Math.max(0, Number(b.dailyLimitUsd));
   if (b.password) await admin.setPassword(b.password);
   await admin.save();
   res.json({ admin: { id: admin._id, username: admin.username, displayName: admin.displayName, role: admin.role, active: admin.active } });
