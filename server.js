@@ -132,6 +132,7 @@ import mobileApiRouter from "./routes/mobileApi.js"; // ← mobile app JSON API
 import mobileSchoolRouter from "./routes/mobileSchool.js"; // ← mobile learning platform
 import reseAdminRouter from "./routes/reseAdmin.js"; // Rese Rese admin panel
 import resePrivacyRouter from "./routes/resePrivacy.js"; // Rese Rese legal pages
+import reseApiRouter from "./routes/reseApi.js"; // Rese Rese app API
 import placementAuditRoutes from "./routes/admin_placement_audits.js";
 import adminOrganizationRoutes from "./routes/admin_organizations.js";
 import orgManagementRoutes from "./routes/org_management.js";
@@ -561,6 +562,7 @@ app.use("/zq-admin", supplierAdminRoutes);
 
 // ── RESE RESE admin panel (own session gate + body parsing) ──
 app.use("/rese-admin", reseAdminRouter);
+app.use("/api/rese", reseApiRouter);
 app.use("/", resePrivacyRouter); // /rese-rese/privacy , /rese-rese/delete-account
 // API routes - keep LMS API on /api/lms so quiz UI fetches work
 app.use("/api/lms", lmsApiRoutes);
