@@ -20,6 +20,7 @@ import User from "../models/user.js";
 import Organization from "../models/organization.js";
 import OrgMembership from "../models/orgMembership.js";
 import QuizRule from "../models/quizRule.js";
+import ExamInstance from "../models/examInstance.js";
 import { requireMobileAuth } from "./mobileApi.js";
 import { assignQuizFromRule } from "../services/quizAssignment.js";
 
@@ -103,6 +104,83 @@ router.post("/grade", requireMobileAuth, async (req, res) => {
     console.error("[student set grade]", e);
     res.status(500).json({ error: "Could not set your grade. Please try again." });
   }
+});
+
+// ── A student's teacher(s): anyone who assigned them work + their managing teacher.
+//    Multi-teacher emerges from assignments — no schema change needed.
+router.get("/teachers", requireMobileAuth, async (req, res) => {
+  try {
+    if (req.mobileUser.role !== "student") return res.json({ teachers: [] });
+    const me = req.mobileUser._id;
+
+    // 1) Teachers who assigned this student an AI quiz (meta.teacherId on the exam)
+    const exams = await ExamInstance.find({ userId: me, "meta.teacherId": { $ne: null } })
+      .select("quizTitle title status meta updatedAt").sort({ updatedAt: -1 }).lean();
+
+    const byTeacher = {};
+    for (const e of exams) {
+      const tid = String(e.meta.teacherId);
+      (byTeacher[tid] = byTeacher[tid] || []).push({
+        title: e.quizTitle || e.title || "Assessment",
+        status: e.status,
+        score: e.meta?.percentage != null ? e.meta.percentage : null
+      });
+    }
+
+    // 2) Their managing teacher (parentUserId), if that account is a teacher
+    const teacherIds = new Set(Object.keys(byTeacher));
+    if (req.mobileUser.parentUserId) teacherIds.add(String(req.mobileUser.parentUserId));
+
+    const teachers = await User.find({ _id: { $in: [...teacherIds] }, role: { $in: ["private_teacher", "teacher"] } })
+      .select("displayName firstName lastName").lean();
+
+    const rows = teachers.map((t) => ({
+      id: String(t._id),
+      name: t.displayName || [t.firstName, t.lastName].filter(Boolean).join(" ") || "Teacher",
+      assessments: byTeacher[String(t._id)] || []
+    }));
+
+    res.json({ teachers: rows });
+  } catch (e) { console.error("[student teachers]", e); res.status(500).json({ error: "Failed to load teachers" }); }
+});
+
+// ── AUTH: which teacher(s) this student has, derived (no schema change) ──────
+// A student's teachers = the private teacher who manages them (parentUserId)
+// PLUS any teacher who has assigned them a quiz (meta.teacherId on their exams).
+// This supports a student having several teachers without a model change.
+router.get("/teachers", requireMobileAuth, async (req, res) => {
+  try {
+    const me = req.mobileUser;
+    const teacherIds = new Set();
+
+    if (me.parentUserId) {
+      const owner = await User.findById(me.parentUserId).select("role").lean();
+      if (owner && owner.role === "private_teacher") teacherIds.add(String(me.parentUserId));
+    }
+    const exams = await ExamInstance.find({ userId: me._id, "meta.teacherId": { $exists: true, $ne: null } })
+      .select("meta status").lean();
+    for (const e of exams) if (e.meta && e.meta.teacherId) teacherIds.add(String(e.meta.teacherId));
+
+    const ids = [...teacherIds];
+    if (!ids.length) return res.json({ teachers: [] });
+
+    const docs = await User.find({ _id: { $in: ids }, role: "private_teacher" }).select("displayName firstName lastName username").lean();
+    const counts = {};
+    for (const e of exams) {
+      const t = e.meta && e.meta.teacherId ? String(e.meta.teacherId) : null;
+      if (!t) continue;
+      counts[t] = counts[t] || { total: 0, done: 0 };
+      counts[t].total++; if (e.status === "finished") counts[t].done++;
+    }
+    res.json({
+      teachers: docs.map((t) => ({
+        id: String(t._id),
+        name: t.displayName || [t.firstName, t.lastName].filter(Boolean).join(" ") || t.username || "Teacher",
+        assessments: counts[String(t._id)]?.total || 0,
+        completed: counts[String(t._id)]?.done || 0
+      }))
+    });
+  } catch (e) { console.error("[mobile student teachers]", e); res.status(500).json({ error: "Failed to load your teachers." }); }
 });
 
 export default router;

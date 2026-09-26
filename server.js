@@ -131,6 +131,7 @@ import authRoutes from "./routes/auth.js";
 import mobileApiRouter from "./routes/mobileApi.js"; // ← mobile app JSON API
 import mobileSchoolRouter from "./routes/mobileSchool.js"; // ← mobile learning platform
 import mobileStudentRouter from "./routes/mobileStudent.js"; // ← student grade + quiz allocation
+import mobileTeacherRouter from "./routes/mobileTeacher.js"; // ← private teacher: quizzes + assign
 import reseAdminRouter from "./routes/reseAdmin.js"; // Rese Rese admin panel
 import resePrivacyRouter from "./routes/resePrivacy.js"; // Rese Rese legal pages
 import reseApiRouter from "./routes/reseApi.js"; // Rese Rese app API
@@ -543,6 +544,7 @@ app.use("/auth", authRoutes);
 
 // ── MOBILE APP JSON API (additive; does not touch web/session flows) ──
 app.use("/api/mobile/student", mobileStudentRouter);  // must precede /api/mobile
+app.use("/api/mobile/teacher", mobileTeacherRouter);  // must precede /api/mobile
 app.use("/api/mobile", mobileApiRouter);
 app.use("/api/mobile/school", mobileSchoolRouter);
 
