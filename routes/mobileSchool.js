@@ -126,7 +126,11 @@ async function resolveChild(req, childId) {
     return User.findById(u._id).lean();
   }
   if (!mongoose.isValidObjectId(childId)) return null;
-  return User.findOne({ _id: childId, parentUserId: u._id }).lean();
+  const owned = await User.findOne({ _id: childId, parentUserId: u._id }).lean();
+  if (owned) return owned;
+  const { isLinked } = await import("../services/learnerLinks.js");
+  if (await isLinked(u._id, childId)) return User.findById(childId).lean();
+  return null;
 }
 
 /**
@@ -317,7 +321,14 @@ router.get("/catalog", requireMobileAuth, async (req, res) => {
 router.get("/children", requireMobileAuth, async (req, res) => {
   try {
     const parent = req.mobileUser;
-    const kids = await User.find({ parentUserId: parent._id, role: "student" })
+    const { linkedLearnerIds } = await import("../services/learnerLinks.js");
+    const linkedIds = await linkedLearnerIds(parent._id);
+    const kids = await User.find({
+      $or: [
+        { parentUserId: parent._id, role: "student" },
+        { _id: { $in: linkedIds }, role: "student" }
+      ]
+    })
       .select("displayName firstName lastName grade studentId username passwordHash createdAt")
       .lean();
 

@@ -23,6 +23,7 @@ import ExamInstance from "../models/examInstance.js";
 import AIQuiz from "../models/aiQuiz.js";
 import { requireMobileAuth } from "./mobileApi.js";
 import { generateAIQuiz, assignAIQuizToStudents } from "../services/aiQuizGenerator.js";
+import { linkedLearnerIds, isLinked } from "../services/learnerLinks.js";
 
 const router = Router();
 router.use(express.json({ limit: "1mb" }));
@@ -38,7 +39,8 @@ const nameOf = (u) => u.displayName || [u.firstName, u.lastName].filter(Boolean)
 // ── My students (+ their most recent score) ─────────────────────────────────
 router.get("/students", requireMobileAuth, ensureTeacher, async (req, res) => {
   try {
-    const students = await User.find({ parentUserId: req.mobileUser._id, role: "student" })
+    const linkedIds = await linkedLearnerIds(req.mobileUser._id, "teacher");
+    const students = await User.find({ $or: [ { parentUserId: req.mobileUser._id, role: "student" }, { _id: { $in: linkedIds }, role: "student" } ] })
       .select("displayName firstName lastName username grade createdAt").sort({ createdAt: -1 }).lean();
     const ids = students.map((s) => s._id);
     const attempts = ids.length
@@ -106,8 +108,9 @@ router.post("/assign", requireMobileAuth, ensureTeacher, async (req, res) => {
     if (!aiQuizId || !mongoose.isValidObjectId(aiQuizId)) return res.status(400).json({ error: "Choose a quiz." });
     if (!Array.isArray(studentIds) || !studentIds.length) return res.status(400).json({ error: "Choose at least one student." });
 
-    const owned = await User.find({ _id: { $in: studentIds }, parentUserId: req.mobileUser._id, role: "student" }).select("_id").lean();
-    const ownedIds = owned.map((s) => String(s._id));
+    const linkedIds = (await linkedLearnerIds(req.mobileUser._id, "teacher")).map(String);
+    const found = await User.find({ _id: { $in: studentIds }, role: "student" }).select("_id parentUserId").lean();
+    const ownedIds = found.filter((s) => String(s.parentUserId) === String(req.mobileUser._id) || linkedIds.includes(String(s._id))).map((s) => String(s._id));
     if (!ownedIds.length) return res.status(403).json({ error: "Those students aren't in your class." });
 
     const assignments = await assignAIQuizToStudents({ aiQuizId, studentIds: ownedIds, teacherId: req.mobileUser._id });
@@ -118,7 +121,8 @@ router.post("/assign", requireMobileAuth, ensureTeacher, async (req, res) => {
 // ── Class overview ───────────────────────────────────────────────────────────
 router.get("/overview", requireMobileAuth, ensureTeacher, async (req, res) => {
   try {
-    const students = await User.find({ parentUserId: req.mobileUser._id, role: "student" }).select("_id").lean();
+    const linkedIds = await linkedLearnerIds(req.mobileUser._id, "teacher");
+    const students = await User.find({ $or: [ { parentUserId: req.mobileUser._id, role: "student" }, { _id: { $in: linkedIds }, role: "student" } ] }).select("_id").lean();
     const ids = students.map((s) => s._id);
     const finished = ids.length ? await ExamInstance.find({ userId: { $in: ids }, status: "finished" }).select("meta").lean() : [];
     const scores = finished.map((f) => f.meta?.percentage).filter((n) => typeof n === "number");
