@@ -65,6 +65,20 @@ function isPaid(user) {
   return ["silver", "gold"].includes(user.subscriptionPlan);
 }
 
+// Can this signed-in user manage learners (add a child, set a login)?
+// The app runs on PERSONA, so honour the active persona AND the stored role,
+// matching the web canActAsParent (parent/guardian/private_teacher/employee/
+// org_admin/super_admin) plus anyone whose active/available persona is teacher
+// or parent. This is why a Professional or persona-switched account can teach.
+function canManageLearners(u) {
+  if (!u) return false;
+  const roleOk = ["parent", "guardian", "private_teacher", "teacher", "employee", "org_admin", "super_admin", "admin"].includes(u.role);
+  const personaOk = u.activeMobileRole === "teacher" || u.activeMobileRole === "parent";
+  const mobileOk = Array.isArray(u.mobileRoles) && (u.mobileRoles.includes("teacher") || u.mobileRoles.includes("parent"));
+  return roleOk || personaOk || mobileOk;
+}
+
+
 /** The org a parent/teacher's children belong to. Home org by default. */
 async function resolveHomeOrg() {
   return Organization.findOne({ slug: "cripfcnt-home" }).lean();
@@ -355,7 +369,7 @@ router.get("/children", requireMobileAuth, async (req, res) => {
 router.post("/children", requireMobileAuth, async (req, res) => {
   try {
     const parent = req.mobileUser;
-    if (!["parent", "private_teacher"].includes(parent.role)) {
+    if (!canManageLearners(parent)) {
       return res.status(403).json({ error: "Only a parent or teacher can add a child." });
     }
     const firstName = String(req.body?.firstName || "").trim();
@@ -363,7 +377,7 @@ router.post("/children", requireMobileAuth, async (req, res) => {
     const grade = req.body?.grade != null ? Number(req.body.grade) : null;
 
     if (!firstName) return res.status(400).json({ error: "Enter the child's first name." });
-    if (!grade || grade < 1 || grade > 12) {
+    if (grade == null || Number.isNaN(grade) || grade < 0 || grade > 13) {
       return res.status(400).json({ error: "Choose the child's grade." });
     }
 
@@ -439,7 +453,7 @@ router.post("/children", requireMobileAuth, async (req, res) => {
 router.post("/children/:childId/password", requireMobileAuth, async (req, res) => {
   try {
     const parent = req.mobileUser;
-    if (!["parent", "private_teacher"].includes(parent.role)) {
+    if (!canManageLearners(parent)) {
       return res.status(403).json({ error: "Only a parent or teacher can set a child's login." });
     }
 
