@@ -1,14 +1,15 @@
 // routes/mobileStudent.js
 // ─────────────────────────────────────────────────────────────────────────────
 // Student onboarding + grade allocation for the mobile app. Additive — it does
-// NOT change the working register flow. After a student signs up (or logs in),
-// the app asks for their grade and calls POST /grade, which:
-//   • stores the grade,
-//   • ensures they're a member of cripfcnt-home (where student quizzes live),
-//   • assigns that grade's TRIAL quizzes — the same assignment the web does when
-//     a student is created — so the student immediately has quizzes to take.
+// NOT change the working register flow.
 //
-// GET /grades is PUBLIC (used on the sign-up screen before the user has a token).
+//   GET  /grades  (public)  — the full grade list (0–13), matching the web's
+//                             parent "add child" form. Always returns a list.
+//   POST /grade   (auth)    — set the signed-in student's grade, ensure their
+//                             cripfcnt-home membership, and assign that grade's
+//                             trial quizzes (same as the web does on student
+//                             create). Works for brand-new AND already-registered
+//                             students who never picked a grade.
 //
 // Mount in server.js:
 //    import mobileStudentRouter from "./routes/mobileStudent.js";
@@ -26,30 +27,26 @@ const router = Router();
 router.use(express.json({ limit: "256kb" }));
 
 const HOME_ORG_SLUG = "cripfcnt-home";
-const gradeLabel = (g) => (Number(g) === 0 ? "ECD" : `Grade ${g}`);
+const MIN_GRADE = 0;
+const MAX_GRADE = 13;
 
-// ── PUBLIC: which grades a student can pick (the ones that actually have quizzes)
-router.get("/grades", async (req, res) => {
-  try {
-    const org = await Organization.findOne({ slug: HOME_ORG_SLUG }).lean();
-    if (!org) return res.json({ grades: fallbackGrades(), roles: roleNotes() });
-
-    const raw = await QuizRule.distinct("grade", { org: org._id, enabled: true, grade: { $ne: null } });
-    const grades = raw
-      .map(Number).filter((g) => Number.isFinite(g)).sort((a, b) => a - b)
-      .map((g) => ({ value: g, label: gradeLabel(g) }));
-
-    res.json({ grades: grades.length ? grades : fallbackGrades(), roles: roleNotes() });
-  } catch (e) {
-    console.error("[student grades]", e);
-    res.json({ grades: fallbackGrades(), roles: roleNotes() });
-  }
-});
-
-function fallbackGrades() {
-  return [0, 1, 2, 3, 4, 5, 6, 7].map((g) => ({ value: g, label: gradeLabel(g) }));
+// Labels match the web parent form exactly: Grade 0–7, then Form 1–6 (8–13).
+function gradeLabel(g) {
+  g = Number(g);
+  return g <= 7 ? `Grade ${g}` : `Form ${g - 7}`;
 }
-// Plain-language notes for the sign-up role chooser (the app can show these).
+function gradeCategory(g) {
+  g = Number(g);
+  return g === 0 ? "Early years" : g <= 7 ? "Primary" : "Secondary";
+}
+// The full, fixed list — never depends on whether quiz rules exist yet.
+function allGrades() {
+  const out = [];
+  for (let g = MIN_GRADE; g <= MAX_GRADE; g++) {
+    out.push({ value: g, label: gradeLabel(g), category: gradeCategory(g) });
+  }
+  return out;
+}
 function roleNotes() {
   return [
     { value: "student", title: "Student", note: "I'm a learner. Take quizzes for my grade, track my progress and build my knowledge map." },
@@ -59,11 +56,18 @@ function roleNotes() {
   ];
 }
 
-// ── AUTH: set the signed-in student's grade → allocate that grade's quizzes
+// ── PUBLIC: grade options for the sign-up picker ─────────────────────────────
+router.get("/grades", async (req, res) => {
+  // Always return the full list; grades are a fixed academic ladder, not a
+  // function of how many quiz rules happen to exist.
+  res.json({ grades: allGrades(), roles: roleNotes() });
+});
+
+// ── AUTH: set the signed-in student's grade → allocate that grade's quizzes ──
 router.post("/grade", requireMobileAuth, async (req, res) => {
   try {
     const gradeNum = Number(req.body?.grade);
-    if (!Number.isFinite(gradeNum) || gradeNum < 0 || gradeNum > 7) {
+    if (!Number.isFinite(gradeNum) || gradeNum < MIN_GRADE || gradeNum > MAX_GRADE) {
       return res.status(400).json({ error: "Please choose a valid grade." });
     }
 
@@ -74,7 +78,7 @@ router.post("/grade", requireMobileAuth, async (req, res) => {
     const org = await Organization.findOne({ slug: HOME_ORG_SLUG }).lean();
     if (!org) return res.status(500).json({ error: "Home learning isn't set up yet." });
 
-    // Store grade + home org (idempotent — safe to call again to change grade)
+    // Store grade + home org (idempotent — safe to re-run to change grade)
     user.grade = gradeNum;
     if (!user.organization) user.organization = org._id;
     await user.save();
@@ -85,7 +89,9 @@ router.post("/grade", requireMobileAuth, async (req, res) => {
       { upsert: true }
     );
 
-    // Assign this grade's TRIAL quizzes (mirrors admin_quiz_rules.js student path)
+    // Assign this grade's TRIAL quizzes (mirrors admin_quiz_rules.js student path).
+    // If no rules exist for this grade yet, the grade is still saved — quizzes
+    // appear automatically when an admin adds rules for it.
     const rules = await QuizRule.find({ org: org._id, grade: gradeNum, quizType: "trial", enabled: true });
     let assigned = 0;
     for (const rule of rules) {
