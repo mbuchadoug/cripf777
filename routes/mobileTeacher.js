@@ -107,12 +107,44 @@ router.get("/quizzes/:id", requireMobileAuth, ensureTeacher, async (req, res) =>
   try {
     if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ error: "Invalid quiz id" });
     const quiz = await AIQuiz.findOne({ _id: req.params.id, teacherId: req.mobileUser._id }).lean();
-    if (!quiz) return res.status(404).json({ error: "Quiz not found" });
-    res.json({
-      id: String(quiz._id), title: quiz.title, subject: quiz.subject, grade: quiz.grade,
-      topic: quiz.topic, difficulty: quiz.difficulty, assignedCount: (quiz.assignedTo || []).length,
-      questions: (quiz.questions || []).map((q) => ({ text: q.text, choices: q.choices, correctIndex: q.correctIndex, explanation: q.explanation }))
-    });
+    if (quiz) {
+      return res.json({
+        source: "ai", id: String(quiz._id), title: quiz.title, subject: quiz.subject, grade: quiz.grade,
+        topic: quiz.topic, difficulty: quiz.difficulty, assignedCount: (quiz.assignedTo || []).length, passage: null,
+        questions: (quiz.questions || []).map((q) => ({ text: q.text, choices: q.choices, correctIndex: q.correctIndex, explanation: q.explanation }))
+      });
+    }
+
+    // Not an AI quiz → try the uploaded library (QuizRule → comprehension passage + children)
+    const rule = await QuizRule.findById(req.params.id).lean();
+    if (rule) {
+      const Question = (await import("../models/question.js")).default;
+      const parent = await Question.findById(rule.quizQuestionId).lean();
+      let questions = [];
+      let passage = null;
+      if (parent) {
+        passage = parent.passage || parent.text || null;
+        const childIds = parent.type === "comprehension" && Array.isArray(parent.questionIds) ? parent.questionIds : [];
+        if (childIds.length) {
+          const kids = await Question.find({ _id: { $in: childIds } }).lean();
+          const byId = {}; for (const k of kids) byId[String(k._id)] = k;
+          questions = childIds.map((id) => byId[String(id)]).filter(Boolean).map((k) => ({
+            text: k.text,
+            choices: (k.choices || []).map((c) => (typeof c === "string" ? c : c.text)),
+            correctIndex: k.answerIndex ?? k.correctIndex ?? null,
+            explanation: k.explanation || ""
+          }));
+        } else if (parent.type !== "comprehension") {
+          questions = [{ text: parent.text, choices: (parent.choices || []).map((c) => (typeof c === "string" ? c : c.text)), correctIndex: parent.answerIndex ?? null, explanation: parent.explanation || "" }];
+        }
+      }
+      return res.json({
+        source: "library", id: String(rule._id), title: rule.quizTitle || "Quiz",
+        subject: rule.subject || null, grade: rule.grade, passage, questions
+      });
+    }
+
+    return res.status(404).json({ error: "Quiz not found" });
   } catch (e) { console.error("[mobile teacher preview]", e); res.status(500).json({ error: "Failed to load preview" }); }
 });
 
