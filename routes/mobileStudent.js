@@ -183,4 +183,76 @@ router.get("/teachers", requireMobileAuth, async (req, res) => {
   } catch (e) { console.error("[mobile student teachers]", e); res.status(500).json({ error: "Failed to load your teachers." }); }
 });
 
+// ── STUDENT DASHBOARD: quizzes split by source (teacher vs system/parent) + library ──
+router.get("/dashboard", requireMobileAuth, async (req, res) => {
+  try {
+    const me = req.mobileUser;
+    if (me.role !== "student") return res.status(403).json({ error: "Students only." });
+    const subjectFilter = String(req.query.subject || "").trim().toLowerCase();
+
+    const exams = await ExamInstance.find({ userId: me._id })
+      .select("examId quizTitle title module subject status questionIds meta updatedAt createdAt")
+      .sort({ updatedAt: -1 }).lean();
+
+    const teacherIds = [...new Set(exams.map((e) => e.meta && e.meta.teacherId).filter(Boolean).map(String))];
+    const teachers = teacherIds.length ? await User.find({ _id: { $in: teacherIds } }).select("displayName firstName lastName").lean() : [];
+    const tName = {}; for (const t of teachers) tName[String(t._id)] = t.displayName || [t.firstName, t.lastName].filter(Boolean).join(" ") || "Teacher";
+
+    const card = (e) => ({
+      examId: e.examId,
+      title: e.quizTitle || e.title || e.module || "Quiz",
+      subject: e.subject || e.module || null,
+      questionCount: (e.questionIds || []).length,
+      status: e.status,
+      score: e.meta && e.meta.percentage != null ? e.meta.percentage : null,
+      teacher: e.meta && e.meta.teacherId ? (tName[String(e.meta.teacherId)] || "Teacher") : null,
+      kind: e.meta && e.meta.teacherId ? "teacher" : "system"
+    });
+
+    let all = exams.map(card);
+    if (subjectFilter) all = all.filter((c) => (c.subject || "").toLowerCase() === subjectFilter);
+
+    const active = all.filter((c) => c.status === "pending" || c.status === "started");
+    const completed = all.filter((c) => c.status === "finished");
+    const fromTeacher = active.filter((c) => c.kind === "teacher");
+    const assigned = active.filter((c) => c.kind === "system");
+
+    // Library (grade practice quizzes)
+    const org = await Organization.findOne({ slug: HOME_ORG_SLUG }).lean();
+    let library = [];
+    if (org && me.grade != null) {
+      let rules = await QuizRule.find({ org: org._id, enabled: true, grade: me.grade })
+        .select("quizTitle subject grade questionCount").lean();
+      if (subjectFilter) rules = rules.filter((r) => (r.subject || "").toLowerCase() === subjectFilter);
+      library = rules.map((r) => ({ ruleId: String(r._id), title: r.quizTitle || "Quiz", subject: r.subject || null, grade: r.grade, questionCount: r.questionCount || 10, kind: "library" }));
+    }
+
+    const subjects = [...new Set([...all.map((c) => c.subject), ...library.map((l) => l.subject)].filter(Boolean))].sort();
+
+    res.json({
+      grade: me.grade ?? null,
+      counts: { fromTeacher: fromTeacher.length, assigned: assigned.length, completed: completed.length, library: library.length },
+      fromTeacher, assigned, completed, library, subjects
+    });
+  } catch (e) { console.error("[student dashboard]", e); res.status(500).json({ error: "Failed to load your dashboard." }); }
+});
+
+// ── REDO a finished quiz → clone into a fresh pending exam (keeps the old result) ──
+router.post("/redo/:examId", requireMobileAuth, async (req, res) => {
+  try {
+    const me = req.mobileUser;
+    const src = await ExamInstance.findOne({ examId: req.params.examId, userId: me._id }).lean();
+    if (!src) return res.status(404).json({ error: "Quiz not found." });
+    const crypto = (await import("crypto")).default;
+    const clone = { ...src };
+    delete clone._id; delete clone.__v; delete clone.answers; delete clone.responses;
+    clone.examId = crypto.randomUUID();
+    clone.status = "pending";
+    clone.meta = { ...(src.meta || {}), redoOf: src.examId, percentage: undefined, scorePct: undefined, finishedAt: undefined };
+    clone.createdAt = new Date(); clone.updatedAt = new Date();
+    const fresh = await ExamInstance.create(clone);
+    res.json({ ok: true, examId: fresh.examId });
+  } catch (e) { console.error("[student redo]", e); res.status(500).json({ error: "Could not restart the quiz." }); }
+});
+
 export default router;
