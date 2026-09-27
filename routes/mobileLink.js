@@ -108,7 +108,7 @@ router.get("/my-guardians", requireMobileAuth, async (req, res) => {
     for (const e of exams) {
       const tid = e.meta && e.meta.teacherId ? String(e.meta.teacherId) : null;
       if (!tid) continue;
-      if (!roleById[tid]) roleById[tid] = "teacher";
+      roleById[tid] = "teacher"; // assigning work is definitive teacher evidence — overrides the parentUserId guess
       (assignsByTeacher[tid] = assignsByTeacher[tid] || []).push({
         title: e.quizTitle || e.title || "Quiz",
         subject: e.subject || e.module || null,
