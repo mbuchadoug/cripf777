@@ -24,6 +24,9 @@ import AIQuiz from "../models/aiQuiz.js";
 import { requireMobileAuth } from "./mobileApi.js";
 import { generateAIQuiz, assignAIQuizToStudents } from "../services/aiQuizGenerator.js";
 import { linkedLearnerIds, isLinked } from "../services/learnerLinks.js";
+import Organization from "../models/organization.js";
+import QuizRule from "../models/quizRule.js";
+import { assignQuizFromRule } from "../services/quizAssignment.js";
 
 const router = Router();
 router.use(express.json({ limit: "1mb" }));
@@ -64,15 +67,38 @@ router.get("/students", requireMobileAuth, ensureTeacher, async (req, res) => {
 // ── My AI-quiz library ───────────────────────────────────────────────────────
 router.get("/quizzes", requireMobileAuth, ensureTeacher, async (req, res) => {
   try {
-    const quizzes = await AIQuiz.find({ teacherId: req.mobileUser._id }).sort({ createdAt: -1 }).lean();
-    res.json({
-      credits: req.mobileUser.aiQuizCredits ?? 0,
-      quizzes: quizzes.map((q) => ({
-        id: String(q._id), title: q.title, subject: q.subject, grade: q.grade, topic: q.topic,
-        difficulty: q.difficulty, questionCount: q.questionCount || (q.questions || []).length,
+    // 1) The teacher's own AI-generated quizzes
+    const ai = await AIQuiz.find({ teacherId: req.mobileUser._id }).sort({ createdAt: -1 }).lean();
+
+    // 2) The uploaded LIBRARY quizzes (QuizRule under cripfcnt-home), like the web.
+    //    Filter by the teacher's enabled levels if set, else show all grades.
+    let library = [];
+    const homeOrg = await Organization.findOne({ slug: "cripfcnt-home" }).lean();
+    if (homeOrg) {
+      const levels = req.mobileUser.schoolLevelsEnabled || [];
+      const ranges = [];
+      if (levels.includes("junior")) ranges.push({ $gte: 1, $lte: 7 });
+      if (levels.includes("high")) ranges.push({ $gte: 8, $lte: 13 });
+      let gradeQuery = {};
+      if (ranges.length === 1) gradeQuery = { grade: ranges[0] };
+      else if (ranges.length === 2) gradeQuery = { $or: ranges.map((r) => ({ grade: r })) };
+      library = await QuizRule.find({ org: homeOrg._id, enabled: true, ...gradeQuery })
+        .select("quizTitle subject grade module questionCount durationMinutes").sort({ grade: 1 }).lean();
+    }
+
+    const quizzes = [
+      ...ai.map((q) => ({
+        source: "ai", id: String(q._id), title: q.title, subject: q.subject, grade: q.grade,
+        topic: q.topic, difficulty: q.difficulty, questionCount: q.questionCount || (q.questions || []).length,
         assignedCount: (q.assignedTo || []).length, createdAt: q.createdAt
+      })),
+      ...library.map((r) => ({
+        source: "library", id: String(r._id), title: r.quizTitle || "Quiz", subject: r.subject || null,
+        grade: r.grade, questionCount: r.questionCount || 10
       }))
-    });
+    ];
+
+    res.json({ credits: req.mobileUser.aiQuizCredits ?? 0, aiCount: ai.length, libraryCount: library.length, quizzes });
   } catch (e) { console.error("[mobile teacher quizzes]", e); res.status(500).json({ error: "Failed to load quizzes" }); }
 });
 
@@ -108,16 +134,32 @@ router.post("/quizzes/generate", requireMobileAuth, ensureTeacher, async (req, r
 // ── Assign a quiz to my students (verifies the students are mine) ────────────
 router.post("/assign", requireMobileAuth, ensureTeacher, async (req, res) => {
   try {
-    const { aiQuizId, studentIds } = req.body || {};
-    if (!aiQuizId || !mongoose.isValidObjectId(aiQuizId)) return res.status(400).json({ error: "Choose a quiz." });
+    const body = req.body || {};
+    const quizId = body.quizId || body.aiQuizId;               // back-compat
+    const source = body.source === "library" ? "library" : "ai";
+    const studentIds = body.studentIds;
+    if (!quizId || !mongoose.isValidObjectId(quizId)) return res.status(400).json({ error: "Choose a quiz." });
     if (!Array.isArray(studentIds) || !studentIds.length) return res.status(400).json({ error: "Choose at least one student." });
 
+    // Only the teacher's own students (created or linked)
     const linkedIds = (await linkedLearnerIds(req.mobileUser._id, "teacher")).map(String);
     const found = await User.find({ _id: { $in: studentIds }, role: "student" }).select("_id parentUserId").lean();
     const ownedIds = found.filter((s) => String(s.parentUserId) === String(req.mobileUser._id) || linkedIds.includes(String(s._id))).map((s) => String(s._id));
     if (!ownedIds.length) return res.status(403).json({ error: "Those students aren't in your class." });
 
-    const assignments = await assignAIQuizToStudents({ aiQuizId, studentIds: ownedIds, teacherId: req.mobileUser._id });
+    if (source === "library") {
+      // Uploaded QuizRule quiz → assign to each student, same engine as the web/admin.
+      const rule = await QuizRule.findById(quizId).lean();
+      if (!rule) return res.status(404).json({ error: "Quiz not found in the library." });
+      let assigned = 0;
+      for (const sid of ownedIds) {
+        try { await assignQuizFromRule({ rule, userId: sid, orgId: rule.org, force: true }); assigned++; } catch (_) {}
+      }
+      return res.json({ ok: true, assigned, skipped: ownedIds.length - assigned });
+    }
+
+    // AI quiz
+    const assignments = await assignAIQuizToStudents({ aiQuizId: quizId, studentIds: ownedIds, teacherId: req.mobileUser._id });
     res.json({ ok: true, assigned: assignments.length, skipped: ownedIds.length - assignments.length });
   } catch (e) { console.error("[mobile teacher assign]", e); res.status(400).json({ error: e.message || "Could not assign the quiz." }); }
 });

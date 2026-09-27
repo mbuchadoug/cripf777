@@ -7,6 +7,10 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY
 });
 
+// Model name is configurable so a future rename never breaks quiz generation —
+// set ANTHROPIC_QUIZ_MODEL in .env to override. Default is a current model.
+const QUIZ_MODEL = process.env.ANTHROPIC_QUIZ_MODEL || "claude-sonnet-4-5";
+
 /**
  * Generate quiz questions using Claude AI
  */
@@ -61,7 +65,7 @@ Return ONLY a JSON array of questions, no additional text.`;
 
   try {
     const message = await anthropic.messages.create({
-      model: "claude-sonnet-4-20250514",
+      model: QUIZ_MODEL,
       max_tokens: 4000,
       messages: [{
         role: "user",
