@@ -229,9 +229,23 @@ router.get("/dashboard", requireMobileAuth, async (req, res) => {
 
     const subjects = [...new Set([...all.map((c) => c.subject), ...library.map((l) => l.subject)].filter(Boolean))].sort();
 
+    // Performance summary from finished quizzes (overall + by subject).
+    const scored = completed.filter((c) => c.score != null);
+    const overall = scored.length ? Math.round(scored.reduce((a, c) => a + c.score, 0) / scored.length) : null;
+    const bySubjectMap = {};
+    for (const c of scored) {
+      const key = c.subject || "general";
+      (bySubjectMap[key] = bySubjectMap[key] || []).push(c.score);
+    }
+    const bySubject = Object.keys(bySubjectMap).map((k) => ({
+      subject: k, count: bySubjectMap[k].length,
+      avg: Math.round(bySubjectMap[k].reduce((a, b) => a + b, 0) / bySubjectMap[k].length)
+    })).sort((a, b) => b.count - a.count);
+
     res.json({
       grade: me.grade ?? null,
       counts: { fromTeacher: fromTeacher.length, assigned: assigned.length, completed: completed.length, library: library.length },
+      performance: { overall, taken: scored.length, bySubject },
       fromTeacher, assigned, completed, library, subjects
     });
   } catch (e) { console.error("[student dashboard]", e); res.status(500).json({ error: "Failed to load your dashboard." }); }

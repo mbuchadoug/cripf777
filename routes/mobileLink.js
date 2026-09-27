@@ -16,6 +16,7 @@
 import express, { Router } from "express";
 import mongoose from "mongoose";
 import User from "../models/user.js";
+import ExamInstance from "../models/examInstance.js";
 import { requireMobileAuth } from "./mobileApi.js";
 import { linkLearner, unlink, guardiansOf, linkedLearnerIds } from "../services/learnerLinks.js";
 
@@ -79,18 +80,61 @@ router.post("/remove/:learnerId", requireMobileAuth, async (req, res) => {
   } catch (e) { console.error("[link remove]", e); res.status(500).json({ error: "Failed" }); }
 });
 
-// ── (Student) who is linked to me + instructions ─────────────────────────────
+// ── (Student) EVERYONE connected to me: teachers + parents, from links,
+//    from parentUserId (who created me), and from who assigned me work —
+//    each with the quizzes they set me and my marks.
 router.get("/my-guardians", requireMobileAuth, async (req, res) => {
   try {
     const me = req.mobileUser;
+    const roleById = {};
+
+    // 1) Explicit links (added by username)
     const links = await guardiansOf(me._id);
-    const gids = links.map((l) => l.guardian);
-    const roleById = {}; for (const l of links) roleById[String(l.guardian)] = l.role;
-    const people = gids.length ? await User.find({ _id: { $in: gids } }).select("displayName firstName lastName").lean() : [];
+    for (const l of links) roleById[String(l.guardian)] = l.role;
+
+    // 2) The account that created me (parentUserId) — teacher or parent
+    if (me.parentUserId) {
+      const owner = await User.findById(me.parentUserId).select("role").lean();
+      if (owner) {
+        const r = ["private_teacher", "teacher"].includes(owner.role) ? "teacher" : "parent";
+        if (!roleById[String(me.parentUserId)]) roleById[String(me.parentUserId)] = r;
+      }
+    }
+
+    // 3) Teachers who assigned me quizzes (meta.teacherId), + collect assignments/marks
+    const exams = await ExamInstance.find({ userId: me._id })
+      .select("quizTitle title subject module status meta updatedAt").sort({ updatedAt: -1 }).lean();
+    const assignsByTeacher = {};
+    for (const e of exams) {
+      const tid = e.meta && e.meta.teacherId ? String(e.meta.teacherId) : null;
+      if (!tid) continue;
+      if (!roleById[tid]) roleById[tid] = "teacher";
+      (assignsByTeacher[tid] = assignsByTeacher[tid] || []).push({
+        title: e.quizTitle || e.title || "Quiz",
+        subject: e.subject || e.module || null,
+        status: e.status,
+        score: e.meta && e.meta.percentage != null ? e.meta.percentage : null
+      });
+    }
+
+    const ids = Object.keys(roleById);
+    const people = ids.length ? await User.find({ _id: { $in: ids } }).select("displayName firstName lastName").lean() : [];
+    const nmeById = {}; for (const p of people) nmeById[String(p._id)] = nameOf(p) || "Someone";
+
+    const guardians = ids.map((id) => {
+      const assignments = assignsByTeacher[id] || [];
+      const done = assignments.filter((a) => a.status === "finished").length;
+      return {
+        id, name: nmeById[id] || "Someone", role: roleById[id] || "teacher",
+        assignmentsCount: assignments.length, completedCount: done,
+        assignments: assignments.slice(0, 20)
+      };
+    });
+
     res.json({
       username: me.username || null,
       howTo: "Share your username with a teacher or parent so they can add you. You can remove anyone here at any time.",
-      guardians: people.map((p) => ({ id: String(p._id), name: nameOf(p) || "Someone", role: roleById[String(p._id)] || "teacher" }))
+      guardians
     });
   } catch (e) { console.error("[my-guardians]", e); res.status(500).json({ error: "Failed" }); }
 });
