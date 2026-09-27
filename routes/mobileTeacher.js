@@ -29,9 +29,13 @@ const router = Router();
 router.use(express.json({ limit: "1mb" }));
 
 function ensureTeacher(req, res, next) {
-  if (!req.mobileUser || req.mobileUser.role !== "private_teacher") {
-    return res.status(403).json({ error: "For private teachers only." });
-  }
+  const u = req.mobileUser;
+  const ok = u && (
+    ["private_teacher", "teacher"].includes(u.role) ||
+    u.activeMobileRole === "teacher" ||
+    (Array.isArray(u.mobileRoles) && u.mobileRoles.includes("teacher"))
+  );
+  if (!ok) return res.status(403).json({ error: "Switch to your Teacher profile to use this." });
   next();
 }
 const nameOf = (u) => u.displayName || [u.firstName, u.lastName].filter(Boolean).join(" ") || u.username || "Learner";
@@ -128,7 +132,20 @@ router.get("/overview", requireMobileAuth, ensureTeacher, async (req, res) => {
     const scores = finished.map((f) => f.meta?.percentage).filter((n) => typeof n === "number");
     const avg = scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : null;
     const quizCount = await AIQuiz.countDocuments({ teacherId: req.mobileUser._id });
-    res.json({ students: ids.length, quizzesCreated: quizCount, assessmentsTaken: finished.length, averageScore: avg, credits: req.mobileUser.aiQuizCredits ?? 0 });
+
+    // Make sure this teacher's monthly AI credits are granted so the hub isn't stuck at 0.
+    let credits = req.mobileUser.aiQuizCredits ?? 0;
+    try {
+      const t = await User.findById(req.mobileUser._id);
+      if (t && typeof t.resetAIQuizCredits === "function") {
+        const before = t.aiQuizCredits || 0;
+        t.resetAIQuizCredits();
+        if ((t.aiQuizCredits || 0) !== before) await t.save();
+        credits = t.aiQuizCredits || 0;
+      }
+    } catch (_) {}
+
+    res.json({ students: ids.length, quizzesCreated: quizCount, assessmentsTaken: finished.length, averageScore: avg, credits });
   } catch (e) { console.error("[mobile teacher overview]", e); res.status(500).json({ error: "Failed" }); }
 });
 
