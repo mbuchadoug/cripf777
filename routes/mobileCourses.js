@@ -24,6 +24,7 @@ import mongoose from "mongoose";
 import { requireMobileAuth } from "./mobileApi.js";
 import Course from "../models/course.js";
 import Enrollment from "../models/enrollment.js";
+import CourseLesson from "../models/courseLesson.js";
 import CourseProgress from "../models/courseProgress.js";
 import CourseCertificate from "../models/courseCertificate.js";
 import ModuleCertificate from "../models/moduleCertificate.js";
@@ -177,6 +178,14 @@ router.get("/:slug", requireMobileAuth, async (req, res) => {
       })
     }));
 
+    // Learning materials: published lessons (video + text), same as the web.
+    const lessonDocs = await CourseLesson.find({ course: course._id, published: true }).sort({ order: 1, createdAt: 1 }).lean();
+    const lessons = lessonDocs.map(l => ({
+      title: l.title, caption: l.caption || "", unitTitle: l.unitTitle || null,
+      videoUrl: l.videoFilename ? (SITE_URL + "/videos/" + l.videoFilename) : null,
+      content: l.content || ""
+    }));
+
     let certificateUrl = result?.certificate?.pdfUrl || null;
     if (certificateUrl && !/^https?:/.test(certificateUrl)) certificateUrl = SITE_URL + certificateUrl;
 
@@ -185,7 +194,7 @@ router.get("/:slug", requireMobileAuth, async (req, res) => {
       progress: { overall: ev?.overallPercentage || 0, passedCount: ev?.passedCount || 0, total: ev?.totalQuizzes || 0,
         complete: !!ev?.complete, classification: ev?.classification || null, breadthOk: !!ev?.breadthOk, depthOk: !!ev?.depthOk,
         currentStage: st.currentStage, stagesTotal: st.totalStages, completion: st.completionPct, attempts: st.totalAttempts },
-      units, certificateUrl
+      units, lessons, certificateUrl
     });
   } catch (e) { console.error("[mobile detail]", e); res.status(500).json({ error: "Failed" }); }
 });
