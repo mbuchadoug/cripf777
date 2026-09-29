@@ -27,6 +27,7 @@ import { linkedLearnerIds, isLinked } from "../services/learnerLinks.js";
 import Organization from "../models/organization.js";
 import QuizRule from "../models/quizRule.js";
 import { assignQuizFromRule } from "../services/quizAssignment.js";
+import { sendPushToUsers } from "../services/push.js";
 
 const router = Router();
 router.use(express.json({ limit: "1mb" }));
@@ -187,11 +188,13 @@ router.post("/assign", requireMobileAuth, ensureTeacher, async (req, res) => {
       for (const sid of ownedIds) {
         try { await assignQuizFromRule({ rule, userId: sid, orgId: rule.org, force: true }); assigned++; } catch (_) {}
       }
+      if (assigned) sendPushToUsers(ownedIds, { title: "New quiz assigned", body: `${nameOf(req.mobileUser)} set you a new quiz`, data: { type: "assignment" } });
       return res.json({ ok: true, assigned, skipped: ownedIds.length - assigned });
     }
 
     // AI quiz
     const assignments = await assignAIQuizToStudents({ aiQuizId: quizId, studentIds: ownedIds, teacherId: req.mobileUser._id });
+    if (assignments.length) sendPushToUsers(ownedIds, { title: "New quiz assigned", body: `${nameOf(req.mobileUser)} set you a new quiz`, data: { type: "assignment" } });
     res.json({ ok: true, assigned: assignments.length, skipped: ownedIds.length - assignments.length });
   } catch (e) { console.error("[mobile teacher assign]", e); res.status(400).json({ error: e.message || "Could not assign the quiz." }); }
 });

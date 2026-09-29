@@ -133,6 +133,8 @@ import mobileSchoolRouter from "./routes/mobileSchool.js"; // ← mobile learnin
 import mobileStudentRouter from "./routes/mobileStudent.js";
 import mobileLinkRouter from "./routes/mobileLink.js"; // ← link learners by username // ← student grade + quiz allocation
 import mobileTeacherRouter from "./routes/mobileTeacher.js"; // ← private teacher: quizzes + assign
+import mobilePushRouter from "./routes/mobilePush.js"; // ← push token registration
+import mobileChatRouter, { chatMediaHandler } from "./routes/mobileChat.js"; // ← chat + reports
 import reseAdminRouter from "./routes/reseAdmin.js"; // Rese Rese admin panel
 import resePrivacyRouter from "./routes/resePrivacy.js"; // Rese Rese legal pages
 import reseApiRouter from "./routes/reseApi.js"; // Rese Rese app API
@@ -547,6 +549,9 @@ app.use("/auth", authRoutes);
 app.use("/api/mobile/student", mobileStudentRouter);
 app.use("/api/mobile/link", mobileLinkRouter);  // must precede /api/mobile
 app.use("/api/mobile/teacher", mobileTeacherRouter);  // must precede /api/mobile
+app.use("/api/mobile/push", mobilePushRouter);  // must precede /api/mobile
+app.use("/api/mobile/chat", mobileChatRouter);  // must precede /api/mobile
+app.get("/chat-media/:filename", chatMediaHandler());  // public chat media (images/audio/files)
 app.use("/api/mobile", mobileApiRouter);
 app.use("/api/mobile/school", mobileSchoolRouter);
 
