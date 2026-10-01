@@ -1,12 +1,12 @@
 // models/learnerLink.js
 // ─────────────────────────────────────────────────────────────────────────────
 // A many-to-many link between a learner (student) and a "guardian" (a private
-// teacher OR a parent) who was added AFTER the student already existed — by the
+// teacher OR a parent) who was added AFTER the student already existed - by the
 // student sharing their username. This sits ALONGSIDE User.parentUserId (the
 // account's creator); it never replaces it. A student can have many guardians.
 //
 // Consent model (kept simple): the student shares their username on purpose, so
-// adding is immediate — but the student sees everyone linked to them and can
+// adding is immediate - but the student sees everyone linked to them and can
 // remove any guardian at any time. Guardians get view + assign, never account
 // control.
 // ─────────────────────────────────────────────────────────────────────────────

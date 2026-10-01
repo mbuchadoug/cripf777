@@ -17,6 +17,15 @@ const SpecialScoiAuditSchema = new mongoose.Schema({
     required: true
   },
 
+  // ── Display title / series identity ──────────────────────────────────────
+  // title is shown on the cover, marketplace card, admin lists, Stripe product
+  // name and PDF filename. Falls back to subject.name when absent.
+  title:        String,
+  subtitle:     String,
+  reportCode:   String,
+  presentation: mongoose.Schema.Types.Mixed,   // { theme, watermark, badge, edition, classification }
+  marketplace:  mongoose.Schema.Types.Mixed,   // { summary, features[] }
+
   subject: {
     name:         String,
     entityType:   String,
@@ -74,6 +83,30 @@ const SpecialScoiAuditSchema = new mongoose.Schema({
   civilizationRiskSignals: mongoose.Schema.Types.Mixed,
 
   counterfactual:        mongoose.Schema.Types.Mixed,
+
+  // ── Extended / non-standard audit sections ────────────────────────────────
+  // Without these declarations Mongoose (strict mode) silently drops them on
+  // import, so they never reach the view or the PDF.
+  executiveSummary:            mongoose.Schema.Types.Mixed,
+  overridingPosition:          mongoose.Schema.Types.Mixed,
+  methodologicalDeparture:     mongoose.Schema.Types.Mixed,
+  financialPeriod:             mongoose.Schema.Types.Mixed,
+  financialStatement:          mongoose.Schema.Types.Mixed,
+  revenueBreakdown:            mongoose.Schema.Types.Mixed,
+  ratioVisual:                 mongoose.Schema.Types.Mixed,
+  keyRatios:                   mongoose.Schema.Types.Mixed,
+  sensitivityAnalysis:         mongoose.Schema.Types.Mixed,
+  provisionalSCOICalculations: mongoose.Schema.Types.Mixed,
+  SCOIStructuralComparison:    mongoose.Schema.Types.Mixed,
+  civilizationFoundation:      mongoose.Schema.Types.Mixed,
+  civilizationEconomicsAudit:  mongoose.Schema.Types.Mixed,
+  sportingCausationAudit:      mongoose.Schema.Types.Mixed,
+  timeAudit:                   mongoose.Schema.Types.Mixed,
+  associationAudit:            mongoose.Schema.Types.Mixed,
+  civilizationRecommendations: mongoose.Schema.Types.Mixed,
+  futureTimeAuditSeries:       mongoose.Schema.Types.Mixed,
+  finalCivilizationCall:       mongoose.Schema.Types.Mixed,
+  sources:                     mongoose.Schema.Types.Mixed,
   disclaimers:           mongoose.Schema.Types.Mixed,
   tags:                  [String],
 

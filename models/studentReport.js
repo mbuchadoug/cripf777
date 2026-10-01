@@ -1,4 +1,4 @@
-// models/studentReport.js — a teacher's written report/comment on a learner,
+// models/studentReport.js - a teacher's written report/comment on a learner,
 // visible to the learner and their parents.
 import mongoose from "mongoose";
 const StudentReportSchema = new mongoose.Schema({

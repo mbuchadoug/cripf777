@@ -1,13 +1,13 @@
 // routes/mobileLink.js
 // ─────────────────────────────────────────────────────────────────────────────
-// Linking existing learners to teachers/parents by USERNAME — for students who
+// Linking existing learners to teachers/parents by USERNAME - for students who
 // already have the app + their own login. Additive; mounts at /api/mobile/link.
 //
-//   POST /add                {username, as:"teacher"|"parent"}  — add a learner I found by username
-//   GET  /my-learners                                            — learners linked to me
-//   POST /remove/:learnerId                                      — I (guardian) remove a learner
-//   GET  /my-guardians                                           — (student) who is linked to me + how-to
-//   POST /guardian/:guardianId/remove                            — (student) remove a guardian
+//   POST /add                {username, as:"teacher"|"parent"}  - add a learner I found by username
+//   GET  /my-learners                                            - learners linked to me
+//   POST /remove/:learnerId                                      - I (guardian) remove a learner
+//   GET  /my-guardians                                           - (student) who is linked to me + how-to
+//   POST /guardian/:guardianId/remove                            - (student) remove a guardian
 //
 // Mount in server.js (before /api/mobile):
 //   import mobileLinkRouter from "./routes/mobileLink.js";
@@ -81,7 +81,7 @@ router.post("/remove/:learnerId", requireMobileAuth, async (req, res) => {
 });
 
 // ── (Student) EVERYONE connected to me: teachers + parents, from links,
-//    from parentUserId (who created me), and from who assigned me work —
+//    from parentUserId (who created me), and from who assigned me work -
 //    each with the quizzes they set me and my marks.
 router.get("/my-guardians", requireMobileAuth, async (req, res) => {
   try {
@@ -92,7 +92,7 @@ router.get("/my-guardians", requireMobileAuth, async (req, res) => {
     const links = await guardiansOf(me._id);
     for (const l of links) roleById[String(l.guardian)] = l.role;
 
-    // 2) The account that created me (parentUserId) — teacher or parent
+    // 2) The account that created me (parentUserId) - teacher or parent
     if (me.parentUserId) {
       const owner = await User.findById(me.parentUserId).select("role").lean();
       if (owner) {
@@ -108,7 +108,7 @@ router.get("/my-guardians", requireMobileAuth, async (req, res) => {
     for (const e of exams) {
       const tid = e.meta && e.meta.teacherId ? String(e.meta.teacherId) : null;
       if (!tid) continue;
-      roleById[tid] = "teacher"; // assigning work is definitive teacher evidence — overrides the parentUserId guess
+      roleById[tid] = "teacher"; // assigning work is definitive teacher evidence - overrides the parentUserId guess
       (assignsByTeacher[tid] = assignsByTeacher[tid] || []).push({
         title: e.quizTitle || e.title || "Quiz",
         subject: e.subject || e.module || null,

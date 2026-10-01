@@ -1,4 +1,4 @@
-// models/conversation.js — a 1:1 (or small group) thread between connected people.
+// models/conversation.js - a 1:1 (or small group) thread between connected people.
 import mongoose from "mongoose";
 const ConversationSchema = new mongoose.Schema({
   participants: [{ type: mongoose.Schema.Types.ObjectId, ref: "User", index: true }],

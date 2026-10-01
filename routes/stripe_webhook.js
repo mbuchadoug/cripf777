@@ -94,7 +94,8 @@ router.post("/", async (req, res) => {
         if (!audit.pdfUrl) {
           console.log(`[PDF Auto-Gen] Generating PDF for audit: ${auditId}`);
 
-          const { generateScoiPdf } = await import("../utils/generateScoiPdf.js");
+          // FIX: the util file is generateScoiAuditPdf.js and exports generateScoiAuditPdf
+          const { generateScoiAuditPdf: generateScoiPdf } = await import("../utils/generateScoiAuditPdf.js");
          // const pdf = await generateScoiPdf(audit);
          const pdf = await generateScoiPdf({ audit, req });
 

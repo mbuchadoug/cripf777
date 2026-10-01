@@ -1,4 +1,4 @@
-// models/message.js — a single chat message. Media is a reference to an uploaded blob.
+// models/message.js - a single chat message. Media is a reference to an uploaded blob.
 import mongoose from "mongoose";
 const MessageSchema = new mongoose.Schema({
   conversation: { type: mongoose.Schema.Types.ObjectId, ref: "Conversation", required: true, index: true },

@@ -1,16 +1,16 @@
 // routes/mobileTeacher.js
 // ─────────────────────────────────────────────────────────────────────────────
-// Private-teacher portal for the mobile app. Additive — the working parent/
+// Private-teacher portal for the mobile app. Additive - the working parent/
 // student/school flows are untouched. A private_teacher already manages students
 // and sees their progress via /api/mobile/school; this adds the teacher's own
 // quiz library: generate an AI quiz, preview it, and assign it to students.
 //
-//   GET  /students            — my students + last score
-//   GET  /quizzes             — my AI-quiz library (+ remaining AI credits)
-//   GET  /quizzes/:id         — preview one quiz (I own it)
-//   POST /quizzes/generate    — AI-generate a new quiz (uses a credit)
-//   POST /assign              — assign a quiz to my students
-//   GET  /overview            — class-at-a-glance
+//   GET  /students            - my students + last score
+//   GET  /quizzes             - my AI-quiz library (+ remaining AI credits)
+//   GET  /quizzes/:id         - preview one quiz (I own it)
+//   POST /quizzes/generate    - AI-generate a new quiz (uses a credit)
+//   POST /assign              - assign a quiz to my students
+//   GET  /overview            - class-at-a-glance
 //
 // Mount in server.js (before /api/mobile):
 //   import mobileTeacherRouter from "./routes/mobileTeacher.js";

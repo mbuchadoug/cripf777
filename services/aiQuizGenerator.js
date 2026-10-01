@@ -7,7 +7,7 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY
 });
 
-// Model name is configurable so a future rename never breaks quiz generation —
+// Model name is configurable so a future rename never breaks quiz generation -
 // set ANTHROPIC_QUIZ_MODEL in .env to override. Default is a current model.
 const QUIZ_MODEL = process.env.ANTHROPIC_QUIZ_MODEL || "claude-sonnet-4-5";
 

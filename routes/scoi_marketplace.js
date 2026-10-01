@@ -32,12 +32,15 @@ router.get("/scoi", async (req, res) => {
       auditKind: "placement"
     }));
 
+    // Price comes from the audit document (stored in cents, e.g. 75000 = $750).
+    // Falls back to the legacy $299 for older special audits with no price set.
     const normalizedSpecial = specialAudits.map(a => ({
       ...a,
+      displayTitle: a.title || a.subject?.name || "Special SCOI Audit",
       assessmentWindow: {
-        label: a.assessmentWindow?.label || "Special Audit"
+        label: a.assessmentWindow?.label || a.assessmentDate?.label || "Special Audit"
       },
-      displayPrice: 299,
+      displayPrice: Math.round((a.price || 29900) / 100),
       auditKind: "special"
     }));
 

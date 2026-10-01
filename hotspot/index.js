@@ -62,7 +62,7 @@ export default function mountHotspot(app, opts = {}) {
   app.get(`${base}/buy`, (req, res) => res.sendFile(path.join(__dirname, "portal", "buy.html")));
   app.get(`${base}/status`, (req, res) => res.sendFile(path.join(__dirname, "portal", "status.html")));
 
-  // Admin panel — served with no-cache so browsers always get the latest after an update.
+  // Admin panel - served with no-cache so browsers always get the latest after an update.
   app.use(base, express.static(path.join(__dirname, "public"), {
     setHeaders: (res, filePath) => {
       if (filePath.endsWith(".html")) res.setHeader("Cache-Control", "no-store, must-revalidate");

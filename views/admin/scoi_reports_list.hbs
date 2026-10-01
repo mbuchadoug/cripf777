@@ -307,10 +307,10 @@
           <tr
             data-type="{{this.auditKind}}"
             data-pdf="{{#if this.pdfUrl}}with-pdf{{else}}no-pdf{{/if}}"
-            data-search="{{this.subject.name}} {{this.author}} {{this.subject.entityType}}"
+            data-search="{{this.title}} {{this.subject.name}} {{this.author}} {{this.subject.entityType}}"
           >
             <td>
-              <div class="rpt-name" title="{{this.subject.name}}">{{this.subject.name}}</div>
+              <div class="rpt-name" title="{{#if this.title}}{{this.title}}{{else}}{{this.subject.name}}{{/if}}">{{#if this.title}}{{this.title}}{{else}}{{this.subject.name}}{{/if}}</div>
               <div class="rpt-meta">{{this.author}}{{#if this.subject.entityType}} · {{this.subject.entityType}}{{/if}}</div>
             </td>
             <td>
@@ -374,7 +374,7 @@
     <div class="rcard"
       data-type="{{this.auditKind}}"
       data-pdf="{{#if this.pdfUrl}}with-pdf{{else}}no-pdf{{/if}}"
-      data-search="{{this.subject.name}} {{this.author}} {{this.subject.entityType}}">
+      data-search="{{this.title}} {{this.subject.name}} {{this.author}} {{this.subject.entityType}}">
       <div class="rcard-head">
         <div>
           <div class="rcard-badges">
@@ -392,7 +392,7 @@
               <span class="badge b-pdf">PDF ✓</span>
             {{/if}}
           </div>
-          <div class="rcard-name">{{this.subject.name}}</div>
+          <div class="rcard-name">{{#if this.title}}{{this.title}}{{else}}{{this.subject.name}}{{/if}}</div>
         </div>
       </div>
       <div class="rcard-body">

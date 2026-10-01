@@ -1,5 +1,5 @@
-// services/push.js — send notifications via Expo Push (delivers over FCM on Android, APNs on iOS).
-// No Firebase SDK needed on the server — Expo's HTTPS endpoint handles both platforms.
+// services/push.js - send notifications via Expo Push (delivers over FCM on Android, APNs on iOS).
+// No Firebase SDK needed on the server - Expo's HTTPS endpoint handles both platforms.
 import PushToken from "../models/pushToken.js";
 
 const EXPO_PUSH = "https://exp.host/--/api/v2/push/send";

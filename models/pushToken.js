@@ -1,4 +1,4 @@
-// models/pushToken.js — one row per device per user (a user can have several devices).
+// models/pushToken.js - one row per device per user (a user can have several devices).
 import mongoose from "mongoose";
 const PushTokenSchema = new mongoose.Schema({
   user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, index: true },

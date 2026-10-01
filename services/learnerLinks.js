@@ -1,4 +1,4 @@
-// services/learnerLinks.js — helpers so routers can treat linked learners like owned ones.
+// services/learnerLinks.js - helpers so routers can treat linked learners like owned ones.
 import LearnerLink from "../models/learnerLink.js";
 
 export async function linkedLearnerIds(guardianId, role = null) {

@@ -1,11 +1,11 @@
 // routes/mobileStudent.js
 // ─────────────────────────────────────────────────────────────────────────────
-// Student onboarding + grade allocation for the mobile app. Additive — it does
+// Student onboarding + grade allocation for the mobile app. Additive - it does
 // NOT change the working register flow.
 //
-//   GET  /grades  (public)  — the full grade list (0–13), matching the web's
+//   GET  /grades  (public)  - the full grade list (0–13), matching the web's
 //                             parent "add child" form. Always returns a list.
-//   POST /grade   (auth)    — set the signed-in student's grade, ensure their
+//   POST /grade   (auth)    - set the signed-in student's grade, ensure their
 //                             cripfcnt-home membership, and assign that grade's
 //                             trial quizzes (same as the web does on student
 //                             create). Works for brand-new AND already-registered
@@ -40,7 +40,7 @@ function gradeCategory(g) {
   g = Number(g);
   return g === 0 ? "Early years" : g <= 7 ? "Primary" : "Secondary";
 }
-// The full, fixed list — never depends on whether quiz rules exist yet.
+// The full, fixed list - never depends on whether quiz rules exist yet.
 function allGrades() {
   const out = [];
   for (let g = MIN_GRADE; g <= MAX_GRADE; g++) {
@@ -79,7 +79,7 @@ router.post("/grade", requireMobileAuth, async (req, res) => {
     const org = await Organization.findOne({ slug: HOME_ORG_SLUG }).lean();
     if (!org) return res.status(500).json({ error: "Home learning isn't set up yet." });
 
-    // Store grade + home org (idempotent — safe to re-run to change grade)
+    // Store grade + home org (idempotent - safe to re-run to change grade)
     user.grade = gradeNum;
     if (!user.organization) user.organization = org._id;
     await user.save();
@@ -91,7 +91,7 @@ router.post("/grade", requireMobileAuth, async (req, res) => {
     );
 
     // Assign this grade's TRIAL quizzes (mirrors admin_quiz_rules.js student path).
-    // If no rules exist for this grade yet, the grade is still saved — quizzes
+    // If no rules exist for this grade yet, the grade is still saved - quizzes
     // appear automatically when an admin adds rules for it.
     const rules = await QuizRule.find({ org: org._id, grade: gradeNum, quizType: "trial", enabled: true });
     let assigned = 0;
@@ -107,7 +107,7 @@ router.post("/grade", requireMobileAuth, async (req, res) => {
 });
 
 // ── A student's teacher(s): anyone who assigned them work + their managing teacher.
-//    Multi-teacher emerges from assignments — no schema change needed.
+//    Multi-teacher emerges from assignments - no schema change needed.
 router.get("/teachers", requireMobileAuth, async (req, res) => {
   try {
     if (req.mobileUser.role !== "student") return res.json({ teachers: [] });

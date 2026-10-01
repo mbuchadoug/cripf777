@@ -103,7 +103,7 @@ router.get(
         return res.status(404).send("Audit not found");
       }
 
-      const safeFilename = `SCOI-Audit-${(audit.subject?.name || audit._id).replace(/[^a-zA-Z0-9-_]/g, "-")}.pdf`;
+      const safeFilename = `SCOI-Audit-${String(audit.reportCode || audit.subject?.name || audit._id).replace(/[^a-zA-Z0-9-_]/g, "-")}.pdf`;
 
       // If we already have a stored PDF URL, try to serve it
       if (audit.pdfUrl) {

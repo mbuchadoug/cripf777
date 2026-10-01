@@ -1,4 +1,4 @@
-// routes/mobilePush.js — device registers its Expo push token here. Mount at /api/mobile/push.
+// routes/mobilePush.js - device registers its Expo push token here. Mount at /api/mobile/push.
 import express, { Router } from "express";
 import PushToken from "../models/pushToken.js";
 import { requireMobileAuth } from "./mobileApi.js";

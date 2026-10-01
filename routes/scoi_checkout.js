@@ -32,8 +32,9 @@ router.post("/scoi/checkout", ensureAuth, async (req, res) => {
   if (!audit) {
     audit = await SpecialScoiAudit.findById(auditId);
     if (audit) {
-      price = 29900; // $299.00
-      productName = `SCOI Special Report: ${audit.subject.name}`;
+      // Price is stored on the audit in cents (75000 = $750). Legacy default $299.
+      price = Number.isInteger(audit.price) && audit.price > 0 ? audit.price : 29900;
+      productName = `SCOI Special Report: ${audit.title || audit.subject.name}`.slice(0, 250);
       auditModel = "SpecialScoiAudit";
     }
   }
@@ -52,7 +53,7 @@ router.post("/scoi/checkout", ensureAuth, async (req, res) => {
         currency: "usd",
         product_data: {
           name: productName,
-          description: `Assessment Window: ${audit.assessmentWindow.label}`,
+          description: `Assessment Window: ${audit.assessmentWindow?.label || audit.assessmentDate?.label || "Special Audit"}`,
           metadata: {
             auditId: audit._id.toString(),
             auditType: audit.auditClass || "placement"

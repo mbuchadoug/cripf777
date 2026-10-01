@@ -7,8 +7,37 @@ import PlacementAudit from "../models/placementAudit.js";
 import SpecialScoiAudit from "../models/specialScoiAudit.js";
 import { ensureAuth } from "../middleware/authGuard.js";
 import { generateScoiAuditPdf as generateScoiPdf } from "../utils/generateScoiAuditPdf.js";
+import AuditPurchase from "../models/auditPurchase.js";
 
 const router = Router();
+
+// ── Access control for paid reports ──────────────────────────────────────────
+// Admins (ADMIN_EMAILS) always have access; everyone else needs a purchase record.
+function isAdminUser(user) {
+  const admins = new Set(
+    (process.env.ADMIN_EMAILS || "")
+      .split(",")
+      .map(s => s.trim().toLowerCase())
+      .filter(Boolean)
+  );
+  return !!user?.email && admins.has(user.email.toLowerCase());
+}
+
+async function canAccessAudit(req, auditId) {
+  if (!req.user) return false;
+  if (isAdminUser(req.user)) return true;
+  const purchase = await AuditPurchase.findOne({
+    userId:  req.user._id,
+    auditId: auditId
+  }).lean();
+  return !!purchase;
+}
+
+// Download filename: report code if present, otherwise subject name
+function pdfFilename(audit) {
+  const base = audit.reportCode || audit.subject?.name || String(audit._id);
+  return `SCOI-Report-${base.replace(/[^a-zA-Z0-9-_]/g, "-")}.pdf`;
+}
 
 /**
  * GET - List all SCOI reports (admin view)
@@ -196,13 +225,18 @@ router.delete("/admin/scoi/reports/:id", ensureAuth, async (req, res) => {
  * FIX: Uses res.download() / stream instead of res.redirect() so the
  *      browser always triggers a file save rather than trying to navigate.
  */
-router.get("/scoi/audits/:id/download", async (req, res) => {
+router.get("/scoi/audits/:id/download", ensureAuth, async (req, res) => {
   try {
     let audit = await PlacementAudit.findById(req.params.id);
     if (!audit) audit = await SpecialScoiAudit.findById(req.params.id);
 
     if (!audit) {
       return res.status(404).send("Report not found");
+    }
+
+    // SECURITY FIX: previously anyone with the link could download a paid PDF
+    if (!(await canAccessAudit(req, audit._id))) {
+      return res.status(403).send("Purchase required to download this report");
     }
 
     // Generate if missing
@@ -224,13 +258,13 @@ router.get("/scoi/audits/:id/download", async (req, res) => {
       audit.pdfUrl = pdf.url;
       await audit.save();
       const newPath = path.join(process.cwd(), "public", audit.pdfUrl);
-      const safeFilename = `SCOI-Report-${(audit.subject?.name || String(audit._id)).replace(/[^a-zA-Z0-9-_]/g, "-")}.pdf`;
+      const safeFilename = pdfFilename(audit);
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader("Content-Disposition", `attachment; filename="${safeFilename}"`);
       return fs.createReadStream(newPath).pipe(res);
     }
 
-    const safeFilename = `SCOI-Report-${(audit.subject?.name || String(audit._id)).replace(/[^a-zA-Z0-9-_]/g, "-")}.pdf`;
+    const safeFilename = pdfFilename(audit);
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `attachment; filename="${safeFilename}"`);
     return fs.createReadStream(filePath).pipe(res);
@@ -244,20 +278,26 @@ router.get("/scoi/audits/:id/download", async (req, res) => {
 /**
  * GET - View audit (for purchased users)
  */
-router.get("/scoi/audits/:id/view", async (req, res) => {
+router.get("/scoi/audits/:id/view", ensureAuth, async (req, res) => {
   try {
     let audit = await PlacementAudit.findById(req.params.id).lean();
-    if (!audit) audit = await SpecialScoiAudit.findById(req.params.id).lean();
+    let view  = "scoi/audit_view";
+    if (!audit) {
+      audit = await SpecialScoiAudit.findById(req.params.id).lean();
+      // FIX: special audits must use the special template, not the placement one
+      view  = "admin/special_scoi_audit_view";
+    }
 
     if (!audit) {
       return res.status(404).send("Report not found");
     }
 
-    // TODO: Add purchase verification
-    // const purchase = await AuditPurchase.findOne({ userId: req.user._id, auditId: audit._id });
-    // if (!purchase) return res.status(403).send("Not purchased");
+    // SECURITY FIX: purchase verification (was a TODO, so the route was open)
+    if (!(await canAccessAudit(req, audit._id))) {
+      return res.status(403).send("Purchase required to view this report");
+    }
 
-    res.render("scoi/audit_view", {
+    res.render(view, {
       audit,
       user: req.user,
       layout: false

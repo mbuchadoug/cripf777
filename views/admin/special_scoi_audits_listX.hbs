@@ -303,10 +303,10 @@
           <tr
             data-pdf="{{#if this.pdfUrl}}with-pdf{{else}}no-pdf{{/if}}"
             data-status="{{#if this.isPaid}}paid{{else}}available{{/if}}"
-            data-search="{{this.title}} {{this.subject.name}} {{this.auditType}} {{this.assessmentWindow.label}} {{this.subject.entityType}}"
+            data-search="{{this.subject.name}} {{this.auditType}} {{this.assessmentWindow.label}} {{this.subject.entityType}}"
           >
             <td>
-              <div class="rpt-name" title="{{#if this.title}}{{this.title}}{{else}}{{this.subject.name}}{{/if}}">{{#if this.title}}{{this.title}}{{else}}{{this.subject.name}}{{/if}}</div>
+              <div class="rpt-name" title="{{this.subject.name}}">{{this.subject.name}}</div>
               <div class="rpt-meta">
                 {{this.subject.entityType}}{{#if this.subject.jurisdiction}} · {{this.subject.jurisdiction}}{{/if}}
               </div>
@@ -371,7 +371,7 @@
     <div class="rcard"
       data-pdf="{{#if this.pdfUrl}}with-pdf{{else}}no-pdf{{/if}}"
       data-status="{{#if this.isPaid}}paid{{else}}available{{/if}}"
-      data-search="{{this.title}} {{this.subject.name}} {{this.auditType}} {{this.assessmentWindow.label}}">
+      data-search="{{this.subject.name}} {{this.auditType}} {{this.assessmentWindow.label}}">
       <div class="rcard-head">
         <div class="rcard-badges">
           <span class="badge b-special">Special</span>
@@ -384,7 +384,7 @@
             <span class="badge b-pdf">PDF ✓</span>
           {{/if}}
         </div>
-        <div class="rcard-name">{{#if this.title}}{{this.title}}{{else}}{{this.subject.name}}{{/if}}</div>
+        <div class="rcard-name">{{this.subject.name}}</div>
         <div class="rcard-sub">{{this.subject.entityType}}{{#if this.subject.jurisdiction}} · {{this.subject.jurisdiction}}{{/if}}</div>
       </div>
       <div class="rcard-body">

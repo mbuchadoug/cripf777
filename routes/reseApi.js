@@ -109,7 +109,7 @@ async function sendWhatsAppOtp(phoneE164, code) {
   if (!WA_TOKEN || !WA_PHONE_ID) return { sent: false, reason: "no-credentials" };
   const to = phoneE164.replace(/[^\d]/g, ""); // 2637...
 
-  // 1) Approved template — delivers outside the 24h window (new users).
+  // 1) Approved template - delivers outside the 24h window (new users).
   if (WA_TEMPLATE) {
     try {
       const r = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${WA_PHONE_ID}/messages`, {
@@ -134,7 +134,7 @@ async function sendWhatsAppOtp(phoneE164, code) {
     }
   }
 
-  // 2) Free-form text — works if the user messaged the number in the last 24h.
+  // 2) Free-form text - works if the user messaged the number in the last 24h.
   try {
     const r = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${WA_PHONE_ID}/messages`, {
       method: "POST",
@@ -156,7 +156,7 @@ async function sendWhatsAppOtp(phoneE164, code) {
   }
 }
 
-// SMS fallback — plug your Zimbabwe gateway here.
+// SMS fallback - plug your Zimbabwe gateway here.
 async function sendSmsOtp(/* phoneE164, code */) {
   return { sent: false, reason: "sms-not-configured" };
 }
@@ -220,7 +220,7 @@ router.post("/auth/request-code", async (req, res) => {
       return res.status(500).json({ error: "Could not start sign in. Try again." });
     }
 
-    // 1) chatbot senders, 2) direct Graph API, both guarded — never throw here.
+    // 1) chatbot senders, 2) direct Graph API, both guarded - never throw here.
     let out = { sent: false };
     try { out = await sendOtpViaChatbot(phone, code); } catch (e) { console.warn("[rese otp] chatbot error:", e.message); }
     if (!out.sent) {
@@ -508,7 +508,7 @@ router.post("/push/register", requireReseAuth, async (req, res) => {
 });
 
 /* ══════════════════════════════════════════════════════════════
-   PAYMENTS — worker "corner fee" via Paynow EcoCash
+   PAYMENTS - worker "corner fee" via Paynow EcoCash
    ══════════════════════════════════════════════════════════════ */
 
 router.post("/pay/init", requireReseAuth, async (req, res) => {

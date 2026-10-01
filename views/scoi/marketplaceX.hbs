@@ -294,7 +294,6 @@
         <option value="">Any Price</option>
         <option value="149">$149 – Placement</option>
         <option value="299">$299 – Special</option>
-        <option value="750">$750 – Time Audit Special</option>
       </select>
       <select id="sortSelect">
         <option value="newest">Newest First</option>
@@ -348,9 +347,6 @@
         <label class="filter-option">
           <input type="radio" name="sidePrice" value="299"> <label>$299 – Special</label>
         </label>
-        <label class="filter-option">
-          <input type="radio" name="sidePrice" value="750"> <label>$750 – Time Audit Special</label>
-        </label>
       </div>
 
       <div class="sidebar-section">
@@ -391,23 +387,20 @@
         data-id="{{this._id}}"
         data-kind="{{this.auditKind}}"
         data-price="{{this.displayPrice}}"
-        data-title="{{#if this.displayTitle}}{{this.displayTitle}}{{else}}{{this.subject.name}}{{/if}}"
+        data-title="{{this.subject.name}}"
         data-window="{{this.assessmentWindow.label}}"
         style="display:none;"
       >
         <div class="card-top">
           <div class="kind-badge {{this.auditKind}}">
-            {{#if this.presentation.badge}}{{this.presentation.badge}}{{else if (eq this.auditKind 'special')}}Premium Special{{else}}Placement Audit{{/if}}
+            {{#if (eq this.auditKind 'special')}}Premium Special{{else}}Placement Audit{{/if}}
           </div>
-          <h3 class="card-title">{{#if this.displayTitle}}{{this.displayTitle}}{{else}}{{this.subject.name}}{{/if}}</h3>
+          <h3 class="card-title">{{this.subject.name}}</h3>
           <div class="card-window">📅 {{this.assessmentWindow.label}}</div>
-          {{#if this.marketplace.summary}}<p class="card-summary" style="font-size:0.82rem;line-height:1.55;margin-top:0.5rem;opacity:0.85;">{{this.marketplace.summary}}</p>{{/if}}
         </div>
         <div class="card-body">
           <ul class="card-features">
-            {{#if this.marketplace.features}}
-              {{#each this.marketplace.features}}<li>{{this}}</li>{{/each}}
-            {{else if (eq this.auditKind 'special')}}
+            {{#if (eq this.auditKind 'special')}}
               <li>Non-placement structural analysis</li>
               <li>Civilization risk signals</li>
               <li>Counterfactual responsibility framework</li>

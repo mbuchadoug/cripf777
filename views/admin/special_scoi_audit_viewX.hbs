@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>{{#if audit.title}}{{audit.title}}{{else}}Special SCOI Audit Report | {{audit.subject.name}}{{/if}}</title>
+  <title>Special SCOI Audit Report | {{audit.subject.name}}</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -63,6 +63,7 @@
       break-after: page;
     }
     .cover::before {
+      content:'SCOI';
       position:absolute;
       right:-1.5rem;
       bottom:-1.5rem;
@@ -697,93 +698,17 @@
       .page { margin:0; }
       .finding-core { padding:1.5rem 1.25rem; }
     }
-
-    /* ══ EXTENDED SECTIONS (financial statement, ratios, time audit…) ══ */
-    .exec-box { border:1px solid var(--g200); border-left:4px solid var(--gold); background:var(--g50); padding:1.5rem 1.75rem; }
-    .exec-headline { font-family:var(--serif); font-size:1.2rem; font-weight:700; color:var(--navy); line-height:1.5; margin-bottom:1rem; }
-    .chip-row { display:flex; flex-wrap:wrap; gap:0.5rem; margin:0.75rem 0; }
-    .chip { font-family:var(--sans); font-size:0.72rem; font-weight:700; padding:0.3rem 0.7rem; border-radius:2px; background:var(--g100); color:var(--g700); letter-spacing:0.3px; word-break:break-word; }
-    .chip-no { background:rgba(15,28,46,0.06); color:var(--navy); border:1px solid var(--g200); }
-    .chip-no::before { content:'✕ '; color:#9B2C2C; }
-    .call-banner { background:var(--navy); color:var(--white); font-family:var(--sans); font-weight:800; letter-spacing:4px; text-transform:uppercase; text-align:center; padding:1rem; font-size:1rem; margin-top:1rem; }
-    .call-banner span { color:var(--gold-light); }
-    .fs-table { width:100%; border-collapse:collapse; font-family:var(--sans); font-size:0.8rem; margin:0.75rem 0 1rem; }
-    .fs-table th { text-align:left; font-size:0.66rem; text-transform:uppercase; letter-spacing:1px; color:var(--g500); border-bottom:2px solid var(--navy); padding:0.5rem 0.6rem; }
-    .fs-table td { padding:0.5rem 0.6rem; border-bottom:1px solid var(--g100); vertical-align:top; color:var(--g700); }
-    .fs-table td.num { text-align:right; white-space:nowrap; font-variant-numeric:tabular-nums; }
-    .fs-subtotal td { font-weight:700; color:var(--navy); background:var(--g50); border-top:1px solid var(--g300); }
-    .fs-total td { font-weight:800; color:var(--white); background:var(--navy); }
-    .basis { display:inline-block; font-size:0.58rem; font-weight:800; letter-spacing:0.6px; padding:0.1rem 0.4rem; border-radius:2px; white-space:nowrap; }
-    .basis-REPORTED { background:#E6F0E9; color:#1F5130; }
-    .basis-DERIVED { background:#FBF1DE; color:#7A5410; }
-    .basis-PUBLIC-ROUNDED { background:#E8EEF7; color:#1E3A5F; }
-    .fs-total .basis { background:rgba(255,255,255,0.15); color:var(--white); }
-    .table-wrap { overflow-x:auto; }
-    .note-box { font-family:var(--serif); font-size:0.95rem; color:var(--g700); background:var(--g50); border:1px solid var(--g200); padding:1rem 1.25rem; margin-top:1rem; line-height:1.7; }
-    .bar-row { margin:0.65rem 0; }
-    .bar-meta { display:flex; justify-content:space-between; gap:1rem; font-family:var(--sans); font-size:0.78rem; color:var(--g700); margin-bottom:0.25rem; }
-    .bar-meta strong { white-space:nowrap; }
-    .bar-track { height:12px; background:var(--g100); border-radius:2px; overflow:hidden; }
-    .bar-fill { height:100%; background:linear-gradient(90deg, var(--navy-mid), var(--accent, var(--navy-light))); }
-    .ratio-grid { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:1px; background:var(--g200); border:1px solid var(--g200); margin-top:0.75rem; }
-    .ratio-cell { background:var(--white); padding:0.9rem 1rem; break-inside:avoid; }
-    .ratio-label { font-family:var(--sans); font-size:0.66rem; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--g500); }
-    .ratio-value { font-family:var(--serif); font-size:1.5rem; font-weight:700; color:var(--navy); line-height:1.2; margin:0.15rem 0; }
-    .ratio-formula { font-family:'Courier New', monospace; font-size:0.75rem; color:var(--g700); }
-    .ratio-note { font-family:var(--sans); font-size:0.72rem; color:var(--g500); margin-top:0.2rem; }
-    .two-col { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:1.25rem; }
-    .mini-head { font-family:var(--sans); font-size:0.7rem; font-weight:800; text-transform:uppercase; letter-spacing:1px; color:var(--navy-light); margin:1rem 0 0.4rem; }
-    .q-item { border-left:3px solid var(--gold-rule); padding:0.6rem 1rem; margin-bottom:0.75rem; background:var(--g50); break-inside:avoid; }
-    .q-label { font-family:var(--sans); font-size:0.68rem; font-weight:800; text-transform:uppercase; letter-spacing:1px; color:var(--gold); }
-    .series-grid { display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:0.75rem; }
-    .series-card { border:1px solid var(--g200); padding:1rem; background:var(--white); break-inside:avoid; }
-    .series-card.current { border:2px solid var(--navy); background:var(--g50); }
-    .series-year { font-family:var(--serif); font-size:1.6rem; font-weight:700; color:var(--navy); line-height:1; }
-    .series-ncp { font-family:var(--sans); font-size:0.75rem; font-weight:700; color:var(--gold); margin:0.35rem 0; }
-    .series-focus { font-family:var(--sans); font-size:0.75rem; color:var(--g700); line-height:1.5; }
-    .formula-box { font-family:'Courier New', monospace; font-weight:700; color:var(--navy); background:rgba(15,28,46,0.05); border-left:3px solid var(--gold-rule); padding:0.8rem 1rem; margin:1rem 0; line-height:1.6; word-break:break-word; }
-    .source-item { font-family:var(--sans); font-size:0.82rem; color:var(--g700); padding:0.55rem 0; border-bottom:1px solid var(--g100); }
-    .source-item strong { display:block; }
-    .cover-badge { display:inline-block; font-family:var(--sans); font-size:0.64rem; font-weight:800; letter-spacing:2px; text-transform:uppercase; color:var(--navy); background:var(--accent, var(--gold-light)); padding:0.3rem 0.8rem; margin-bottom:1rem; }
-    .cover-code { font-family:'Courier New', monospace; font-size:0.75rem; color:rgba(255,255,255,0.55); margin-bottom:0.5rem; letter-spacing:1px; }
-    .cover-title.long { font-size:1.75rem; line-height:1.3; }
-    .cover-subtitle.long { font-size:0.85rem; line-height:1.6; max-width:95%; }
-    .cover::before { content: attr(data-watermark); }
-
-    /* ── Theme: Time Audit (distinct identity for the time-audit series) ── */
-    .page.theme-time-audit { --accent:#6CABDD; border-top-color:#6CABDD; }
-    .theme-time-audit .cover { background:linear-gradient(155deg, #071629 0%, #12355E 55%, #1C4E80 100%); border-bottom:4px solid #6CABDD; }
-    .theme-time-audit .cover-eyebrow::before { background:#6CABDD; }
-    .theme-time-audit .section-num { color:#2E78B8; }
-    .theme-time-audit .finding-core { background:linear-gradient(135deg, #0B1F3A, #12355E); border-left:5px solid #6CABDD; }
-
-    @media (max-width:640px) {
-      .ratio-grid, .two-col { grid-template-columns:1fr; }
-      .series-grid { grid-template-columns:1fr 1fr; }
-      .cover-title.long { font-size:1.35rem; }
-    }
-    @media print {
-      .fs-table tr, .ratio-cell, .series-card, .q-item, .exec-box, .note-box { page-break-inside:avoid; break-inside:avoid; }
-      .fs-total td, .call-banner, .bar-fill, .cover-badge { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-    }
   </style>
 </head>
 <body>
 
-<article class="page{{#if audit.presentation.theme}} theme-{{audit.presentation.theme}}{{/if}}">
+<article class="page">
 
   <!-- ══ COVER BAND ══════════════════════════════════════════ -->
-  <header class="cover" data-watermark="{{#if audit.presentation.watermark}}{{audit.presentation.watermark}}{{else}}SCOI{{/if}}">
-    <div class="cover-eyebrow">CRIPFCnt Framework · {{#if audit.presentation.edition}}{{audit.presentation.edition}}{{else}}Special SCOI Audit{{/if}}</div>
-    {{#if audit.presentation.badge}}<div class="cover-badge">{{audit.presentation.badge}}</div>{{/if}}
-    {{#if audit.reportCode}}<div class="cover-code">{{audit.reportCode}}</div>{{/if}}
-    {{#if audit.title}}
-      <div class="cover-title long">{{audit.title}}</div>
-      <div class="cover-subtitle long">{{#if audit.subtitle}}{{audit.subtitle}}{{else}}Special Structural Intelligence Assessment{{/if}}</div>
-    {{else}}
-      <div class="cover-title">Special SCOI<br>Audit Report</div>
-      <div class="cover-subtitle">Special Structural Intelligence Assessment</div>
-    {{/if}}
+  <header class="cover">
+    <div class="cover-eyebrow">CRIPFCnt Framework · Special SCOI Audit</div>
+    <div class="cover-title">Special SCOI<br>Audit Report</div>
+    <div class="cover-subtitle">Special Structural Intelligence Assessment</div>
 
     <div class="cover-meta">
       <div class="cm-item">
@@ -833,12 +758,6 @@
         <div class="cm-label">Entity Type</div>
         <div class="cm-value">{{audit.subject.entityType}}</div>
       </div>
-      {{#if audit.presentation.classification}}
-      <div class="cm-item" style="grid-column:1 / -1;">
-        <div class="cm-label">Classification</div>
-        <div class="cm-value">{{audit.presentation.classification}}</div>
-      </div>
-      {{/if}}
     </div>
   </header>
 
@@ -854,80 +773,6 @@
       </div>
       <p>{{audit.purpose}}</p>
     </div>
-
-    {{!-- ── Executive Summary ── --}}
-    {{#if audit.executiveSummary}}
-    <hr class="rule rule-gold">
-    <div class="section">
-      <div class="section-head">
-        <span class="section-num"></span>
-        <h2 class="section-title">Executive Summary</h2>
-        <span class="section-title-line"></span>
-      </div>
-      <div class="exec-box">
-        {{#if audit.executiveSummary.headline}}<div class="exec-headline">{{audit.executiveSummary.headline}}</div>{{/if}}
-        {{#if audit.executiveSummary.points}}
-        <ul>
-          {{#each audit.executiveSummary.points}}<li>{{this}}</li>{{/each}}
-        </ul>
-        {{/if}}
-      </div>
-    </div>
-    {{/if}}
-
-    {{!-- ── Overriding Position ── --}}
-    {{#if audit.overridingPosition}}
-    <hr class="rule">
-    <div class="section">
-      <div class="section-head">
-        <span class="section-num"></span>
-        <h2 class="section-title">Overriding Position</h2>
-        <span class="section-title-line"></span>
-      </div>
-      {{#if audit.overridingPosition.principle}}<p>{{audit.overridingPosition.principle}}</p>{{/if}}
-      {{#if audit.overridingPosition.recommendations}}
-      <table class="kv-table">
-        {{#each audit.overridingPosition.recommendations}}
-        <tr><td>{{this.label}}</td><td>{{#if this.value}}Yes{{else}}No - not made by this audit{{/if}}</td></tr>
-        {{/each}}
-      </table>
-      {{/if}}
-      {{#if audit.overridingPosition.finalCall}}
-        <div class="call-banner">Final Call · <span>{{audit.overridingPosition.finalCall}}</span></div>
-      {{/if}}
-    </div>
-    {{/if}}
-
-    {{!-- ── Methodological Departure ── --}}
-    {{#if audit.methodologicalDeparture}}
-    <hr class="rule">
-    <div class="section">
-      <div class="section-head">
-        <span class="section-num"></span>
-        <h2 class="section-title">Methodological Departure</h2>
-        <span class="section-title-line"></span>
-      </div>
-      {{#if audit.methodologicalDeparture.status}}<div class="placement-tag" style="margin:0 0 1rem;">{{audit.methodologicalDeparture.status}}</div>{{/if}}
-      {{#if audit.methodologicalDeparture.reason}}<p>{{audit.methodologicalDeparture.reason}}</p>{{/if}}
-      {{#with audit.methodologicalDeparture.newProvisionalMeasure}}
-      <div class="calc-block" style="margin-top:1rem;">
-        <div class="calc-head">New Provisional Measure · {{this.name}}{{#if this.shortName}} ({{this.shortName}}){{/if}}</div>
-        {{#if this.formula}}<div class="calc-formula">{{this.formula}}</div>{{/if}}
-        {{#if this.purpose}}<p style="font-size:0.95rem;">{{this.purpose}}</p>{{/if}}
-      </div>
-      {{/with}}
-      {{#if audit.methodologicalDeparture.distinctFromStandardSCOI}}
-        <div class="mini-head">How it differs from standard SCOI</div>
-        <p>{{audit.methodologicalDeparture.distinctFromStandardSCOI}}</p>
-      {{/if}}
-      {{#if audit.methodologicalDeparture.methodologicalWarning}}
-        <div class="note-box"><strong>Methodological warning.</strong> {{audit.methodologicalDeparture.methodologicalWarning}}</div>
-      {{/if}}
-      {{#if audit.methodologicalDeparture.experimentalStatus}}
-        <div class="note-box"><strong>Experimental status.</strong> {{audit.methodologicalDeparture.experimentalStatus}}</div>
-      {{/if}}
-    </div>
-    {{/if}}
 
     {{!-- ── Subject Intelligence (always rendered when any sub-field present) ── --}}
     {{#if audit.subject.entityScope}}
@@ -1376,126 +1221,8 @@
         </div>
         {{/if}}
 
-      {{else if audit.provisionalSCOICalculations.necessaryContributionProfitSCOI}}
-        {{#with audit.provisionalSCOICalculations.necessaryContributionProfitSCOI}}
-        <div class="score-panel">
-          <div class="sp-head">
-            <div class="sp-label">Necessary Contribution to Profit SCOI (NC-P) · Provisional</div>
-            <div class="sp-value">{{this.reportedSCOI}}</div>
-            <div class="sp-range">Gross {{this.grossSCOI}} · {{this.calculation}}</div>
-          </div>
-          <div class="sp-body">
-            {{#if this.interpretation}}<p>{{this.interpretation}}</p>{{/if}}
-            {{#if this.status}}<div class="placement-tag">{{this.status}}</div>{{/if}}
-          </div>
-        </div>
-        {{/with}}
-        {{#with audit.provisionalSCOICalculations.voluntaryContributionProfitCapacitySCOI}}
-        <div class="score-panel">
-          <div class="sp-head">
-            <div class="sp-label">Voluntary Contribution to Profit Capacity SCOI · Floor</div>
-            <div class="sp-value">{{this.reportedMinimum}}</div>
-            <div class="sp-range">Gross {{this.grossSCOI}} · {{this.calculation}}</div>
-          </div>
-          <div class="sp-body">
-            {{#if this.interpretation}}<p>{{this.interpretation}}</p>{{/if}}
-            {{#if this.status}}<div class="placement-tag">{{this.status}}</div>{{/if}}
-          </div>
-        </div>
-        {{/with}}
       {{/if}}
     </div>
-
-    {{!-- ── Financial Statement ── --}}
-    {{#if audit.financialStatement}}
-    <hr class="rule rule-gold">
-    <div class="section">
-      <div class="section-head">
-        <span class="section-num"></span>
-        <h2 class="section-title">{{#if audit.financialStatement.title}}{{audit.financialStatement.title}}{{else}}Financial Statement{{/if}}</h2>
-        <span class="section-title-line"></span>
-      </div>
-      <div class="chip-row">
-        <span class="basis basis-REPORTED">REPORTED</span>
-        <span class="basis basis-DERIVED">DERIVED</span>
-        <span class="basis basis-PUBLIC-ROUNDED">PUBLIC-ROUNDED</span>
-      </div>
-      <div class="table-wrap">
-      <table class="fs-table">
-        <thead><tr><th>Line</th><th style="text-align:right;">{{#if audit.financialStatement.currency}}{{audit.financialStatement.currency}}{{else}}Value{{/if}}</th><th style="text-align:right;">% Revenue</th><th>Source</th></tr></thead>
-        <tbody>
-        {{#each audit.financialStatement.lines}}
-          <tr class="fs-{{this.rowType}}">
-            <td>{{this.label}}</td>
-            <td class="num">{{this.value}}</td>
-            <td class="num">{{this.pctOfRevenue}}</td>
-            <td><span class="basis basis-{{this.basis}}">{{this.basis}}</span></td>
-          </tr>
-        {{/each}}
-        </tbody>
-      </table>
-      </div>
-      {{#if audit.financialStatement.reconciliationNote}}
-        <div class="note-box"><strong>Reconciliation.</strong> {{audit.financialStatement.reconciliationNote}}</div>
-      {{/if}}
-      {{#if audit.financialStatement.dataCorrections}}
-        <div class="mini-head">Data corrections in this edition</div>
-        <ul>{{#each audit.financialStatement.dataCorrections}}<li>{{this}}</li>{{/each}}</ul>
-      {{/if}}
-    </div>
-    {{/if}}
-
-    {{!-- ── Revenue mix + 75/25 visual ── --}}
-    {{#if audit.revenueBreakdown}}
-    <hr class="rule">
-    <div class="section">
-      <div class="section-head">
-        <span class="section-num"></span>
-        <h2 class="section-title">{{#if audit.revenueBreakdown.title}}{{audit.revenueBreakdown.title}}{{else}}Revenue Mix{{/if}}</h2>
-        <span class="section-title-line"></span>
-      </div>
-      {{#each audit.revenueBreakdown.lines}}
-        <div class="bar-row">
-          <div class="bar-meta"><span>{{this.label}}</span><strong>{{this.valueDisplay}} · {{this.share}}</strong></div>
-          <div class="bar-track"><div class="bar-fill" style="width:{{this.widthPct}}%;"></div></div>
-        </div>
-      {{/each}}
-      {{#if audit.revenueBreakdown.note}}<p style="margin-top:0.75rem;font-size:0.95rem;">{{audit.revenueBreakdown.note}}</p>{{/if}}
-
-      {{#if audit.ratioVisual}}
-        <div class="mini-head" style="margin-top:1.75rem;">{{audit.ratioVisual.title}}</div>
-        {{#each audit.ratioVisual.bars}}
-          <div class="bar-row">
-            <div class="bar-meta"><span>{{this.label}}</span><strong>{{this.valueDisplay}}</strong></div>
-            <div class="bar-track"><div class="bar-fill" style="width:{{this.widthPct}}%;"></div></div>
-          </div>
-        {{/each}}
-        {{#if audit.ratioVisual.caption}}<p style="margin-top:0.75rem;font-size:0.95rem;font-style:italic;color:var(--g500);">{{audit.ratioVisual.caption}}</p>{{/if}}
-      {{/if}}
-    </div>
-    {{/if}}
-
-    {{!-- ── Key Ratios ── --}}
-    {{#if audit.keyRatios}}
-    <hr class="rule">
-    <div class="section">
-      <div class="section-head">
-        <span class="section-num"></span>
-        <h2 class="section-title">Key Ratios</h2>
-        <span class="section-title-line"></span>
-      </div>
-      <div class="ratio-grid">
-        {{#each audit.keyRatios}}
-        <div class="ratio-cell">
-          <div class="ratio-label">{{this.label}}</div>
-          <div class="ratio-value">{{this.value}}</div>
-          <div class="ratio-formula">{{this.formula}}</div>
-          {{#if this.note}}<div class="ratio-note">{{this.note}}</div>{{/if}}
-        </div>
-        {{/each}}
-      </div>
-    </div>
-    {{/if}}
 
     {{#if audit.calculations}}
     <hr class="rule">
@@ -1526,91 +1253,6 @@
         {{/if}}
       </div>
       {{/each}}
-    </div>
-    {{/if}}
-
-    {{!-- ── Sensitivity Analysis ── --}}
-    {{#if audit.sensitivityAnalysis}}
-    <hr class="rule">
-    <div class="section">
-      <div class="section-head">
-        <span class="section-num"></span>
-        <h2 class="section-title">Sensitivity Analysis</h2>
-        <span class="section-title-line"></span>
-      </div>
-      {{#if audit.sensitivityAnalysis.note}}<p>{{audit.sensitivityAnalysis.note}}</p>{{/if}}
-      <div class="table-wrap">
-      <table class="fs-table">
-        <thead><tr><th>Basis</th><th>Calculation</th><th style="text-align:right;">Result</th><th>Reading</th></tr></thead>
-        <tbody>
-        {{#each audit.sensitivityAnalysis.rows}}
-          <tr{{#if @first}} class="fs-subtotal"{{/if}}>
-            <td>{{this.basis}}</td><td>{{this.calculation}}</td><td class="num">{{this.result}}</td><td>{{this.reading}}</td>
-          </tr>
-        {{/each}}
-        </tbody>
-      </table>
-      </div>
-    </div>
-    {{/if}}
-
-    {{!-- ── Contribution composition (numerator / denominator) ── --}}
-    {{#if audit.provisionalSCOICalculations}}
-    <hr class="rule">
-    <div class="section">
-      <div class="section-head">
-        <span class="section-num"></span>
-        <h2 class="section-title">Contribution Composition</h2>
-        <span class="section-title-line"></span>
-      </div>
-      {{#with audit.provisionalSCOICalculations.necessaryContributionProfitSCOI}}
-        <div class="two-col">
-          <div class="calc-block">
-            <div class="calc-head">Numerator · {{this.numerator.label}}</div>
-            <div class="calc-result">{{this.numerator.valueDisplay}}</div>
-            <div class="ratio-note">{{this.numerator.basis}}</div>
-            <div class="mini-head">Included conceptually</div>
-            <ul>{{#each this.numerator.includedConceptually}}<li>{{this}}</li>{{/each}}</ul>
-            <div class="mini-head">Excluded</div>
-            <ul>{{#each this.numerator.excluded}}<li>{{this}}</li>{{/each}}</ul>
-          </div>
-          <div class="calc-block">
-            <div class="calc-head">Denominator · {{this.denominator.label}}</div>
-            <div class="calc-result">{{this.denominator.valueDisplay}}</div>
-            <div class="ratio-note">{{this.denominator.basis}}</div>
-            {{#if this.civilizationMeaning}}
-              <div class="mini-head">Civilization meaning</div>
-              <p style="font-size:0.95rem;">{{this.civilizationMeaning}}</p>
-            {{/if}}
-          </div>
-        </div>
-        {{#if this.nonMeaning}}
-          <div class="mini-head">What {{this.reportedSCOI}} does not mean</div>
-          <div class="chip-row">{{#each this.nonMeaning}}<span class="chip chip-no">{{this}}</span>{{/each}}</div>
-        {{/if}}
-      {{/with}}
-      {{#with audit.provisionalSCOICalculations.voluntaryContributionProfitCapacitySCOI}}
-        {{#if this.qualification}}<div class="note-box"><strong>Voluntary contribution qualification.</strong> {{this.qualification}}</div>{{/if}}
-      {{/with}}
-    </div>
-    {{/if}}
-
-    {{!-- ── Structural Comparison ── --}}
-    {{#if audit.SCOIStructuralComparison}}
-    <hr class="rule">
-    <div class="section">
-      <div class="section-head">
-        <span class="section-num"></span>
-        <h2 class="section-title">Necessary vs Voluntary: Structural Comparison</h2>
-        <span class="section-title-line"></span>
-      </div>
-      <table class="kv-table">
-        <tr><td>Necessary Contribution ÷ Profit</td><td>{{audit.SCOIStructuralComparison.necessaryContributionProfit}}</td></tr>
-        <tr><td>Verified Voluntary ÷ Profit (floor)</td><td>{{audit.SCOIStructuralComparison.verifiedMinimumVoluntaryContributionProfit}}</td></tr>
-      </table>
-      {{#if audit.SCOIStructuralComparison.principle}}<p>{{audit.SCOIStructuralComparison.principle}}</p>{{/if}}
-      {{#if audit.SCOIStructuralComparison.scaleNote}}<p>{{audit.SCOIStructuralComparison.scaleNote}}</p>{{/if}}
-      <div class="chip-row">{{#each audit.SCOIStructuralComparison.distinctions}}<span class="chip">{{this}}</span>{{/each}}</div>
     </div>
     {{/if}}
 
@@ -1667,100 +1309,6 @@
       {{/if}}
     </div>
 
-    {{!-- ── Civilization Foundation ── --}}
-    {{#if audit.civilizationFoundation}}
-    <hr class="rule">
-    <div class="section">
-      <div class="section-head">
-        <span class="section-num"></span>
-        <h2 class="section-title">Civilization Foundation</h2>
-        <span class="section-title-line"></span>
-      </div>
-      {{#if audit.civilizationFoundation.principle}}<div class="placement-tag" style="margin:0 0 1rem;">{{audit.civilizationFoundation.principle}}</div>{{/if}}
-      {{#if audit.civilizationFoundation.description}}<p>{{audit.civilizationFoundation.description}}</p>{{/if}}
-      {{#if audit.civilizationFoundation.observedFoundation}}
-        <div class="mini-head">Observed foundation</div>
-        <div class="chip-row">{{#each audit.civilizationFoundation.observedFoundation}}<span class="chip">{{this}}</span>{{/each}}</div>
-      {{/if}}
-      {{#if audit.civilizationFoundation.reportedCommunityReach}}
-        <table class="kv-table"><tr><td>Reported community reach</td><td>{{audit.civilizationFoundation.reportedCommunityReach}}</td></tr></table>
-      {{/if}}
-      {{#if audit.civilizationFoundation.interpretation}}<div class="note-box">{{audit.civilizationFoundation.interpretation}}</div>{{/if}}
-    </div>
-    {{/if}}
-
-    {{!-- ── Civilization Economics Audit ── --}}
-    {{#if audit.civilizationEconomicsAudit}}
-    <hr class="rule">
-    <div class="section">
-      <div class="section-head">
-        <span class="section-num"></span>
-        <h2 class="section-title">Civilization Economics Audit</h2>
-        <span class="section-title-line"></span>
-      </div>
-      {{#if audit.civilizationEconomicsAudit.centralQuestion}}<p><strong>Central question.</strong> {{audit.civilizationEconomicsAudit.centralQuestion}}</p>{{/if}}
-      {{#if audit.civilizationEconomicsAudit.transmissionChannels}}
-        <div class="mini-head">Transmission channels</div>
-        <div class="chip-row">{{#each audit.civilizationEconomicsAudit.transmissionChannels}}<span class="chip">{{this}}</span>{{/each}}</div>
-      {{/if}}
-      {{#if audit.civilizationEconomicsAudit.principle}}<p><strong>Principle.</strong> {{audit.civilizationEconomicsAudit.principle}}</p>{{/if}}
-      {{#if audit.civilizationEconomicsAudit.boundary}}<div class="note-box"><strong>Boundary.</strong> {{audit.civilizationEconomicsAudit.boundary}}</div>{{/if}}
-    </div>
-    {{/if}}
-
-    {{!-- ── Sporting Causation Audit ── --}}
-    {{#if audit.sportingCausationAudit}}
-    <hr class="rule">
-    <div class="section">
-      <div class="section-head">
-        <span class="section-num"></span>
-        <h2 class="section-title">Sporting Causation Audit</h2>
-        <span class="section-title-line"></span>
-      </div>
-      {{#if audit.sportingCausationAudit.results}}
-      <table class="kv-table">
-        {{#each audit.sportingCausationAudit.results}}<tr><td>{{this.competition}}</td><td>{{this.outcome}}</td></tr>{{/each}}
-      </table>
-      {{/if}}
-      <div class="chip-row">
-        {{#if audit.sportingCausationAudit.principle}}<span class="chip">{{audit.sportingCausationAudit.principle}}</span>{{/if}}
-        {{#if audit.sportingCausationAudit.counterPrinciple}}<span class="chip">{{audit.sportingCausationAudit.counterPrinciple}}</span>{{/if}}
-      </div>
-      {{#if audit.sportingCausationAudit.interpretation}}<p>{{audit.sportingCausationAudit.interpretation}}</p>{{/if}}
-    </div>
-    {{/if}}
-
-    {{!-- ── Time Audit ── --}}
-    {{#if audit.timeAudit}}
-    <hr class="rule">
-    <div class="section">
-      <div class="section-head">
-        <span class="section-num"></span>
-        <h2 class="section-title">Time Audit</h2>
-        <span class="section-title-line"></span>
-      </div>
-      {{#if audit.timeAudit.principle}}<div class="placement-tag" style="margin:0 0 1rem;">{{audit.timeAudit.principle}}</div>{{/if}}
-      {{#each audit.timeAudit.questions}}
-        <div class="q-item"><div class="q-label">{{this.label}}</div><p style="margin:0;">{{this.question}}</p></div>
-      {{/each}}
-    </div>
-    {{/if}}
-
-    {{!-- ── Regulatory (Association) Audit ── --}}
-    {{#if audit.associationAudit}}
-    <hr class="rule">
-    <div class="section">
-      <div class="section-head">
-        <span class="section-num"></span>
-        <h2 class="section-title">Regulatory Association Audit</h2>
-        <span class="section-title-line"></span>
-      </div>
-      {{#if audit.associationAudit.principle}}<div class="placement-tag" style="margin:0 0 1rem;">{{audit.associationAudit.principle}}</div>{{/if}}
-      <ul>{{#each audit.associationAudit.questions}}<li>{{this}}</li>{{/each}}</ul>
-      {{#if audit.associationAudit.nonFinding}}<div class="note-box"><strong>Non-finding.</strong> {{audit.associationAudit.nonFinding}}</div>{{/if}}
-    </div>
-    {{/if}}
-
     {{!-- ── CRIPFCnt Interpretation (always its own section when present) ─── --}}
     {{#if audit.CRIPFCntInterpretation}}
     <hr class="rule">
@@ -1780,11 +1328,6 @@
           <div class="class-label">Key Doctrine</div>
           <div class="class-def">{{audit.CRIPFCntInterpretation.keyDoctrine}}</div>
         </div>
-      {{/if}}
-
-      {{#if audit.CRIPFCntInterpretation.supportingDoctrine}}
-        <div class="mini-head">Supporting doctrine</div>
-        <div class="chip-row">{{#each audit.CRIPFCntInterpretation.supportingDoctrine}}<span class="chip">{{this}}</span>{{/each}}</div>
       {{/if}}
 
       {{#if audit.CRIPFCntInterpretation.structuralLesson}}
@@ -1833,8 +1376,6 @@
       <div class="counter-box">
         <div class="counter-goal">Target</div>
         <div class="counter-goal-val">{{audit.counterfactual.goal}}</div>
-        {{#if audit.counterfactual.question}}<p style="margin:0.75rem 0;">{{audit.counterfactual.question}}</p>{{/if}}
-        {{#if audit.counterfactual.question}}<div class="counter-goal" style="margin-top:0.5rem;">Variables</div>{{/if}}
         <ul>
           {{#each audit.counterfactual.requirements}}
             <li>{{this}}</li>
@@ -1844,86 +1385,6 @@
           <div class="counter-note">{{audit.counterfactual.note}}</div>
         {{/if}}
       </div>
-    </div>
-    {{/if}}
-
-    {{!-- ── Civilization Recommendations ── --}}
-    {{#if audit.civilizationRecommendations}}
-    <hr class="rule rule-gold">
-    <div class="section">
-      <div class="section-head">
-        <span class="section-num"></span>
-        <h2 class="section-title">Civilization Recommendations</h2>
-        <span class="section-title-line"></span>
-      </div>
-      {{#if audit.civilizationRecommendations.orientation}}<div class="placement-tag" style="margin:0 0 1rem;">{{audit.civilizationRecommendations.orientation}}</div>{{/if}}
-      {{#if audit.civilizationRecommendations.objective}}<p><strong>Objective.</strong> {{audit.civilizationRecommendations.objective}}</p>{{/if}}
-      <ol>{{#each audit.civilizationRecommendations.recommendations}}<li>{{this}}</li>{{/each}}</ol>
-      {{#if audit.civilizationRecommendations.civilizationFormula}}<div class="formula-box">{{audit.civilizationRecommendations.civilizationFormula}}</div>{{/if}}
-      {{#if audit.civilizationRecommendations.finalQuestion}}<p style="font-style:italic;">{{audit.civilizationRecommendations.finalQuestion}}</p>{{/if}}
-      {{#if audit.civilizationRecommendations.overridingRecommendation}}<div class="call-banner">Overriding Recommendation · <span>{{audit.civilizationRecommendations.overridingRecommendation}}</span></div>{{/if}}
-    </div>
-    {{/if}}
-
-    {{!-- ── Time Audit Series ── --}}
-    {{#if audit.futureTimeAuditSeries}}
-    <hr class="rule">
-    <div class="section">
-      <div class="section-head">
-        <span class="section-num"></span>
-        <h2 class="section-title">Time Audit Series</h2>
-        <span class="section-title-line"></span>
-      </div>
-      <div class="series-grid">
-        {{#each audit.futureTimeAuditSeries.reports}}
-        <div class="series-card{{#if @first}} current{{/if}}">
-          <div class="ratio-label">{{this.code}} · {{this.status}}</div>
-          <div class="series-year">{{this.reference}}</div>
-          <div class="series-ncp">NC-P SCOI: {{this.ncp}}</div>
-          <div class="series-focus">{{this.focus}}</div>
-        </div>
-        {{/each}}
-      </div>
-      {{#if audit.futureTimeAuditSeries.comparativeObjective}}<p style="margin-top:1rem;">{{audit.futureTimeAuditSeries.comparativeObjective}}</p>{{/if}}
-    </div>
-    {{/if}}
-
-    {{!-- ── Final Civilization Call ── --}}
-    {{#if audit.finalCivilizationCall}}
-    <hr class="rule rule-gold">
-    <div class="section">
-      <div class="section-head">
-        <span class="section-num"></span>
-        <h2 class="section-title">Final Civilization Call</h2>
-        <span class="section-title-line"></span>
-      </div>
-      <table class="kv-table">
-        {{#if audit.finalCivilizationCall.startingPoint}}<tr><td>Starting point</td><td>{{audit.finalCivilizationCall.startingPoint}}</td></tr>{{/if}}
-        {{#if audit.finalCivilizationCall.recognition}}<tr><td>Recognition</td><td>{{audit.finalCivilizationCall.recognition}}</td></tr>{{/if}}
-      </table>
-      {{#if audit.finalCivilizationCall.not}}
-        <div class="mini-head">This audit is not</div>
-        <div class="chip-row">{{#each audit.finalCivilizationCall.not}}<span class="chip chip-no">{{this}}</span>{{/each}}</div>
-      {{/if}}
-      {{#if audit.finalCivilizationCall.statement}}
-        <div class="finding-core" style="margin-top:1rem;"><p>{{audit.finalCivilizationCall.statement}}</p></div>
-      {{/if}}
-      {{#if audit.finalCivilizationCall.call}}<div class="call-banner"><span>{{audit.finalCivilizationCall.call}}</span></div>{{/if}}
-    </div>
-    {{/if}}
-
-    {{!-- ── Sources ── --}}
-    {{#if audit.sources}}
-    <hr class="rule">
-    <div class="section">
-      <div class="section-head">
-        <span class="section-num"></span>
-        <h2 class="section-title">Sources &amp; Data Provenance</h2>
-        <span class="section-title-line"></span>
-      </div>
-      {{#each audit.sources}}
-        <div class="source-item"><strong>{{this.title}}</strong>{{this.publisher}}{{#if this.usedFor}} · <em>{{this.usedFor}}</em>{{/if}}</div>
-      {{/each}}
     </div>
     {{/if}}
 
