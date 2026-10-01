@@ -608,9 +608,9 @@
       <article class="audit-card reveal">
         <div class="audit-card-header">
           <div class="audit-kind-badge {{this.auditKind}}">
-            {{#if this.presentation.badge}}{{this.presentation.badge}}{{else if (eq this.auditKind 'special')}}Premium Special Report{{else}}Placement Audit{{/if}}
+            {{#if (eq this.auditKind 'special')}}Premium Special Report{{else}}Placement Audit{{/if}}
           </div>
-          <h3 class="audit-card-title">{{#if this.title}}{{this.title}}{{else}}{{this.subject.name}}{{/if}}</h3>
+          <h3 class="audit-card-title">{{this.subject.name}}</h3>
           <div class="audit-card-window">📅 {{this.assessmentWindow.label}}</div>
         </div>
         <div class="audit-card-body">

@@ -776,8 +776,9 @@ app.get("/", async (req, res) => {
 
     const normalizedSpecial = latestSpecial.map(a => ({
       ...a,
-      assessmentWindow: { label: a.assessmentWindow?.label || "Special Audit" },
-      displayPrice: 299,
+      assessmentWindow: { label: a.assessmentWindow?.label || a.assessmentDate?.label || "Special Audit" },
+      // Price is stored on each audit in cents (75000 = $750); legacy default $299
+      displayPrice: Math.round((a.price || 29900) / 100),
       auditKind: "special",
     }));
 
