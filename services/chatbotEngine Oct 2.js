@@ -3582,11 +3582,6 @@ export async function handleIncomingMessage({ from, action, hasImage = false, im
     );
     _isFirstEverMessage = !_priorContact;
   } catch (err) { console.error("[PHONE CONTACT TRACK]", err.message); }
-  // Fallback signal: PhoneContact rows can pre-exist (imports, broadcasts, retries)
-  // for people who never actually used the bot. No UserSession = never onboarded.
-  let _hadPriorSession = true;
-  try { _hadPriorSession = !!(await UserSession.exists({ phone })); }
-  catch (err) { console.error("[FIRST-TIME SESSION CHECK]", err.message); }
   // ─────────────────────────────────────────────────────────────────────────
 
   const text = typeof action === "string" ? action.trim() : "";
@@ -4879,33 +4874,6 @@ try {
       );
     }
     return sendMainMenu(from);
-  }
-
-  // ── FIRST-TIME USER → MAIN MENU (TOP LEVEL) ───────────────────────────────
-  // Must run BEFORE the school / tutor / college / supplier free-text handlers
-  // below - they used to swallow a new user's first message as a search.
-  // Deep links (ZQ:, apply:, group taps) and button taps are excluded so links
-  // shared to new users still open what they point to.
-  {
-    const _ownsBiz    = !!(biz && _bizIsOwnedByUser);
-    const _isDeepLink = /^(zq:|apply:|zqg_|zqsg_|zqtg_|view_and_quote)/i.test(text);
-    if (!_ownsBiz && !isMetaAction && !_isDeepLink) {
-      let _isNewUser = _isFirstEverMessage;
-      if (!_isNewUser && !_hadPriorSession) {
-        const _sp = await findSupplierByPhone(phone).catch(() => null);
-        _isNewUser = !_sp;
-      }
-      if (_isNewUser) {
-        // Create the session so the NEXT message flows normally (no menu loop).
-        await UserSession.findOneAndUpdate(
-          { phone },
-          { $set: { phone, "tempData.welcomedAt": new Date() } },
-          { upsert: true }
-        );
-        console.log("[FIRST-TIME USER] menu shown to", phone, "| first msg:", text.slice(0, 80));
-        return sendMainMenu(from);
-      }
-    }
   }
 
   // ZQ:REQUEST deep link
