@@ -169,7 +169,7 @@ router.post("/admin/mobile/users/:id/activate", ensureAuth, ensureAdminEmails, a
       user.teacherSubscriptionExpiresAt = expiresAt;
       user.teacherPaidAt = now;
       user.maxChildren = cfg.maxChildren;
-      if (cfg.aiQuizCredits) user.aiQuizCredits = (user.aiQuizCredits || 0) + cfg.aiQuizCredits;
+      if (cfg.aiQuizCredits) user.aiQuizCredits = cfg.aiQuizCredits; // set the full monthly allowance on activation
     } else {
       // The missing flip. Web gates access on subscriptionStatus === "paid";
       // without this the account looks paid on mobile (which keys off the plan)

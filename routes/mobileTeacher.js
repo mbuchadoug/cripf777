@@ -210,17 +210,9 @@ router.get("/overview", requireMobileAuth, ensureTeacher, async (req, res) => {
     const avg = scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : null;
     const quizCount = await AIQuiz.countDocuments({ teacherId: req.mobileUser._id });
 
-    // Make sure this teacher's monthly AI credits are granted so the hub isn't stuck at 0.
-    let credits = req.mobileUser.aiQuizCredits ?? 0;
-    try {
-      const t = await User.findById(req.mobileUser._id);
-      if (t && typeof t.resetAIQuizCredits === "function") {
-        const before = t.aiQuizCredits || 0;
-        t.resetAIQuizCredits();
-        if ((t.aiQuizCredits || 0) !== before) await t.save();
-        credits = t.aiQuizCredits || 0;
-      }
-    } catch (_) {}
+    // Report the stored credit balance. (We no longer call the model's reset here -
+    // it was zeroing manually-activated teachers. Credits are granted on activation.)
+    const credits = req.mobileUser.aiQuizCredits ?? 0;
 
     res.json({ students: ids.length, quizzesCreated: quizCount, assessmentsTaken: finished.length, averageScore: avg, credits });
   } catch (e) { console.error("[mobile teacher overview]", e); res.status(500).json({ error: "Failed" }); }

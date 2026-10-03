@@ -236,7 +236,18 @@ role: {
   // The persona currently selected in the app (null = use primary role).
   activeMobileRole: { type: String, enum: ["parent", "professional", "teacher", "student", null], default: null },
 
-  paidAt: { type: Date, default: null }
+  paidAt: { type: Date, default: null },
+
+  // ── 3-DAY FREE TRIAL (parent / teacher / student) ──────────────────────────
+  // When the trial ends. Set on first signup. While now < trialEndsAt the account
+  // gets a capped taste of the product; after it, free users hit the upgrade wall.
+  trialEndsAt: { type: Date, default: null, index: true },
+
+  // ── FREE/TRIAL QUIZ CAP (per calendar month) ───────────────────────────────
+  // Counts quizzes taken this month so free accounts can be capped. monthlyQuizPeriod
+  // is a "YYYY-MM" marker; it resets the count when the month rolls over.
+  monthlyQuizCount: { type: Number, default: 0 },
+  monthlyQuizPeriod: { type: String, default: null }
 }, { strict: true });
 
 
@@ -335,16 +346,25 @@ UserSchema.methods.hasAIQuizCredits = function () {
   return this.aiQuizCredits > 0;
 };
 
+UserSchema.methods.monthlyAICreditAllowance = function () {
+  // Paid plans first; otherwise a small trial allowance while the trial is live.
+  if (this.teacherSubscriptionPlan === "professional") return 50;
+  if (this.teacherSubscriptionPlan === "starter") return 20;
+  if (this.isTrialActive && this.isTrialActive()) return 5; // teacher trial
+  return 0;
+};
+
 UserSchema.methods.resetAIQuizCredits = function () {
   const now = new Date();
   const lastReset = this.aiQuizCreditsResetAt || new Date(0);
   if (now - lastReset > 30 * 24 * 60 * 60 * 1000) {
-    if (this.teacherSubscriptionPlan === "starter") {
-      this.aiQuizCredits = 20;
-    } else if (this.teacherSubscriptionPlan === "professional") {
-      this.aiQuizCredits = 50;
+    const allowance = this.monthlyAICreditAllowance();
+    // Only (re)grant when there's an allowance - never strand a plan at 0,
+    // and never wipe credits that were granted manually this period.
+    if (allowance > 0) {
+      this.aiQuizCredits = allowance;
+      this.aiQuizCreditsResetAt = now;
     }
-    this.aiQuizCreditsResetAt = now;
   }
 };
 
@@ -362,6 +382,60 @@ UserSchema.methods.getPlanLabel = function () {
   if (this.subscriptionPlan === "gold") return "Gold";
   if (this.subscriptionPlan === "silver") return "Silver";
   return "Free Trial";
+};
+
+// ==============================
+// 🎁 FREE TRIAL + QUIZ CAP HELPERS
+// ==============================
+
+// Start a 3-day trial if one hasn't been set yet (safe to call on every login).
+UserSchema.methods.ensureTrialStarted = function (days = 3) {
+  if (!this.trialEndsAt && this.subscriptionStatus !== "paid" &&
+      this.teacherSubscriptionStatus !== "paid" && this.employeeSubscriptionStatus !== "paid") {
+    this.trialEndsAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+    return true;
+  }
+  return false;
+};
+
+UserSchema.methods.isTrialActive = function () {
+  return !!this.trialEndsAt && new Date() < new Date(this.trialEndsAt);
+};
+
+// True if the account has ANY active paid plan (parent, teacher, or employee).
+UserSchema.methods.isAnyPlanPaid = function () {
+  return this.isSubscriptionActive() ||
+         (typeof this.isTeacherSubscriptionActive === "function" && this.isTeacherSubscriptionActive()) ||
+         (typeof this.isEmployeeSubscriptionActive === "function" && this.isEmployeeSubscriptionActive());
+};
+
+// How many children a free/trial parent may add (paid plans use maxChildren).
+UserSchema.methods.getChildLimit = function () {
+  if (this.isSubscriptionActive()) return this.maxChildren || 2;
+  return 2; // free + trial parents: up to 2
+};
+
+// Monthly quiz cap for free/trial users. Paid users are uncapped (null).
+UserSchema.methods.monthlyQuizCap = function () {
+  if (this.isAnyPlanPaid()) return null;        // paid = unlimited
+  if (this.isTrialActive()) return 20;          // trial taste
+  return 10;                                    // free (trial ended) - a taste, then upgrade
+};
+
+// Returns { allowed, remaining, cap }. Call BEFORE starting a quiz for a free user.
+UserSchema.methods.checkQuizQuota = function () {
+  const cap = this.monthlyQuizCap();
+  if (cap == null) return { allowed: true, remaining: null, cap: null };
+  const period = new Date().toISOString().slice(0, 7); // YYYY-MM
+  const used = this.monthlyQuizPeriod === period ? (this.monthlyQuizCount || 0) : 0;
+  return { allowed: used < cap, remaining: Math.max(0, cap - used), cap };
+};
+
+// Record one quiz taken this month (rolls over automatically).
+UserSchema.methods.recordQuizTaken = function () {
+  const period = new Date().toISOString().slice(0, 7);
+  if (this.monthlyQuizPeriod !== period) { this.monthlyQuizPeriod = period; this.monthlyQuizCount = 0; }
+  this.monthlyQuizCount = (this.monthlyQuizCount || 0) + 1;
 };
 
 // ==============================

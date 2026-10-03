@@ -396,11 +396,11 @@ router.post("/children", requireMobileAuth, async (req, res) => {
     const paid = isPaid(parent);
     const limit = childLimitFor(parent);
 
-    // Free trial: one child allowed. Paid: up to the plan limit.
-    if (!paid && existing >= 1) {
+    // Free / trial: up to TWO children. Paid: up to the plan limit.
+    if (!paid && existing >= 2) {
       return res.status(402).json({
         code: "UPGRADE_REQUIRED",
-        error: "Your free trial allows one child. Upgrade to add more."
+        error: "Your free plan allows two children. Upgrade to add more."
       });
     }
     if (paid && existing >= limit) {

@@ -3,50 +3,27 @@ import Anthropic from "@anthropic-ai/sdk";
 import AIQuiz from "../models/aiQuiz.js";
 import User from "../models/user.js";
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY
-});
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-// Model name is configurable so a future rename never breaks quiz generation -
-// set ANTHROPIC_QUIZ_MODEL in .env to override. Default is a current model.
+// Configurable so a model rename never breaks generation.
 const QUIZ_MODEL = process.env.ANTHROPIC_QUIZ_MODEL || "claude-sonnet-4-5";
 
 /**
- * Generate quiz questions using Claude AI
+ * Generate quiz questions using Claude AI.
+ * Credits are driven purely by the stored aiQuizCredits count (granted on
+ * plan activation / trial start). We intentionally do NOT call the model's
+ * monthly-reset here - that was zeroing manually-activated teachers' credits.
  */
-export async function generateAIQuiz({
-  teacherId,
-  subject,
-  grade,
-  topic,
-  difficulty,
-  questionCount = 10
-}) {
+export async function generateAIQuiz({ teacherId, subject, grade, topic, difficulty, questionCount = 10 }) {
   const teacher = await User.findById(teacherId);
-  
-  // ✅ Reset credits if needed (this updates in memory)
-  teacher.resetAIQuizCredits();
-  
-  // ✅ Save the reset before checking
-  await teacher.save();
-  
-  // ✅ Reload to get fresh data
-  const freshTeacher = await User.findById(teacherId);
-  
-  console.log(`[AI Quiz] Teacher ${teacherId} has ${freshTeacher.aiQuizCredits} credits`);
-  
-  if (!freshTeacher.hasAIQuizCredits() || freshTeacher.aiQuizCredits <= 0) {
-    throw new Error("No quiz geneation credits remaining this month");
+  if (!teacher) throw new Error("Teacher not found");
+
+  const credits = typeof teacher.aiQuizCredits === "number" ? teacher.aiQuizCredits : 0;
+  console.log(`[AI Quiz] Teacher ${teacherId} has ${credits} credits`);
+  if (credits <= 0) {
+    throw new Error("No quiz generation credits remaining this month");
   }
 
-  // Check and reset credits if needed
-  teacher.resetAIQuizCredits();
-  
-  if (!teacher.hasAIQuizCredits()) {
-    throw new Error("No quiz geenation credits remaining this month");
-  }
-
-  // Build prompt
   const prompt = `Generate ${questionCount} multiple-choice quiz questions for:
 - Subject: ${subject}
 - Grade Level: ${grade}
@@ -67,128 +44,70 @@ Return ONLY a JSON array of questions, no additional text.`;
     const message = await anthropic.messages.create({
       model: QUIZ_MODEL,
       max_tokens: 4000,
-      messages: [{
-        role: "user",
-        content: prompt
-      }]
+      messages: [{ role: "user", content: prompt }]
     });
 
-    // Parse response
     const content = message.content[0].text;
     const jsonMatch = content.match(/\[[\s\S]*\]/);
-    
-    if (!jsonMatch) {
-      throw new Error("Failed to parse AI response");
-    }
+    if (!jsonMatch) throw new Error("Failed to parse AI response");
 
     const questions = JSON.parse(jsonMatch[0]);
+    if (!Array.isArray(questions) || questions.length === 0) throw new Error("No valid questions generated");
 
-    // Validate questions
-    if (!Array.isArray(questions) || questions.length === 0) {
-      throw new Error("No valid questions generated");
-    }
-
-    // Create AIQuiz document
     const aiQuiz = await AIQuiz.create({
       teacherId,
       title: `${topic} - Grade ${grade} (${difficulty})`,
-      subject: subject.toLowerCase(),
-      grade,
-      topic,
-      difficulty,
+      subject: String(subject).toLowerCase(),
+      grade, topic, difficulty,
       questionCount: questions.length,
       questions,
       aiProvider: "anthropic"
     });
 
-    // Deduct credit
-  // ✅ Deduct credit using freshTeacher
-freshTeacher.aiQuizCredits -= 1;
-await freshTeacher.save();
+    // Deduct exactly one credit, only after a successful generation.
+    teacher.aiQuizCredits = Math.max(0, credits - 1);
+    await teacher.save();
+    console.log(`[AI Quiz] Credit used. Remaining: ${teacher.aiQuizCredits}`);
 
-console.log(`[AI Quiz] Credit used. Remaining: ${freshTeacher.aiQuizCredits}`);
-
-return aiQuiz;
-
+    return aiQuiz;
   } catch (error) {
     console.error("[AI Quiz Generation Error]", error);
     throw new Error("Failed to generate quiz: " + error.message);
   }
 }
 
-/**
- * Assign AI quiz to multiple students
- */
-export async function assignAIQuizToStudents({
-  aiQuizId,
-  studentIds,
-  teacherId
-}) {
+/** Assign AI quiz to multiple students (unchanged behaviour). */
+export async function assignAIQuizToStudents({ aiQuizId, studentIds, teacherId }) {
   const ExamInstance = (await import("../models/examInstance.js")).default;
   const crypto = (await import("crypto")).default;
-  
-  const aiQuiz = await AIQuiz.findOne({
-    _id: aiQuizId,
-    teacherId
-  });
 
-  if (!aiQuiz) {
-    throw new Error(" Quiz not found");
-  }
+  const aiQuiz = await AIQuiz.findOne({ _id: aiQuizId, teacherId });
+  if (!aiQuiz) throw new Error("Quiz not found");
 
   const assignments = [];
-
   for (const studentId of studentIds) {
-    // Check if already assigned
-    const existing = await ExamInstance.findOne({
-      userId: studentId,
-      "meta.aiQuizId": aiQuizId
-    });
-
+    const existing = await ExamInstance.findOne({ userId: studentId, "meta.aiQuizId": aiQuizId });
     if (existing) continue;
 
-    // Create exam instance
     const examId = crypto.randomUUID();
-    
-  // Get the student's org so exam is properly linked
-const student = await User.findById(studentId).select("organization").lean();
+    const student = await User.findById(studentId).select("organization").lean();
 
-const exam = await ExamInstance.create({
-  examId,
-  userId: studentId,
-  org: student?.organization || null,          // ✅ FIX: link to org
-  title: aiQuiz.title,
-  quizTitle: aiQuiz.title,
-  module: aiQuiz.subject,                      // "math", "english", etc.
-  subject: aiQuiz.subject,                     // ✅ FIX: also set subject field
-  grade: aiQuiz.grade,                         // ✅ FIX: set grade
-  targetRole: "student",
-  status: "pending",
-  durationMinutes: aiQuiz.questionCount * 2,
-  
-  questionIds: aiQuiz.questions.map((_, idx) => `ai:${aiQuizId}:${idx}`),
-  choicesOrder: aiQuiz.questions.map(q => 
-    Array.from({ length: q.choices.length }, (_, i) => i)
-  ),
-  
-  meta: {
-    aiQuizId: aiQuizId,
-    isAIGenerated: true,
-    teacherId,
-    difficulty: aiQuiz.difficulty
-  }
-});
-
-    // Track assignment
-    aiQuiz.assignedTo.push({
-      studentId,
-      assignedAt: new Date()
+    const exam = await ExamInstance.create({
+      examId, userId: studentId,
+      org: student?.organization || null,
+      title: aiQuiz.title, quizTitle: aiQuiz.title,
+      module: aiQuiz.subject, subject: aiQuiz.subject, grade: aiQuiz.grade,
+      targetRole: "student", status: "pending",
+      durationMinutes: aiQuiz.questionCount * 2,
+      questionIds: aiQuiz.questions.map((_, idx) => `ai:${aiQuizId}:${idx}`),
+      choicesOrder: aiQuiz.questions.map(q => Array.from({ length: q.choices.length }, (_, i) => i)),
+      meta: { aiQuizId, isAIGenerated: true, teacherId, difficulty: aiQuiz.difficulty }
     });
 
+    aiQuiz.assignedTo.push({ studentId, assignedAt: new Date() });
     assignments.push(exam);
   }
 
   await aiQuiz.save();
-  
   return assignments;
 }
