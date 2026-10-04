@@ -1,5 +1,6 @@
 import { Router } from "express";
 import crypto from "crypto";
+import Stripe from "stripe";
 import paynow from "../services/paynow.js";
 import Payment from "../models/payment.js";
 import User from "../models/user.js";
@@ -9,6 +10,9 @@ import { assignQuizFromRule } from "../services/quizAssignment.js";
 import Organization from "../models/organization.js";
 
 import BattleEntry from "../models/battleEntry.js";
+
+const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null;
+const SITE_URL = (process.env.SITE_URL || "https://cripfcnt.com").replace(/\/$/, "");
 
 const router = Router();
 
@@ -419,6 +423,61 @@ router.post("/paynow/result", async (req, res) => {
     console.error("[paynow result] error:", err);
     return res.sendStatus(200);
   }
+});
+
+
+/* ------------------------------
+   STRIPE CHECKOUT (cards — international)
+   Creates a Checkout Session for a plan; Stripe redirects back after payment.
+   The stripe webhook then activates the plan via processSuccessfulPayment.
+-------------------------------- */
+router.post("/stripe/checkout", ensureAuth, async (req, res) => {
+  try {
+    if (!stripe) return res.status(500).json({ error: "Card payments are not configured." });
+    const plan = String(req.body?.plan || "");
+    const cfg = PLANS[plan];
+    if (!cfg) return res.status(400).json({ error: "Invalid plan selected." });
+
+    // Create our own pending Payment first so the webhook can find + activate it.
+    const reference = `ST-${crypto.randomUUID()}`;
+    const payment = await Payment.create({
+      userId: req.user._id, reference, amount: cfg.amount, plan,
+      status: "pending", meta: { method: "stripe" }
+    });
+
+    const session = await stripe.checkout.sessions.create({
+      mode: "payment",
+      payment_method_types: ["card"],
+      customer_email: req.user.email || undefined,
+      line_items: [{
+        price_data: {
+          currency: "usd",
+          unit_amount: Math.round(cfg.amount * 100),
+          product_data: { name: `CRIPFCnt ${cfg.name} — Monthly` }
+        },
+        quantity: 1
+      }],
+      success_url: `${SITE_URL}/payments/stripe/success?ref=${reference}`,
+      cancel_url: `${SITE_URL}/payments/stripe/cancel?ref=${reference}`,
+      // The webhook reads these to activate the right user + plan.
+      metadata: { type: "subscription", userId: String(req.user._id), plan, paymentId: String(payment._id), reference }
+    });
+
+    return res.json({ success: true, url: session.url });
+  } catch (err) {
+    console.error("[stripe checkout]", err);
+    return res.status(500).json({ error: "Could not start card payment." });
+  }
+});
+
+/* Friendly landing pages after Stripe redirects back. */
+router.get("/stripe/success", ensureAuth, (req, res) => {
+  const dest = req.user?.role === "private_teacher" ? "/teacher/dashboard" : "/parent/dashboard";
+  return res.redirect(dest + "?paid=1");
+});
+router.get("/stripe/cancel", ensureAuth, (req, res) => {
+  const dest = req.user?.role === "private_teacher" ? "/teacher/dashboard" : "/parent/dashboard";
+  return res.redirect(dest + "?cancelled=1");
 });
 
 export default router;

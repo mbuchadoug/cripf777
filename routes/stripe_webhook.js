@@ -3,6 +3,8 @@ import Stripe from "stripe";
 import dotenv from "dotenv";
 import User from "../models/user.js";
 import AuditPurchase from "../models/auditPurchase.js";
+import Payment from "../models/payment.js";
+import { processSuccessfulPayment } from "./payments.js";
 // ── 8QT certificate handler ──────────────────────────────────
 import { handle8QTCertificate } from "./stripe_webhook_8qt.js";
 // ── Grocery order handler (ZimQuote delivery) ─────────────────
@@ -127,6 +129,22 @@ router.post("/", async (req, res) => {
       } catch (err) {
         // Log but don't fail the webhook - Stripe needs a 200
         console.error("[8qt webhook] certificate handler error:", err.message);
+      }
+    }
+
+    // 6️⃣ SUBSCRIPTION (parent/teacher plan via Stripe card)
+    if (meta.type === "subscription" && (meta.paymentId || meta.reference)) {
+      try {
+        let payment = meta.paymentId ? await Payment.findById(meta.paymentId) : null;
+        if (!payment && meta.reference) payment = await Payment.findOne({ reference: meta.reference });
+        if (payment) {
+          await processSuccessfulPayment(payment._id); // flips user to paid + assigns paid quizzes
+          console.log(`✅ Subscription activated via Stripe for payment ${payment._id}`);
+        } else {
+          console.error("[stripe subscription] no matching payment for", meta);
+        }
+      } catch (err) {
+        console.error("[stripe subscription webhook]", err.message);
       }
     }
 
