@@ -122,6 +122,63 @@ function writeCsv(file, rows, cols) {
   fs.writeFileSync(file, "\uFEFF" + [head, ...body].join("\r\n"), "utf8");
 }
 
+// A search "failed" if it returned nothing (logged as none/error, or a count of 0 on a result mode).
+export const isZeroResult = (s) => ["none", "error"].includes(s?.resultMode) ||
+  (Number(s?.resultCount) === 0 && ["offers", "suppliers", "schools"].includes(s?.resultMode));
+
+// ── Time-frame engine for conversion targets ─────────────────────────────────
+// Every seller's buyer touches are stored as day numbers (days since 2024-01-01,
+// Harare time) so any window - 7 days, a month, all time, or a custom range - can
+// be computed without the database. These three functions are self-contained on
+// purpose: the report page runs the exact same code in the browser.
+const TL_DAY0 = Date.UTC(2024, 0, 1);
+const dayIndex = (d) => Math.floor((new Date(localDay(d) + "T00:00:00Z").getTime() - TL_DAY0) / DAY);
+
+export function zqRangeStats(T, from, to) {
+  var lo = from == null ? -1e9 : from, hi = to == null ? 1e9 : to, out = [];
+  for (var k = 0; k < T.sellers.length; k++) {
+    var x = T.sellers[k], seen = {}, seenN = 0, times = 0, vis = {}, visN = 0, req = 0, ord = 0, mkt = 0, i, d;
+    for (i = 0; i < x.s.length; i += 2) { d = x.s[i]; if (d < lo || d > hi) continue; times++; if (!seen[x.s[i + 1]]) { seen[x.s[i + 1]] = 1; seenN++; } }
+    for (i = 0; i < x.v.length; i += 2) { d = x.v[i]; if (d < lo || d > hi) continue; if (!vis[x.v[i + 1]]) { vis[x.v[i + 1]] = 1; visN++; } }
+    for (i = 0; i < x.r.length; i++) if (x.r[i] >= lo && x.r[i] <= hi) req++;
+    for (i = 0; i < x.o.length; i++) if (x.o[i] >= lo && x.o[i] <= hi) ord++;
+    for (i = 0; i < x.m.length; i += 2) if (x.m[i] >= lo && x.m[i] <= hi) mkt += x.m[i + 1];
+    var leads = seenN + visN + req + ord;
+    out.push({ k: k, seen: seenN, times: times, vis: visN, req: req, ord: ord, mkt: mkt, leads: leads,
+      proof: Math.round((leads * 3 + ord * 10 + Math.min(mkt, 30) * 0.5) * 10) / 10 });
+  }
+  return out.sort(function (a, b) { return b.proof - a.proof || b.mkt - a.mkt; });
+}
+
+export function zqRangeLabel(T, from, to) {
+  var M = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  var fmt = function (d) { var t = new Date(T.day0ms + d * 86400000); return t.getUTCDate() + " " + M[t.getUTCMonth()] + " " + t.getUTCFullYear(); };
+  if (from == null && to == null) return "since you joined ZimQuote";
+  if (from == null) return "up to " + fmt(to) + ",";
+  if (to == null || to >= T.today) return "in the last " + (T.today - from + 1) + " days";
+  return "between " + fmt(from) + " and " + fmt(to) + ",";
+}
+
+export function zqRangePitch(x, st, label) {
+  var name = x.n || "there", bits = [], proof;
+  if (st.seen) bits.push(st.seen + " buyer" + (st.seen === 1 ? "" : "s") + " saw " + name + " in ZimQuote search results");
+  if (st.vis) bits.push(st.vis + " opened your ZimQuote link");
+  if (st.req) bits.push(st.req + " buyer request" + (st.req === 1 ? " was" : "s were") + " sent to you");
+  if (st.ord) bits.push("you received " + st.ord + " order" + (st.ord === 1 ? "" : "s"));
+  if (bits.length) proof = label + " " + bits.join(", ") + ".";
+  else if (st.mkt) proof = label + " people" + (x.c ? " in " + x.c : "") + " searched ZimQuote " + st.mkt + " time" + (st.mkt === 1 ? "" : "s") + " for what you sell.";
+  else return "";
+  var fix = x.pr === 0 ? " Add your prices so buyers can order straight away." : "";
+  var when = (x.de !== null && x.de !== undefined && x.de >= 0 && x.de <= 30)
+    ? (x.de === 0 ? " Your free listing ends today." : " Your free listing ends in " + x.de + " day" + (x.de === 1 ? "" : "s") + ".")
+    : (x.seg === "lapsed_payer" ? " Your listing has lapsed." : " Your free trial period is over.");
+  return "Hi " + name + ", " + proof + fix + when + " Keep receiving these buyers for $" + x.p + "/month - reply PAY and we'll send the EcoCash prompt.";
+}
+
+// Day number <-> YYYY-MM-DD
+export const tlDayFromIso = (iso) => iso ? Math.floor((Date.parse(iso + "T00:00:00Z") - TL_DAY0) / DAY) : null;
+export const tlIsoFromDay = (d) => new Date(TL_DAY0 + d * DAY).toISOString().slice(0, 10);
+
 // ── Entry-channel classifier (what the person typed / tapped first) ─────────
 export function classifyEntry(text) {
   const t = String(text || "").trim();
@@ -424,7 +481,7 @@ export function analyze(data, { now = new Date(), prices = DEFAULT_PRICES, exclu
   const firstResult = { found: { people: 0, returned: 0 }, none: { people: 0, returned: 0 } };
   for (const p of allPeople) {
     const s = p.searches[0]; if (!s) continue;
-    const k = (s.resultMode === "none" || s.resultMode === "error" || (s.resultCount === 0 && s.resultMode !== "unknown")) ? "none" : "found";
+    const k = isZeroResult(s) ? "none" : "found";
     firstResult[k].people++; if (p.returnedAny) firstResult[k].returned++;
   }
 
@@ -451,7 +508,7 @@ export function analyze(data, { now = new Date(), prices = DEFAULT_PRICES, exclu
     }
     const what = lc(s.parsed?.category || s.parsed?.service || s.parsed?.product);
     if (what) inc(parsedWhat, what);
-    if (s.resultMode === "none" || (s.resultCount === 0 && ["offers", "suppliers", "schools", "none"].includes(s.resultMode))) {
+    if (isZeroResult(s)) {
       const key = `${term}|${city}`;
       const z = zero[key] = zero[key] || { term, city, count: 0, people: new Set(), last: null, flow: s.flow };
       z.count++; z.people.add(normPhone(s.phone));
@@ -474,11 +531,16 @@ export function analyze(data, { now = new Date(), prices = DEFAULT_PRICES, exclu
   });
 
   // ── Supplier scorecard ────────────────────────────────────────────────────
+  // timeline: supplierId → { s:[day,buyer,...], v:[day,buyer,...], r:[day...], o:[day...], m:{day:count} }
+  const tl = {}, tlx = (id) => tl[id] || (tl[id] = { s: [], v: [], r: [], o: [], m: {} });
+  const buyerNo = new Map(), bno = (ph) => { let n = buyerNo.get(ph); if (n === undefined) { n = buyerNo.size; buyerNo.set(ph, n); } return n; };
   const appear = {};            // supplierId → { all, d30, people:Set, people30:Set }
   for (const s of buyerSearches) {
-    const d = toDate(s.createdAt), ph = normPhone(s.phone);
+    const d = toDate(s.createdAt), ph = normPhone(s.phone), di = dayIndex(d), bn = bno(ph);
+    const seenHere = new Set();
     for (const r of s.resultsPreview || []) {
       const id = idStr(r.supplierId); if (!id) continue;
+      if (!seenHere.has(id)) { seenHere.add(id); tlx(id).s.push(di, bn); }
       const a = appear[id] = appear[id] || { all: 0, d30: 0, people: new Set(), people30: new Set() };
       a.all++; a.people.add(ph);
       if (d >= D30) { a.d30++; a.people30.add(ph); }
@@ -491,6 +553,9 @@ export function analyze(data, { now = new Date(), prices = DEFAULT_PRICES, exclu
     const x = visitors[id] = visitors[id] || { unique: new Set(), d30: new Set(), converted: 0, sources: {} };
     x.unique.add(ph);
     const last = toDate(v.lastSeen) || toDate(v.updatedAt) || toDate(v.createdAt);
+    const first = toDate(v.firstSeen) || toDate(v.createdAt) || last;
+    if (first) tlx(id).v.push(dayIndex(first), bno(ph));
+    if (last && first && localDay(last) !== localDay(first)) tlx(id).v.push(dayIndex(last), bno(ph));
     if (last && last >= D30) x.d30.add(ph);
     if (v.converted) x.converted++;
     inc(x.sources, lc(v.source) || "direct");
@@ -501,6 +566,7 @@ export function analyze(data, { now = new Date(), prices = DEFAULT_PRICES, exclu
     for (const id of r.notifiedSuppliers || []) {
       const k = idStr(id); const x = reqNotified[k] = reqNotified[k] || { all: 0, d30: 0 };
       x.all++; if (d >= D30) x.d30++;
+      if (d) tlx(k).r.push(dayIndex(d));
     }
     for (const resp of r.responses || []) inc(reqResponded, idStr(resp.supplierId));
   }
@@ -508,6 +574,7 @@ export function analyze(data, { now = new Date(), prices = DEFAULT_PRICES, exclu
   for (const o of data.orders || []) {
     const k = idStr(o.supplierId); const x = ordersBy[k] = ordersBy[k] || { all: 0, d30: 0, value: 0 };
     x.all++; if (toDate(o.createdAt) >= D30) x.d30++; x.value += Number(o.totalAmount) || 0;
+    if (toDate(o.createdAt)) tlx(k).o.push(dayIndex(toDate(o.createdAt)));
   }
   const paidBy = {}, paymentsByMonth = {}, paymentsTotal = { count: 0, amount: 0, adminTrials: 0, pending: 0 };
   const supById = new Map(suppliers.map(s => [idStr(s._id), s]));
@@ -546,6 +613,7 @@ export function analyze(data, { now = new Date(), prices = DEFAULT_PRICES, exclu
       const sr = realSearches[i]; const sc = lc(sr.parsed?.city);
       if (sc && city && sc !== city) continue;
       marketAll++;
+      { const md = tlx(id).m, dd = dayIndex(toDate(sr.createdAt)); md[dd] = (md[dd] || 0) + 1; }
       if (toDate(sr.createdAt) >= D30) {
         market30++; marketPeople30.add(normPhone(sr.phone));
         inc(marketTerms, lc(sr.parsed?.product || sr.parsed?.service || sr.normalizedText || sr.rawText).slice(0, 40));
@@ -594,6 +662,16 @@ export function analyze(data, { now = new Date(), prices = DEFAULT_PRICES, exclu
   });
 
   for (const r of supplierRows) r.pitch = buildPitch(r);
+
+  // Compact timeline of every unpaid seller (paying sellers don't need converting)
+  const timeline = { day0: "2024-01-01", day0ms: TL_DAY0, today: dayIndex(now), sellers: [] };
+  for (const r of supplierRows) {
+    if (r.segment === "paying") continue;
+    const t = tl[r.id] || { s: [], v: [], r: [], o: [], m: {} };
+    timeline.sellers.push({ id: r.id, n: r.businessName || "", ph: r.phone, c: r.city, a: r.area, seg: r.segment,
+      pr: r.priceCount, de: r.daysToEnd, p: r.price, joined: r.createdAt ? dayIndex(r.createdAt) : null,
+      s: t.s, v: t.v, r: t.r, o: t.o, m: Object.entries(t.m).flatMap(([d, c]) => [Number(d), c]) });
+  }
 
   const segCounts = {};
   supplierRows.forEach(r => inc(segCounts, r.segment));
@@ -675,7 +753,7 @@ export function analyze(data, { now = new Date(), prices = DEFAULT_PRICES, exclu
     const lastS = real[real.length - 1];
     const term = lastS ? lc(lastS.parsed?.product || lastS.parsed?.service || lastS.normalizedText || lastS.rawText).slice(0, 60) : "";
     const city = lastS ? lc(lastS.parsed?.city) : "";
-    const hadNone = lastS ? (lastS.resultMode === "none" || lastS.resultCount === 0) : false;
+    const hadNone = lastS ? isZeroResult(lastS) : false;
     const nowAvail = term ? supplierKwCity(term, city) : 0;
     const score = (term ? 2 : 0) + (hadNone && nowAvail ? 4 : 0) + Math.min(p.activeDays, 5) + (p.requests ? 2 : 0) + (p.orders ? 3 : 0);
     return { phone: p.phone, firstSeen: p.first, lastSeen: p.last, daysSince: daysBetween(p.last.getTime(), NOW),
@@ -744,7 +822,7 @@ export function analyze(data, { now = new Date(), prices = DEFAULT_PRICES, exclu
       returnedPct: pct(allPeople.filter(p => p.returnedAny).length, allPeople.length),
       returned7Pct: pct(allPeople.filter(p => p.returned7).length, allPeople.length),
       searchesTotal: buyerSearches.length, realSearches: realSearches.length,
-      zeroResultPct: pct(realSearches.filter(s => s.resultMode === "none").length, realSearches.length),
+      zeroResultPct: pct(realSearches.filter(isZeroResult).length, realSearches.length),
       suppliers: suppliers.length, suppliersAccessActive: supplierRows.filter(r => r.accessActive).length,
       suppliersPaying: payingSup.length, schools: schools.length, schoolsPaying: payingSch.length,
       mrr, cashCollected: Math.round(paymentsTotal.amount), paymentsCount: paymentsTotal.count,
@@ -766,7 +844,7 @@ export function analyze(data, { now = new Date(), prices = DEFAULT_PRICES, exclu
     schools: { rows: schoolRows },
     lapsed,
     money: { mrr, paymentsByMonth, potential, paymentsTotal },
-    requestStats, orderStats, bizPayments: bizPay,
+    requestStats, orderStats, bizPayments: bizPay, timeline,
     dataQuality: dq
   };
 }
@@ -1089,7 +1167,168 @@ function heatmap(heat) {
   }</tbody></table></div>`;
 }
 
-export function renderHtml(S, aiText = null) {
+// ── Conversion-target views over any time frame ──────────────────────────────
+const TL_WINDOWS = [["7d", 7], ["30d", 30], ["90d", 90], ["all", null]];
+export function windowedTargets(T) {
+  if (!T || !Array.isArray(T.sellers)) return [];
+  const per = {};
+  for (const [key, n] of TL_WINDOWS) {
+    for (const st of zqRangeStats(T, n ? T.today - n + 1 : null, null)) (per[st.k] = per[st.k] || {})[key] = st;
+  }
+  return Object.entries(per).map(([k, w]) => ({ x: T.sellers[k], w }))
+    .filter(r => r.w.all.leads > 0 || r.w.all.mkt > 0)
+    .sort((a, b) => b.w.all.proof - a.w.all.proof || b.w["30d"].proof - a.w["30d"].proof);
+}
+
+function windowedTable(T, { phones = false } = {}) {
+  const rows = windowedTargets(T);
+  if (!rows.length) return `<p class="empty">No unpaid seller has any buyer activity yet.</p>`;
+  const segTag = (x) => `<span class="tag ${x}">${String(x).replace("_", " ")}</span>`;
+  const ends = (de) => de === null || de === undefined ? "" : de < 0 ? `${-de}d ago` : de === 0 ? "today" : `in ${de}d`;
+  return table(rows, [
+    { label: "Business", get: r => r.x.n }, ...(phones ? [{ label: "Phone", get: r => r.x.ph }] : []), { label: "City", get: r => r.x.c },
+    { label: "Segment", get: r => segTag(r.x.seg), html: true },
+    { label: "Leads 7d", get: r => r.w["7d"].leads, num: true }, { label: "Leads 30d", get: r => r.w["30d"].leads, num: true },
+    { label: "Leads 90d", get: r => r.w["90d"].leads, num: true }, { label: "Leads all", get: r => r.w.all.leads, num: true },
+    { label: "Seen all", get: r => r.w.all.seen, num: true }, { label: "Visitors all", get: r => r.w.all.vis, num: true },
+    { label: "Requests all", get: r => r.w.all.req, num: true }, { label: "Orders all", get: r => r.w.all.ord, num: true },
+    { label: "Market 30d", get: r => r.w["30d"].mkt, num: true }, { label: "Market all", get: r => r.w.all.mkt, num: true },
+    { label: "Prices", get: r => r.x.pr, num: true }, { label: "Trial", get: r => ends(r.x.de) }
+  ], { limit: 1e6 });
+}
+
+function windowedMessages(T, { phones = false, limit = 1e6 } = {}) {
+  const rows = windowedTargets(T).slice(0, limit);
+  const items = rows.map(r => {
+    // use the strongest recent window that has something to say
+    const pick = ["30d", "90d", "all"].find(k => r.w[k].leads > 0) || (r.w["30d"].mkt ? "30d" : "all");
+    const n = TL_WINDOWS.find(w => w[0] === pick)[1];
+    const msg = zqRangePitch(r.x, r.w[pick], zqRangeLabel(T, n ? T.today - n + 1 : null, null));
+    return msg ? `<li><strong>${esc(r.x.n)}</strong>${phones ? ` · ${esc(r.x.ph)}` : ""} · ${esc(r.x.c)}<br><span class="pitch">${esc(msg)}</span></li>` : "";
+  }).filter(Boolean);
+  return items.length ? `<ol class="msgs">${items.join("")}</ol>` : `<p class="empty">No messages - no seller has activity to point to.</p>`;
+}
+
+// Interactive version for the web report: presets + any custom date range.
+function interactiveTargets(S) {
+  const T = S.timeline;
+  if (!T || !Array.isArray(T.sellers)) return `<p class="empty">Run a new scan to enable the time-frame filter.</p>`;
+  const json = JSON.stringify(T).replace(/</g, "\\u003c");
+  const run = S.run || "";
+  return `<div class="ctl" id="ct-ctl">
+  <span>Time frame:</span>
+  <button type="button" data-r="7">7 days</button><button type="button" data-r="30">30 days</button><button type="button" data-r="90">90 days</button>
+  <button type="button" data-r="month">This month</button><button type="button" data-r="lastmonth">Last month</button><button type="button" data-r="all">All time</button>
+  <label>From <input type="date" id="ct-from"></label><label>to <input type="date" id="ct-to"></label><button type="button" id="ct-apply">Apply</button>
+  <label><input type="checkbox" id="ct-zero"> include sellers with no activity</label>
+</div>
+<p id="ct-sum" class="sub"></p>
+<p class="sub"><a id="ct-pdf" href="#">Download this view as PDF</a> · <a id="ct-csv" href="#">Download this view as CSV</a></p>
+<div id="ct"><p class="empty">Loading the time-frame view…</p></div>
+<script type="application/json" id="zq-tl">${json}</script>
+<script>
+(function () {
+  ${zqRangeStats.toString()}
+  ${zqRangeLabel.toString()}
+  ${zqRangePitch.toString()}
+  var T = JSON.parse(document.getElementById("zq-tl").textContent), RUN = ${JSON.stringify(run)};
+  var $ = function (id) { return document.getElementById(id); };
+  var iso = function (d) { return new Date(T.day0ms + d * 86400000).toISOString().slice(0, 10); };
+  var day = function (s) { return s ? Math.floor((Date.parse(s + "T00:00:00Z") - T.day0ms) / 86400000) : null; };
+  var esc = function (s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); };
+  var ends = function (de) { return de === null || de === undefined ? "" : de < 0 ? (-de) + "d ago" : de === 0 ? "today" : "in " + de + "d"; };
+  var cur = { from: T.today - 29, to: null }, lastRows = [];
+  function render() {
+    var lbl = zqRangeLabel(T, cur.from, cur.to), all = $("ct-zero").checked;
+    var rows = zqRangeStats(T, cur.from, cur.to).filter(function (r) { return all || r.leads > 0 || r.mkt > 0; });
+    lastRows = rows;
+    $("ct-from").value = cur.from == null ? "" : iso(cur.from);
+    $("ct-to").value = cur.to == null ? "" : iso(Math.min(cur.to, T.today));
+    var totL = 0, totO = 0; rows.forEach(function (r) { totL += r.leads; totO += r.ord; });
+    $("ct-sum").textContent = rows.length + " unpaid sellers " + (cur.from == null && cur.to == null ? "across all time" : lbl.replace(/,$/, "")) +
+      " · " + totL + " buyer touches · " + totO + " orders. Ranked by proof of value for this time frame.";
+    var h = '<div class="tw"><table><thead><tr><th>#</th><th>Business</th><th>Phone</th><th>City</th><th>Segment</th><th class="n">Seen by</th><th class="n">Link visitors</th><th class="n">Requests</th><th class="n">Orders</th><th class="n">Market searches</th><th class="n">Leads</th><th class="n">Prices</th><th>Trial ends</th><th>Message to send</th></tr></thead><tbody>';
+    rows.forEach(function (r, i) {
+      var x = T.sellers[r.k];
+      h += "<tr><td class=n>" + (i + 1) + "</td><td>" + esc(x.n) + "</td><td>" + esc(x.ph) + "</td><td>" + esc(x.c) + '</td><td><span class="tag ' + esc(x.seg) + '">' + esc(String(x.seg).replace("_", " ")) +
+        "</span></td><td class=n>" + r.seen + "</td><td class=n>" + r.vis + "</td><td class=n>" + r.req + "</td><td class=n>" + r.ord + "</td><td class=n>" + r.mkt +
+        "</td><td class=n><strong>" + r.leads + "</strong></td><td class=n>" + x.pr + "</td><td>" + ends(x.de) + '</td><td><span class="pitch">' + esc(zqRangePitch(x, r, lbl)) + "</span></td></tr>";
+    });
+    h += "</tbody></table></div>";
+    $("ct").innerHTML = rows.length ? h : '<p class="empty">No unpaid seller had buyer activity in this time frame. Try a longer one.</p>';
+    var q = "?from=" + (cur.from == null ? "" : iso(cur.from)) + "&to=" + (cur.to == null ? "" : iso(cur.to)) + (all ? "&zero=1" : "");
+    $("ct-pdf").href = RUN ? "/zq-admin/intel/r/" + RUN + "/targets" + q : "#";
+    var buttons = document.querySelectorAll("#ct-ctl button[data-r]");
+    for (var b = 0; b < buttons.length; b++) buttons[b].setAttribute("aria-pressed", buttons[b].getAttribute("data-r") === cur.key ? "true" : "false");
+  }
+  function preset(r) {
+    var t = new Date(T.day0ms + T.today * 86400000), y = t.getUTCFullYear(), m = t.getUTCMonth();
+    if (r === "all") cur = { from: null, to: null };
+    else if (r === "month") cur = { from: day(new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 10)), to: null };
+    else if (r === "lastmonth") cur = { from: day(new Date(Date.UTC(y, m - 1, 1)).toISOString().slice(0, 10)), to: day(new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10)) };
+    else cur = { from: T.today - Number(r) + 1, to: null };
+    cur.key = r; render();
+  }
+  $("ct-ctl").addEventListener("click", function (e) { var r = e.target.getAttribute && e.target.getAttribute("data-r"); if (r) preset(r); });
+  $("ct-apply").addEventListener("click", function () {
+    var f = day($("ct-from").value), t = day($("ct-to").value);
+    if (f != null && t != null && f > t) { var s = f; f = t; t = s; }
+    cur = { from: f, to: t != null && t >= T.today ? null : t, key: "" }; render();
+  });
+  $("ct-zero").addEventListener("change", render);
+  $("ct-csv").addEventListener("click", function (e) {
+    e.preventDefault();
+    var lbl = zqRangeLabel(T, cur.from, cur.to), q = function (v) { v = String(v == null ? "" : v); return /[",\\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+    var lines = [["rank", "business", "phone", "city", "segment", "seen_by", "link_visitors", "requests", "orders", "market_searches", "leads", "prices", "trial_days_left", "message"].join(",")];
+    lastRows.forEach(function (r, i) { var x = T.sellers[r.k]; lines.push([i + 1, x.n, x.ph, x.c, x.seg, r.seen, r.vis, r.req, r.ord, r.mkt, r.leads, x.pr, x.de, zqRangePitch(x, r, lbl)].map(q).join(",")); });
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob(["\\ufeff" + lines.join("\\r\\n")], { type: "text/csv" }));
+    a.download = "zq-conversion-targets-" + (cur.from == null ? "start" : iso(cur.from)) + "-to-" + (cur.to == null ? "today" : iso(cur.to)) + ".csv";
+    document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  });
+  preset("30");
+})();
+</script>`;
+}
+
+// Stand-alone conversion-targets document for one time frame (admin PDF - has phones).
+export function renderTargetsHtml(S, fromIso, toIso, { includeZero = false } = {}) {
+  const T = S.timeline;
+  const from = tlDayFromIso(fromIso), to0 = tlDayFromIso(toIso);
+  const to = to0 != null && to0 >= T.today ? null : to0;
+  const lbl = zqRangeLabel(T, from, to);
+  const rows = zqRangeStats(T, from, to).filter(r => includeZero || r.leads > 0 || r.mkt > 0);
+  const title = from == null && to == null ? "all time" : `${from == null ? "start" : tlIsoFromDay(from)} to ${to == null ? fmtDate(S.generatedAt) : tlIsoFromDay(to)}`;
+  const segTag = (x) => `<span class="tag ${x}">${String(x).replace("_", " ")}</span>`;
+  const ends = (de) => de === null || de === undefined ? "" : de < 0 ? `${-de}d ago` : de === 0 ? "today" : `in ${de}d`;
+  const tot = rows.reduce((t, r) => ({ l: t.l + r.leads, o: t.o + r.ord, m: t.m + r.mkt }), { l: 0, o: 0, m: 0 });
+  const css = `body{margin:0;font:13px/1.5 "Public Sans","Segoe UI",system-ui,sans-serif;color:#0f2a24}main{padding:0 12mm}
+h1{font:800 26px/1.15 "Bricolage Grotesque",system-ui,sans-serif;margin:0 0 4px}h2{font:750 18px/1.2 "Bricolage Grotesque",system-ui,sans-serif;margin:22px 0 8px}
+.sub{color:#5d6b66}.tw{margin:8px 0}table{border-collapse:collapse;width:100%;font-size:10px}thead{display:table-header-group}
+th,td{padding:4px 6px;border-bottom:1px solid #d5dbd4;text-align:left;vertical-align:top}th{background:#eef3ef;white-space:nowrap}td.n,th.n{text-align:right}
+.tag{display:inline-block;padding:0 5px;border:1px solid currentColor;font-size:9.5px;white-space:nowrap}.hot_unpaid,.lapsed_payer{color:#b23a2b}.warm_unpaid{color:#c99400}.no_signal{color:#5d6b66}
+.msgs{font-size:11px;padding-left:20px}.msgs li{margin:6px 0;break-inside:avoid}.pitch{color:#41504a}.kp{display:flex;gap:28px;margin:12px 0}.kp b{display:block;font-size:20px}`;
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Conversion targets ${title}</title>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@700;800&family=Public+Sans:wght@400;650&display=swap" rel="stylesheet"><style>${css}</style></head><body><main>
+<h1>Conversion targets: ${esc(title)}</h1>
+<p class="sub">Unpaid ZimQuote sellers ranked by proof of value for this time frame. Seen by = unique buyers who saw them in search results; link visitors = unique buyers who opened their smart link; market searches = buyer searches in their city for what they sell. Data to ${fmtDate(S.generatedAt)}.</p>
+<div class="kp"><div><b>${rows.length}</b>sellers with activity</div><div><b>${tot.l}</b>buyer touches</div><div><b>${tot.o}</b>orders</div><div><b>${tot.m}</b>market searches</div></div>
+<h2>Ranked list</h2>
+${rows.length ? table(rows, [
+    { label: "#", get: (r) => rows.indexOf(r) + 1, num: true }, { label: "Business", get: r => T.sellers[r.k].n }, { label: "Phone", get: r => T.sellers[r.k].ph },
+    { label: "City", get: r => [T.sellers[r.k].c, T.sellers[r.k].a].filter(Boolean).join(", ") }, { label: "Segment", get: r => segTag(T.sellers[r.k].seg), html: true },
+    { label: "Seen by", key: "seen", num: true }, { label: "Times shown", key: "times", num: true }, { label: "Link visitors", key: "vis", num: true },
+    { label: "Requests", key: "req", num: true }, { label: "Orders", key: "ord", num: true }, { label: "Market", key: "mkt", num: true },
+    { label: "Leads", key: "leads", num: true }, { label: "Prices", get: r => T.sellers[r.k].pr, num: true }, { label: "Trial", get: r => ends(T.sellers[r.k].de) }
+  ], { limit: 1e6 }) : `<p>No unpaid seller had buyer activity in this time frame.</p>`}
+<h2>Messages to send</h2>
+<ol class="msgs">${rows.map(r => { const x = T.sellers[r.k]; const m = zqRangePitch(x, r, lbl);
+    return m ? `<li><strong>${esc(x.n)}</strong> · ${esc(x.ph)} · ${esc(x.c)}<br><span class="pitch">${esc(m)}</span></li>` : ""; }).join("")}</ol>
+</main></body></html>`;
+}
+
+export function renderHtml(S, aiText = null, { full = false } = {}) {
+  const L = (n) => full ? 1e6 : n;          // full = every row (PDF), otherwise screen-sized
   const k = S.kpi, seg = S.suppliers.segCounts;
   const hot = S.suppliers.rows.filter(r => r.segment === "hot_unpaid");
   const lapsedUnmet = S.lapsed.filter(l => l.lastHadNoResults && l.suppliersNowAvailable).length;
@@ -1138,12 +1377,13 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}tbody tr:hover{back
 .heat td{text-align:center;min-width:26px;background:color-mix(in srgb,var(--green) calc(var(--a)*100%),transparent);font-size:11px}
 .tag{display:inline-block;padding:1px 7px;border:1px solid currentColor;font-size:12px;white-space:nowrap}
 .hot_unpaid{color:var(--red)}.paying{color:var(--green)}.warm_unpaid{color:var(--gold)}.lapsed_payer{color:var(--red)}.no_signal{color:var(--muted)}
-.pitch{display:block;font-size:12px;color:var(--muted);min-width:300px;max-width:52ch}.empty,.more{color:var(--muted);font-size:13px}
+.pitch{display:block;font-size:12px;color:var(--muted);min-width:300px;max-width:52ch}
+.ctl{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;margin:10px 0;font-size:14px}.ctl button{font:inherit;padding:4px 10px;border:1px solid var(--line);background:var(--paper);color:var(--ink);cursor:pointer}.ctl button[aria-pressed=true]{background:var(--ink);color:var(--paper);border-color:var(--ink)}.ctl input[type=date]{font:inherit;padding:3px 6px}.msgs{padding-left:22px}.msgs li{margin:6px 0}.empty,.more{color:var(--muted);font-size:13px}
 .ai{border-left:4px solid var(--gold);padding:4px 0 4px 18px}
 nav{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:14px;margin:8px 0 0}nav a{color:var(--green)}
 a:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 @media (max-width:640px){.kpis{grid-template-columns:repeat(2,1fr)}h1{font-size:26px}.ladder li{grid-template-columns:30px 1fr}.ladder .cash{grid-column:2}}
-@media print{:root{--paper:#fff;--ink:#0f2a24;--wash:#eef3ef;--line:#d5dbd4;--muted:#5d6b66}main{padding:0 12mm;max-width:none;width:100%}h3{break-after:avoid}.cols{grid-template-columns:repeat(2,minmax(0,1fr))}nav{display:none}.tw{overflow:visible}table{font-size:10.5px}tr,.bar,.ladder li{break-inside:avoid}h2{break-after:avoid}.pitch{min-width:0}}`;
+@media print{:root{--paper:#fff;--ink:#0f2a24;--wash:#eef3ef;--line:#d5dbd4;--muted:#5d6b66}main{padding:0 12mm;max-width:none;width:100%}h3{break-after:avoid}.cols{grid-template-columns:repeat(2,minmax(0,1fr))}nav{display:none}.tw{overflow:visible}table{font-size:10px}.bar,.ladder li,.msgs li{break-inside:avoid}h2{break-after:avoid}thead{display:table-header-group}.pitch{min-width:0;max-width:none}.msgs{font-size:11px}.msgs li{margin:5px 0}}`;
 
   const segTag = (s) => `<span class="tag ${s}">${s.replace("_", " ")}</span>`;
 
@@ -1172,37 +1412,41 @@ a:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 
 <h2 id="sellers">Sellers</h2>
 <div class="cols"><div><h3>Segments</h3>${bars(S.suppliers.segCounts)}</div><div><h3>Subscription status</h3>${bars(S.suppliers.supplierStatus)}</div></div>
-<h3>Conversion targets (unpaid, ranked by proof of value)</h3>
-${table(S.suppliers.conversionTargets, [
-    { label: "Business", key: "businessName" }, { label: "City", key: "city" }, { label: "Segment", get: r => segTag(r.segment), html: true },
-    { label: "Seen by (30d)", key: "searchersReached30", num: true }, { label: "Link visitors (30d)", key: "linkVisitors30", num: true },
-    { label: "Requests (30d)", key: "requestsNotified30", num: true }, { label: "Orders", key: "orders", num: true },
-    { label: "Market (30d)", key: "market30", num: true }, { label: "Prices", key: "priceCount", num: true },
-    { label: "Trial ends", get: r => r.daysToEnd === null ? "" : r.daysToEnd < 0 ? `${-r.daysToEnd}d ago` : `in ${r.daysToEnd}d` },
-    { label: "Message to send", get: r => `<span class="pitch">${esc(r.pitch)}</span>`, html: true }
-  ], { limit: 40 })}
+${full ? `<h3>Conversion targets across time frames (unpaid sellers, ranked by all-time proof of value)</h3>
+<p class="sub">Leads = unique buyers who saw them in search + unique link visitors + requests sent to them + orders, counted for each time frame. Market = buyer searches in their city for what they sell.</p>
+${S.timeline ? windowedTable(S.timeline, { phones: true }) : table(S.suppliers.conversionTargets, [
+    { label: "Business", key: "businessName" }, { label: "Phone", key: "phone" }, { label: "City", key: "city" }, { label: "Segment", get: r => segTag(r.segment), html: true },
+    { label: "Seen 30d", key: "searchersReached30", num: true }, { label: "Seen all", key: "searchersReached", num: true },
+    { label: "Visitors all", key: "linkVisitorsAll", num: true }, { label: "Requests all", key: "requestsNotified", num: true }, { label: "Orders", key: "orders", num: true },
+    { label: "Market all", key: "marketAll", num: true }, { label: "Prices", key: "priceCount", num: true }], { limit: 1e6 })}
+<h3>Messages to send (every conversion target)</h3>
+${S.timeline ? windowedMessages(S.timeline, { phones: true }) : `<ol class="msgs">${S.suppliers.conversionTargets.filter(r => r.pitch).map(r =>
+    `<li><strong>${esc(r.businessName)}</strong> · ${esc(r.phone)} · ${esc(r.city)}<br><span class="pitch">${esc(r.pitch)}</span></li>`).join("")}</ol>`}` :
+`<h3>Conversion targets (unpaid, ranked by proof of value)</h3>
+<p class="sub">Pick any time frame - the ranking, numbers and messages all change to match it.</p>
+${interactiveTargets(S)}`}
 <h3>Trials ending in the next 14 days</h3>
 ${table(S.suppliers.expiringSoon, [{ label: "Business", key: "businessName" }, { label: "City", key: "city" }, { label: "Days left", key: "daysToEnd", num: true },
-    { label: "Leads (30d)", key: "leads30", num: true }, { label: "Segment", get: r => segTag(r.segment), html: true }], { limit: 30 })}
+    { label: "Leads (30d)", key: "leads30", num: true }, { label: "Segment", get: r => segTag(r.segment), html: true }], { limit: L(30) })}
 
 <h2 id="schools">Schools</h2>
 ${table(S.schools.rows, [{ label: "School", key: "schoolName" }, { label: "City", key: "city" }, { label: "Segment", get: r => segTag(r.segment), html: true },
     { label: "Link opens", key: "linkOpens", num: true }, { label: "Parent contacts", key: "contacts", num: true }, { label: "Contacts (30d)", key: "contacts30", num: true },
     { label: "Applications", key: "applications", num: true }, { label: "Lead actions", key: "leadActions", num: true }, { label: "Not followed up", key: "uncontactedLeads", num: true },
-    { label: "Paid", get: r => money(r.paidTotal), num: true }], { limit: 30 })}
+    { label: "Paid", get: r => money(r.paidTotal), num: true }], { limit: L(30) })}
 
 <h2 id="demand">What people search for</h2>
-<div class="cols"><div><h3>Top search terms</h3>${bars(S.demand.topTerms.slice(0, 25).map(([t, n]) => [t, n]), { max: 25 })}</div>
+<div class="cols"><div><h3>Top search terms</h3>${bars(S.demand.topTerms.slice(0, full ? 50 : 25).map(([t, n]) => [t, n]), { max: full ? 50 : 25 })}</div>
 <div><h3>Cities</h3>${bars(S.demand.byCity, { max: 15 })}<h3>Result outcome</h3>${bars(S.demand.byMode)}</div></div>
 <h3>Searches per week</h3>${bars(Object.entries(S.demand.searchesByWeek).sort(), { max: 30 })}
 <h3>When people search (Harare time)</h3><p class="sub">Send broadcasts just before the darkest cells.</p>${heatmap(S.demand.heat)}
 <h3>Searches with no results (unmet demand)</h3>
 ${table(S.demand.zeroTop, [{ label: "Searched for", key: "term" }, { label: "City", key: "city" }, { label: "People", key: "people", num: true },
-    { label: "Times", key: "count", num: true }, { label: "Last", get: r => fmtDate(r.last) }], { limit: 30 })}
+    { label: "Times", key: "count", num: true }, { label: "Last", get: r => fmtDate(r.last) }], { limit: L(30) })}
 
 <h2 id="gaps">Supply gaps: demand per active seller (last 90 days)</h2>
 ${table(S.demand.gapRows, [{ label: "Keyword", key: "keyword" }, { label: "City", key: "city" }, { label: "Searches", key: "searches90", num: true },
-    { label: "Active sellers", key: "activeSuppliers", num: true }, { label: "Searches per seller", key: "ratio", num: true }], { limit: 30 })}
+    { label: "Active sellers", key: "activeSuppliers", num: true }, { label: "Searches per seller", key: "ratio", num: true }], { limit: L(30) })}
 
 <h2 id="retention">Do people come back?</h2>
 <div class="cols"><div><h3>Days active per person</h3>${bars(S.retention.activeDayHist)}</div>
@@ -1211,8 +1455,8 @@ ${table(S.demand.gapRows, [{ label: "Keyword", key: "keyword" }, { label: "City"
 First search found nothing: <strong>${fr.none.returnPct}%</strong> came back (${fr.none.people} people).</p>
 <h3>Searches per searcher</h3>${bars(S.demand.searchesPerSearcher)}</div></div>
 <h3>Weekly cohorts: % active again after N weeks</h3>
-${table(S.retention.cohortRows.slice(-20).reverse(), [{ label: "First week", key: "week" }, { label: "People", key: "size", num: true },
-    ...[1, 2, 4, 8, 12].map(o => ({ label: `+${o}w`, get: r => r[`w${o}`] === null ? "" : r[`w${o}`] + "%", num: true }))], { limit: 20 })}
+${table(S.retention.cohortRows.slice(full ? 0 : -20).reverse(), [{ label: "First week", key: "week" }, { label: "People", key: "size", num: true },
+    ...[1, 2, 4, 8, 12].map(o => ({ label: `+${o}w`, get: r => r[`w${o}`] === null ? "" : r[`w${o}`] + "%", num: true }))], { limit: L(20) })}
 
 <h2 id="acq">Where people come from</h2>
 <p class="sub">From the first thing each person sent the bot. Website channels: <strong>${webShare}%</strong> of all people. Ads or unknown 'Hi': <strong>${adShare}%</strong>.</p>
@@ -1225,9 +1469,21 @@ ${table(S.retention.cohortRows.slice(-20).reverse(), [{ label: "First week", key
 
 <h2 id="lapsed">Lapsed buyers worth winning back</h2>
 <p class="sub">Last seen 14-180 days ago. Numbers are masked here; the CSV has the full list.</p>
-${table(S.lapsed, [{ label: "Phone", get: r => maskPhone(r.phone) }, { label: "Last wanted", key: "lastTerm" }, { label: "City", key: "city" },
+${table(S.lapsed, [{ label: "Phone", get: r => full ? r.phone : maskPhone(r.phone) }, { label: "Last wanted", key: "lastTerm" }, { label: "City", key: "city" },
     { label: "Days away", key: "daysSince", num: true }, { label: "Active days", key: "activeDays", num: true },
-    { label: "Failed then, sellers now", get: r => r.lastHadNoResults && r.suppliersNowAvailable ? `yes (${r.suppliersNowAvailable})` : "" }], { limit: 25 })}
+    { label: "Failed then, sellers now", get: r => r.lastHadNoResults && r.suppliersNowAvailable ? `yes (${r.suppliersNowAvailable})` : "" }], { limit: L(25) })}
+
+${full ? `<h2 id="all-sellers">Every seller, scored</h2>
+<p class="sub">All ${S.suppliers.rows.length} seller profiles, ranked by proof of value. Leads = searchers who saw them + link visitors + requests + orders.</p>
+${table([...S.suppliers.rows].sort((a, b) => b.proof - a.proof), [
+    { label: "Business", key: "businessName" }, { label: "Phone", key: "phone" }, { label: "City", get: r => [r.city, r.area].filter(Boolean).join(", ") },
+    { label: "Type", key: "profileType" }, { label: "Status", get: r => `${r.subscriptionStatus || "-"}${r.accessActive ? "" : " (off)"}` },
+    { label: "Segment", get: r => segTag(r.segment), html: true }, { label: "Paid", get: r => money(r.paidTotal), num: true },
+    { label: "Leads 30d", key: "leads30", num: true }, { label: "Leads all", key: "leadsAll", num: true },
+    { label: "Orders", key: "orders", num: true }, { label: "Market 30d", key: "market30", num: true },
+    { label: "Prices", key: "priceCount", num: true }, { label: "Profile %", key: "completeness", num: true },
+    { label: "Ends", get: r => fmtDate(r.endsAt) }, { label: "Joined", get: r => fmtDate(r.createdAt) }
+  ], { limit: 1e6 })}` : ""}
 
 <h2 id="dq">Data quality</h2>
 ${table(Object.entries(S.dataQuality).map(([k2, v]) => ({ k2, v })), [{ label: "Check", key: "k2" }, { label: "Value", key: "v", num: true }])}
@@ -1240,80 +1496,265 @@ ${aiText ? `<h2 id="ai">Claude's strategy memo</h2><div class="ai">${mdToHtml(ai
 // ═════════════════════════════════════════════════════════════════════════════
 // Memo document + PDF export
 // ═════════════════════════════════════════════════════════════════════════════
-// The memo contains no phone numbers (Claude never receives them), so memo.html
-// and memo.pdf are safe to share. report.html / report.pdf contain buyer and
-// seller numbers - keep those internal.
+// The memo contains NO phone numbers (Claude never receives them and the data
+// appendix leaves them out), so memo.html / memo.pdf are safe to share.
+// report.pdf is the internal working copy: every row, with phone numbers.
 export function renderMemoHtml(S, aiText) {
-  const k = S.kpi;
+  const k = S.kpi || {};
+  const rows = Array.isArray(S.suppliers?.rows) ? S.suppliers.rows : null;          // null when built from summary.json
+  const targets = Array.isArray(S.suppliers?.conversionTargets) ? S.suppliers.conversionTargets : null;
+  const expiring = Array.isArray(S.suppliers?.expiringSoon) ? S.suppliers.expiringSoon : null;
+  const schools = Array.isArray(S.schools?.rows) ? S.schools.rows : null;
+  const lapsed = Array.isArray(S.lapsed) ? S.lapsed : null;
+  const fr = S.retention?.firstResult || { found: {}, none: {} };
+  const segTag = (x) => `<span class="tag ${x}">${String(x).replace("_", " ")}</span>`;
+  const ends = (r) => r.daysToEnd === null || r.daysToEnd === undefined ? "" : r.daysToEnd < 0 ? `${-r.daysToEnd}d ago` : r.daysToEnd === 0 ? "today" : `in ${r.daysToEnd}d`;
+  const kv = (list) => table(list.map(([a, b, c]) => ({ a, b, c })), [{ label: "Measure", key: "a" }, { label: "Value", key: "b", num: true }, { label: "What it means", key: "c" }], { limit: 1e6 });
+  const objRows = (o, l1 = "Item", l2 = "Count") => table(Object.entries(o || {}).sort((a, b) => b[1] - a[1]).map(([a, b]) => ({ a, b })),
+    [{ label: l1, key: "a" }, { label: l2, key: "b", num: true }], { limit: 1e6 });
+  const missing = `<p class="empty">Detailed rows are not in this older run. Click "Run new scan" and rebuild the PDF to include them.</p>`;
+
+  const hourTotals = S.demand?.heat ? S.demand.heat[0].map((_, h) => S.demand.heat.reduce((t, r) => t + r[h], 0)) : [];
+  const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const dayTotals = S.demand?.heat ? S.demand.heat.map(r => r.reduce((a, b) => a + b, 0)) : [];
+
+  // Money ladder (same logic as the report)
+  const hotN = rows ? rows.filter(r => r.segment === "hot_unpaid").length : (S.suppliers?.segCounts?.hot_unpaid || 0);
+  const warmN = S.suppliers?.segCounts?.warm_unpaid || 0;
+  const hotSchN = schools ? schools.filter(r => r.segment === "hot_unpaid").length : 0;
+  const pot = S.money?.potential || {};
+  const lapsedN = lapsed ? lapsed.length : (typeof S.lapsed === "number" ? S.lapsed : 0);
+  const lapsedUnmet = lapsed ? lapsed.filter(l => l.lastHadNoResults && l.suppliersNowAvailable).length : 0;
+
   const css = `
-:root{--ink:#0f2a24;--paper:#ffffff;--line:#d5dbd4;--muted:#5d6b66;--green:#1f7a4d;--gold:#c99400;--wash:#eef3ef}
-*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.6 "Public Sans","Segoe UI",system-ui,sans-serif}
-main{max-width:780px;margin:0 auto;padding:40px 24px 80px}
-.cover{border-bottom:3px solid var(--ink);padding-bottom:22px;margin-bottom:26px}
+:root{--ink:#0f2a24;--paper:#fff;--line:#d5dbd4;--muted:#5d6b66;--green:#1f7a4d;--gold:#c99400;--red:#b23a2b;--wash:#eef3ef}
+*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:14.5px/1.6 "Public Sans","Segoe UI",system-ui,sans-serif}
+main{max-width:860px;margin:0 auto;padding:40px 24px 80px}
+.cover{border-bottom:3px solid var(--ink);padding-bottom:22px;margin-bottom:22px}
 .cover h1{font:800 38px/1.08 "Bricolage Grotesque","Public Sans",system-ui,sans-serif;letter-spacing:-.02em;margin:0 0 10px}
 .cover p{color:var(--muted);margin:0}
-.strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--line);margin:22px 0 0}
-.strip div{padding:10px 12px;border-right:1px solid var(--line)}.strip div:last-child{border-right:0}
-.strip b{display:block;font:700 22px/1.1 "Bricolage Grotesque",system-ui,sans-serif}.strip span{font-size:12px;color:var(--muted)}
-h2{font:750 25px/1.2 "Bricolage Grotesque",system-ui,sans-serif;margin:34px 0 8px}
-h3{font:750 19px/1.25 "Bricolage Grotesque",system-ui,sans-serif;margin:30px 0 8px;padding-top:12px;border-top:1px solid var(--line)}
-h4,h5{font-size:16px;margin:20px 0 6px}
-p,li{max-width:72ch}ul,ol{padding-left:22px}li{margin:3px 0}
-.tw{overflow-x:auto;border:1px solid var(--line);margin:12px 0}table{border-collapse:collapse;width:100%;font-size:13px}
-th,td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}th{background:var(--wash)}
-code{background:var(--wash);padding:0 4px;font-size:.92em}hr{border:0;border-top:3px solid var(--ink);margin:40px 0}
-.empty{padding:30px;border:1px dashed var(--line);color:var(--muted)}
-@media (max-width:640px){.strip{grid-template-columns:repeat(2,1fr)}.cover h1{font-size:28px}}
-@media print{main{padding:0 14mm;max-width:none}h3{break-after:avoid}tr,li{break-inside:avoid}.tw{overflow:visible}
-  hr{break-after:page;border:0;margin:0}a{color:inherit}}`;
+.strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--line);margin:20px 0 0}
+.strip div{padding:10px 12px;border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
+.strip b{display:block;font:700 21px/1.1 "Bricolage Grotesque",system-ui,sans-serif}.strip span{font-size:12px;color:var(--muted)}
+.part{font:800 30px/1.1 "Bricolage Grotesque",system-ui,sans-serif;margin:44px 0 6px;padding-top:16px;border-top:3px solid var(--ink)}
+h2{font:750 23px/1.2 "Bricolage Grotesque",system-ui,sans-serif;margin:30px 0 8px}
+h3{font:750 18px/1.25 "Bricolage Grotesque",system-ui,sans-serif;margin:26px 0 8px;padding-top:10px;border-top:1px solid var(--line)}
+h4,h5{font-size:15.5px;margin:18px 0 6px}
+p,li{max-width:76ch}ul,ol{padding-left:22px}li{margin:3px 0}.sub{color:var(--muted)}
+.tw{overflow-x:auto;border:1px solid var(--line);margin:10px 0}table{border-collapse:collapse;width:100%;font-size:12.5px}
+th,td{padding:5px 7px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}th{background:var(--wash);white-space:nowrap}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+.bars{display:grid;gap:3px;margin:8px 0}.bar{display:grid;grid-template-columns:minmax(90px,40%) 1fr 56px;gap:8px;align-items:center;font-size:12.5px}
+.bl{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.bt{background:var(--wash);height:12px}.bt i{display:block;height:100%;background:var(--green)}.bv{text-align:right}
+.tag{display:inline-block;padding:0 6px;border:1px solid currentColor;font-size:11px;white-space:nowrap}
+.hot_unpaid,.lapsed_payer{color:var(--red)}.paying{color:var(--green)}.warm_unpaid{color:var(--gold)}.no_signal{color:var(--muted)}
+.pitch{font-size:11.5px;color:var(--muted)}.ladder{padding-left:20px}.ladder li{margin:8px 0}.ladder b{color:var(--green)}
+code{background:var(--wash);padding:0 4px}hr{border:0;border-top:2px solid var(--line);margin:30px 0}
+.empty,.more{color:var(--muted);font-size:13px}.cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px}
+@media (max-width:640px){.strip,.cols{grid-template-columns:repeat(2,minmax(0,1fr))}.cols{grid-template-columns:1fr}.cover h1{font-size:28px}}
+@media print{main{padding:0 13mm;max-width:none}.part{break-before:page;border-top:0}h2,h3,h4{break-after:avoid}
+  tr,li,.bar{break-inside:avoid}.tw{overflow:visible;border:0}table{font-size:10.5px}thead{display:table-header-group}a{color:inherit}}`;
+
+  const memoPart = aiText
+    ? mdToHtml(aiText.replace(/^# ZimQuote strategy memo\s*/i, ""))
+    : `<p class="empty">This run has no Claude memo. Click "Scan + Claude memo" (or run <code>node scripts/zqIntel.js --ai</code>) to add the written strategy. The data briefing below is complete without it.</p>`;
+
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ZimQuote strategy memo ${fmtDate(S.generatedAt)}</title>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@700;800&family=Public+Sans:wght@400;650&display=swap" rel="stylesheet">
 <style>${css}</style></head><body><main>
-<div class="cover"><h1>ZimQuote strategy memo</h1>
-<p>Data from ${fmtDate(S.window.firstDay)} to ${fmtDate(S.generatedAt)} · ${k.peopleEver.toLocaleString()} buyers, ${k.suppliers} sellers, ${k.schools} schools, ${k.searchesTotal.toLocaleString()} searches</p>
+<div class="cover"><h1>ZimQuote strategy memo and data briefing</h1>
+<p>Data from ${fmtDate(S.window?.firstDay)} to ${fmtDate(S.generatedAt)} (${S.window?.days || 0} days) · ${(k.peopleEver || 0).toLocaleString()} buyers, ${k.suppliers || 0} sellers, ${k.schools || 0} schools, ${(k.searchesTotal || 0).toLocaleString()} searches</p>
 <div class="strip">
 <div><b>${money(k.mrr)}</b><span>Monthly revenue now</span></div>
-<div><b>${k.suppliersPaying}/${k.suppliers}</b><span>Sellers paying</span></div>
-<div><b>${k.oneAndDonePct}%</b><span>Buyers who never return</span></div>
-<div><b>${money(S.money.potential.realistic)}</b><span>Realistic new monthly revenue</span></div>
+<div><b>${money(k.cashCollected)}</b><span>Cash ever collected</span></div>
+<div><b>${k.suppliersPaying || 0}/${k.suppliers || 0}</b><span>Sellers paying</span></div>
+<div><b>${k.schoolsPaying || 0}/${k.schools || 0}</b><span>Schools paying</span></div>
+<div><b>${k.wau || 0} / ${k.mau || 0}</b><span>Active buyers week / 30 days</span></div>
+<div><b>${k.oneAndDonePct || 0}%</b><span>Buyers who never return</span></div>
+<div><b>${k.zeroResultPct || 0}%</b><span>Searches with no results</span></div>
+<div><b>${money(pot.realistic)}</b><span>Realistic new monthly revenue</span></div>
 </div></div>
-${aiText ? mdToHtml(aiText.replace(/^# ZimQuote strategy memo\s*/i, "")) : `<p class="empty">No Claude memo in this run. Run the scan with --ai to generate one.</p>`}
+<p>Part A is the written strategy. Part B is the evidence behind it: every number the scan produced, laid out section by section. Phone numbers are deliberately left out so this document can be shared.</p>
+
+<div class="part">Part A. Strategy</div>
+${memoPart}
+
+<div class="part">Part B. Data briefing</div>
+
+<h2>B1. Key numbers</h2>
+${kv([
+  ["Real monthly revenue", money(k.mrr), "Sellers and schools with a real payment that is still current"],
+  ["Cash ever collected", `${money(k.cashCollected)} (${k.paymentsCount || 0} payments)`, "Real EcoCash/Paynow payments; $0 admin trials excluded"],
+  ["Admin trial records", k.adminTrialRecords || 0, "Free trials logged as 'paid' with $0 - not revenue"],
+  ["Pending payments", k.pendingPayments || 0, "EcoCash prompts started but never completed - follow these up"],
+  ["Sellers / with live access", `${k.suppliers || 0} / ${k.suppliersAccessActive || 0}`, "Profiles that can currently be found in search"],
+  ["Buyers ever seen", k.peopleEver || 0, "Unique non-seller WhatsApp numbers"],
+  ["Came back at least once", `${k.returnedPct || 0}%`, "Active on 2 or more different days"],
+  ["Came back a week+ later", `${k.returned7Pct || 0}%`, "The real retention number"],
+  ["Searches (all / real)", `${k.searchesTotal || 0} / ${k.realSearches || 0}`, "Real = excluding deep-link codes and greetings"],
+  ["Buyer requests / orders", `${k.buyerRequests || 0} / ${k.orders || 0}`, "Requests sent to sellers; orders placed through the bot"]
+])}
+
+<h2>B2. Money actions, in order</h2>
+<ol class="ladder">
+<li>Convert <strong>${hotN}</strong> hot unpaid sellers - worth <b>${money(pot.hotSuppliers)}/mo</b> at list price (about ${money((pot.hotSuppliers || 0) * 0.4)}/mo at 40% conversion).</li>
+<li>Convert <strong>${hotSchN}</strong> school${hotSchN === 1 ? "" : "s"} with live parent interest - <b>${money(pot.hotSchools)}/mo</b>.</li>
+<li>Nudge <strong>${warmN}</strong> warm sellers with market-size proof - about <b>${money((pot.warmSuppliers || 0) * 0.1)}/mo</b> at 10% conversion.</li>
+<li>Win back <strong>${lapsedN}</strong> lapsed buyers${lapsed ? `, ${lapsedUnmet} of whom searched for something you now have` : ""}.</li>
+<li>Recruit sellers for the top unmet searches (B7) - you can tell each recruit how many buyers already asked.</li>
+</ol>
+
+<h2>B3. Sellers</h2>
+<div class="cols"><div><h4>Segments</h4>${objRows(S.suppliers?.segCounts, "Segment", "Sellers")}</div><div><h4>Subscription status</h4>${objRows(S.suppliers?.supplierStatus, "Status", "Sellers")}</div></div>
+<p class="sub">Hot = 5+ buyer touches in 30 days or an order. Warm = some visibility or clear market demand. No signal = nothing yet.</p>
+<h3>Conversion targets across time frames</h3>
+${S.timeline ? windowedTable(S.timeline) : ""}
+<h3>Conversion targets, last 30 days</h3>
+${targets ? table(targets, [
+    { label: "Business", key: "businessName" }, { label: "City", key: "city" }, { label: "Segment", get: r => segTag(r.segment), html: true },
+    { label: "Seen 30d", key: "searchersReached30", num: true }, { label: "Visitors 30d", key: "linkVisitors30", num: true },
+    { label: "Requests 30d", key: "requestsNotified30", num: true }, { label: "Orders", key: "orders", num: true },
+    { label: "Market 30d", key: "market30", num: true }, { label: "Prices", key: "priceCount", num: true }, { label: "Trial", get: ends }
+  ], { limit: 1e6 }) : missing}
+<h3>Ready-made messages</h3>
+${S.timeline ? windowedMessages(S.timeline) : targets ? `<ol>${targets.slice(0, 25).filter(r => r.pitch).map(r => `<li><strong>${esc(r.businessName)}</strong> (${esc(r.city)}): <span class="pitch">${esc(r.pitch)}</span></li>`).join("")}</ol>` : missing}
+<h3>Trials ending in the next 14 days</h3>
+${expiring ? table(expiring, [{ label: "Business", key: "businessName" }, { label: "City", key: "city" }, { label: "Days left", key: "daysToEnd", num: true },
+    { label: "Leads 30d", key: "leads30", num: true }, { label: "Segment", get: r => segTag(r.segment), html: true }], { limit: 1e6 }) : missing}
+<h3>Every seller at a glance</h3>
+${rows ? table([...rows].sort((a, b) => b.proof - a.proof), [
+    { label: "Business", key: "businessName" }, { label: "City", key: "city" }, { label: "Type", key: "profileType" },
+    { label: "Segment", get: r => segTag(r.segment), html: true }, { label: "Paid", get: r => money(r.paidTotal), num: true },
+    { label: "Leads 30d", key: "leads30", num: true }, { label: "Leads all", key: "leadsAll", num: true },
+    { label: "Prices", key: "priceCount", num: true }, { label: "Profile %", key: "completeness", num: true }, { label: "Trial", get: ends }
+  ], { limit: 1e6 }) : missing}
+
+<h2>B4. Schools</h2>
+${schools ? table(schools, [{ label: "School", key: "schoolName" }, { label: "City", key: "city" }, { label: "Segment", get: r => segTag(r.segment), html: true },
+    { label: "Link opens", key: "linkOpens", num: true }, { label: "Parent contacts", key: "contacts", num: true }, { label: "Contacts 30d", key: "contacts30", num: true },
+    { label: "Applications", key: "applications", num: true }, { label: "Lead actions", key: "leadActions", num: true },
+    { label: "Not followed up", key: "uncontactedLeads", num: true }, { label: "Paid", get: r => money(r.paidTotal), num: true }], { limit: 1e6 }) : missing}
+
+<h2>B5. What buyers search for</h2>
+<h3>Top search terms</h3>
+${table((S.demand?.topTerms || []).map(([t, n, p]) => ({ t, n, p })), [{ label: "Search term", key: "t" }, { label: "Searches", key: "n", num: true }, { label: "People", key: "p", num: true }], { limit: 1e6 })}
+<div class="cols"><div><h4>Cities</h4>${table((S.demand?.byCity || []).map(([a, b]) => ({ a, b })), [{ label: "City", key: "a" }, { label: "Searches", key: "b", num: true }], { limit: 1e6 })}</div>
+<div><h4>Search outcome</h4>${objRows(S.demand?.byMode, "Result", "Searches")}<h4>Searches per searcher</h4>${objRows(S.demand?.searchesPerSearcher, "Searches", "People")}</div></div>
+<h3>When people search (Harare time)</h3>
+<div class="cols"><div><h4>By hour</h4>${bars(hourTotals.map((v, h) => [`${String(h).padStart(2, "0")}:00`, v]), { max: 24 })}</div>
+<div><h4>By weekday</h4>${bars([1, 2, 3, 4, 5, 6, 0].map(d => [dayNames[d], dayTotals[d] || 0]), { max: 7 })}</div></div>
+<h3>Searches per week</h3>
+${bars(Object.entries(S.demand?.searchesByWeek || {}).sort(), { max: 60 })}
+
+<h2>B6. Buyer requests and orders</h2>
+${kv([
+  ["Requests (all / last 30 days)", `${S.requestStats?.total || 0} / ${S.requestStats?.last30 || 0}`, "Buyers asking several sellers at once"],
+  ["Requests with a seller reply", `${S.requestStats?.withResponse || 0} (${S.requestStats?.responseRatePct || 0}%)`, "Low here means sellers aren't answering - fix before charging"],
+  ["Requests sent to nobody", S.requestStats?.notifiedNone || 0, "No matching seller - pure supply gap"],
+  ["Orders (all / last 30 days)", `${S.orderStats?.total || 0} / ${S.orderStats?.last30 || 0}`, ""],
+  ["Order value", money(S.orderStats?.value), "Estimated goods value passed to sellers"],
+  ["Unique buyers / sellers in orders", `${S.orderStats?.uniqueBuyers || 0} / ${S.orderStats?.uniqueSellers || 0}`, ""]
+])}
+<div class="cols"><div><h4>Requests by status</h4>${objRows(S.requestStats?.byStatus, "Status")}</div><div><h4>Orders by status</h4>${objRows(S.orderStats?.byStatus, "Status")}</div></div>
+
+<h2>B7. Unmet demand (searches with no results)</h2>
+${table(S.demand?.zeroTop || [], [{ label: "Searched for", key: "term" }, { label: "City", key: "city" }, { label: "People", key: "people", num: true },
+    { label: "Times", key: "count", num: true }, { label: "Last", get: r => fmtDate(r.last) }], { limit: 1e6 })}
+
+<h2>B8. Supply gaps (last 90 days)</h2>
+<p class="sub">Searches per active seller for each keyword and city. High ratios are where a new seller would get the most buyers.</p>
+${table(S.demand?.gapRows || [], [{ label: "Keyword", key: "keyword" }, { label: "City", key: "city" }, { label: "Searches", key: "searches90", num: true },
+    { label: "Active sellers", key: "activeSuppliers", num: true }, { label: "Searches per seller", key: "ratio", num: true }], { limit: 1e6 })}
+
+<h2>B9. Retention</h2>
+<div class="cols"><div><h4>Days active per person</h4>${objRows(S.retention?.activeDayHist, "Active days", "People")}</div>
+<div><h4>First search outcome vs coming back</h4>
+<p>Found something: <strong>${fr.found?.returnPct || 0}%</strong> came back (${fr.found?.people || 0} people).<br>Found nothing: <strong>${fr.none?.returnPct || 0}%</strong> came back (${fr.none?.people || 0} people).</p></div></div>
+<h3>Weekly cohorts: % active again after N weeks</h3>
+${table([...(S.retention?.cohortRows || [])].reverse(), [{ label: "First week", key: "week" }, { label: "People", key: "size", num: true },
+    ...[1, 2, 4, 8, 12].map(o => ({ label: `+${o}w`, get: r => r[`w${o}`] === null || r[`w${o}`] === undefined ? "" : r[`w${o}`] + "%", num: true }))], { limit: 1e6 })}
+
+<h2>B10. Where buyers come from</h2>
+${table(Object.entries(S.acquisition?.channelReturn || {}).sort((a, b) => b[1].people - a[1].people).map(([c, v]) => ({ c, ...v })),
+    [{ label: "First message / channel", get: r => CHANNEL_LABEL[r.c] || r.c }, { label: "People", key: "people", num: true },
+     { label: "Searched", key: "searched", num: true }, { label: "Came back", get: r => r.returnPct + "%", num: true }], { limit: 1e6 })}
+<div class="cols"><div><h4>New people per month</h4>${bars(Object.entries(S.acquisition?.newByMonth || {}).sort())}</div>
+<div><h4>SEO page groups that bring people</h4>${bars(topN(S.acquisition?.seoPages || {}, 30))}</div></div>
+<h4>Smart-link sources</h4>${bars(topN(S.acquisition?.linkSources || {}, 20))}
+
+<h2>B11. Lapsed buyers</h2>
+${lapsed ? `${kv([
+  ["Lapsed buyers (14-180 days away)", lapsed.length, "Win-back audience"],
+  ["Searched for something you now have", lapsedUnmet, "Best people to message first"],
+  ["Made a request or order before", lapsed.filter(l => l.requests || l.orders).length, "Proven intent"],
+  ["Never searched", lapsed.filter(l => !l.searches).length, "Arrived but never used the bot"]
+])}
+<div class="cols"><div><h4>Days away</h4>${objRows(lapsed.reduce((m, l) => inc(m, l.daysSince <= 30 ? "14-30" : l.daysSince <= 60 ? "31-60" : l.daysSince <= 90 ? "61-90" : "91-180"), {}), "Days", "People")}</div>
+<div><h4>What they last wanted</h4>${table(topN(lapsed.reduce((m, l) => l.lastTerm ? inc(m, l.lastTerm) : m, {}), 30).map(([a, b]) => ({ a, b })), [{ label: "Search", key: "a" }, { label: "People", key: "b", num: true }], { limit: 1e6 })}</div></div>` : missing}
+
+<h2>B12. Payments by month</h2>
+${table(Object.entries(S.money?.paymentsByMonth || {}).sort().map(([m, v]) => ({ m, v })), [{ label: "Month", key: "m" }, { label: "Collected", get: r => money(r.v), num: true }], { limit: 1e6 })}
+
+<h2>B13. Data quality</h2>
+${objRows(S.dataQuality, "Check", "Value")}
+<p class="sub">Generated ${esc(String(S.generatedAt || ""))} by scripts/zqIntel.js (read-only scan).</p>
 </main></body></html>`;
 }
 
-export async function renderPdf(html, filepath) {
+export async function renderPdf(html, filepath, { landscape = false } = {}) {
   let puppeteer;
   try { puppeteer = (await import("puppeteer")).default; }
-  catch { log("  puppeteer not installed - skipping PDF (npm install puppeteer)"); return false; }
+  catch { throw new Error("puppeteer is not installed - run: npm install puppeteer"); }
   const browser = await puppeteer.launch({ headless: "new",
-    args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu", "--no-first-run", "--no-default-browser-check"] });
+    args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu", "--no-first-run", "--no-default-browser-check", "--font-render-hinting=none"] });
   try {
     const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: "networkidle2", timeout: 45000 }).catch(() => {}); // fonts are optional
+    page.setDefaultTimeout(60000);
+    // "load" + a capped wait for web fonts: never hang on a slow/blocked Google Fonts request
+    await page.setContent(html, { waitUntil: "load", timeout: 60000 });
+    await Promise.race([page.evaluate(() => document.fonts && document.fonts.ready), new Promise(r => setTimeout(r, 6000))]).catch(() => {});
     await page.emulateMediaType("print");
-    await page.pdf({ path: filepath, format: "A4", printBackground: true,
-      margin: { top: "16mm", bottom: "16mm", left: "0", right: "0" },
+    const tmp = filepath + ".tmp";
+    await page.pdf({ path: tmp, format: "A4", landscape, printBackground: true,
+      margin: { top: "14mm", bottom: "16mm", left: "0", right: "0" },
       displayHeaderFooter: true, headerTemplate: "<span></span>",
-      footerTemplate: `<div style="font:9px sans-serif;color:#777;width:100%;text-align:center">ZimQuote · <span class="pageNumber"></span>/<span class="totalPages"></span></div>` });
+      footerTemplate: `<div style="font:8px sans-serif;color:#777;width:100%;text-align:center">ZimQuote intelligence · page <span class="pageNumber"></span> of <span class="totalPages"></span></div>` });
+    if (!fs.existsSync(tmp) || fs.statSync(tmp).size < 1000) throw new Error("PDF came out empty");
+    fs.renameSync(tmp, filepath);                       // only replace the old PDF once the new one is good
     return true;
   } finally { await browser.close().catch(() => {}); }
 }
 
-// Builds memo.html / memo.pdf / report.pdf for a run folder (used by the CLI and the admin route).
+// Builds memo.html, memo.pdf and report.pdf for a run folder (CLI + admin route).
+// Uses report_data.json (every row) when present; older runs fall back to summary.json.
 export async function buildPdfs(runDir, { report = true, memo = true } = {}) {
-  const S = JSON.parse(fs.readFileSync(path.join(runDir, "summary.json"), "utf8"));
-  const memoMd = fs.existsSync(path.join(runDir, "ai_strategy.md")) ? fs.readFileSync(path.join(runDir, "ai_strategy.md"), "utf8") : null;
-  const made = [];
+  const fullPath = path.join(runDir, "report_data.json");
+  const detailed = fs.existsSync(fullPath);
+  const S = JSON.parse(fs.readFileSync(detailed ? fullPath : path.join(runDir, "summary.json"), "utf8"));
+  S.run = S.run || path.basename(runDir);
+  const mdPath = path.join(runDir, "ai_strategy.md");
+  const memoMd = fs.existsSync(mdPath) ? fs.readFileSync(mdPath, "utf8") : null;
+  const made = [], errors = [];
   if (memo) {
-    const html = renderMemoHtml(S, memoMd);
-    fs.writeFileSync(path.join(runDir, "memo.html"), html, "utf8");
-    if (await renderPdf(html, path.join(runDir, "memo.pdf"))) made.push("memo.pdf");
+    try {
+      const html = renderMemoHtml(S, memoMd);
+      fs.writeFileSync(path.join(runDir, "memo.html"), html, "utf8");
+      await renderPdf(html, path.join(runDir, "memo.pdf"));
+      made.push("memo.pdf");
+    } catch (e) { errors.push(`memo.pdf: ${e.message}`); }
   }
-  if (report && fs.existsSync(path.join(runDir, "report.html"))) {
-    if (await renderPdf(fs.readFileSync(path.join(runDir, "report.html"), "utf8"), path.join(runDir, "report.pdf"))) made.push("report.pdf");
+  if (report) {
+    try {
+      const html = detailed ? renderHtml(S, memoMd, { full: true })
+        : (fs.existsSync(path.join(runDir, "report.html")) ? fs.readFileSync(path.join(runDir, "report.html"), "utf8") : null);
+      if (!html) throw new Error("no report data in this run");
+      if (detailed) fs.writeFileSync(path.join(runDir, "report_full.html"), html, "utf8");
+      await renderPdf(html, path.join(runDir, "report.pdf"), { landscape: true });
+      made.push("report.pdf");
+    } catch (e) { errors.push(`report.pdf: ${e.message}`); }
   }
-  return made;
+  return { made, errors, detailed };
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -1342,9 +1783,11 @@ export function writeOutputs(S, outDir, aiText) {
   writeCsv(path.join(outDir, "cohort_retention.csv"), S.retention.cohortRows,
     ["week", "size", "w1", "w2", "w4", "w8", "w12"].map(key => ({ key })));
 
-  const slim = { ...S, suppliers: { ...S.suppliers, rows: undefined, conversionTargets: S.suppliers.conversionTargets.length,
+  const slim = { ...S, timeline: undefined, suppliers: { ...S.suppliers, rows: undefined, conversionTargets: S.suppliers.conversionTargets.length,
     expiringSoon: S.suppliers.expiringSoon.length }, schools: { count: S.schools.rows.length }, lapsed: S.lapsed.length };
   fs.writeFileSync(path.join(outDir, "summary.json"), JSON.stringify(slim, null, 2));
+  // complete dataset (internal - has phone numbers) used to rebuild detailed PDFs later
+  fs.writeFileSync(path.join(outDir, "report_data.json"), JSON.stringify(S));
   fs.writeFileSync(path.join(outDir, "report.html"), renderHtml(S, aiText), "utf8");
 }
 
@@ -1367,12 +1810,17 @@ async function main() {
   const run = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
   const outDir = path.join(OPT.out, run);
   fs.mkdirSync(outDir, { recursive: true });
+  S.run = run;
   const aiText = OPT.ai ? await runAi(S, outDir) : null;
   writeOutputs(S, outDir, aiText);
   fs.writeFileSync(path.join(OPT.out, "LATEST"), run);
   if (OPT.pdf) {
     log("  building PDFs...");
-    try { const made = await buildPdfs(outDir); if (made.length) log(`  PDFs: ${made.join(", ")}`); }
+    try {
+      const { made, errors } = await buildPdfs(outDir);
+      if (made.length) log(`  PDFs: ${made.join(", ")}`);
+      for (const e of errors) console.error(`[zq-intel] PDF problem - ${e}`);
+    }
     catch (e) { log(`  PDF step failed (report files are fine): ${e.message}`); }
   }
   log(`done in ${((Date.now() - t0) / 1000).toFixed(1)}s → ${outDir}`);
