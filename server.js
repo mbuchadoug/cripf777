@@ -100,7 +100,8 @@ import webPayments from "./routes/web_payments.js";
 import webSubscription from "./routes/web_subscription.js"; // ← ADD
 
 
-
+   import zqIntelAdminRoutes from "./routes/zqIntelAdmin.js";   // with the other route imports
+ 
 
 
 
@@ -222,7 +223,7 @@ app.use("/stripe/webhook", express.raw({ type: "application/json" }));
 app.use("/stripe/webhook", stripeWebhookRoutes);
 
  app.use("/api/boardroom", boardroomApiRoutes);
-
+  app.use("/zq-admin", zqIntelAdminRoutes); 
 app.use("/api", tradesApiRoutes);
 
 
