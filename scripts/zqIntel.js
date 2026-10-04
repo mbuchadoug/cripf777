@@ -815,12 +815,19 @@ async function runAi(S, outDir) {
     "7. Metrics to watch weekly and data-quality fixes needed\n" +
     "Keep it under 1,800 words.";
   log(`  asking ${model} for a strategy memo...`);
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
-    body: JSON.stringify({ model, max_tokens: 6000, system, messages: [{ role: "user", content: prompt }] })
-  });
-  const body = await res.json().catch(() => ({}));
+  let res, body = {};
+  for (let attempt = 1; attempt <= 5; attempt++) {
+    res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
+      body: JSON.stringify({ model, max_tokens: 6000, system, messages: [{ role: "user", content: prompt }] })
+    });
+    body = await res.json().catch(() => ({}));
+    if (![429, 500, 529].includes(res.status)) break;
+    const wait = Math.min(attempt * 20000, 90000);
+    log(`  Claude busy (${res.status}), retry ${attempt}/5 in ${wait / 1000}s...`);
+    await new Promise(r => setTimeout(r, wait));
+  }
   if (!res.ok) { log(`  AI call failed (${res.status}): ${body?.error?.message || "unknown error"}`); return null; }
   const text = (body.content || []).filter(b => b.type === "text").map(b => b.text).join("\n").trim();
   fs.writeFileSync(path.join(outDir, "ai_strategy.md"), text, "utf8");
