@@ -14,7 +14,9 @@
 //
 // Usage (from the project root, e.g. /var/www/cripf777):
 //   node scripts/zqIntel.js                      # full history, no AI
-//   node scripts/zqIntel.js --ai                 # + Claude strategy memo (uses ANTHROPIC_API_KEY)
+//   node scripts/zqIntel.js --ai                 # + Claude strategy memo + playbook (uses ANTHROPIC_API_KEY)
+//   node scripts/zqIntel.js --ai --model claude-opus-5-5   # deepest analysis
+//   node scripts/zqIntel.js --no-pdf             # skip PDF export (PDFs need puppeteer)
 //   node scripts/zqIntel.js --since 2026-01-01   # limit window
 //   node scripts/zqIntel.js --uri "mongodb://..." --db cripDB
 //
@@ -49,11 +51,13 @@ const arg = (name, def = null) => {
 };
 const OPT = {
   ai:     !!arg("ai", false),
+  model:  arg("model", null),
   since:  arg("since", null),
   uri:    arg("uri", null) || process.env.MONGODB_URI,
   db:     arg("db", null),
   out:    arg("out", null) || path.join(ROOT, "reports", "zq-intel"),
-  quiet:  !!arg("quiet", false)
+  quiet:  !!arg("quiet", false),
+  pdf:    !arg("no-pdf", false)
 };
 
 const log = (...a) => { if (!OPT.quiet) console.log("[zq-intel]", ...a); };
@@ -694,6 +698,27 @@ export function analyze(data, { now = new Date(), prices = DEFAULT_PRICES, exclu
     realistic: Math.round(hot.reduce((t, r) => t + r.price, 0) * 0.4 + warm.reduce((t, r) => t + r.price, 0) * 0.1 + hotSch.reduce((t, r) => t + r.price, 0) * 0.4)
   };
 
+  // ── Buyer requests & orders ───────────────────────────────────────────────
+  const reqs = data.requests || [];
+  const requestStats = { total: reqs.length, last30: reqs.filter(r => toDate(r.createdAt) >= D30).length,
+    byStatus: {}, byProfileType: {}, byCity: {}, withResponse: 0, notifiedNone: 0, byMonth: {} };
+  for (const r of reqs) {
+    inc(requestStats.byStatus, r.status || "unknown"); inc(requestStats.byProfileType, r.profileType || "product");
+    inc(requestStats.byCity, lc(r.city) || "(none)");
+    if ((r.responses || []).length) requestStats.withResponse++;
+    if (!(r.notifiedSuppliers || []).length) requestStats.notifiedNone++;
+    const d = toDate(r.createdAt); if (d) inc(requestStats.byMonth, monthKey(d));
+  }
+  requestStats.responseRatePct = pct(requestStats.withResponse, reqs.length);
+  const ords = data.orders || [];
+  const orderStats = { total: ords.length, last30: ords.filter(o => toDate(o.createdAt) >= D30).length, byStatus: {},
+    byMonth: {}, value: Math.round(ords.reduce((t, o) => t + (Number(o.totalAmount) || 0), 0)),
+    uniqueBuyers: new Set(ords.map(o => normPhone(o.buyerPhone))).size,
+    uniqueSellers: new Set(ords.map(o => idStr(o.supplierId))).size };
+  for (const o of ords) { inc(orderStats.byStatus, o.status || "unknown"); const d = toDate(o.createdAt); if (d) inc(orderStats.byMonth, monthKey(d)); }
+  const bizPay = { total: (data.bizPayments || []).length, real: (data.bizPayments || []).filter(isRealPayment).length,
+    byStatus: (data.bizPayments || []).reduce((m, p) => inc(m, p.status || "unknown"), {}) };
+
   // ── Data quality flags ────────────────────────────────────────────────────
   const dq = {
     searchesWithoutCity: pct(realSearches.filter(s => !s.parsed?.city).length, realSearches.length),
@@ -741,6 +766,7 @@ export function analyze(data, { now = new Date(), prices = DEFAULT_PRICES, exclu
     schools: { rows: schoolRows },
     lapsed,
     money: { mrr, paymentsByMonth, potential, paymentsTotal },
+    requestStats, orderStats, bizPayments: bizPay,
     dataQuality: dq
   };
 }
@@ -769,70 +795,240 @@ export function buildPitch(r) {
 // AI strategy memo (optional)
 // ═════════════════════════════════════════════════════════════════════════════
 export function aiPayload(S) {
-  // Aggregates + business names only. No phone numbers.
-  const strip = (r) => ({ name: r.businessName, city: r.city, type: r.profileType, cats: r.categories, segment: r.segment,
-    searchersReached30: r.searchersReached30, linkVisitors30: r.linkVisitors30, requests30: r.requestsNotified30,
-    orders: r.orders, market30: r.market30, priceCount: r.priceCount, completeness: r.completeness, daysToEnd: r.daysToEnd });
+  // Aggregates + business names only. No phone numbers ever leave the server.
+  const seller = (r) => ({
+    name: r.businessName, city: r.city, area: r.area, type: r.profileType, cats: r.categories, tier: r.tier,
+    status: r.subscriptionStatus, segment: r.segment, access: r.accessActive, daysToEnd: r.daysToEnd, paid: r.paidTotal,
+    joined: fmtDate(r.createdAt), lastUpdated: fmtDate(r.lastUpdated),
+    seen30: r.searchersReached30, seenAll: r.searchersReached, visitors30: r.linkVisitors30, visitorsAll: r.linkVisitorsAll,
+    linkOpens: r.linkOpens, linkSources: r.linkSources, req30: r.requestsNotified30, reqAll: r.requestsNotified,
+    replies: r.requestResponses, orders: r.orders, orderValue: r.orderValue, market30: r.market30,
+    marketTerms: r.marketTopTerms, prices: r.priceCount, completeness: r.completeness, savedBy: r.savedBy
+  });
+  const L = S.lapsed;
+  const bucket = (d) => d <= 30 ? "14-30d" : d <= 60 ? "31-60d" : d <= 90 ? "61-90d" : "91-180d";
+  const lapsedAgg = {
+    total: L.length,
+    byDaysAway: L.reduce((m, l) => inc(m, bucket(l.daysSince)), {}),
+    byEntryChannel: L.reduce((m, l) => inc(m, l.entry), {}),
+    byCity: topN(L.reduce((m, l) => inc(m, l.city || "(none)"), {}), 12),
+    lastWanted: topN(L.reduce((m, l) => l.lastTerm ? inc(m, l.lastTerm) : m, {}), 40),
+    failedThenNowAvailable: L.filter(l => l.lastHadNoResults && l.suppliersNowAvailable).length,
+    neverSearched: L.filter(l => !l.searches).length,
+    madeRequestOrOrder: L.filter(l => l.requests || l.orders).length
+  };
+  const hourTotals = S.demand.heat[0].map((_, h) => S.demand.heat.reduce((t, row) => t + row[h], 0));
+  const dayTotals = S.demand.heat.map(row => row.reduce((a, b) => a + b, 0)); // index 0 = Sunday
+
   return {
-    context: "ZimQuote: WhatsApp-first marketplace for Zimbabwe's informal/SME economy. Buyers search via the WhatsApp bot; " +
-      "sellers (suppliers, service providers, tutors, lodges) and schools list for a monthly fee (prices in 'prices'). " +
-      "Most sellers were onboarded by the founder on free admin trials and have not paid. Facebook ads used to drive most traffic " +
-      "but there is no ad budget now; free SEO pages and web tools (calculators, quote generators) link into the bot with ZQ:GROUP codes. " +
-      "Payments are EcoCash via Paynow. WhatsApp Cloud API: outbound outside the 24h window requires approved templates (cost per message).",
+    platform: {
+      name: "ZimQuote (zimqoute.co.zw)",
+      what: "WhatsApp-first marketplace for Zimbabwe's informal economy and SMEs. Buyers message the WhatsApp bot to search for " +
+        "products, services, tutors, lodges and schools, see prices, send requests to multiple sellers, and place orders. " +
+        "Sellers and schools pay a monthly listing fee (see prices) via EcoCash through Paynow. Each seller has a smart link/QR " +
+        "(ZQ:S:<slug>) and gets notified of buyer requests. Schools get an application form, enquiry capture and parent contacts.",
+      history: "The founder (a solo developer in Harare) onboarded most sellers himself on free admin trials; almost none have paid. " +
+        "Earlier traffic came mostly from Facebook ads; there is now no ad budget. Replacement acquisition is free: SEO landing pages " +
+        "(e.g. plumbers-in-harare, grocery-delivery-borrowdale-harare, schools-zimbabwe), web tools (plumbing cost calculator, " +
+        "plumber quote generator, car service calculator, solar panel), all linking into the bot with ZQ:GROUP:<slug> codes. " +
+        "Buyers tend to come once and not return; sellers don't come back to update prices.",
+      constraints: "Solo founder, very small budget, can write code quickly (Node/MongoDB chatbot). WhatsApp Cloud API: free replies " +
+        "within 24h of the user's last message; anything outside that window needs a Meta-approved template and is charged per " +
+        "message (marketing templates cost the most). Every outbound marketing message therefore has a real cost."
+    },
+    scale_note: "This is an early-stage dataset - treat small counts carefully and say when a number is too small to act on.",
     window: S.window, prices: S.prices, kpi: S.kpi,
-    acquisition: { channelTotals: S.acquisition.channelTotals, channelReturn: S.acquisition.channelReturn,
-      newByMonth: S.acquisition.newByMonth, seoPages: topN(S.acquisition.seoPages, 15), linkSources: topN(S.acquisition.linkSources, 15) },
-    retention: { activeDayHist: S.retention.activeDayHist, firstResult: S.retention.firstResult, cohorts: S.retention.cohortRows.slice(-16) },
-    demand: { topTerms: S.demand.topTerms.slice(0, 40), byCity: S.demand.byCity.slice(0, 12), byMode: S.demand.byMode,
-      zeroTop: S.demand.zeroTop.slice(0, 30).map(z => ({ term: z.term, city: z.city, people: z.people, count: z.count })),
-      gaps: S.demand.gapRows.slice(0, 25), heatByHour: S.demand.heat[0].map((_, h) => S.demand.heat.reduce((t, row) => t + row[h], 0)) },
-    suppliers: { segCounts: S.suppliers.segCounts, status: S.suppliers.supplierStatus,
-      topTargets: S.suppliers.conversionTargets.slice(0, 30).map(strip), expiringSoon: S.suppliers.expiringSoon.length },
-    schools: S.schools.rows.slice(0, 15).map(r => ({ name: r.schoolName, city: r.city, segment: r.segment, contacts30: r.contacts30, applications: r.applications, leadActions: r.leadActions })),
-    lapsedBuyers: { count: S.lapsed.length, withUnmetSearchNowAvailable: S.lapsed.filter(l => l.lastHadNoResults && l.suppliersNowAvailable).length },
-    money: { mrr: S.money.mrr, paymentsByMonth: S.money.paymentsByMonth, potential: S.money.potential },
+    acquisition: {
+      channelTotals: S.acquisition.channelTotals, channelReturn: S.acquisition.channelReturn,
+      newByMonth: S.acquisition.newByMonth, newByWeek: S.acquisition.newByWeek, channelByMonth: S.acquisition.channelByMonth,
+      seoPages: topN(S.acquisition.seoPages, 30), linkSources: topN(S.acquisition.linkSources, 20)
+    },
+    retention: { activeByWeek: S.retention.activeByWeek, activeDayHist: S.retention.activeDayHist,
+      firstResult: S.retention.firstResult, cohorts: S.retention.cohortRows },
+    demand: {
+      searchesByWeek: S.demand.searchesByWeek, byFlow: S.demand.byFlow, bySource: S.demand.bySource, byMode: S.demand.byMode,
+      byCity: S.demand.byCity, topTerms: S.demand.topTerms.slice(0, 60), parsedWhat: S.demand.parsedWhat,
+      searchesPerSearcher: S.demand.searchesPerSearcher,
+      zeroResults: S.demand.zeroTop.slice(0, 60).map(z => ({ term: z.term, city: z.city, people: z.people, count: z.count, last: fmtDate(z.last) })),
+      supplyGaps: S.demand.gapRows.slice(0, 40),
+      searchesByHourHarare: hourTotals, searchesByWeekdaySunFirst: dayTotals
+    },
+    buyerRequests: S.requestStats, orders: S.orderStats, invoicingSubscriptions: S.bizPayments,
+    sellers: { segCounts: S.suppliers.segCounts, status: S.suppliers.supplierStatus, all: S.suppliers.rows.map(seller) },
+    schools: S.schools.rows.map(r => ({ name: r.schoolName, city: r.city, suburb: r.suburb, type: r.institutionType,
+      segment: r.segment, active: r.active, daysToEnd: r.daysToEnd, linkOpens: r.linkOpens, contacts: r.contacts,
+      contacts30: r.contacts30, applications: r.applications, leadActions: r.leadActions, notFollowedUp: r.uncontactedLeads, paid: r.paidTotal })),
+    lapsedBuyers: lapsedAgg,
+    money: { mrr: S.money.mrr, paymentsByMonth: S.money.paymentsByMonth, potential: S.money.potential, payments: S.money.paymentsTotal },
     dataQuality: S.dataQuality
   };
 }
 
-async function runAi(S, outDir) {
-  const key = process.env.ANTHROPIC_API_KEY;
-  if (!key) { log("  --ai requested but ANTHROPIC_API_KEY is not set - skipping"); return null; }
-  const model = process.env.ZQ_INTEL_MODEL || "claude-sonnet-5-5";
-  const payload = aiPayload(S);
-  fs.writeFileSync(path.join(outDir, "ai_payload.json"), JSON.stringify(payload, null, 2));
-  const system = "You are a pragmatic growth and monetisation analyst for a bootstrapped Zimbabwean marketplace startup with no ad budget. " +
-    "Work only from the data supplied; when a number is missing say so rather than guessing. Be specific: name sellers, cities, search terms and dollar amounts from the data. " +
-    "Prefer actions one founder can execute this week with WhatsApp, EcoCash, free SEO pages and the existing chatbot.";
-  const prompt = `Here is the full business-intelligence summary as JSON:\n\n${JSON.stringify(payload)}\n\n` +
-    "Write a strategy memo in Markdown with these sections:\n" +
-    "1. What the data says (the 5 most important findings, each with the numbers behind it)\n" +
-    "2. Cash this month: which unpaid sellers to convert first and exactly what to say to them, plus a pricing/offer recommendation (e.g. pay-per-lead, annual discount, founding-member price) justified by the data\n" +
-    "3. Retention: why buyers don't come back and 3-5 concrete bot or content changes to fix it, tied to the zero-result and cohort data\n" +
-    "4. Free acquisition without Facebook ads: which SEO pages/tools/smart-link channels are working, which to build next (specific page titles + target terms from the demand data)\n" +
-    "5. Supply gaps: which seller categories/cities to recruit first and how\n" +
-    "6. A 30-day plan as a week-by-week checklist with a revenue target for each week\n" +
-    "7. Metrics to watch weekly and data-quality fixes needed\n" +
-    "Keep it under 1,800 words.";
-  log(`  asking ${model} for a strategy memo...`);
-  let res, body = {};
+const ZW_CONTEXT = `Zimbabwe operating context - use it, but let the data override any assumption, and flag anything you are unsure of:
+- Money: trade is mostly priced in US dollars; ZiG (ZWG) is the official local currency. EcoCash dominates mobile money; InnBucks, OneMoney, bank transfers and cash USD are common. Small US change is scarce, so odd amounts are awkward - round prices ($3, $5, $10) work best. Many small sellers think week-to-week, so a monthly fee feels big next to a data bundle; weekly, per-lead or prepaid-bundle options may convert better than monthly.
+- Cash cycles: month-end salaries (civil servants are often paid mid-to-late month), school terms starting around January, May and September (fees, uniforms, stationery, transport, school searches peak before term), December festive and diaspora-remittance season, rainy season roughly November to March (affects construction, roofing, boreholes, solar), and power cuts driving solar, inverter and generator demand.
+- Channels: WhatsApp is the internet for many people and is often on cheap WhatsApp-only bundles, so WhatsApp beats web links and heavy images. WhatsApp Status, community/WhatsApp groups, Facebook groups (free organic posting), TikTok and word of mouth are the free channels. Trust is low because of scams, so verification, real reviews, a visible human, and referrals from someone you know matter more than ads.
+- Supply side: much of the informal economy clusters in known markets and industrial areas (e.g. Mbare, Siyaso, Gulf complex, Magaba, Glen View furniture, light industry in each town), which makes in-person onboarding days efficient. Many sellers are not tech-confident; anything that needs them to "log in" or "update a profile" fails unless it happens inside WhatsApp in one or two taps.
+- Language: English is fine for business, but short Shona (and Ndebele for Bulawayo/Matabeleland) lines lift response and trust.
+- Distances and transport costs mean buyers care about area/suburb and delivery more than city.`;
+
+const AI_SYSTEM = `You are a senior growth, retention and monetisation strategist who has built marketplaces in African informal economies. You are advising a bootstrapped solo founder in Harare.
+Rules:
+- Work only from the JSON data supplied plus the context notes. Quote the specific numbers behind every claim. If a number is too small to act on, say so.
+- Be specific: name sellers, schools, cities, search terms, SEO pages and dollar amounts from the data. No generic startup advice.
+- Prefer actions one person can do with WhatsApp, EcoCash, the existing chatbot, free SEO pages and physical visits, with no ad spend.
+- Be honest when the data says something uncomfortable (e.g. a vertical isn't working, the price is wrong, sellers get no value).
+- Write in clear Markdown with headings, short paragraphs, bullet lists and tables where they help.
+
+${ZW_CONTEXT}`;
+
+const PASS1 = `PART 1 - DEEP ANALYSIS. Using the data above, write:
+
+## 1. Executive summary
+The 7 most important things the data says, ranked by money impact, each with its numbers.
+
+## 2. Funnel diagnosis
+Walk the full funnel - acquisition (by channel), first search, result found or not, request/order, return visit, seller response, seller payment. For each stage give the numbers, the leak, and the most likely cause in the Zimbabwe context.
+
+## 3. Buyers: who comes, what they want, why they leave
+Demand by category and city, time-of-day/weekday patterns, the cohort and one-and-done figures, the impact of zero-result searches, and which entry channels bring people who actually come back.
+
+## 4. Sellers: who is getting value and who isn't
+Segment the sellers. Name the sellers with the strongest proof of value and the ones getting nothing (and why - wrong category, no prices, wrong city, no demand). Assess whether the current price and plan structure fit this market, and propose the pricing/offer you would test, justified by the data.
+
+## 5. Schools and education
+What the school and tutor data shows and the realistic revenue path there, tied to the term calendar.
+
+## 6. Verticals: double down, fix, or drop
+A table of each vertical/category with demand, supply, conversion signals and your verdict.
+
+## 7. Free acquisition without Facebook ads
+Which SEO pages, tools and link sources work, which don't, and the next 10 pages or tools to build (exact page titles + target search terms taken from the demand and zero-result data).
+
+## 8. Risks and data gaps
+What could be misleading in this data and what tracking to add.`;
+
+const PASS2 = `PART 2 - ACTION PLAYBOOK. Your Part 1 analysis is above. Now turn it into things the founder can execute. Write:
+
+## 9. This week: cash conversations
+A ranked list of the first 15 sellers/schools to approach, why each, the offer, and the channel (call, visit, WhatsApp).
+
+## 10. Ready-to-send messages
+Write each message in English with a short Shona line, sized for WhatsApp (under 600 characters), with {{placeholders}} for personal numbers:
+- Seller conversion: proof-of-value message, follow-up 48h later, last-day reminder, "founding member" offer
+- Seller re-activation for sellers getting zero leads (fix profile/prices)
+- School pitch tied to the coming term
+- Buyer win-back as a Meta MARKETING TEMPLATE (follow template rules: variables as {{1}}, {{2}}; a clear opt-out line; no misleading claims) - one for "we now have sellers for what you searched", one general
+- Buyer retention nudge inside the free 24-hour window after a search
+- Referral message buyers/sellers can forward
+
+## 11. Bot and product changes
+The 10 highest-impact changes to the WhatsApp bot and web pages, ranked by impact over effort, each with what to build, why (data), and how to measure it. Include what to do when a search returns nothing, how to bring buyers back without paid templates, and how to make sellers interact weekly inside WhatsApp.
+
+## 12. Retention system
+A concrete weekly rhythm for buyers and sellers (what is sent, when in Harare time, to whom, what it costs in templates) that fits the data on when people search.
+
+## 13. Free growth plan
+Week-by-week plan for SEO pages, tools, WhatsApp Status/groups, Facebook groups, TikTok and physical onboarding days at specific markets - with a target for each.
+
+## 14. 30/60/90-day plan
+A table with weekly actions, owner hours, and targets for: new buyers, returning buyers, paying sellers, paying schools, MRR.
+
+## 15. Weekly scorecard
+The 8 numbers to check every Monday from this report and the thresholds that mean "change course".`;
+
+// Streams the response so long outputs never hit fetch's header timeout.
+async function claudeStream({ key, model, system, messages, max_tokens }) {
   for (let attempt = 1; attempt <= 5; attempt++) {
-    res = await fetch("https://api.anthropic.com/v1/messages", {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
-      body: JSON.stringify({ model, max_tokens: 6000, system, messages: [{ role: "user", content: prompt }] })
+      body: JSON.stringify({ model, max_tokens, system, messages, stream: true })
     });
-    body = await res.json().catch(() => ({}));
-    if (![429, 500, 529].includes(res.status)) break;
-    const wait = Math.min(attempt * 20000, 90000);
-    log(`  Claude busy (${res.status}), retry ${attempt}/5 in ${wait / 1000}s...`);
-    await new Promise(r => setTimeout(r, wait));
+    if ([429, 500, 529].includes(res.status)) {
+      const wait = Math.min(attempt * 20000, 90000);
+      log(`  Claude busy (${res.status}), retry ${attempt}/5 in ${wait / 1000}s...`);
+      await new Promise(r => setTimeout(r, wait));
+      continue;
+    }
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(`API ${res.status}: ${body?.error?.message || "unknown error"}`);
+    }
+    let text = "", buf = "", stop = null;
+    const usage = { input: 0, output: 0, cacheWrite: 0, cacheRead: 0 };
+    const dec = new TextDecoder();
+    for await (const chunk of res.body) {
+      buf += dec.decode(chunk, { stream: true });
+      let nl;
+      while ((nl = buf.indexOf("\n")) !== -1) {
+        const line = buf.slice(0, nl).trim(); buf = buf.slice(nl + 1);
+        if (!line.startsWith("data:")) continue;
+        let ev; try { ev = JSON.parse(line.slice(5)); } catch { continue; }
+        if (ev.type === "content_block_delta" && ev.delta?.type === "text_delta") {
+          text += ev.delta.text;
+          if (!OPT.quiet && text.length % 2000 < ev.delta.text.length) process.stdout.write(".");
+        } else if (ev.type === "message_start") {
+          const u = ev.message?.usage || {};
+          usage.input = u.input_tokens || 0; usage.cacheWrite = u.cache_creation_input_tokens || 0; usage.cacheRead = u.cache_read_input_tokens || 0;
+        } else if (ev.type === "message_delta") {
+          usage.output = ev.usage?.output_tokens || usage.output; stop = ev.delta?.stop_reason || stop;
+        } else if (ev.type === "error") {
+          throw new Error(ev.error?.message || "stream error");
+        }
+      }
+    }
+    if (!OPT.quiet) process.stdout.write("\n");
+    return { text: text.trim(), usage, stop };
   }
-  if (!res.ok) { log(`  AI call failed (${res.status}): ${body?.error?.message || "unknown error"}`); return null; }
-  const text = (body.content || []).filter(b => b.type === "text").map(b => b.text).join("\n").trim();
-  fs.writeFileSync(path.join(outDir, "ai_strategy.md"), text, "utf8");
-  log(`  AI memo saved (${body.usage?.input_tokens || "?"} in / ${body.usage?.output_tokens || "?"} out tokens)`);
-  return text;
+  throw new Error("Claude stayed busy after 5 retries");
+}
+
+export async function runAi(S, outDir) {
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (!key) { log("  --ai requested but ANTHROPIC_API_KEY is not set - skipping"); return null; }
+  const model = (typeof OPT.model === "string" && OPT.model) || process.env.ZQ_INTEL_MODEL || "claude-sonnet-5-5";
+  const payload = aiPayload(S);
+  const dataText = `ZIMQUOTE DATA (generated ${S.generatedAt}, full history from ${fmtDate(S.window.firstDay)}):\n\n${JSON.stringify(payload)}`
+    // scrub any phone numbers buyers typed into searches
+    .replace(/(?:\+?263|\b0)7\d{8}\b/g, "[phone]").replace(/\b7[1378]\d{7}\b/g, "[phone]");
+  fs.writeFileSync(path.join(outDir, "ai_payload.json"), JSON.stringify(payload, null, 2));
+  log(`  payload ${Math.round(dataText.length / 1024)} KB (no phone numbers) → ${model}`);
+
+  // The data block is cached so Part 2 re-reads it at a fraction of the price.
+  const dataBlock = { type: "text", text: dataText, cache_control: { type: "ephemeral" } };
+  const sys = [{ type: "text", text: AI_SYSTEM }];
+  const totals = { input: 0, output: 0, cacheWrite: 0, cacheRead: 0 };
+  const add = (u) => { for (const k of Object.keys(totals)) totals[k] += u[k] || 0; };
+
+  try {
+    log("  part 1/2: deep analysis...");
+    const p1 = await claudeStream({ key, model, system: sys, max_tokens: 14000,
+      messages: [{ role: "user", content: [dataBlock, { type: "text", text: PASS1 }] }] });
+    add(p1.usage);
+    fs.writeFileSync(path.join(outDir, "ai_strategy.md"), p1.text, "utf8");
+    if (p1.stop === "max_tokens") log("  note: part 1 hit max_tokens and may be cut short");
+
+    log("  part 2/2: action playbook...");
+    const p2 = await claudeStream({ key, model, system: sys, max_tokens: 16000,
+      messages: [
+        { role: "user", content: [dataBlock, { type: "text", text: PASS1 }] },
+        { role: "assistant", content: p1.text },
+        { role: "user", content: PASS2 }
+      ] });
+    add(p2.usage);
+    if (p2.stop === "max_tokens") log("  note: part 2 hit max_tokens and may be cut short");
+
+    const full = `# ZimQuote strategy memo\n\n_Model: ${model} · data to ${fmtDate(S.generatedAt)}_\n\n${p1.text}\n\n---\n\n${p2.text}`;
+    fs.writeFileSync(path.join(outDir, "ai_strategy.md"), full, "utf8");
+    fs.writeFileSync(path.join(outDir, "ai_playbook.md"), p2.text, "utf8");
+    log(`  AI done - tokens: input ${totals.input}, cache write ${totals.cacheWrite}, cache read ${totals.cacheRead}, output ${totals.output}`);
+    return full;
+  } catch (e) {
+    log(`  AI call failed: ${e.message}`);
+    const p = path.join(outDir, "ai_strategy.md");
+    return fs.existsSync(p) ? fs.readFileSync(p, "utf8") : null;   // keep part 1 if part 2 failed
+  }
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -844,16 +1040,27 @@ const money = (n) => `$${Math.round(n || 0).toLocaleString("en-US")}`;
 const maskPhone = (p) => p ? `0${p.slice(3, 5)}…${p.slice(-3)}` : "";
 
 function mdToHtml(md) {
-  const lines = String(md || "").split(/\r?\n/); let html = "", inList = false;
-  const inline = (t) => esc(t).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>").replace(/`([^`]+)`/g, "<code>$1</code>");
+  const lines = String(md || "").split(/\r?\n/); let html = "", list = null, tbl = null;
+  const inline = (t) => esc(t).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>").replace(/(^|[^*])\*([^*]+)\*/g, "$1<em>$2</em>")
+    .replace(/_([^_]+)_/g, "<em>$1</em>").replace(/`([^`]+)`/g, "<code>$1</code>");
+  const closeList = () => { if (list) { html += `</${list}>`; list = null; } };
+  const closeTbl = () => { if (tbl) { html += `<div class="tw"><table>${tbl.join("")}</table></div>`; tbl = null; } };
+  const cells = (ln) => ln.trim().replace(/^\||\|$/g, "").split("|").map(c => c.trim());
   for (const ln of lines) {
-    const h = ln.match(/^(#{1,4})\s+(.*)/); const li = ln.match(/^\s*(?:[-*]|\d+\.)\s+(.*)/);
-    if (!li && inList) { html += "</ul>"; inList = false; }
-    if (h) html += `<h${Math.min(h[1].length + 2, 5)}>${inline(h[2])}</h${Math.min(h[1].length + 2, 5)}>`;
-    else if (li) { if (!inList) { html += "<ul>"; inList = true; } html += `<li>${inline(li[1])}</li>`; }
-    else if (ln.trim()) html += `<p>${inline(ln)}</p>`;
+    if (/^\s*\|.*\|\s*$/.test(ln)) {
+      closeList();
+      if (/^\s*\|[\s:|-]+\|\s*$/.test(ln)) continue;          // separator row
+      const tag = tbl ? "td" : "th"; tbl = tbl || [];
+      tbl.push(`<tr>${cells(ln).map(c => `<${tag}>${inline(c)}</${tag}>`).join("")}</tr>`); continue;
+    }
+    closeTbl();
+    const h = ln.match(/^(#{1,4})\s+(.*)/), ul = ln.match(/^\s*[-*]\s+(.*)/), ol = ln.match(/^\s*\d+[.)]\s+(.*)/);
+    if (h) { closeList(); const n = Math.min(h[1].length + 1, 5); html += `<h${n}>${inline(h[2])}</h${n}>`; }
+    else if (ul || ol) { const t = ul ? "ul" : "ol"; if (list !== t) { closeList(); html += `<${t}>`; list = t; } html += `<li>${inline((ul || ol)[1])}</li>`; }
+    else if (/^\s*---+\s*$/.test(ln)) { closeList(); html += "<hr>"; }
+    else if (ln.trim()) { closeList(); html += `<p>${inline(ln)}</p>`; }
   }
-  if (inList) html += "</ul>";
+  closeList(); closeTbl();
   return html;
 }
 
@@ -914,7 +1121,7 @@ h1{font:800 34px/1.1 "Bricolage Grotesque","Public Sans",system-ui,sans-serif;le
 h2{font:750 22px/1.2 "Bricolage Grotesque","Public Sans",system-ui,sans-serif;margin:46px 0 6px;padding-top:14px;border-top:2px solid var(--ink)}
 h3{font-size:16px;margin:22px 0 8px}h4,h5{margin:16px 0 6px}
 p{max-width:76ch}.sub{color:var(--muted);margin:0 0 18px}
-.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:0;border:1px solid var(--line);margin:18px 0}
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0;border:1px solid var(--line);margin:18px 0}
 .kpi{padding:12px 14px;border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
 .kpi b{display:block;font:700 24px/1.1 "Bricolage Grotesque",system-ui,sans-serif}.kpi span{color:var(--muted);font-size:13px}
 .ladder{counter-reset:a;list-style:none;padding:0;margin:14px 0}
@@ -935,7 +1142,8 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}tbody tr:hover{back
 .ai{border-left:4px solid var(--gold);padding:4px 0 4px 18px}
 nav{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:14px;margin:8px 0 0}nav a{color:var(--green)}
 a:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
-@media (max-width:640px){.kpis{grid-template-columns:repeat(2,1fr)}h1{font-size:26px}.ladder li{grid-template-columns:30px 1fr}.ladder .cash{grid-column:2}}`;
+@media (max-width:640px){.kpis{grid-template-columns:repeat(2,1fr)}h1{font-size:26px}.ladder li{grid-template-columns:30px 1fr}.ladder .cash{grid-column:2}}
+@media print{:root{--paper:#fff;--ink:#0f2a24;--wash:#eef3ef;--line:#d5dbd4;--muted:#5d6b66}main{padding:0 12mm;max-width:none;width:100%}h3{break-after:avoid}.cols{grid-template-columns:repeat(2,minmax(0,1fr))}nav{display:none}.tw{overflow:visible}table{font-size:10.5px}tr,.bar,.ladder li{break-inside:avoid}h2{break-after:avoid}.pitch{min-width:0}}`;
 
   const segTag = (s) => `<span class="tag ${s}">${s.replace("_", " ")}</span>`;
 
@@ -1030,6 +1238,85 @@ ${aiText ? `<h2 id="ai">Claude's strategy memo</h2><div class="ai">${mdToHtml(ai
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
+// Memo document + PDF export
+// ═════════════════════════════════════════════════════════════════════════════
+// The memo contains no phone numbers (Claude never receives them), so memo.html
+// and memo.pdf are safe to share. report.html / report.pdf contain buyer and
+// seller numbers - keep those internal.
+export function renderMemoHtml(S, aiText) {
+  const k = S.kpi;
+  const css = `
+:root{--ink:#0f2a24;--paper:#ffffff;--line:#d5dbd4;--muted:#5d6b66;--green:#1f7a4d;--gold:#c99400;--wash:#eef3ef}
+*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.6 "Public Sans","Segoe UI",system-ui,sans-serif}
+main{max-width:780px;margin:0 auto;padding:40px 24px 80px}
+.cover{border-bottom:3px solid var(--ink);padding-bottom:22px;margin-bottom:26px}
+.cover h1{font:800 38px/1.08 "Bricolage Grotesque","Public Sans",system-ui,sans-serif;letter-spacing:-.02em;margin:0 0 10px}
+.cover p{color:var(--muted);margin:0}
+.strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--line);margin:22px 0 0}
+.strip div{padding:10px 12px;border-right:1px solid var(--line)}.strip div:last-child{border-right:0}
+.strip b{display:block;font:700 22px/1.1 "Bricolage Grotesque",system-ui,sans-serif}.strip span{font-size:12px;color:var(--muted)}
+h2{font:750 25px/1.2 "Bricolage Grotesque",system-ui,sans-serif;margin:34px 0 8px}
+h3{font:750 19px/1.25 "Bricolage Grotesque",system-ui,sans-serif;margin:30px 0 8px;padding-top:12px;border-top:1px solid var(--line)}
+h4,h5{font-size:16px;margin:20px 0 6px}
+p,li{max-width:72ch}ul,ol{padding-left:22px}li{margin:3px 0}
+.tw{overflow-x:auto;border:1px solid var(--line);margin:12px 0}table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}th{background:var(--wash)}
+code{background:var(--wash);padding:0 4px;font-size:.92em}hr{border:0;border-top:3px solid var(--ink);margin:40px 0}
+.empty{padding:30px;border:1px dashed var(--line);color:var(--muted)}
+@media (max-width:640px){.strip{grid-template-columns:repeat(2,1fr)}.cover h1{font-size:28px}}
+@media print{main{padding:0 14mm;max-width:none}h3{break-after:avoid}tr,li{break-inside:avoid}.tw{overflow:visible}
+  hr{break-after:page;border:0;margin:0}a{color:inherit}}`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ZimQuote strategy memo ${fmtDate(S.generatedAt)}</title>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@700;800&family=Public+Sans:wght@400;650&display=swap" rel="stylesheet">
+<style>${css}</style></head><body><main>
+<div class="cover"><h1>ZimQuote strategy memo</h1>
+<p>Data from ${fmtDate(S.window.firstDay)} to ${fmtDate(S.generatedAt)} · ${k.peopleEver.toLocaleString()} buyers, ${k.suppliers} sellers, ${k.schools} schools, ${k.searchesTotal.toLocaleString()} searches</p>
+<div class="strip">
+<div><b>${money(k.mrr)}</b><span>Monthly revenue now</span></div>
+<div><b>${k.suppliersPaying}/${k.suppliers}</b><span>Sellers paying</span></div>
+<div><b>${k.oneAndDonePct}%</b><span>Buyers who never return</span></div>
+<div><b>${money(S.money.potential.realistic)}</b><span>Realistic new monthly revenue</span></div>
+</div></div>
+${aiText ? mdToHtml(aiText.replace(/^# ZimQuote strategy memo\s*/i, "")) : `<p class="empty">No Claude memo in this run. Run the scan with --ai to generate one.</p>`}
+</main></body></html>`;
+}
+
+export async function renderPdf(html, filepath) {
+  let puppeteer;
+  try { puppeteer = (await import("puppeteer")).default; }
+  catch { log("  puppeteer not installed - skipping PDF (npm install puppeteer)"); return false; }
+  const browser = await puppeteer.launch({ headless: "new",
+    args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu", "--no-first-run", "--no-default-browser-check"] });
+  try {
+    const page = await browser.newPage();
+    await page.setContent(html, { waitUntil: "networkidle2", timeout: 45000 }).catch(() => {}); // fonts are optional
+    await page.emulateMediaType("print");
+    await page.pdf({ path: filepath, format: "A4", printBackground: true,
+      margin: { top: "16mm", bottom: "16mm", left: "0", right: "0" },
+      displayHeaderFooter: true, headerTemplate: "<span></span>",
+      footerTemplate: `<div style="font:9px sans-serif;color:#777;width:100%;text-align:center">ZimQuote · <span class="pageNumber"></span>/<span class="totalPages"></span></div>` });
+    return true;
+  } finally { await browser.close().catch(() => {}); }
+}
+
+// Builds memo.html / memo.pdf / report.pdf for a run folder (used by the CLI and the admin route).
+export async function buildPdfs(runDir, { report = true, memo = true } = {}) {
+  const S = JSON.parse(fs.readFileSync(path.join(runDir, "summary.json"), "utf8"));
+  const memoMd = fs.existsSync(path.join(runDir, "ai_strategy.md")) ? fs.readFileSync(path.join(runDir, "ai_strategy.md"), "utf8") : null;
+  const made = [];
+  if (memo) {
+    const html = renderMemoHtml(S, memoMd);
+    fs.writeFileSync(path.join(runDir, "memo.html"), html, "utf8");
+    if (await renderPdf(html, path.join(runDir, "memo.pdf"))) made.push("memo.pdf");
+  }
+  if (report && fs.existsSync(path.join(runDir, "report.html"))) {
+    if (await renderPdf(fs.readFileSync(path.join(runDir, "report.html"), "utf8"), path.join(runDir, "report.pdf"))) made.push("report.pdf");
+  }
+  return made;
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
 // Write outputs
 // ═════════════════════════════════════════════════════════════════════════════
 export function writeOutputs(S, outDir, aiText) {
@@ -1083,6 +1370,11 @@ async function main() {
   const aiText = OPT.ai ? await runAi(S, outDir) : null;
   writeOutputs(S, outDir, aiText);
   fs.writeFileSync(path.join(OPT.out, "LATEST"), run);
+  if (OPT.pdf) {
+    log("  building PDFs...");
+    try { const made = await buildPdfs(outDir); if (made.length) log(`  PDFs: ${made.join(", ")}`); }
+    catch (e) { log(`  PDF step failed (report files are fine): ${e.message}`); }
+  }
   log(`done in ${((Date.now() - t0) / 1000).toFixed(1)}s → ${outDir}`);
   log(`MRR ${money(S.kpi.mrr)} · paying sellers ${S.kpi.suppliersPaying}/${S.kpi.suppliers} · hot unpaid ${S.suppliers.segCounts.hot_unpaid || 0} · realistic new MRR ${money(S.money.potential.realistic)}`);
   await mongoose.disconnect();

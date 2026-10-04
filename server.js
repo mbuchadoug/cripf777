@@ -98,10 +98,7 @@ import adminScoiReports from "./routes/admin_scoi_reports.js";
 
 import webPayments from "./routes/web_payments.js";
 import webSubscription from "./routes/web_subscription.js"; // ← ADD
-
-
-   import zqIntelAdminRoutes from "./routes/zqIntelAdmin.js";   // with the other route imports
- 
+import zqIntelAdminRoutes, { zqIntelShareRoutes } from "./routes/zqIntelAdmin.js"; // ZimQuote BI reports
 
 
 
@@ -223,7 +220,6 @@ app.use("/stripe/webhook", express.raw({ type: "application/json" }));
 app.use("/stripe/webhook", stripeWebhookRoutes);
 
  app.use("/api/boardroom", boardroomApiRoutes);
-  app.use("/zq-admin", zqIntelAdminRoutes); 
 app.use("/api", tradesApiRoutes);
 
 
@@ -571,6 +567,9 @@ app.use("/", schoolApplyRouter);          // Public apply form: /apply/school/:i
 app.use("/", steuritApplyRouter);         // St Eurit website: /apply/steurit/web, /apply/steurit/ping
 app.use("/zq-admin", schoolAdminRoutes);
 app.use("/zq-admin", supplierAdminRoutes);
+// ── ZimQuote business intelligence (needs session - keep AFTER session/passport) ──
+app.use("/zq-admin", zqIntelAdminRoutes);        // /zq-admin/intel, /zq-admin/intel/memo
+app.use("/zq-intel-share", zqIntelShareRoutes);  // public memo-only share links (token-protected)
 
 // ── RESE RESE admin panel (own session gate + body parsing) ──
 app.use("/rese-admin", reseAdminRouter);
