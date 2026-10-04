@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Edit user · CRIPFCnt admin</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    :root { --accent:#0B4F45; --muted:#64748b; }
+    html, body { max-width:100%; overflow-x:hidden; }
+    body { font-family: Inter, system-ui, -apple-system, sans-serif; background:#f1f5f9; color:#0b2545; margin:0; padding:24px; }
+    .card { max-width:640px; margin:0 auto; background:#fff; border:1px solid #e2e8f0; border-radius:14px; padding:24px; }
+    h1 { font-size:1.25rem; margin:0 0 4px; }
+    .muted { color:var(--muted); font-size:0.9rem; }
+    a.back { color:var(--accent); text-decoration:none; font-size:0.9rem; }
+    .grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:18px; }
+    .grid .full { grid-column:1 / -1; }
+    label { display:block; font-size:0.8rem; font-weight:600; color:#334155; margin-bottom:5px; }
+    input, select { width:100%; padding:10px 12px; border:1px solid #cbd5e1; border-radius:8px; font-size:0.95rem; background:#fff; color:#0b2545; }
+    .row-actions { display:flex; gap:10px; margin-top:22px; flex-wrap:wrap; }
+    button.save { background:var(--accent); color:#fff; border:none; padding:11px 22px; border-radius:8px; font-weight:700; cursor:pointer; font-size:0.95rem; }
+    a.cancel { padding:11px 22px; border:1px solid #cbd5e1; border-radius:8px; color:#334155; text-decoration:none; font-weight:600; }
+    .note { background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:10px 12px; font-size:0.82rem; color:var(--muted); margin-top:16px; }
+    @media (max-width:560px){ .grid { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <a class="back" href="/admin/users">← Back to users</a>
+    <h1 style="margin-top:10px">Edit user</h1>
+    <div class="muted">{{u.email}}{{#if u.username}} · @{{u.username}}{{/if}}</div>
+
+    <form method="post" action="/admin/users/{{u._id}}/edit">
+      <div class="grid">
+        <div>
+          <label>First name</label>
+          <input name="firstName" value="{{u.firstName}}" />
+        </div>
+        <div>
+          <label>Last name</label>
+          <input name="lastName" value="{{u.lastName}}" />
+        </div>
+        <div class="full">
+          <label>Email</label>
+          <input name="email" type="email" value="{{u.email}}" />
+        </div>
+        <div>
+          <label>Username</label>
+          <input name="username" value="{{u.username}}" />
+        </div>
+        <div>
+          <label>Role</label>
+          <select name="role" id="roleSel">
+            <option value="student">student</option>
+            <option value="parent">parent</option>
+            <option value="private_teacher">private_teacher</option>
+            <option value="teacher">teacher</option>
+            <option value="employee">employee</option>
+            <option value="org_admin">org_admin</option>
+            <option value="readonly_admin">readonly_admin</option>
+            <option value="super_admin">super_admin</option>
+          </select>
+          <script>document.getElementById("roleSel").value = "{{u.role}}";</script>
+        </div>
+        <div>
+          <label>Grade (students, 0–13)</label>
+          <input name="grade" type="number" min="0" max="13" value="{{u.grade}}" />
+        </div>
+        <div>
+          <label>Max children (parents)</label>
+          <input name="maxChildren" type="number" min="0" value="{{u.maxChildren}}" />
+        </div>
+        <div>
+          <label>AI quiz credits (teachers)</label>
+          <input name="aiQuizCredits" type="number" min="0" value="{{u.aiQuizCredits}}" />
+        </div>
+        <div>
+          <label>Set new password (optional)</label>
+          <input name="newPassword" type="text" placeholder="Leave blank to keep current" />
+        </div>
+      </div>
+
+      <div class="note">
+        Leave a field blank to keep its current value (except where blank is meaningful). Role changes take effect immediately.
+        To change a plan, use the Activate / Grant access buttons on the users list.
+      </div>
+
+      <div class="row-actions">
+        <button class="save" type="submit">Save changes</button>
+        <a class="cancel" href="/admin/users">Cancel</a>
+      </div>
+    </form>
+  </div>
+</body>
+</html>

@@ -190,6 +190,25 @@
       .main{margin-left:0;width:100%;padding:16px}
       table{min-width:720px}
     }
+
+    /* ── Responsive: never cut on any screen ───────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { max-width: 100%; overflow-x: hidden; }
+    .main { min-width: 0; max-width: 100%; }
+    .table-wrap { max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    table { min-width: 760px; }
+    /* Stack the action controls vertically so the table stays narrow and fits laptops. */
+    td.actions { white-space: normal; }
+    td.actions > form, td.actions > a { display: flex; margin: 0 0 6px 0 !important; }
+    td.actions > a { display: inline-flex; }
+    .edit-btn { display:inline-flex; align-items:center; background:#1c3f6e; color:#fff; text-decoration:none; padding:6px 12px; border-radius:6px; font-size:12px; font-weight:600; }
+    .delete-btn { background:#b42318; color:#fff; border:none; padding:6px 12px; border-radius:6px; cursor:pointer; font-size:12px; font-weight:600; }
+    @media (max-width: 1200px) {
+      td.actions .mini-select { max-width: 150px; }
+    }
+    @media (max-width: 920px) {
+      table { min-width: 640px; }
+    }
   </style>
 </head>
 <body>
@@ -257,7 +276,7 @@
                   {{else}}
                     {{firstName}} {{lastName}}
                   {{/if}}
-                  {{#if username}}<br><span class="muted monospace">@{{username}}</span>{{/if}}
+                  {{#if username}}<br><span class="muted monospace">@{{username}}</span>{{/if}}{{#if gradeLabel}}<br><span class="muted" style="font-size:11px">{{gradeLabel}}</span>{{/if}}
                 </td>
 
                 <td class="muted">{{email}}</td>
@@ -271,7 +290,7 @@
                   {{/if}}
                 </td>
 
-                <td class="muted">{{#if createdAt}}{{createdAt}}{{else}}-{{/if}}</td>
+                <td class="muted">{{#if createdAtLabel}}{{createdAtLabel}}{{else}}-{{/if}}</td>
 
                 <td class="actions">
                   {{#if isParentOrTeacher}}
@@ -312,6 +331,7 @@
                     <label style="font-size:11px;display:inline-flex;gap:3px;align-items:center"><input type="checkbox" name="personas" value="student" {{#if hasStudent}}checked{{/if}}>Student</label>
                     <button type="submit" class="activate-btn" title="Grant these mobile accounts and activate each">Grant access</button>
                   </form>
+                  <a class="edit-btn" href="/admin/users/{{_id}}/edit" title="Edit this user">Edit</a>
                   <form method="post" action="/admin/users/{{_id}}/delete" style="display:inline" onsubmit="return confirmDelete(this);">
                     <button type="submit" class="delete-btn" title="Delete user">Delete</button>
                   </form>

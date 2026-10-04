@@ -373,6 +373,8 @@ router.get("/users", ensureAuth, ensureAdmin, async (req, res) => {
         planLabel: planKey || null,
         planActive: !!active,
         planExpiry: active && expirySrc ? new Date(expirySrc).toLocaleDateString() : null,
+        createdAtLabel: u.createdAt ? new Date(u.createdAt).toLocaleDateString() : "-",
+        gradeLabel: (u.role === "student" && u.grade != null) ? (Number(u.grade) <= 7 ? ("Grade " + u.grade) : ("Form " + (Number(u.grade) - 7))) : null,
         mobileRoles: Array.isArray(u.mobileRoles) ? u.mobileRoles : [],
         hasParent: (u.mobileRoles || []).includes("parent"),
         hasProfessional: (u.mobileRoles || []).includes("professional"),
@@ -540,6 +542,69 @@ router.get("/mobile-attempts", ensureAuth, ensureAdmin, async (req, res) => {
   } catch (err) {
     console.error("[admin/mobile-attempts]", err && (err.stack || err));
     return res.status(500).send("Failed to load mobile attempts");
+  }
+});
+
+
+/* ── EDIT a user (show form) ── */
+router.get("/users/:id/edit", ensureAuth, ensureAdmin, async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id).lean();
+    if (!user) return res.status(404).send("User not found");
+    return safeRender(req, res, "admin/user_edit", { title: "Admin · Edit user", u: user, layout: false });
+  } catch (err) {
+    console.error("[admin/users/edit GET]", err && (err.stack || err));
+    return res.status(500).send("Failed to load user");
+  }
+});
+
+/* ── EDIT a user (save) ── */
+router.post("/users/:id/edit", ensureAuth, ensureAdmin, async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).send("User not found");
+    const b = req.body || {};
+    const set = (k, v) => { if (v !== undefined && v !== null && String(v).trim() !== "") user[k] = v; };
+
+    set("firstName", b.firstName && String(b.firstName).trim());
+    set("lastName", b.lastName && String(b.lastName).trim());
+    user.displayName = [user.firstName, user.lastName].filter(Boolean).join(" ") || user.displayName;
+    if (b.email !== undefined) user.email = String(b.email).trim().toLowerCase() || user.email;
+    if (b.username !== undefined && String(b.username).trim()) user.username = String(b.username).trim().toLowerCase();
+    if (b.role && ["student","teacher","employee","org_admin","super_admin","private_teacher","parent","readonly_admin"].includes(b.role)) user.role = b.role;
+    if (b.grade !== undefined && String(b.grade).trim() !== "") { const g = Number(b.grade); if (Number.isFinite(g) && g >= 0 && g <= 13) user.grade = g; }
+    if (b.maxChildren !== undefined && String(b.maxChildren).trim() !== "") { const m = Number(b.maxChildren); if (Number.isFinite(m) && m >= 0) user.maxChildren = m; }
+    if (b.aiQuizCredits !== undefined && String(b.aiQuizCredits).trim() !== "") { const c = Number(b.aiQuizCredits); if (Number.isFinite(c) && c >= 0) user.aiQuizCredits = c; }
+    // Optional: reset a password
+    if (b.newPassword && String(b.newPassword).trim().length >= 4) { await user.setPassword(String(b.newPassword).trim()); }
+
+    await user.save();
+    return res.redirect("/admin/users");
+  } catch (err) {
+    console.error("[admin/users/edit POST]", err && (err.stack || err));
+    return res.status(500).send("Failed to save user: " + (err.message || "error"));
+  }
+});
+
+/* ── DELETE a user (and detach their managed children; remove their exams) ── */
+router.post("/users/:id/delete", ensureAuth, ensureAdmin, async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).send("User not found");
+    // Safety: never let an admin delete themselves.
+    if (req.user && String(req.user._id) === String(user._id)) {
+      return res.status(400).send("You can't delete your own account here.");
+    }
+    const ExamInstance = (await import("../models/examInstance.js")).default;
+    // Detach children they manage (don't cascade-delete learners).
+    await User.updateMany({ parentUserId: user._id }, { $set: { parentUserId: null } });
+    // Remove this user's own exam attempts.
+    await ExamInstance.deleteMany({ userId: user._id });
+    await User.deleteOne({ _id: user._id });
+    return res.redirect("/admin/users");
+  } catch (err) {
+    console.error("[admin/users/delete]", err && (err.stack || err));
+    return res.status(500).send("Failed to delete user");
   }
 });
 
