@@ -57,6 +57,11 @@ import mobileCoursesRouter from "./routes/mobileCourses.js";   // course engine 
 import mountHotspot from "./hotspot/index.js";
 // ...after mongoose has connected and `app` exists...
 
+import cripfcntWhatsAppRoutes from "./routes/cripfcnt_whatsapp.js";
+// ...
+
+
+
 
 import {
   allowInsecurePrototypeAccess
@@ -80,6 +85,7 @@ import lmsImportRoutes from "./routes/lms_Import.js";
 import adminCertificateRoutes from "./routes/admin_certificates.js";
 
 import stripeWebhookRoutes from "./routes/stripe_webhook.js";
+
 import { handle8QTCertificate } from "./routes/stripe_webhook_8qt.js";
 import billingRoutes from "./routes/billing.js";
 
@@ -218,6 +224,7 @@ app.use(express.urlencoded({ extended: true }));*/
 // 1️⃣ Stripe webhook FIRST (raw body)
 app.use("/stripe/webhook", express.raw({ type: "application/json" }));
 app.use("/stripe/webhook", stripeWebhookRoutes);
+app.use("/wa/cripfcnt", cripfcntWhatsAppRoutes);   // ← add here
 
  app.use("/api/boardroom", boardroomApiRoutes);
 app.use("/api", tradesApiRoutes);
