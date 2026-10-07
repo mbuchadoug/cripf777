@@ -992,8 +992,8 @@
         <a href="/auth/logout" class="btn-nav-primary">Sign Out</a>
       {{else}}
 <a href="/org/cripfcnt-school/dashboard" class="btn-nav-outline">CRIPFCnt School</a>
-<a href="/login?as=professional&amp;next=%2Farena" class="btn-nav-outline">🏆 Join Arena</a>
-<a href="/signup?as=parent" class="btn-nav-primary">🎓 Start Junior Academy</a>
+<a href="/auth/arena" class="btn-nav-outline">🏆 Join Arena</a>
+<a href="/auth/parent" class="btn-nav-primary">🎓 Start Junior Academy</a>
 
       {{/if}}
     </div>
@@ -1021,10 +1021,10 @@
           Go to Dashboard →
         </a>
       {{else}}
-<a href="/signup?as=parent" class="btn-hero btn-hero-primary">
+<a href="/auth/parent" class="btn-hero btn-hero-primary">
   🎓 Start Junior Academy
 </a>
-<a href="/login?as=professional&amp;next=%2Farena" class="btn-hero btn-hero-secondary">
+<a href="/auth/arena" class="btn-hero btn-hero-secondary">
   🏆 Join Arena
 </a>
 <a href="/lms/quiz" class="btn-hero btn-hero-secondary">
@@ -1059,7 +1059,7 @@
       {{#if user}}
         <a href="/parent/dashboard" class="hero-card-cta">Open Parent Dashboard →</a>
       {{else}}
-       <a href="/signup?as=parent" class="hero-card-cta">Start Junior Academy Free →</a>
+       <a href="/auth/parent" class="hero-card-cta">Start Junior Academy Free →</a>
       {{/if}}
     </div>
   </div>
@@ -1222,7 +1222,7 @@
         {{#if user}}
           <a href="/parent/dashboard" class="btn-hero btn-hero-primary">Open Parent Dashboard →</a>
         {{else}}
-        <a href="/signup?as=parent" class="btn-hero btn-hero-primary">Start Free Trial →</a>
+        <a href="/auth/parent" class="btn-hero btn-hero-primary">Start Free Trial →</a>
         {{/if}}
       </div>
 
@@ -1282,10 +1282,10 @@
             Go to Dashboard
           </a>
         {{else}}
- <a href="/signup?as=parent" class="btn-cta btn-cta-dark">
+ <a href="/auth/parent" class="btn-cta btn-cta-dark">
   🎓 Start Junior Academy
 </a>
-<a href="/login?as=professional" class="btn-cta btn-cta-light">
+<a href="/auth/google?returnTo=%2Forg%2Fcripfcnt-school%2Fdashboard&force=1" class="btn-cta btn-cta-light">
   CRIPFCnt School
 </a>
 
@@ -1327,8 +1327,8 @@
     <div>
       <h4>Access</h4>
       <ul>
-        <li><a href="/login?as=student">School Login</a></li>
-        <li><a href="/login?as=professional">Professional Login</a></li>
+        <li><a href="/auth/school">School Login</a></li>
+        <li><a href="/auth/google">Professional Login</a></li>
         <li><a href="/support">Support</a></li>
       </ul>
     </div>

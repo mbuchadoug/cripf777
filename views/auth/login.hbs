@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{#if (eq mode "signup")}}Create your account{{else}}Sign in{{/if}} · CRIPFCnt</title>
+  <style>
+    :root{--navy:#07203a;--navy2:#1E3A5F;--gold:#D4AF37;--gold2:#b58f2a;--ink:#07203a;--muted:#6b7280;--line:#e6ecf3;--bg:#f4f7fb;--white:#fff;--err:#c0392b;--ok:#0b7a52;--wa:#1f9d55}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:radial-gradient(1200px 600px at 50% -10%,#eaf1fb,transparent),var(--bg);color:var(--ink);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+    .card{width:100%;max-width:440px;background:var(--white);border:1px solid var(--line);border-radius:18px;box-shadow:0 18px 50px rgba(7,32,58,.10);padding:30px 28px}
+    .brand{display:flex;align-items:center;gap:11px;margin-bottom:20px;text-decoration:none;color:inherit}
+    .brand .mark{width:42px;height:42px;border-radius:10px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,var(--gold),var(--gold2));color:#000;font-weight:900;font-size:20px}
+    .brand b{font-size:17px;letter-spacing:.3px}.brand span{display:block;font-size:11.5px;color:var(--muted);font-weight:600;margin-top:1px}
+    h1{font-size:21px;margin:0 0 5px}p.sub{margin:0 0 18px;color:var(--muted);font-size:13.5px;line-height:1.5}
+    label{display:block;font-size:12.5px;font-weight:700;margin:12px 0 6px;color:var(--navy2)}
+    input,select{width:100%;padding:12px 13px;border:1.5px solid var(--line);border-radius:10px;font-size:15px;color:var(--ink);background:#fbfdff;outline:none}
+    input:focus,select:focus{border-color:var(--gold)}
+    input.code{letter-spacing:8px;text-align:center;font-size:22px;font-weight:700}
+    .row{display:flex;gap:10px}.row>div{flex:1}
+    .btn{display:block;width:100%;margin-top:16px;padding:12px 14px;border:none;border-radius:10px;font-size:14.5px;font-weight:800;cursor:pointer;background:var(--navy);color:#fff;text-align:center;text-decoration:none}
+    .btn:disabled{opacity:.6;cursor:wait}.btn.gold{background:linear-gradient(135deg,var(--gold),var(--gold2));color:#000}
+    .btn.ghost{background:#fff;color:var(--navy);border:1.5px solid var(--line)}.btn.wa{background:var(--wa)}
+    .link{background:none;border:none;color:var(--navy2);font-weight:700;font-size:13px;cursor:pointer;padding:0;text-decoration:underline}
+    .links{display:flex;justify-content:space-between;margin-top:14px;font-size:13px}
+    .or{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:12px;margin:18px 0 4px}.or:before,.or:after{content:"";flex:1;height:1px;background:var(--line)}
+    .msg{display:none;margin-top:12px;padding:10px 12px;border-radius:9px;font-size:13px;line-height:1.45}
+    .msg.err{display:block;background:#fdecea;color:var(--err)}.msg.ok{display:block;background:#e8f6ef;color:var(--ok)}
+    .step{display:none}.step.active{display:block}
+    .who{background:#f6f8fb;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:13.5px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center}
+    .roles{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px}
+    .role{border:1.5px solid var(--line);border-radius:12px;padding:12px;cursor:pointer;background:#fbfdff;text-align:left;font:inherit;color:inherit}
+    .role b{display:block;font-size:14px}.role small{display:block;color:var(--muted);font-size:11.5px;margin-top:3px;line-height:1.35}
+    .role.sel{border-color:var(--gold);background:#fffaf0;box-shadow:0 0 0 3px rgba(212,175,55,.18)}
+    .acct{display:flex;justify-content:space-between;align-items:center;border:1.5px solid var(--line);border-radius:10px;padding:10px 12px;margin-top:8px;font-size:13.5px}
+    .acct small{color:var(--muted)}.pill{font-size:11px;font-weight:800;background:#eef3f9;border-radius:20px;padding:2px 8px;margin-left:6px}
+    .hint{font-size:12px;color:var(--muted);margin-top:6px;line-height:1.45}
+    .tabs{display:flex;background:#eef3f9;border-radius:11px;padding:4px;margin-bottom:18px}
+    .tabs a{flex:1;text-align:center;padding:8px;border-radius:8px;font-size:13.5px;font-weight:800;color:var(--navy2);text-decoration:none}
+    .tabs a.on{background:#fff;box-shadow:0 2px 8px rgba(7,32,58,.08)}
+  </style>
+</head>
+<body>
+<div class="card" id="app" data-mode="{{mode}}" data-as="{{as}}" data-next="{{next}}" data-what="{{what}}">
+  <a class="brand" href="/"><div class="mark">C</div><div><b>CRIPFCnt</b><span>Learning · Assessment · Certification</span></div></a>
+
+  <div class="tabs" id="tabs">
+    <a href="/login{{#if as}}?as={{as}}{{/if}}" class="{{#if (eq mode "login")}}on{{/if}}{{#if (eq mode "forgot")}}on{{/if}}">Sign in</a>
+    <a href="/signup{{#if as}}?as={{as}}{{/if}}" class="{{#if (eq mode "signup")}}on{{/if}}">Create account</a>
+  </div>
+
+  <!-- ═════════════ SIGN IN ═════════════ -->
+  <section class="step" id="s-identify">
+    <h1>Sign in{{#if asLabel}} · {{asLabel}}{{/if}}</h1>
+    <p class="sub">One account for the website, the app and WhatsApp. Students, parents, teachers, schools and professionals all sign in here.</p>
+    <label for="identifier">Email, phone number or username</label>
+    <input id="identifier" autocomplete="username" placeholder="e.g. 0771 234 567, you@email.com or johsmith1042">
+    <button class="btn" id="b-identify">Continue</button>
+    <div class="links"><button class="link" data-go="forgot-password">Forgot password?</button><button class="link" data-go="forgot-username">Forgot username?</button></div>
+    <div class="or">or</div>
+    <a class="btn ghost" href="{{googleUrl}}">Continue with Google</a>
+  </section>
+
+  <section class="step" id="s-method">
+    <div class="who"><span id="who-name">Your account</span><button class="link" data-go="identify">Not you?</button></div>
+    <div id="pw-box">
+      <label for="password">Password</label>
+      <input id="password" type="password" autocomplete="current-password">
+      <button class="btn" id="b-password">Sign in</button>
+    </div>
+    <div id="code-box">
+      <div class="or" id="code-or">or get a one-time code</div>
+      <div id="code-options"></div>
+    </div>
+    <p class="hint" id="no-options" style="display:none">No phone or email is linked to this account, so we can't send a code. Use your password, or ask your school or parent to reset it.</p>
+  </section>
+
+  <section class="step" id="s-managed">
+    <h1>Ask for help</h1>
+    <p class="sub" id="managed-text">This is a student account. Your parent or teacher can reset your password from their dashboard.</p>
+    <button class="btn ghost" data-go="identify">Back</button>
+  </section>
+
+  <section class="step" id="s-code">
+    <h1>Enter your code</h1>
+    <p class="sub" id="code-sent">We sent a 6-digit code.</p>
+    <input id="code" class="code" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="••••••">
+    <button class="btn" id="b-code">Verify</button>
+    <div class="links"><button class="link" id="b-resend">Send a new code</button><button class="link" data-go="back">Back</button></div>
+  </section>
+
+  <section class="step" id="s-choose">
+    <h1>Choose an account</h1>
+    <p class="sub">These accounts use the same phone or email. Pick the one you want.</p>
+    <div id="choose-list"></div>
+  </section>
+
+  <section class="step" id="s-setpw">
+    <h1 id="setpw-title">Create a password</h1>
+    <p class="sub" id="setpw-sub">So you can also sign in with your username or phone and a password.</p>
+    <label for="newpw">New password</label><input id="newpw" type="password" autocomplete="new-password">
+    <label for="newpw2">Repeat password</label><input id="newpw2" type="password" autocomplete="new-password">
+    <button class="btn" id="b-setpw">Save password</button>
+    <button class="btn ghost" id="b-setpw-skip">Skip for now</button>
+  </section>
+
+  <section class="step" id="s-phone">
+    <h1>Add your WhatsApp number</h1>
+    <p class="sub">Sign in next time with a code on WhatsApp, and recover your account if you forget your password.</p>
+    <div id="phone-ask"><label for="phone">WhatsApp number</label><input id="phone" inputmode="tel" placeholder="0771 234 567 or +44 7700 900123"><button class="btn wa" id="b-phone">Send code on WhatsApp</button></div>
+    <div id="phone-code" style="display:none"><p class="sub" id="phone-sent"></p><input id="phonecode" class="code" inputmode="numeric" maxlength="6" placeholder="••••••"><button class="btn" id="b-phonecode">Verify number</button></div>
+    <button class="btn ghost" id="b-phone-skip">Skip for now</button>
+  </section>
+
+  <section class="step" id="s-done">
+    <h1 id="done-title">You're in</h1>
+    <p class="sub" id="done-text"></p>
+    <button class="btn gold" id="b-done">Continue</button>
+  </section>
+
+  <!-- ═════════════ FORGOT ═════════════ -->
+  <section class="step" id="s-forgot-password">
+    <h1>Reset your password</h1>
+    <p class="sub">Enter your email, phone number or username. We'll send a code to the WhatsApp number or email on the account.</p>
+    <label for="fp-identifier">Email, phone number or username</label>
+    <input id="fp-identifier" autocomplete="username">
+    <button class="btn" id="b-fp">Continue</button>
+    <div class="links"><button class="link" data-go="forgot-username">Forgot username instead?</button><button class="link" data-go="identify">Back to sign in</button></div>
+  </section>
+
+  <section class="step" id="s-forgot-username">
+    <h1>Find your username</h1>
+    <p class="sub">Enter the phone number or email on your account. After you confirm the code we'll show every account linked to it, including your children's.</p>
+    <label for="fu-contact">Phone number or email</label>
+    <input id="fu-contact" autocomplete="email">
+    <button class="btn" id="b-fu">Send code</button>
+    <div class="links"><button class="link" data-go="forgot-password">Forgot password instead?</button><button class="link" data-go="identify">Back to sign in</button></div>
+  </section>
+
+  <section class="step" id="s-usernames">
+    <h1>Your accounts</h1>
+    <p class="sub">Tap one to sign in. Your children sign in with their own username and PIN; you can change their PIN from your dashboard.</p>
+    <div id="username-list"></div>
+  </section>
+
+  <!-- ═════════════ SIGN UP ═════════════ -->
+  <section class="step" id="u-role">
+    <h1>Create your account</h1>
+    <p class="sub">What are you here for? You can add the others to the same account later.</p>
+    <div class="roles">
+      <button class="role" data-role="student"><b>🎓 Student</b><small>Quizzes for my grade and my knowledge map</small></button>
+      <button class="role" data-role="parent"><b>👨‍👩‍👧 Parent / Guardian</b><small>Add my children and follow their results</small></button>
+      <button class="role" data-role="teacher"><b>👨‍🏫 Private teacher</b><small>Teach my own students with AI quizzes</small></button>
+      <button class="role" data-role="professional"><b>🏛️ Professional</b><small>Courses, assessments and certificates</small></button>
+    </div>
+    <button class="btn" id="b-role">Continue</button>
+    <p class="hint">Already have an account? <a href="/login">Sign in</a>. Under 13? Ask a parent or teacher to create your account.</p>
+  </section>
+
+  <section class="step" id="u-details">
+    <div class="who"><span id="role-chosen"></span><button class="link" data-go="u-role">Change</button></div>
+    <div class="row"><div><label for="firstName">First name</label><input id="firstName" autocomplete="given-name"></div><div><label for="lastName">Last name</label><input id="lastName" autocomplete="family-name"></div></div>
+    <label for="contact">Phone number (WhatsApp) or email</label>
+    <input id="contact" autocomplete="email" placeholder="0771 234 567 or you@email.com">
+    <p class="hint">We'll send a code to confirm it's yours. Phone numbers get the code on WhatsApp.</p>
+    <div id="grade-box" style="display:none"><label for="grade">Your grade</label>
+      <select id="grade"><option value="">Choose your grade</option>{{#each grades}}<option value="{{value}}">{{label}}</option>{{/each}}</select></div>
+    <label for="supw">Password</label><input id="supw" type="password" autocomplete="new-password" placeholder="At least 6 characters">
+    <button class="btn" id="b-signup">Create account</button>
+  </section>
+
+  <div class="msg" id="msg"></div>
+</div>
+
+<script>
+(function(){
+  var app = document.getElementById("app");
+  var S = { mode: app.dataset.mode, as: app.dataset.as, next: app.dataset.next, persona: app.dataset.as || "", option: 0, purpose: "signin", codeFor: "login", result: null, history: [] };
+  var $ = function(id){ return document.getElementById(id); };
+  function go(u){ (window.__cripfcntGo || function(v){ window.location.href = v; })(u); }
+  var msg = $("msg");
+  function say(t, ok){ msg.className = "msg " + (ok ? "ok" : "err"); msg.textContent = t; }
+  function hush(){ msg.className = "msg"; msg.textContent = ""; }
+  function show(id){ hush(); var cur = document.querySelector(".step.active"); if (cur && cur.id !== id) S.history.push(cur.id);
+    document.querySelectorAll(".step").forEach(function(s){ s.classList.toggle("active", s.id === id); });
+    var f = document.querySelector("#" + id + " input:not([type=hidden])"); if (f) setTimeout(function(){ f.focus(); }, 30); }
+  async function post(url, body){
+    try { var r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json", "Accept": "application/json" }, credentials: "same-origin", body: JSON.stringify(body || {}) });
+      var d = {}; try { d = await r.json(); } catch(e){}
+      return { ok: r.ok, status: r.status, data: d };
+    } catch(e){ return { ok: false, status: 0, data: { error: "No connection. Check your internet and try again." } }; }
+  }
+  function busy(btn, on, label){ if (!btn) return; if (on){ btn.dataset.t = btn.textContent; btn.textContent = label || "Please wait…"; btn.disabled = true; } else { btn.textContent = btn.dataset.t || btn.textContent; btn.disabled = false; } }
+  function enter(input, btn){ input && input.addEventListener("keydown", function(e){ if (e.key === "Enter"){ e.preventDefault(); btn.click(); } }); }
+  function fail(res, fallback){ var d = res.data || {}; if (res.status === 440){ say(d.error || "Session timed out."); show(S.mode === "signup" ? "u-role" : "s-identify"); return; } say(d.error || fallback); }
+
+  // ── navigation links ──
+  document.querySelectorAll("[data-go]").forEach(function(b){ b.addEventListener("click", function(){
+    var g = b.dataset.go;
+    if (g === "back"){ var prev = S.history.pop(); if (prev){ document.querySelectorAll(".step").forEach(function(s){ s.classList.toggle("active", s.id === prev); }); hush(); } return; }
+    if (g === "identify") { S.purpose = "signin"; return show("s-identify"); }
+    if (g === "forgot-password") { S.purpose = "reset_password"; return show("s-forgot-password"); }
+    if (g === "forgot-username") return show("s-forgot-username");
+    show(g);
+  }); });
+
+  // ── after a successful sign-in: optional password / WhatsApp, then go ──
+  function afterLogin(d){
+    S.result = d;
+    if (d.mustSetPassword){ $("setpw-title").textContent = "Choose a new password"; $("setpw-sub").textContent = "Your old password will stop working."; $("b-setpw-skip").style.display = "none"; return show("s-setpw"); }
+    if (d.needsPassword){ $("b-setpw-skip").style.display = "block"; return show("s-setpw"); }
+    return maybePhone();
+  }
+  function maybePhone(){ if (S.result && S.result.offerPhone) return show("s-phone"); return finish(); }
+  function finish(){
+    var d = S.result || {};
+    if (S.codeFor === "signup" && d.username){
+      $("done-title").textContent = "Welcome to CRIPFCnt";
+      $("done-text").textContent = "Your username is " + d.username + ". You can sign in with it, your phone or your email.";
+      $("b-done").onclick = function(){ go(d.redirect || "/"); };
+      return show("s-done");
+    }
+    go(d.redirect || "/");
+  }
+
+  // ── 1. identify ──
+  async function identify(value, btn){
+    var r = await post("/login/api/identify", { identifier: value });
+    if (!r.ok){ if (r.data && r.data.canSignup) say((r.data.error || "") + " New here? Tap Create account."); else fail(r, "Something went wrong."); return null; }
+    return r.data;
+  }
+  function renderMethod(d, resetMode){
+    $("who-name").textContent = d.multiple ? "Several accounts match - we'll ask which one" : ("Hi " + (d.name || "there"));
+    $("pw-box").style.display = (!resetMode && d.hasPassword) ? "block" : "none";
+    $("code-or").textContent = (!resetMode && d.hasPassword) ? "or get a one-time code" : "Get a one-time code";
+    var box = $("code-options"); box.innerHTML = "";
+    d.options.forEach(function(o){ var b = document.createElement("button"); b.className = "btn " + (o.channel === "whatsapp" ? "wa" : "ghost");
+      b.textContent = "Send code to " + o.label; b.onclick = function(){ sendCode(o.index, b); }; box.appendChild(b); });
+    $("code-box").style.display = d.options.length ? "block" : "none";
+    $("no-options").style.display = d.options.length ? "none" : "block";
+    show("s-method");
+  }
+  $("b-identify").onclick = async function(){
+    var v = $("identifier").value.trim(); if (!v) return say("Enter your email, phone number or username.");
+    busy(this, true, "Checking…"); var d = await identify(v); busy(this, false); if (!d) return;
+    S.purpose = "signin";
+    if (d.managed && !d.hasPassword){ $("managed-text").textContent = "This is a student account managed by " + d.helper + ". Ask them to reset your PIN from their dashboard."; return show("s-managed"); }
+    renderMethod(d, false);
+  };
+  enter($("identifier"), $("b-identify"));
+
+  $("b-password").onclick = async function(){
+    var pw = $("password").value; if (!pw) return say("Enter your password.");
+    busy(this, true, "Signing in…"); var r = await post("/login/api/password", { password: pw }); busy(this, false);
+    if (!r.ok) return fail(r, "That password is not right."); S.codeFor = "login"; afterLogin(r.data);
+  };
+  enter($("password"), $("b-password"));
+
+  // ── 2. codes ──
+  async function sendCode(index, btn){
+    S.option = index; busy(btn, true, "Sending…");
+    var r = await post("/login/api/code/send", { option: index, purpose: S.purpose }); busy(btn, false);
+    if (!r.ok) return fail(r, "Could not send a code.");
+    S.codeFor = "login"; $("code").value = ""; $("code-sent").textContent = "We sent a 6-digit code to " + r.data.sentTo + "." + (r.data.devCode ? " (dev: " + r.data.devCode + ")" : "");
+    show("s-code");
+  }
+  $("b-resend").onclick = async function(){
+    if (S.codeFor === "signup") return $("b-signup").click();
+    if (S.codeFor === "username") return $("b-fu").click();
+    var r = await post("/login/api/code/send", { option: S.option, purpose: S.purpose });
+    if (!r.ok) return fail(r, "Could not send a code."); say("A new code is on its way.", true);
+  };
+  $("b-code").onclick = async function(){
+    var c = $("code").value.trim(); if (c.length !== 6) return say("Enter the 6-digit code.");
+    var url = S.codeFor === "signup" ? "/signup/api/verify" : S.codeFor === "username" ? "/forgot/api/username/verify" : "/login/api/code/verify";
+    busy(this, true, "Checking…"); var r = await post(url, { code: c }); busy(this, false);
+    if (!r.ok){ if (r.data && r.data.signIn) { say(r.data.error); setTimeout(function(){ go("/login"); }, 1800); return; } return fail(r, "That code is not right."); }
+    if (S.codeFor === "username") return renderUsernames(r.data);
+    if (r.data.chooseAccount) return renderChoose(r.data.chooseAccount);
+    afterLogin(r.data);
+  };
+  enter($("code"), $("b-code"));
+  $("code").addEventListener("input", function(){ this.value = this.value.replace(/\D/g, "").slice(0, 6); if (this.value.length === 6) $("b-code").click(); });
+
+  function accountRow(a, sub){
+    var row = document.createElement("div"); row.className = "acct";
+    row.innerHTML = "<div><b></b><span class='pill'></span><br><small></small></div>";
+    row.querySelector("b").textContent = a.name; row.querySelector(".pill").textContent = a.role;
+    row.querySelector("small").textContent = (a.username ? "Username: " + a.username : "No username") + (sub ? " · " + sub : "");
+    var b = document.createElement("button"); b.className = "btn"; b.style.width = "auto"; b.style.margin = "0"; b.style.padding = "8px 14px"; b.textContent = "Sign in";
+    b.onclick = async function(){ busy(b, true, "…"); var r = await post("/login/api/choose", { id: a.id }); busy(b, false); if (!r.ok) return fail(r, "Login failed."); S.codeFor = "login"; afterLogin(r.data); };
+    row.appendChild(b); return row;
+  }
+  function renderChoose(list){ var box = $("choose-list"); box.innerHTML = ""; list.forEach(function(a){ box.appendChild(accountRow(a)); }); show("s-choose"); }
+
+  // ── 3. password + WhatsApp after sign-in ──
+  $("b-setpw").onclick = async function(){
+    var a = $("newpw").value, b = $("newpw2").value;
+    if (a.length < 6) return say("Use at least 6 characters."); if (a !== b) return say("The passwords don't match.");
+    busy(this, true, "Saving…"); var r = await post("/login/api/set-password", { password: a }); busy(this, false);
+    if (!r.ok) return fail(r, "Could not save your password."); maybePhone();
+  };
+  $("b-setpw-skip").onclick = maybePhone;
+  $("b-phone").onclick = async function(){
+    var p = $("phone").value.trim(); if (!p) return say("Enter your WhatsApp number.");
+    busy(this, true, "Sending…"); var r = await post("/login/api/phone/send", { phone: p }); busy(this, false);
+    if (!r.ok) return fail(r, "Could not send a code.");
+    $("phone-sent").textContent = "Enter the code we sent to " + r.data.sentTo + "." + (r.data.devCode ? " (dev: " + r.data.devCode + ")" : "");
+    $("phone-ask").style.display = "none"; $("phone-code").style.display = "block"; $("phonecode").focus();
+  };
+  $("b-phonecode").onclick = async function(){
+    var c = $("phonecode").value.trim(); if (c.length !== 6) return say("Enter the 6-digit code.");
+    busy(this, true, "Checking…"); var r = await post("/login/api/phone/verify", { code: c }); busy(this, false);
+    if (!r.ok) return fail(r, "That code is not right."); say("WhatsApp number added.", true); setTimeout(finish, 600);
+  };
+  $("b-phone-skip").onclick = finish;
+
+  // ── forgot password / username ──
+  $("b-fp").onclick = async function(){
+    var v = $("fp-identifier").value.trim(); if (!v) return say("Enter your email, phone number or username.");
+    busy(this, true, "Checking…"); var d = await identify(v); busy(this, false); if (!d) return;
+    S.purpose = "reset_password";
+    if (!d.options.length){ $("managed-text").textContent = d.managed ? ("This student account is managed by " + d.helper + ". Ask them to reset your PIN from their dashboard.") : "There's no phone or email on this account, so we can't send a reset code. Ask your school administrator, parent or teacher to reset your password."; return show("s-managed"); }
+    renderMethod(d, true);
+  };
+  enter($("fp-identifier"), $("b-fp"));
+  $("b-fu").onclick = async function(){
+    var v = $("fu-contact").value.trim(); if (!v) return say("Enter your phone number or email.");
+    busy(this, true, "Sending…"); var r = await post("/forgot/api/username/send", { contact: v }); busy(this, false);
+    if (!r.ok) return fail(r, "Could not send a code.");
+    S.codeFor = "username"; $("code").value = ""; $("code-sent").textContent = "We sent a 6-digit code to " + r.data.sentTo + "." + (r.data.devCode ? " (dev: " + r.data.devCode + ")" : "");
+    show("s-code");
+  };
+  enter($("fu-contact"), $("b-fu"));
+  function renderUsernames(d){
+    var box = $("username-list"); box.innerHTML = "";
+    d.accounts.forEach(function(a){ box.appendChild(accountRow(a)); });
+    if (d.children.length){ var h = document.createElement("p"); h.className = "hint"; h.style.marginTop = "14px"; h.textContent = "Children on these accounts:"; box.appendChild(h);
+      d.children.forEach(function(c){ box.appendChild(accountRow(c, "managed by " + c.managedBy)); }); }
+    show("s-usernames");
+  }
+
+  // ── sign up ──
+  var LABEL = { student: "🎓 Student", parent: "👨‍👩‍👧 Parent / Guardian", teacher: "👨‍🏫 Private teacher", professional: "🏛️ Professional" };
+  document.querySelectorAll(".role").forEach(function(b){ b.addEventListener("click", function(){ S.persona = b.dataset.role;
+    document.querySelectorAll(".role").forEach(function(x){ x.classList.toggle("sel", x === b); }); }); if (b.dataset.role === S.persona) b.classList.add("sel"); });
+  $("b-role").onclick = function(){ if (!S.persona) return say("Choose what you're here for.");
+    $("role-chosen").textContent = LABEL[S.persona]; $("grade-box").style.display = S.persona === "student" ? "block" : "none"; show("u-details"); };
+  $("b-signup").onclick = async function(){
+    var body = { persona: S.persona, firstName: $("firstName").value.trim(), lastName: $("lastName").value.trim(), contact: $("contact").value.trim(), password: $("supw").value, grade: $("grade").value };
+    if (!body.firstName) return say("Enter your first name."); if (!body.contact) return say("Enter your phone number or email.");
+    if (S.persona === "student" && body.grade === "") return say("Choose your grade."); if (body.password.length < 6) return say("Use a password of at least 6 characters.");
+    busy(this, true, "Creating…"); var r = await post("/signup/api/start", body); busy(this, false);
+    if (!r.ok){ if (r.data && r.data.signIn){ say(r.data.error); return; } return fail(r, "Could not start sign-up."); }
+    S.codeFor = "signup"; $("code").value = ""; $("code-sent").textContent = "We sent a 6-digit code to " + r.data.sentTo + ". Enter it to finish creating your account." + (r.data.devCode ? " (dev: " + r.data.devCode + ")" : "");
+    show("s-code");
+  };
+  enter($("supw"), $("b-signup"));
+
+  // ── start ──
+  if (S.mode === "signup") show(S.persona ? (document.querySelector(".role.sel") ? "u-role" : "u-role") : "u-role");
+  else if (S.mode === "forgot") { S.purpose = app.dataset.what === "username" ? "signin" : "reset_password"; show(app.dataset.what === "username" ? "s-forgot-username" : "s-forgot-password"); }
+  else show("s-identify");
+})();
+</script>
+</body>
+</html>

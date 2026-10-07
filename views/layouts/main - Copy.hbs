@@ -314,15 +314,15 @@
       <li class="c-dropdown c-desktop-only" id="cLmsDropdown">
         <a href="/lms" class="c-dropdown-toggle">LMS <span class="c-caret">▾</span></a>
         <div class="c-dropdown-menu">
-          <a class="c-dd-link" href="/login?as=parent">
+          <a class="c-dd-link" href="/auth/parent">
             <div class="c-dd-title">👨‍👩‍👧 Parents &amp; Guardians</div>
             <div class="c-dd-sub">Manage kids · Grades 1–7 + High School</div>
           </a>
-          <a class="c-dd-link" href="/login?as=teacher">
+          <a class="c-dd-link" href="/auth/teacher">
             <div class="c-dd-title">👨‍🏫 Private Teachers</div>
             <div class="c-dd-sub">Up to 15/40 learners</div>
           </a>
-          <a class="c-dd-link" href="/login?as=professional">
+          <a class="c-dd-link" href="/auth/google?returnTo=%2Forg%2Fcripfcnt-school%2Fdashboard&force=1">
             <div class="c-dd-title">🏛️ Professionals</div>
             <div class="c-dd-sub">8 modules · audits · certification</div>
           </a>
@@ -333,13 +333,13 @@
       <li class="c-mobile-only c-lms-section">
         <div class="c-lms-header">LMS Options</div>
         <ul class="c-lms-links">
-          <li><a href="/login?as=parent">👨‍👩‍👧 Parents &amp; Guardians</a></li>
-          <li><a href="/login?as=teacher">👨‍🏫 Private Teachers</a></li>
-          <li><a href="/login?as=professional">🏛️ Professionals</a></li>
+          <li><a href="/auth/parent">👨‍👩‍👧 Parents &amp; Guardians</a></li>
+          <li><a href="/auth/teacher">👨‍🏫 Private Teachers</a></li>
+          <li><a href="/auth/google?returnTo=%2Forg%2Fcripfcnt-school%2Fdashboard&force=1">🏛️ Professionals</a></li>
         </ul>
       </li>
 
-      <li><a href="/login?as=student">Student Portal</a></li>
+      <li><a href="/auth/school">Student Portal</a></li>
 
       <!-- 8QT Placement Intelligence Test -->
       <li class="c-desktop-only">
@@ -366,7 +366,7 @@
             <a href="/auth/logout" class="c-signout">Sign Out</a>
           </div>
         {{else}}
-          <a href="/login" class="c-btn">Sign In</a>
+          <a href="/auth/google" class="c-btn">Sign In</a>
         {{/if}}
       </li>
     </ul>
