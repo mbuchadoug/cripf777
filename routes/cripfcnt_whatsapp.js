@@ -52,31 +52,49 @@ function alreadySeen(id) {
 }
 
 // ── 2) Incoming events ───────────────────────────────────────────────────────
+// Logging: one summary line per webhook call. Set CRIPFCNT_WA_DEBUG=1 in .env to
+// also dump the raw payload (turn it off again once things work).
 router.post("/webhook", express.raw({ type: "*/*", limit: "2mb" }), async (req, res) => {
   const raw = Buffer.isBuffer(req.body) ? req.body : Buffer.from(JSON.stringify(req.body || {}));
-  if (!validSignature(raw, req.get("x-hub-signature-256"))) return res.sendStatus(401);
+  const sigOk = validSignature(raw, req.get("x-hub-signature-256"));
+  console.log(`[CRIPFCnt WA] webhook POST ${raw.length}b bodyType=${Buffer.isBuffer(req.body) ? "raw" : typeof req.body} sig=${sigOk ? "ok" : "BAD"}`);
+  if (!sigOk) return res.sendStatus(401);
   res.sendStatus(200); // always ACK fast; work happens after
 
-  let body;
-  try { body = JSON.parse(raw.toString("utf8")); } catch { return; }
+  try {
+    let body;
+    try { body = JSON.parse(raw.toString("utf8")); }
+    catch (e) { console.warn("[CRIPFCnt WA] body is not JSON:", raw.toString("utf8").slice(0, 200)); return; }
+    if (process.env.CRIPFCNT_WA_DEBUG === "1") console.log("[CRIPFCnt WA] payload", JSON.stringify(body).slice(0, 3000));
 
-  for (const entry of body.entry || []) {
-    for (const change of entry.changes || []) {
-      const value = change.value || {};
-      // Safety: only handle events for the CRIPFCnt number.
-      if (process.env.CRIPFCNT_WA_PHONE_NUMBER_ID &&
-          value.metadata?.phone_number_id !== process.env.CRIPFCNT_WA_PHONE_NUMBER_ID) continue;
+    const want = String(process.env.CRIPFCNT_WA_PHONE_NUMBER_ID || "").trim();
 
-      for (const msg of value.messages || []) {
-        if (!msg.id || alreadySeen(msg.id)) continue;
-        const name = value.contacts?.find((c) => c.wa_id === msg.from)?.profile?.name || "";
-        handleMessage(msg, name).catch((e) => console.error("[CRIPFCnt WA handle]", e.message));
-      }
-      // value.statuses (sent/delivered/read/failed) - log failures for now.
-      for (const st of value.statuses || []) {
-        if (st.status === "failed") console.warn("[CRIPFCnt WA status failed]", st.recipient_id, JSON.stringify(st.errors || []));
+    for (const entry of body.entry || []) {
+      for (const change of entry.changes || []) {
+        const value = change.value || {};
+        const pid = String(value.metadata?.phone_number_id || "").trim();
+        const msgs = value.messages || [];
+        const statuses = value.statuses || [];
+        console.log(`[CRIPFCnt WA] field=${change.field} pid=${pid || "-"} want=${want || "(unset)"} msgs=${msgs.length} statuses=${statuses.length}`);
+
+        // Safety: only handle events for the CRIPFCnt number.
+        if (want && pid && pid !== want) { console.warn("[CRIPFCnt WA] skipped: phone_number_id mismatch"); continue; }
+
+        for (const msg of msgs) {
+          if (!msg.id || alreadySeen(msg.id)) { console.log("[CRIPFCnt WA] duplicate ignored", msg.id); continue; }
+          const name = value.contacts?.find((c) => c.wa_id === msg.from)?.profile?.name || "";
+          console.log(`[CRIPFCnt WA] in from=${msg.from} type=${msg.type} action="${actionOf(msg)}"`);
+          handleMessage(msg, name)
+            .then(() => console.log(`[CRIPFCnt WA] replied to ${msg.from}`))
+            .catch((e) => console.error("[CRIPFCnt WA handle]", e.response?.data?.error ? JSON.stringify(e.response.data.error) : e.stack || e.message));
+        }
+        for (const st of statuses) {
+          if (st.status === "failed") console.warn("[CRIPFCnt WA status failed]", st.recipient_id, JSON.stringify(st.errors || []));
+        }
       }
     }
+  } catch (e) {
+    console.error("[CRIPFCnt WA] webhook processing error:", e.stack || e.message);
   }
 });
 
