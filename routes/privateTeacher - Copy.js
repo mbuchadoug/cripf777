@@ -13,7 +13,6 @@ import multer from "multer";
 import Attempt from "../models/attempt.js";
 import CreatorCampaign from "../models/creatorCampaign.js";
 import { buildAttemptReview } from "../services/attemptReview.js";
-import { hasPersona } from "../services/identity.js";
 
 
 
@@ -30,14 +29,9 @@ const upload = multer({
 const router = Router();
 
 // ✅ Middleware: Ensure private teacher
-// Central login Phase 1: anyone who HAS the Teacher persona may use the teacher
-// area - whether their account started as a teacher or they added Teacher later
-// (on the web or in the app). Their role is never changed to get here.
 function ensurePrivateTeacher(req, res, next) {
-  if (!req.user) return res.redirect("/auth/login");
-  if (!hasPersona(req.user, "teacher")) {
-    // Explicit choice only - we never add a role just because a URL was opened.
-    return res.status(403).send('This area is for teachers. <a href="/auth/teacher">Add a Teacher profile to your account</a> or <a href="/">go back</a>.');
+  if (req.user.role !== "private_teacher") {
+    return res.status(403).send("Private teachers only");
   }
   next();
 }

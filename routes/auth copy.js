@@ -1,15 +1,5 @@
 // routes/auth.js
 // ─────────────────────────────────────────────────────────────────────
-//  CENTRAL LOGIN - PHASE 1 (stops data damage; same pages, same URLs):
-//   • Logging in NEVER changes user.role any more. /auth/parent, /auth/teacher
-//     and the Google callback ADD a persona (exactly like the app's
-//     /api/mobile/roles/enable) instead of overwriting the role.
-//   • Email codes use the shared, hashed, attempt-limited code store
-//     (services/identity.js) instead of plaintext codes in the session.
-//   • One landing rule (identity.landingFor) for every login path.
-//   • Rate limits on every password/code endpoint.
-//   • Removed the temporary child-username diagnostic logging.
-// ─────────────────────────────────────────────────────────────────────
 //  CHANGES FROM PREVIOUS VERSION:
 //
 //  1. After Google OAuth callback, school members (employees/students/
@@ -38,20 +28,9 @@ import Question from "../models/question.js";
 import { ensureAuth } from "../middleware/authGuard.js";
 import User from "../models/user.js";
 import { mobileGoogleReturn } from "./mobileApi.js"; // mobile app return hook
-import {
-  issueCode, verifyCode, codeErrorMessage, CodeError,
-  enablePersona, landingFor, normalizeEmail
-} from "../services/identity.js";
-import { rateLimit } from "../middleware/rateLimit.js";
+import { sendVerificationCode } from "../services/mobileMailer.js"; // shared SMTP mailer
 
 const router = Router();
-
-// ── Rate limits (per IP) ─────────────────────────────────────────────
-const passwordLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 20 });
-const codeLimit     = rateLimit({ windowMs: 15 * 60 * 1000, max: 10 });
-router.use(["/email/login-password", "/email/verify-code", "/email/reset-password", "/email/check"], passwordLimit);
-router.use("/email/request-code", codeLimit);
-router.post(["/school", "/student"], passwordLimit);
 
 // ── Helpers ────────────────────────────────────────────────────────
 function safeReturnTo(candidate) {
@@ -91,7 +70,14 @@ function decodeState(state) {
 // Renders the chooser page (email / code / Google) instead of auto-Google.
 // ────────────────────────────────────────────────────────────
 router.get("/login", async (req, res) => {
-  if (req.user) return res.redirect(await landingFor(req.user));
+  if (req.user) {
+    if (req.user.role === "student" || req.user.parentUserId) return res.redirect("/student/dashboard");
+    if (req.user.role === "private_teacher") {
+      const td = await User.findById(req.user._id).select("needsProfileSetup schoolLevelsEnabled").lean();
+      return res.redirect((td?.needsProfileSetup || !td?.schoolLevelsEnabled?.length) ? "/teacher/setup" : "/teacher/dashboard");
+    }
+    return res.redirect("/parent/dashboard");
+  }
   // If your view lives elsewhere, change this render path to match.
   return res.render("auth/parent_login", { layout: false });
 });
@@ -104,10 +90,13 @@ router.get("/parent", async (req, res) => {
     if (req.user.role === "student" || req.user.parentUserId) {
       return res.redirect("/student/dashboard");
     }
-    // Add (or switch to) the Parent persona. The account's role is untouched,
-    // so a teacher or professional keeps everything they already have.
-    try { await enablePersona(req.user._id, "parent"); }
-    catch (e) { console.warn("[auth/parent] enablePersona:", e.message); }
+    if (!["parent", "private_teacher"].includes(req.user.role)) {
+      await User.updateOne(
+        { _id: req.user._id },
+        { $set: { role: "parent", consumerEnabled: true, accountType: "parent" } }
+      );
+      req.user.role = "parent";
+    }
     return res.redirect("/parent/dashboard");
   }
 
@@ -128,11 +117,16 @@ router.get("/teacher", async (req, res) => {
     if (req.user.role === "student" || req.user.parentUserId) {
       return res.redirect("/student/dashboard");
     }
-    // Add (or switch to) the Teacher persona - never overwrite the role.
-    let fresh = req.user;
-    try { fresh = await enablePersona(req.user._id, "teacher"); }
-    catch (e) { console.warn("[auth/teacher] enablePersona:", e.message); }
-    return res.redirect(await landingFor(fresh, "teacher"));
+    if (req.user.role !== "private_teacher") {
+      await User.updateOne(
+        { _id: req.user._id },
+        { $set: { role: "private_teacher", needsProfileSetup: true, consumerEnabled: true } }
+      );
+      req.user.role = "private_teacher";
+    }
+    const doc = await User.findById(req.user._id).select("needsProfileSetup schoolLevelsEnabled").lean();
+    if (doc?.needsProfileSetup || !doc?.schoolLevelsEnabled?.length) return res.redirect("/teacher/setup");
+    return res.redirect("/teacher/dashboard");
   }
   req.session.signupSource = "private_teacher";
   req.session.returnTo = "/teacher/setup";
@@ -236,16 +230,26 @@ router.get(
         if (isManagedStudent) {
           // A student/child is never re-roled by a signup source.
           redirectPath = "/student/dashboard";
-        } else if (signupSource === "private_teacher" || signupSource === "parent") {
-          // Came in through the Teacher / Parent button: ADD that persona.
-          // The account's role is never overwritten.
-          const persona = signupSource === "parent" ? "parent" : "teacher";
-          let fresh = req.user;
-          try { fresh = await enablePersona(req.user._id, persona); }
-          catch (e) { console.warn("[google callback] enablePersona:", e.message); }
-          redirectPath = await landingFor(fresh, persona);
-        } else if (["private_teacher", "teacher", "parent", "guardian"].includes(req.user.role) || memberships.length > 0) {
-          redirectPath = await landingFor(req.user);
+        } else if (signupSource === "private_teacher" && req.user.role !== "private_teacher") {
+          await User.updateOne({ _id: req.user._id }, { $set: { role: "private_teacher", needsProfileSetup: true, consumerEnabled: true } });
+          req.user.role = "private_teacher";
+          redirectPath = "/teacher/setup";
+        } else if (signupSource === "private_teacher") {
+          const td = await User.findById(req.user._id).select("needsProfileSetup schoolLevelsEnabled").lean();
+          redirectPath = (td?.needsProfileSetup || !td?.schoolLevelsEnabled?.length) ? "/teacher/setup" : "/teacher/dashboard";
+        } else if (signupSource === "parent") {
+          if (!["parent", "private_teacher"].includes(req.user.role)) {
+            await User.updateOne({ _id: req.user._id }, { $set: { role: "parent", consumerEnabled: true, accountType: "parent" } });
+            req.user.role = "parent";
+          }
+          redirectPath = "/parent/dashboard";
+        } else if (req.user.role === "private_teacher") {
+          const td = await User.findById(req.user._id).select("needsProfileSetup schoolLevelsEnabled").lean();
+          redirectPath = (td?.needsProfileSetup || !td?.schoolLevelsEnabled?.length) ? "/teacher/setup" : "/teacher/dashboard";
+        } else if (req.user.role === "parent") {
+          redirectPath = "/parent/dashboard";
+        } else if (memberships.length > 0 && memberships[0].org?.slug) {
+          redirectPath = `/org/${memberships[0].org.slug}/dashboard`;
         } else {
           const org = await Organization.findOne({ slug: defaultOrgSlug }).lean();
           if (org) {
@@ -358,6 +362,36 @@ router.post("/school", async (req, res) => {
 
     user.lastLogin = new Date();
     await user.save();
+
+    // ---- DIAGNOSTIC (temporary) ----
+    // Shows exactly which account matched the typed credentials, and - when it
+    // is a parent/teacher - the child usernames that DO reach the student dash.
+    // Remove this block once the correct child username is confirmed.
+    try {
+      console.log("[/auth/school] MATCHED ACCOUNT", {
+        typed: raw,
+        _id: String(user._id),
+        role: user.role,
+        username: user.username || null,
+        parentUserId: user.parentUserId ? String(user.parentUserId) : null,
+        hasPassword: !!user.passwordHash
+      });
+      if (user.role === "parent" || user.role === "private_teacher") {
+        const kids = await User.find({ parentUserId: user._id, role: "student" })
+          .select("firstName lastName username grade passwordHash")
+          .lean();
+        console.log(`[/auth/school] ^ this is a ${user.role}; ${kids.length} child login(s):`);
+        for (const k of kids) {
+          console.log("   child:", [k.firstName, k.lastName].filter(Boolean).join(" "),
+            "| username:", k.username || "(none)",
+            "| canWebLogin:", !!k.passwordHash,
+            "| grade:", k.grade == null ? "-" : k.grade);
+        }
+        console.log("   >> To reach the STUDENT dashboard, log in with a child username above that shows canWebLogin:true (NOT this parent account).");
+      }
+    } catch (e) {
+      console.warn("[/auth/school] diagnostic failed:", e.message);
+    }
 
     req.login(user, async err => {
       if (err) {
@@ -602,25 +636,37 @@ router.post("/admin/create-parent", ensureAuth, async (req, res) => {
 // SMTP mailer and is NEVER returned to the browser (except when AUTH_DEBUG_CODES=1
 // is set locally, which is refused in production).
 // ────────────────────────────────────────────────────────────
-// Codes now live in the shared, hashed, attempt-limited store (services/identity.js).
-// The request/response shapes are unchanged, so auth/parent_login.hbs works as-is.
+function genCode() { return String(Math.floor(100000 + Math.random() * 900000)); }
 
-async function redirectForUser(user) {
-  return landingFor(user);
+async function sendLoginCode(email, code, purpose) {
+  const reason = purpose === "set_password" ? "reset your password" : "verify your email";
+  let delivered = false;
+  try {
+    delivered = await sendVerificationCode(email, code, reason);
+  } catch (e) {
+    console.error("[auth/email] sendVerificationCode failed:", e?.message);
+  }
+  // Only ever surface the code when explicitly debugging locally - never in prod,
+  // and never by default, so it stays secret to the recipient's inbox.
+  const debug = process.env.AUTH_DEBUG_CODES === "1" && process.env.NODE_ENV !== "production";
+  return { delivered, devCode: debug ? code : undefined };
 }
 
-function codeFailure(res, e) {
-  if (e instanceof CodeError) {
-    const status = e.code === "BAD_TARGET" ? 400 : e.code === "SEND_FAILED" ? 500 : 429;
-    return res.status(status).json({ error: e.message, ...(e.retryAfter ? { retryAfter: e.retryAfter } : {}) });
-  }
-  console.error("[auth/email] code error:", e);
-  return res.status(500).json({ error: "Could not send a code" });
+function redirectForUser(user) {
+  if (user.role === "student" || user.parentUserId) return "/student/dashboard";
+  if (user.role === "private_teacher") return "/teacher/dashboard";
+  return "/parent/dashboard";
+}
+
+function readEmailAuth(req) {
+  const s = req.session?.emailAuth;
+  if (!s || !s.expiresAt || Date.now() > s.expiresAt) return null;
+  return s;
 }
 
 router.post("/email/check", async (req, res) => {
   try {
-    const email = normalizeEmail(req.body?.email);
+    const email = String(req.body?.email || "").trim().toLowerCase();
     if (!email) return res.status(400).json({ error: "Email required" });
     const user = await User.findOne({ email }).select("passwordHash").lean();
     return res.json({ exists: !!user, hasPassword: !!user?.passwordHash });
@@ -629,47 +675,49 @@ router.post("/email/check", async (req, res) => {
 
 router.post("/email/login-password", async (req, res) => {
   try {
-    const email = normalizeEmail(req.body?.email);
+    const email = String(req.body?.email || "").trim().toLowerCase();
     const password = String(req.body?.password || "");
     if (!email || !password) return res.status(400).json({ error: "Email and password required" });
     const user = await User.findOne({ email });
     if (!user || !user.passwordHash) return res.status(401).json({ error: "Wrong email or password" });
     if (!(await user.verifyPassword(password))) return res.status(401).json({ error: "Wrong email or password" });
     user.lastLogin = new Date(); await user.save();
-    const redirect = await redirectForUser(user);
-    req.login(user, (err) => err ? res.status(500).json({ error: "Login failed" }) : res.json({ redirect }));
+    req.login(user, (err) => err ? res.status(500).json({ error: "Login failed" }) : res.json({ redirect: redirectForUser(user) }));
   } catch (e) { console.error("[auth/email/login-password]", e); return res.status(500).json({ error: "Login failed" }); }
 });
 
 router.post("/email/request-code", async (req, res) => {
   try {
-    const email = normalizeEmail(req.body?.email);
+    const email = String(req.body?.email || "").trim().toLowerCase();
     const purpose = req.body?.purpose === "set_password" ? "set_password" : "signin";
     if (!email) return res.status(400).json({ error: "Email required" });
     const user = await User.findOne({ email }).select("_id").lean();
     if (!user) return res.status(404).json({ error: "We couldn't find an account with that email." });
-    const out = await issueCode({ channel: "email", target: email, purpose, userId: user._id });
-    return res.json({ ok: true, ...(out.devCode ? { devCode: out.devCode } : {}) });
-  } catch (e) { return codeFailure(res, e); }
+    const code = genCode();
+    const { delivered, devCode } = await sendLoginCode(email, code, purpose);
+    if (!delivered && !devCode) {
+      return res.status(500).json({ error: "We couldn't send the code right now. Please try again shortly." });
+    }
+    req.session.emailAuth = { email, code, purpose, userId: String(user._id), expiresAt: Date.now() + 10 * 60 * 1000 };
+    req.session.save(() => res.json({ ok: true, ...(devCode ? { devCode } : {}) }));
+  } catch (e) { console.error("[auth/email/request-code]", e); return res.status(500).json({ error: "Could not send a code" }); }
 });
 
 router.post("/email/verify-code", async (req, res) => {
   try {
-    const email = normalizeEmail(req.body?.email);
+    const email = String(req.body?.email || "").trim().toLowerCase();
     const code = String(req.body?.code || "").trim();
-    if (!email || !code) return res.status(400).json({ error: "Enter the code we sent you." });
-    const r = await verifyCode({ channel: "email", target: email, purpose: "signin", code });
-    if (!r.ok) return res.status(400).json({ error: codeErrorMessage(r) });
-    const user = r.record.userId ? await User.findById(r.record.userId) : await User.findOne({ email });
+    const s = readEmailAuth(req);
+    if (!s || s.email !== email) return res.status(400).json({ error: "Your code has expired. Request a new one." });
+    if (s.code !== code) return res.status(400).json({ error: "That code is not right." });
+    const user = await User.findById(s.userId);
     if (!user) return res.status(404).json({ error: "Account not found" });
-    user.lastLogin = new Date();
-    user.emailVerified = true;              // they just proved they own this inbox
-    await user.save();
-    const redirect = await redirectForUser(user);
+    user.lastLogin = new Date(); await user.save();
     req.login(user, (err) => {
       if (err) return res.status(500).json({ error: "Login failed" });
-      if (!user.passwordHash) return res.json({ needsPassword: true });
-      return res.json({ redirect });
+      if (!user.passwordHash) { req.session.emailAuth = { ...s, verified: true }; return res.json({ needsPassword: true }); }
+      delete req.session.emailAuth;
+      return res.json({ redirect: redirectForUser(user) });
     });
   } catch (e) { console.error("[auth/email/verify-code]", e); return res.status(500).json({ error: "Could not verify code" }); }
 });
@@ -682,27 +730,24 @@ router.post("/email/set-password", ensureAuth, async (req, res) => {
     if (!user) return res.status(404).json({ error: "User not found" });
     await user.setPassword(password); await user.save();
     if (req.session?.emailAuth) delete req.session.emailAuth;
-    return res.json({ redirect: await redirectForUser(user) });
+    return res.json({ redirect: redirectForUser(user) });
   } catch (e) { console.error("[auth/email/set-password]", e); return res.status(500).json({ error: "Could not save your password" }); }
 });
 
 router.post("/email/reset-password", async (req, res) => {
   try {
-    const email = normalizeEmail(req.body?.email);
+    const email = String(req.body?.email || "").trim().toLowerCase();
     const code = String(req.body?.code || "").trim();
     const password = String(req.body?.password || "");
     if (password.length < 6) return res.status(400).json({ error: "Use at least 6 characters" });
-    if (!email || !code) return res.status(400).json({ error: "Enter the code we sent you." });
-    const r = await verifyCode({ channel: "email", target: email, purpose: "set_password", code });
-    if (!r.ok) return res.status(400).json({ error: codeErrorMessage(r) });
-    const user = r.record.userId ? await User.findById(r.record.userId) : await User.findOne({ email });
+    const s = readEmailAuth(req);
+    if (!s || s.email !== email) return res.status(400).json({ error: "Your code has expired. Request a new one." });
+    if (s.code !== code) return res.status(400).json({ error: "That code is not right." });
+    const user = await User.findById(s.userId);
     if (!user) return res.status(404).json({ error: "Account not found" });
-    await user.setPassword(password);
-    user.lastLogin = new Date();
-    user.emailVerified = true;
-    await user.save();
-    const redirect = await redirectForUser(user);
-    req.login(user, (err) => err ? res.status(500).json({ error: "Login failed" }) : res.json({ redirect }));
+    await user.setPassword(password); user.lastLogin = new Date(); await user.save();
+    delete req.session.emailAuth;
+    req.login(user, (err) => err ? res.status(500).json({ error: "Login failed" }) : res.json({ redirect: redirectForUser(user) }));
   } catch (e) { console.error("[auth/email/reset-password]", e); return res.status(500).json({ error: "Could not reset your password" }); }
 });
 

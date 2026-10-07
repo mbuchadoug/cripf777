@@ -36,16 +36,6 @@ role: {
   lastName: String,
 
   email: { type: String, index: true },
-
-  // ── CENTRAL LOGIN (Phase 1) ─────────────────────────────────────────
-  // Phone in E.164 form, e.g. "+263775110288" / "+447123456789". Unique when
-  // present. NEVER set it to null - leave it undefined (or $unset it) so the
-  // sparse unique index ignores accounts without a phone.
-  phone: { type: String, unique: true, sparse: true, trim: true },
-  // True once the person proved they own the phone / email (code or Google).
-  // Admin rights (ADMIN_EMAILS) will require emailVerified from Phase 2 on.
-  phoneVerified: { type: Boolean, default: false },
-  emailVerified: { type: Boolean, default: false },
   photo: String,
   locale: String,
   provider: String,

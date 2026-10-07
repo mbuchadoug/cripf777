@@ -131,11 +131,6 @@ if (isParentSignup || isTeacherSignup) {
   // only disable if you truly want employees to never be parents (you do NOT)
   // so: do nothing here
 }
-// Central login Phase 1: Google has verified this address, so record it.
-// (Admin rights will require a verified email from Phase 2.)
-if (email && String(user.email || "").toLowerCase() === email && !user.emailVerified) {
-  user.emailVerified = true;
-}
 await user.save();
 
 
