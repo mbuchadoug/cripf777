@@ -1,6 +1,7 @@
 import { Router } from "express";
 import SpecialScoiAudit from "../models/specialScoiAudit.js";
 import { ensureAuth } from "../middleware/authGuard.js";
+import { scoiCompleteHtml } from "../utils/scoiCompleteHtml.js";
 import { generateScoiAuditPdf } from "../utils/generateScoiAuditPdf.js";
 import fs from "fs";
 import path from "path";
@@ -44,6 +45,7 @@ router.get(
       res.render("admin/special_scoi_audit_view", {
         title: `Special SCOI Audit - ${audit.subject?.name || "Report"}`,
         audit,
+        completeHtml: audit.raw ? scoiCompleteHtml(audit.raw) : null,
         layout: "main"
       });
     } catch (err) {

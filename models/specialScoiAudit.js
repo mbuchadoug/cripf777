@@ -122,6 +122,12 @@ const SpecialScoiAuditSchema = new mongoose.Schema({
 
   pdfUrl: String,
 
+  // ── COMPLETE original submission ───────────────────────────────────────────
+  // The full uploaded JSON, stored verbatim so NOTHING is ever dropped - even
+  // fields this schema doesn't explicitly declare. The view renders from this
+  // for unique-format reports.
+  raw: mongoose.Schema.Types.Mixed,
+
   createdAt: {
     type:    Date,
     default: Date.now

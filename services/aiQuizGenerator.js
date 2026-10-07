@@ -6,7 +6,7 @@ import User from "../models/user.js";
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const QUIZ_MODEL = process.env.ANTHROPIC_QUIZ_MODEL || "claude-sonnet-4-5";
 
-// ── Credit entitlement — SELF-CONTAINED (does not depend on model methods) ──
+// ── Credit entitlement - SELF-CONTAINED (does not depend on model methods) ──
 // Paid teacher plan → 20/50. Active 3-day trial → 5. Everyone else → 3 free a
 // month, so a new teacher can always TRY the AI feature (the hook that sells it).
 function currentMonth() { return new Date().toISOString().slice(0, 7); } // YYYY-MM

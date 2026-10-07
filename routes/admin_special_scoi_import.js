@@ -132,7 +132,12 @@ async function runScoiImport(rawAudits, auditType) {
         continue;
       }
 
-      await Model.create({ framework: "CRIPFCnt SCOI", ...audit });
+      // Store the COMPLETE original (raw) so nothing is dropped, and map the
+      // display price from commercialStatus.fullReportPriceUSD when present.
+      const priceCents = (audit.commercialStatus && Number(audit.commercialStatus.fullReportPriceUSD) > 0)
+        ? Math.round(Number(audit.commercialStatus.fullReportPriceUSD) * 100)
+        : (Number.isInteger(audit.price) && audit.price > 0 ? audit.price : 29900);
+      await Model.create({ framework: "CRIPFCnt SCOI", ...audit, raw: audit, price: priceCents });
       console.log(`[SCOI import] ✅ Imported: "${audit.subject.name}"`);
       imported++;
     } catch (docErr) {
@@ -209,4 +214,4 @@ router.post(
   }
 );
 
-export default router;
+export default router;s

@@ -18,6 +18,7 @@
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 import fs   from "fs";
+import { scoiCompleteHtml } from "./scoiCompleteHtml.js";
 import path from "path";
 
 export async function generateScoiAuditPdf({ audit, req }) {
@@ -54,7 +55,7 @@ export async function generateScoiAuditPdf({ audit, req }) {
     html = await new Promise((resolve, reject) => {
       req.app.render(
         templateName,
-        { audit: safeAudit, layout: false },
+        { audit: safeAudit, completeHtml: safeAudit.raw ? scoiCompleteHtml(safeAudit.raw) : null, layout: false },
         (err, rendered) => (err ? reject(err) : resolve(rendered))
       );
     });

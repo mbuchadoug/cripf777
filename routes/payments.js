@@ -427,7 +427,7 @@ router.post("/paynow/result", async (req, res) => {
 
 
 /* ------------------------------
-   STRIPE CHECKOUT (cards — international)
+   STRIPE CHECKOUT (cards - international)
    Creates a Checkout Session for a plan; Stripe redirects back after payment.
    The stripe webhook then activates the plan via processSuccessfulPayment.
 -------------------------------- */
@@ -453,7 +453,7 @@ router.post("/stripe/checkout", ensureAuth, async (req, res) => {
         price_data: {
           currency: "usd",
           unit_amount: Math.round(cfg.amount * 100),
-          product_data: { name: `CRIPFCnt ${cfg.name} — Monthly` }
+          product_data: { name: `CRIPFCnt ${cfg.name} - Monthly` }
         },
         quantity: 1
       }],

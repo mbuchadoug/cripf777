@@ -8,6 +8,7 @@ import SpecialScoiAudit from "../models/specialScoiAudit.js";
 import { ensureAuth } from "../middleware/authGuard.js";
 import { generateScoiAuditPdf as generateScoiPdf } from "../utils/generateScoiAuditPdf.js";
 import AuditPurchase from "../models/auditPurchase.js";
+import { scoiCompleteHtml } from "../utils/scoiCompleteHtml.js";
 
 const router = Router();
 
@@ -111,6 +112,7 @@ router.get("/admin/scoi/reports/:id/view", ensureAuth, async (req, res) => {
       title: `Special SCOI Audit - ${audit.subject?.name || "Report"}`,
       audit,
       user: req.user,
+      completeHtml: audit.raw ? scoiCompleteHtml(audit.raw) : null,
       layout: false
     });
   } catch (err) {
@@ -300,6 +302,7 @@ router.get("/scoi/audits/:id/view", ensureAuth, async (req, res) => {
     res.render(view, {
       audit,
       user: req.user,
+      completeHtml: (view === "admin/special_scoi_audit_view" && audit.raw) ? scoiCompleteHtml(audit.raw) : null,
       layout: false
     });
   } catch (err) {

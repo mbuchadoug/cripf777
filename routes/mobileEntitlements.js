@@ -1,7 +1,7 @@
 // routes/mobileEntitlements.js
 // ─────────────────────────────────────────────────────────────────────────────
 // What the signed-in mobile user is entitled to: trial window, AI credits,
-// caps, plan — so the app can SHOW "Trial: 2 days left · 3 AI credits" and the
+// caps, plan - so the app can SHOW "Trial: 2 days left · 3 AI credits" and the
 // right upgrade prompts. Also starts the 3-day trial on first open, and gives a
 // Stripe card-checkout URL for Android.
 //
@@ -41,7 +41,7 @@ router.get("/entitlements", requireMobileAuth, async (req, res) => {
     const daysLeft = user.trialEndsAt
       ? Math.max(0, Math.ceil((new Date(user.trialEndsAt) - new Date()) / 86400000)) : 0;
 
-    // AI credits (teachers) — grant the monthly allowance if due, then read it.
+    // AI credits (teachers) - grant the monthly allowance if due, then read it.
     let aiCredits = user.aiQuizCredits ?? 0, aiAllowance = 0;
     const isTeacher = ["private_teacher", "teacher"].includes(user.role) ||
       user.activeMobileRole === "teacher" || (Array.isArray(user.mobileRoles) && user.mobileRoles.includes("teacher"));
@@ -78,7 +78,7 @@ router.post("/stripe-checkout", requireMobileAuth, async (req, res) => {
     const payment = await Payment.create({ userId: user._id, reference, amount: cfg.amount, plan, status: "pending", meta: { method: "stripe_mobile" } });
     const session = await stripe.checkout.sessions.create({
       mode: "payment", payment_method_types: ["card"], customer_email: user.email || undefined,
-      line_items: [{ price_data: { currency: "usd", unit_amount: Math.round(cfg.amount * 100), product_data: { name: `CRIPFCnt ${cfg.name} — Monthly` } }, quantity: 1 }],
+      line_items: [{ price_data: { currency: "usd", unit_amount: Math.round(cfg.amount * 100), product_data: { name: `CRIPFCnt ${cfg.name} - Monthly` } }, quantity: 1 }],
       success_url: `${SITE_URL}/payments/stripe/success?ref=${reference}`,
       cancel_url: `${SITE_URL}/payments/stripe/cancel?ref=${reference}`,
       metadata: { type: "subscription", userId: String(user._id), plan, paymentId: String(payment._id), reference }
