@@ -425,11 +425,10 @@
             <div class="price-amount">${{this.displayPrice}}</div>
             <div class="price-lbl">One-time purchase</div>
           </div>
-          {{#if @root.user}}
-            <a href="/scoi/checkout/{{this._id}}" class="btn-buy" style="display:inline-block;text-decoration:none;text-align:center;">Purchase →</a>
-          {{else}}
-            <a href="/auth/google?returnTo=%2Fscoi%2Fcheckout%2F{{this._id}}" class="btn-buy" style="display:inline-block;text-decoration:none;text-align:center;">Sign in to purchase →</a>
-          {{/if}}
+          <form method="POST" action="/scoi/checkout" style="margin:0">
+            <input type="hidden" name="auditId" value="{{this._id}}">
+            <button type="submit" class="btn-buy">Purchase →</button>
+          </form>
         </div>
       </article>
       {{/each}}
