@@ -45,7 +45,8 @@ router.get("/scoi", async (req, res) => {
     }));
 
     // ── Merge: special first, then placement, both newest-first ──
-    const audits = [...normalizedSpecial, ...normalizedPlacement];
+    const audits = [...normalizedSpecial, ...normalizedPlacement]
+      .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)); // newest → oldest across all
 
     res.render("scoi/marketplace", {
       user: req.user || null,

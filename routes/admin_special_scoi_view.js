@@ -163,4 +163,22 @@ router.delete(
   }
 );
 
+
+/**
+ * SET PRICE - POST /admin/special-scoi-audits/:id/price
+ * Admin sets any price (in dollars) per report — supports different prices per
+ * report. Stored in cents; shows on homepage, marketplace and list automatically.
+ */
+router.post("/admin/special-scoi-audits/:id/price", ensureAuth, async (req, res) => {
+  try {
+    const dollars = Number(req.body?.price);
+    if (!Number.isFinite(dollars) || dollars < 0) return res.status(400).send("Invalid price");
+    await SpecialScoiAudit.findByIdAndUpdate(req.params.id, { $set: { price: Math.round(dollars * 100) } });
+    return res.redirect("/admin/special-scoi-audits");
+  } catch (err) {
+    console.error("[special scoi set price]", err);
+    return res.status(500).send("Failed to set price");
+  }
+});
+
 export default router;
