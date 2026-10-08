@@ -313,3 +313,126 @@ export function isPlatformAdmin(user) {
   if (!email || !list.includes(email)) return false;
   return !!(user.emailVerified || user.googleId);
 }
+
+// ═════════════════════════════════════════════════════════════════════════════
+// PHASE 2 - central login & sign-up
+// ═════════════════════════════════════════════════════════════════════════════
+
+/** Every account an identifier could mean (shared emails exist - see report). */
+export async function findAllByIdentifier(raw, limit = 10) {
+  const input = String(raw || "").trim();
+  if (!input) return [];
+  const lower = input.toLowerCase();
+  const or = [{ username: lower }, { studentId: input }, { teacherId: input }, { adminId: input }];
+  const email = normalizeEmail(input);
+  if (email) or.push({ email });
+  const phone = !email ? normalizePhone(input) : null;
+  if (phone) or.push({ phone });
+  return User.find({ $or: or }).sort({ lastLogin: -1 }).limit(limit);
+}
+
+/** Accounts that own a phone/email, plus the children those accounts manage. */
+export async function accountsForContact(contact) {
+  const email = normalizeEmail(contact);
+  const phone = email ? null : normalizePhone(contact);
+  if (!email && !phone) return { owners: [], children: [] };
+  const owners = await User.find(email ? { email } : { phone }).sort({ lastLogin: -1 }).limit(10);
+  const children = owners.length
+    ? await User.find({ parentUserId: { $in: owners.map((o) => o._id) }, role: "student" }).sort({ firstName: 1 }).limit(60)
+    : [];
+  return { owners, children };
+}
+
+export function roleLabel(u) {
+  return ({ student: "Student", parent: "Parent", guardian: "Parent", private_teacher: "Teacher", teacher: "Teacher",
+    employee: "Professional", org_admin: "School admin", super_admin: "Admin", readonly_admin: "Admin (read-only)" })[u?.role] || "Account";
+}
+export function displayNameOf(u) {
+  return u?.displayName || [u?.firstName, u?.lastName].filter(Boolean).join(" ") || u?.username || "Your account";
+}
+export function describeAccount(u) {
+  return { id: String(u._id), name: displayNameOf(u), role: roleLabel(u), username: u.username || null };
+}
+
+// Sign-up roles → stored role. Same set as the app's SELF_SIGNUP_ROLES.
+export const SIGNUP_ROLES = { student: "student", parent: "parent", teacher: "private_teacher", professional: "employee" };
+
+export function gradeLabel(g) {
+  const n = Number(g);
+  return n <= 7 ? `Grade ${n}` : `Form ${n - 7}`;
+}
+
+/**
+ * Create a self-sign-up account. Mirrors the app's createAccount() field-for-field
+ * (routes/mobileApi.js) so an account made on the web is identical to one made in
+ * the app, plus the web-only setup the dashboards need:
+ *   • professional → also joins cripfcnt-school + gets the trial quizzes (as Google sign-up did)
+ *   • student with a grade → gets that grade's trial quizzes (as /api/mobile/student/grade does)
+ * `passwordHash` is already hashed - plain passwords are never stored anywhere.
+ */
+export async function createAccount({ persona, firstName, lastName, passwordHash, email, phone, grade, verified }) {
+  const role = SIGNUP_ROLES[persona];
+  if (!role) throw new Error("Choose Student, Parent, Private teacher or Professional.");
+  const username = await User.createUniqueUsername(firstName, lastName);
+  const user = new User({
+    role, firstName, lastName,
+    displayName: [firstName, lastName].filter(Boolean).join(" ") || username,
+    username,
+    ...(email ? { email, emailVerified: verified === "email" } : {}),
+    ...(phone ? { phone, phoneVerified: verified === "phone" } : {}),
+    passwordHash,
+    provider: "password",
+    consumerEnabled: role === "parent" || role === "private_teacher" || role === "employee",
+    accountType: role === "parent" ? "parent" : role === "student" ? "student_self" : undefined,
+    lastLogin: new Date()
+  });
+  if (role === "private_teacher") {
+    user.teacherSubscriptionStatus = "trial"; user.teacherSubscriptionPlan = "none";
+    user.aiQuizCredits = 0; user.needsProfileSetup = true;
+  }
+  if (role === "employee") { user.employeeSubscriptionStatus = "trial"; user.employeeSubscriptionPlan = "none"; }
+  if (role === "student" && Number.isFinite(Number(grade)) && grade !== "" && grade != null) user.grade = Number(grade);
+  await user.save();
+  await enrolNewUser(user);
+  return user;
+}
+
+async function enrolNewUser(user) {
+  const join = async (slug, role) => {
+    const org = await Organization.findOne({ slug }).lean();
+    if (!org) return null;
+    await OrgMembership.updateOne(
+      { org: org._id, user: user._id },
+      { $setOnInsert: { org: org._id, user: user._id, role, joinedAt: new Date() } },
+      { upsert: true }
+    );
+    return org;
+  };
+  try {
+    // Same as the app: everyone self-signed-up joins the home-learning org.
+    const mRole = { parent: "parent", private_teacher: "private_teacher", student: "student", employee: "employee" }[user.role];
+    const home = await join(HOME_SLUG, mRole);
+
+    if (user.role === "employee") {
+      // Same as Google sign-up for professionals (config/passport.js).
+      const school = await join(SCHOOL_SLUG, "employee");
+      if (school) {
+        try {
+          const { assignTrialQuizzesToUser } = await import("./trialQuizAssignment.js");
+          await assignTrialQuizzesToUser({ userId: user._id, orgId: school._id });
+        } catch (e) { console.warn("[identity] professional trial quizzes skipped:", e.message); }
+      }
+    }
+    if (user.role === "student" && user.grade != null && home) {
+      // Same as POST /api/mobile/student/grade.
+      try {
+        const { default: QuizRule } = await import("../models/quizRule.js");
+        const { assignQuizFromRule } = await import("./quizAssignment.js");
+        const rules = await QuizRule.find({ org: home._id, grade: user.grade, quizType: "trial", enabled: true });
+        for (const rule of rules) { try { await assignQuizFromRule({ rule, userId: user._id, orgId: home._id }); } catch (_) {} }
+      } catch (e) { console.warn("[identity] student trial quizzes skipped:", e.message); }
+    }
+  } catch (e) {
+    console.error("[identity] enrol failed (non-fatal):", e.message);
+  }
+}
