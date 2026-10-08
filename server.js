@@ -132,6 +132,7 @@ import apiOrgQuizRoutes from "./routes/api_org_quiz.js";
 
 import configurePassport from "./config/passport.js";
 import authRoutes from "./routes/auth.js";
+import loginRoutes from "./routes/login.js"; // central login: /login, /signup, /forgot
 import mobileApiRouter from "./routes/mobileApi.js"; // ← mobile app JSON API
 import mobileSchoolRouter from "./routes/mobileSchool.js"; // ← mobile learning platform
 import mobileStudentRouter from "./routes/mobileStudent.js";
@@ -547,6 +548,7 @@ app.use((req, res, next) => {
 });
 
 // mount auth routes first (so /auth is available when needed)
+app.use("/", loginRoutes);      // central login (must come after session + passport)
 app.use("/auth", authRoutes);
 
 // ── MOBILE APP JSON API (additive; does not touch web/session flows) ──
