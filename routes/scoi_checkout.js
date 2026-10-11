@@ -75,13 +75,13 @@ async function startScoiCheckout(req, res, auditId) {
   return res.redirect(session.url);
 }
 
-// POST (legacy form submit) — auditId in the body.
+// POST (legacy form submit) - auditId in the body.
 router.post("/scoi/checkout", ensureAuth, async (req, res) => {
   try { return await startScoiCheckout(req, res, req.body?.auditId); }
   catch (err) { console.error("[scoi checkout POST]", err); return res.status(500).send("Checkout failed. Please try again."); }
 });
 
-// GET with the auditId IN THE URL — this is the long-lasting fix. Because the id
+// GET with the auditId IN THE URL - this is the long-lasting fix. Because the id
 // is in the path, it survives the sign-in round-trip (ensureAuth saves this exact
 // URL as returnTo, and the user lands right back here after logging in).
 router.get("/scoi/checkout/:auditId", ensureAuth, async (req, res) => {
@@ -89,7 +89,7 @@ router.get("/scoi/checkout/:auditId", ensureAuth, async (req, res) => {
   catch (err) { console.error("[scoi checkout GET]", err); return res.status(500).send("Checkout failed. Please try again."); }
 });
 
-// Bare GET with no id (e.g. a stray post-login redirect) — fail gracefully.
+// Bare GET with no id (e.g. a stray post-login redirect) - fail gracefully.
 router.get("/scoi/checkout", (req, res) => res.redirect("/scoi"));
 
 // ── STRIPE WEBHOOK ───────────────────────────────────────────────────────────

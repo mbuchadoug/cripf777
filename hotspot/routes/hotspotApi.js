@@ -133,10 +133,15 @@ router.post("/vouchers/generate", authRequired, async (req, res) => {
 
     const batchId = `B-${Date.now().toString(36).toUpperCase()}`;
     const admin = req.hsAdmin;
-    const profileName = plan.rosProfile();
 
-    // Issuer daily value cap.
-    const unitPrice = b.price != null ? Number(b.price) : plan.price;
+    // Devices per voucher - defaults to the plan, but the admin can override it
+    // per batch. A custom count gets its own RouterOS profile (hs_<key>_dN) so
+    // the device cap (shared-users) is enforced without changing the plan.
+    const devices = Math.min(20, Math.max(1, Number(b.devices || plan.deviceCap)));
+    const profileName = devices === plan.deviceCap ? plan.rosProfile() : `${plan.rosProfile()}_d${devices}`;
+
+    // Price: an explicit override wins; otherwise auto-price for this device count.
+    const unitPrice = b.price != null ? Number(b.price) : suggestPrice({ durationMinutes: plan.durationMinutes, devices }).price;
     if (admin.role === "issuer" && admin.dailyLimitUsd > 0) {
       const { total } = await issuedTodayUsd(admin._id);
       const batchValue = unitPrice * count;
@@ -148,7 +153,7 @@ router.post("/vouchers/generate", authRequired, async (req, res) => {
 
     // Ensure profile once for the whole batch.
     let routerOnline = true;
-    try { await mt.ensureProfile({ name: profileName, sharedUsers: plan.deviceCap, rateLimit: plan.rateLimitString() }); }
+    try { await mt.ensureProfile({ name: profileName, sharedUsers: devices, rateLimit: plan.rateLimitString() }); }
     catch { routerOnline = false; }
 
     const made = [];
@@ -160,13 +165,13 @@ router.post("/vouchers/generate", authRequired, async (req, res) => {
         planLabel: plan.label,
         durationType: plan.durationType,
         durationMinutes: plan.durationMinutes,
-        deviceCap: plan.deviceCap,
+        deviceCap: devices,
         downKbps: plan.downKbps,
         upKbps: plan.upKbps,
         batchId,
         createdBy: admin._id,
         createdByName: admin.displayName,
-        price: b.price != null ? Number(b.price) : plan.price,
+        price: unitPrice,
         currency: plan.currency,
         paymentMethod: ["cash", "ecocash", "complimentary", "other"].includes(b.paymentMethod) ? b.paymentMethod : "cash",
         note: String(b.note || "")
@@ -193,7 +198,7 @@ router.post("/vouchers/generate", authRequired, async (req, res) => {
       batchId,
       routerOnline,
       wifiName: WIFI_NAME,
-      plan: { label: plan.label, durationMinutes: plan.durationMinutes, durationType: plan.durationType, deviceCap: plan.deviceCap },
+      plan: { label: plan.label, durationMinutes: plan.durationMinutes, durationType: plan.durationType, deviceCap: devices },
       vouchers: made.map(shapeVoucher)
     });
   } catch (err) {

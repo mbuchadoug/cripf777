@@ -166,7 +166,7 @@ router.delete(
 
 /**
  * SET PRICE - POST /admin/special-scoi-audits/:id/price
- * Admin sets any price (in dollars) per report — supports different prices per
+ * Admin sets any price (in dollars) per report - supports different prices per
  * report. Stored in cents; shows on homepage, marketplace and list automatically.
  */
 router.post("/admin/special-scoi-audits/:id/price", ensureAuth, async (req, res) => {

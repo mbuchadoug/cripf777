@@ -350,23 +350,42 @@ async function viewGenerate(){
       <h2 style="font-size:16px;margin-bottom:12px">Choose a plan</h2>
       <div class="grid plan-grid" id="plans"></div>
       <div class="grid" style="grid-template-columns:1fr 1fr;margin-top:16px">
-        <div class="field"><label>How many</label><input id="g-count" type="number" min="1" max="200" value="1"></div>
-        <div class="field"><label>Payment</label><select id="g-pay"><option value="cash">Cash</option><option value="ecocash">EcoCash</option><option value="complimentary">Free / staff</option><option value="other">Other</option></select></div>
+        <div class="field"><label>How many codes</label><input id="g-count" type="number" min="1" max="200" value="1"></div>
+        <div class="field"><label>Devices per code</label><input id="g-devices" type="number" min="1" max="20" value="1" oninput="suggestGenPrice()"></div>
       </div>
+      <div class="field"><label>Payment</label><select id="g-pay"><option value="cash">Cash</option><option value="ecocash">EcoCash</option><option value="complimentary">Free / staff</option><option value="other">Other</option></select></div>
       <div class="field"><label>Note (optional) - e.g. table 4, guest name</label><input id="g-note" placeholder=""></div>
-      <div class="field"><label>Custom price ($, optional) - leave blank to use the plan price</label><input id="g-price" type="number" min="0" placeholder=""></div>
+      <div class="field"><label>Custom price ($, optional) - <span id="g-suggest" class="muted">leave blank to use the plan price</span></label><input id="g-price" type="number" min="0" placeholder=""></div>
       <button class="btn btn-gold btn-block" onclick="generate()">Generate vouchers</button>
       <div class="err" id="g-err"></div>
     </div>
     <div id="g-result"></div>`);
   renderPlanCards();
+  const selP=plansCache.find(x=>x.key===genPlan);
+  const dvEl=document.getElementById("g-devices"); if(selP&&dvEl) dvEl.value=selP.deviceCap||1;
+  suggestGenPrice();
   loadAllowance();
   }catch(e){ mount(`<div class="card">${esc(e.message)}</div>`); }
+}
+function selectPlan(key){
+  genPlan=key;
+  const p=plansCache.find(x=>x.key===key);
+  const dv=document.getElementById("g-devices"); if(p&&dv) dv.value=p.deviceCap||1;
+  renderPlanCards();
+  suggestGenPrice();
+}
+function suggestGenPrice(){
+  const p=plansCache.find(x=>x.key===genPlan); const hint=document.getElementById("g-suggest");
+  if(!p||!hint) return;
+  const dev=Math.max(1,Number(document.getElementById("g-devices")?.value||p.deviceCap||1));
+  api(`/price/suggest?durationMinutes=${p.durationMinutes}&devices=${dev}`).then(r=>{
+    hint.innerHTML=`suggested <b style="color:var(--pine)">$${r.price}</b> for ${dev} device${dev>1?'s':''} · <a href="#" onclick="document.getElementById('g-price').value=${r.price};return false" style="color:var(--pine)">use</a>`;
+  }).catch(()=>{});
 }
 function renderPlanCards(){
   const el=document.getElementById("plans"); if(!el) return;
   el.innerHTML=plansCache.map(p=>`
-    <button class="plan ${p.key===genPlan?'sel':''}" onclick="genPlan='${p.key}';renderPlanCards()">
+    <button class="plan ${p.key===genPlan?'sel':''}" onclick="selectPlan('${p.key}')">
       <div class="pl">${esc(p.label)}</div>
       <div class="meta">${dur(p.durationMinutes,p.durationType)}<br>${p.deviceCap} device${p.deviceCap>1?'s':''}${p.downKbps?` · ${(p.downKbps/1000).toFixed(1)}Mbps`:''}</div>
       <div class="price">${p.price} ${p.currency}</div>
@@ -388,7 +407,7 @@ async function generate(){
   const err=document.getElementById("g-err"); if(err) err.textContent="";
   if(!genPlan){ if(err) err.textContent="Pick a plan first."; return; }
   try{
-    const body={planKey:genPlan,count:Number(document.getElementById("g-count")?.value||1),paymentMethod:document.getElementById("g-pay")?.value,note:document.getElementById("g-note")?.value};
+    const body={planKey:genPlan,count:Number(document.getElementById("g-count")?.value||1),devices:Number(document.getElementById("g-devices")?.value||1),paymentMethod:document.getElementById("g-pay")?.value,note:document.getElementById("g-note")?.value};
     const cp=document.getElementById("g-price")?.value;
     if(cp!=="" && cp!=null) body.price=Number(cp);
     const d=await api("/vouchers/generate",{method:"POST",body:JSON.stringify(body)});

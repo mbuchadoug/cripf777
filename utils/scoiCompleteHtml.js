@@ -1,5 +1,5 @@
 // utils/scoiCompleteHtml.js
-// Renders ANY SCOI audit object into clean, COMPLETE, world-class HTML — nothing
+// Renders ANY SCOI audit object into clean, COMPLETE, world-class HTML - nothing
 // is left out, nothing overlaps. Self-contained (scoped styles), works on the
 // website and in the PDF, and handles any unique report structure.
 
@@ -25,7 +25,7 @@ function fmtVal(key, v) {
 }
 
 function renderValue(key, val, depth) {
-  if (val === null || val === undefined || val === "") return `<span class="sc-empty">—</span>`;
+  if (val === null || val === undefined || val === "") return `<span class="sc-empty">-</span>`;
   if (Array.isArray(val)) {
     if (val.every((x) => x === null || typeof x !== "object")) {
       return `<ul class="sc-list">${val.map((x) => `<li>${fmtVal(key, x)}</li>`).join("")}</ul>`;

@@ -105,7 +105,14 @@ export async function ensureProfile({ name, sharedUsers, rateLimit }) {
     const existing = byName(rows, name);
     const params = [
       `=shared-users=${sharedUsers || 1}`,
-      "=add-mac-cookie=yes"
+      "=add-mac-cookie=yes",
+      // Phones sleep their WiFi when the screen is off. Without these, RouterOS
+      // logs a sleeping phone out (keepalive timeout) and the guest is bounced
+      // back to the sign-in page on wake. "none" keeps the session alive; the
+      // mac-cookie lets them reconnect for the life of the voucher.
+      "=keepalive-timeout=none",
+      "=idle-timeout=none",
+      `=mac-cookie-timeout=${process.env.MT_MAC_COOKIE_TIMEOUT || "30d"}`
     ];
     if (rateLimit) params.push(`=rate-limit=${rateLimit}`);
 
