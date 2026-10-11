@@ -568,4 +568,37 @@ router.get("/pay/poll/:reference", requireReseAuth, async (req, res) => {
   }
 });
 
+/* ══════════════════════════════════════════════════════════════
+   PHONE SIGN-IN (no OTP)
+   Used while WhatsApp verification is pending. The phone number is the
+   unique identity: an existing number signs back into the SAME account, so
+   nobody can create a second account on one number. Flip back to the OTP
+   flow any time by setting the app's extra.skipOtp to false - the
+   /auth/request-code + /auth/verify routes above are untouched.
+   ══════════════════════════════════════════════════════════════ */
+
+router.post("/auth/phone-signin", async (req, res) => {
+  try {
+    const phone = normalizePhone(req.body?.phone);
+    if (!phone) return res.status(400).json({ error: "Enter a valid phone number" });
+    const name = typeof req.body?.name === "string" ? req.body.name.trim().slice(0, 60) : "";
+
+    // Find-or-create by phone. One number = one account (no duplicates).
+    let user = await ReseUser.findOne({ phone });
+    const isNew = !user;
+    if (!user) {
+      user = await ReseUser.create({ phone, isRequester: true, name: name || undefined });
+    } else if (name && !user.name) {
+      user.name = name; // fill a blank name on an existing account, never overwrite
+    }
+    user.lastActiveAt = new Date();
+    await user.save();
+
+    return res.json({ token: signToken(user), user: publicUser(user), isNew });
+  } catch (err) {
+    console.error("[rese phone-signin]", err);
+    return res.status(500).json({ error: "Could not sign in. Try again." });
+  }
+});
+
 export default router;
