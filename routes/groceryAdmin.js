@@ -1,6 +1,6 @@
 import { Router } from "express";
 import GroceryOrder from "../models/groceryOrder.js";
-import { ZONES } from "./groceryCatalogue.js";
+import { ZONES, SERVICE_MIN, SERVICE_PCT } from "./groceryCatalogue.js";
 
 const router = Router();
 
@@ -53,7 +53,7 @@ router.post("/grocery/orders/:ref/quote", async (req, res) => {
   order.hasCustomItems = stillCustom;
 
   goods = Math.round(goods * 100) / 100;
-  const serviceFee = Math.max(2, Math.round(goods * 0.05 * 100) / 100);
+  const serviceFee = Math.max(SERVICE_MIN, Math.round(goods * SERVICE_PCT * 100) / 100);
   const deliveryFee = ZONES[order.delivery.zone]?.fee || 0;
   order.amounts.goods = goods;
   order.amounts.serviceFee = serviceFee;
