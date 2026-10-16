@@ -138,10 +138,23 @@ router.post("/vouchers/generate", authRequired, async (req, res) => {
     // per batch. A custom count gets its own RouterOS profile (hs_<key>_dN) so
     // the device cap (shared-users) is enforced without changing the plan.
     const devices = Math.min(20, Math.max(1, Number(b.devices || plan.deviceCap)));
-    const profileName = devices === plan.deviceCap ? plan.rosProfile() : `${plan.rosProfile()}_d${devices}`;
+
+    // Duration + speed overrides - default to the plan, admin can customise per batch.
+    const durationMinutes = Math.max(1, Number(b.durationMinutes || plan.durationMinutes));
+    const downKbps = b.downKbps != null ? Math.max(0, Number(b.downKbps)) : plan.downKbps;
+    const upKbps   = b.upKbps   != null ? Math.max(0, Number(b.upKbps))   : plan.upKbps;
+    const rateLimit = (upKbps || downKbps) ? `${upKbps || 0}k/${downKbps || 0}k` : null;
+
+    // A RouterOS profile is defined by its device cap + speed. If any of those
+    // differ from the plan, this batch gets its own profile so the caps are
+    // enforced without touching the plan. Duration is per-voucher (limit-uptime).
+    const isCustomProfile = devices !== plan.deviceCap || downKbps !== plan.downKbps || upKbps !== plan.upKbps;
+    const profileName = isCustomProfile
+      ? `${plan.rosProfile()}_d${devices}_${downKbps || 0}_${upKbps || 0}`
+      : plan.rosProfile();
 
     // Price: an explicit override wins; otherwise auto-price for this device count.
-    const unitPrice = b.price != null ? Number(b.price) : suggestPrice({ durationMinutes: plan.durationMinutes, devices }).price;
+    const unitPrice = b.price != null ? Number(b.price) : suggestPrice({ durationMinutes, devices }).price;
     if (admin.role === "issuer" && admin.dailyLimitUsd > 0) {
       const { total } = await issuedTodayUsd(admin._id);
       const batchValue = unitPrice * count;
@@ -153,7 +166,7 @@ router.post("/vouchers/generate", authRequired, async (req, res) => {
 
     // Ensure profile once for the whole batch.
     let routerOnline = true;
-    try { await mt.ensureProfile({ name: profileName, sharedUsers: devices, rateLimit: plan.rateLimitString() }); }
+    try { await mt.ensureProfile({ name: profileName, sharedUsers: devices, rateLimit }); }
     catch { routerOnline = false; }
 
     const made = [];
@@ -164,10 +177,10 @@ router.post("/vouchers/generate", authRequired, async (req, res) => {
         planKey: plan.key,
         planLabel: plan.label,
         durationType: plan.durationType,
-        durationMinutes: plan.durationMinutes,
+        durationMinutes,
         deviceCap: devices,
-        downKbps: plan.downKbps,
-        upKbps: plan.upKbps,
+        downKbps,
+        upKbps,
         batchId,
         createdBy: admin._id,
         createdByName: admin.displayName,
@@ -181,7 +194,7 @@ router.post("/vouchers/generate", authRequired, async (req, res) => {
         try {
           v.rosUserId = await mt.addVoucherUser({
             code, profile: profileName,
-            limitUptimeMinutes: plan.durationType === "uptime" ? plan.durationMinutes : 0
+            limitUptimeMinutes: plan.durationType === "uptime" ? durationMinutes : 0
           });
           v.syncedToRouter = true;
         } catch (err) {
@@ -198,7 +211,7 @@ router.post("/vouchers/generate", authRequired, async (req, res) => {
       batchId,
       routerOnline,
       wifiName: WIFI_NAME,
-      plan: { label: plan.label, durationMinutes: plan.durationMinutes, durationType: plan.durationType, deviceCap: devices },
+      plan: { label: plan.label, durationMinutes, durationType: plan.durationType, deviceCap: devices },
       vouchers: made.map(shapeVoucher)
     });
   } catch (err) {
