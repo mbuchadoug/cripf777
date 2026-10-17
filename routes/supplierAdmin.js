@@ -1,6 +1,7 @@
 // routes/supplierAdmin.js
 import express from "express";
 import axios from "axios";
+import mongoose from "mongoose";
 import { requireSupplierAdmin } from "../middleware/supplierAdminAuth.js";
 import SupplierProfile from "../models/supplierProfile.js";
 import SupplierOrder from "../models/supplierOrder.js";
@@ -9708,6 +9709,204 @@ async function _resolveContactName(phone) {
   return null;
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+// ── BATCH SENDER ENGINE  (persistent, batched, abortable, no duplicates) ─────
+// Adds a job-based sender ON TOP of the existing synchronous /broadcast route.
+// The old route is untouched (dry-run, preview and quick single-contact tests
+// all keep working). A "job" persists every recipient + its per-phone status
+// (pending / sent / failed / skipped) in MongoDB, so:
+//   • nothing is ever sent twice (the runner only touches "pending" rows, and
+//     new jobs can skip phones already sent this same template);
+//   • the admin can pause / resume / abort mid-send and see live progress;
+//   • a server restart cannot double-send (interrupted jobs pause, then the
+//     admin resumes and only the remaining "pending" rows go out).
+// ══════════════════════════════════════════════════════════════════════════════
+const _sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+const _BroadcastJobSchema = new mongoose.Schema({
+  templateName:  { type: String, required: true },
+  audienceLabel: { type: String, default: "" },
+  variables:     { type: [String], default: [] },
+  media:         { url: String, type: { type: String }, filename: String },
+  batchSize:     { type: Number, default: 50 },
+  msPerMessage:  { type: Number, default: 3000 },
+  mode:          { type: String, enum: ["auto", "manual"], default: "auto" }, // manual = pause after each batch
+  dryRun:        { type: Boolean, default: false },
+  status:        { type: String, enum: ["ready","running","paused","aborted","done","failed"], default: "ready", index: true },
+  note:          { type: String, default: "" },
+  total:         { type: Number, default: 0 },
+  sent:          { type: Number, default: 0 },
+  failed:        { type: Number, default: 0 },
+  skipped:       { type: Number, default: 0 },
+  recipients: [{
+    _id:    false,
+    phone:  { type: String, required: true },
+    name:   { type: String, default: "" },
+    status: { type: String, enum: ["pending","sent","failed","skipped"], default: "pending" },
+    error:  { type: String, default: "" },
+    sentAt: { type: Date }
+  }],
+  createdBy:  { type: String, default: "" },
+  startedAt:  { type: Date },
+  finishedAt: { type: Date }
+}, { timestamps: true });
+
+const BroadcastJob = mongoose.models.BroadcastJob || mongoose.model("BroadcastJob", _BroadcastJobSchema);
+
+// In-memory control flags per running job (abort / pause / active-guard).
+// State of record lives in Mongo; these flags only steer the live loop.
+const _jobControls = new Map();
+function _ctrl(id) {
+  const k = String(id);
+  if (!_jobControls.has(k)) _jobControls.set(k, { abort: false, pause: false, active: false });
+  return _jobControls.get(k);
+}
+
+// Send ONE WhatsApp template message. Returns { ok, error }.
+// Reuses the exact Graph API shapes already proven by the synchronous senders.
+async function _sendOneMessage({ phone, templateName, variables = [], media = {} }) {
+  const PHONE_ID = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.META_PHONE_NUMBER_ID || process.env.PHONE_NUMBER_ID;
+  const TOKEN    = process.env.META_ACCESS_TOKEN || process.env.WHATSAPP_ACCESS_TOKEN;
+  const name     = String(templateName || "");
+  try {
+    // ── Formatted campaign templates (zero variables, optional baked image) ──
+    if (name.startsWith("zqm_campaign_") || name.startsWith("zqm_campaignimg_")) {
+      let components = null;
+      if (name.startsWith("zqm_campaignimg_")) {
+        const imgUrl = _readCampaignImages()[name];
+        if (imgUrl) components = [{ type: "header", parameters: [{ type: "image", image: { link: imgUrl } }] }];
+      }
+      await axios.post(`https://graph.facebook.com/v24.0/${PHONE_ID}/messages`, {
+        messaging_product: "whatsapp", to: phone, type: "template",
+        template: components
+          ? { name, language: { code: "en" }, components }
+          : { name, language: { code: "en" } }
+      }, { headers: { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json" } });
+      return { ok: true };
+    }
+
+    // ── Image broadcast: image header + {{1}} body ──────────────────────────
+    if (name === "zqm_broadcast_image") {
+      if (!media.url) return { ok: false, error: "zqm_broadcast_image requires an image URL." };
+      await axios.post(`https://graph.facebook.com/v24.0/${PHONE_ID}/messages`, {
+        messaging_product: "whatsapp", to: phone, type: "template",
+        template: {
+          name: "zqm_broadcast_image", language: { code: "en" },
+          components: [
+            { type: "header", parameters: [{ type: "image", image: { link: media.url } }] },
+            { type: "body",   parameters: [{ type: "text", text: String(variables[0] || "Dear customer, please find attached.").slice(0, 1024) }] }
+          ]
+        }
+      }, { headers: { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json" } });
+      return { ok: true };
+    }
+
+    // ── Legacy approved templates: delegate to the proven sender (1 phone) ──
+    const { sendBroadcastTemplate } = await import("../services/buyerRequestNotifications.js");
+    const r = await sendBroadcastTemplate({
+      phones: [phone], templateName: name, variables,
+      headerMediaUrl: media.url || null, headerType: media.type || "image",
+      headerFilename: media.filename || "ZimQuote.pdf",
+      msPerMessage: 0, dryRun: false
+    });
+    if (r && r.sent > 0) return { ok: true };
+    return { ok: false, error: "Send reported 0 sent (" + JSON.stringify(r) + ")" };
+  } catch (err) {
+    return { ok: false, error: err.response?.data?.error?.message || err.message };
+  }
+}
+
+// The runner. Processes "pending" recipients, up to batchSize per invocation in
+// manual mode (then pauses), or straight through in auto mode. Honours abort /
+// pause flags between every message. Safe to call repeatedly (active-guarded).
+async function _runBroadcastJob(jobId) {
+  const ctrl = _ctrl(jobId);
+  if (ctrl.active) return;          // already looping
+  ctrl.active = true;
+  ctrl.abort = false; ctrl.pause = false;
+  try {
+    const job = await BroadcastJob.findById(jobId);
+    if (!job) { ctrl.active = false; return; }
+    if (["aborted", "done"].includes(job.status)) { ctrl.active = false; return; }
+
+    await BroadcastJob.updateOne({ _id: jobId }, {
+      $set: { status: "running", note: "" },
+      ...(job.startedAt ? {} : { $currentDate: { startedAt: true } })
+    });
+
+    const media = job.media || {};
+    let processedThisRun = 0;
+
+    for (const r of job.recipients) {
+      if (ctrl.abort) break;
+      if (r.status !== "pending") continue;
+
+      if (job.dryRun) {
+        await BroadcastJob.updateOne(
+          { _id: jobId, "recipients.phone": r.phone },
+          { $set: { "recipients.$.status": "skipped", "recipients.$.sentAt": new Date() }, $inc: { skipped: 1 } });
+      } else {
+        const res = await _sendOneMessage({ phone: r.phone, templateName: job.templateName, variables: job.variables, media });
+        if (res.ok) {
+          await BroadcastJob.updateOne(
+            { _id: jobId, "recipients.phone": r.phone },
+            { $set: { "recipients.$.status": "sent", "recipients.$.sentAt": new Date(), "recipients.$.error": "" }, $inc: { sent: 1 } });
+        } else {
+          await BroadcastJob.updateOne(
+            { _id: jobId, "recipients.phone": r.phone },
+            { $set: { "recipients.$.status": "failed", "recipients.$.sentAt": new Date(), "recipients.$.error": String(res.error || "").slice(0, 300) }, $inc: { failed: 1 } });
+        }
+      }
+
+      processedThisRun++;
+
+      // delay between live sends (rate-limit); skip delay for dry runs
+      if (!job.dryRun && job.msPerMessage > 0) await _sleep(job.msPerMessage);
+
+      if (ctrl.abort) break;
+
+      // manual mode: pause after each batch and wait for an explicit resume
+      if (job.mode === "manual" && processedThisRun >= job.batchSize) {
+        await BroadcastJob.updateOne({ _id: jobId }, { $set: { status: "paused", note: "Batch complete - resume to send the next " + job.batchSize + "." } });
+        ctrl.active = false;
+        return;
+      }
+      // pause requested mid-run
+      if (ctrl.pause) {
+        await BroadcastJob.updateOne({ _id: jobId }, { $set: { status: "paused", note: "Paused." } });
+        ctrl.active = false;
+        return;
+      }
+    }
+
+    // loop ended - figure out why
+    const fresh = await BroadcastJob.findById(jobId).lean();
+    const pending = (fresh?.recipients || []).filter(x => x.status === "pending").length;
+    if (ctrl.abort) {
+      await BroadcastJob.updateOne({ _id: jobId }, { $set: { status: "aborted", finishedAt: new Date(), note: "Aborted by admin - " + pending + " not sent." } });
+    } else if (pending === 0) {
+      await BroadcastJob.updateOne({ _id: jobId }, { $set: { status: "done", finishedAt: new Date(), note: "Completed." } });
+    } else {
+      await BroadcastJob.updateOne({ _id: jobId }, { $set: { status: "paused", note: pending + " remaining." } });
+    }
+  } catch (e) {
+    console.error("[BROADCAST JOB] runner error:", e.message);
+    await BroadcastJob.updateOne({ _id: jobId }, { $set: { status: "paused", note: "Error: " + e.message } }).catch(() => {});
+  } finally {
+    ctrl.active = false;
+  }
+}
+
+// On module load, demote any job left "running" by a crash/restart to "paused"
+// so nothing auto-resends; the admin resumes it explicitly from the UI.
+(async () => {
+  try {
+    const r = await BroadcastJob.updateMany({ status: "running" },
+      { $set: { status: "paused", note: "Interrupted by server restart - resume to continue." } });
+    if (r?.modifiedCount) console.log(`[BROADCAST JOB] reconciled ${r.modifiedCount} interrupted job(s) to paused.`);
+  } catch (_e) { /* DB may not be ready yet; harmless */ }
+})();
+
 // ── GET /zq-admin/broadcast ───────────────────────────────────────────────────
 router.get("/broadcast", requireSupplierAdmin, async (req, res) => {
   try {
@@ -10223,6 +10422,107 @@ router.get("/broadcast", requireSupplierAdmin, async (req, res) => {
         </form>
       </div>
 
+      <!-- ══ BATCH SENDER (live · batched · abortable · no duplicates) ══════════ -->
+      <div style="background:white;border:2px solid #0d6b5e;border-radius:12px;padding:22px;margin-bottom:24px">
+        <h3 style="font-size:16px;font-weight:800;margin-bottom:4px;color:#0d6b5e">🚀 Batch Sender - live, abortable, no duplicates</h3>
+        <p style="font-size:12px;color:var(--muted);margin-bottom:16px;line-height:1.55">
+          Uses the <strong>same Audience &amp; Template you set above</strong>. Sends in batches, records <strong>every recipient</strong> so nobody is messaged twice,
+          and lets you <strong>pause or abort</strong> at any moment. Pick 1 contact above (☑️ Pick from list) to send a safe test first.
+        </p>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:14px">
+          <div>
+            <label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Batch size</label>
+            <select id="batchSizeSel" onchange="document.getElementById('batchSizeCustomWrap').style.display=(this.value==='custom'?'':'none')"
+              style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px">
+              <option value="25">25 per batch</option>
+              <option value="50" selected>50 per batch</option>
+              <option value="100">100 per batch</option>
+              <option value="custom">Custom…</option>
+            </select>
+            <div id="batchSizeCustomWrap" style="display:none;margin-top:6px">
+              <input id="batchSizeCustom" type="number" min="1" max="1000" value="75" placeholder="e.g. 75"
+                style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px" />
+            </div>
+          </div>
+          <div>
+            <label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Mode</label>
+            <select id="jobModeSel" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px">
+              <option value="auto" selected>Auto - run all batches</option>
+              <option value="manual">Manual - pause after each batch</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Pace</label>
+            <select id="batchPaceSel" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px">
+              <option value="3000" selected>1 msg / 3s (safe)</option>
+              <option value="2000">1 msg / 2s</option>
+              <option value="5000">1 msg / 5s (slowest)</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:16px">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:600">
+            <input type="checkbox" id="skipAlready" checked style="width:16px;height:16px" />
+            🚫 Skip contacts already sent this template
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px">
+            <input type="checkbox" id="batchDryRun" style="width:16px;height:16px" />
+            🧪 Dry run (build the list &amp; mark as skipped - no real messages)
+          </label>
+        </div>
+
+        <button type="button" onclick="createBatchJob()"
+          style="background:#0d6b5e;color:white;border:none;padding:11px 24px;border-radius:8px;font-size:14px;font-weight:800;cursor:pointer">
+          ① Build job &amp; preview
+        </button>
+        <div id="batchHint" style="font-size:12px;margin-top:10px"></div>
+
+        <!-- ── LIVE JOB PANEL ─────────────────────────────────────────────── -->
+        <div id="jobPanel" style="display:none;margin-top:18px;border-top:1px dashed var(--border);padding-top:18px">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px">
+            <div>
+              <span id="jobStatusBadge" style="font-size:11px;font-weight:800;padding:3px 10px;border-radius:999px;background:#f1f5f9;color:var(--text)">-</span>
+              <span id="jobMeta" style="font-size:12px;color:var(--muted);margin-left:8px"></span>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button type="button" id="jobStartBtn" onclick="bcStart()" style="display:none;background:#16a34a;color:white;border:none;padding:8px 16px;border-radius:7px;font-size:13px;font-weight:800;cursor:pointer">▶ Start sending</button>
+              <button type="button" id="jobPauseBtn" onclick="bcPause()" style="display:none;background:#f59e0b;color:white;border:none;padding:8px 16px;border-radius:7px;font-size:13px;font-weight:800;cursor:pointer">⏸ Pause</button>
+              <button type="button" id="jobAbortBtn" onclick="bcAbort()" style="display:none;background:#dc2626;color:white;border:none;padding:8px 16px;border-radius:7px;font-size:13px;font-weight:800;cursor:pointer">⛔ Abort</button>
+            </div>
+          </div>
+
+          <!-- progress bar -->
+          <div style="background:#eef2f1;border-radius:999px;height:16px;overflow:hidden;margin-bottom:8px">
+            <div id="jobBar" style="height:100%;width:0%;background:linear-gradient(90deg,#0d6b5e,#16a34a);transition:width .4s"></div>
+          </div>
+          <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px;margin-bottom:6px">
+            <span>✅ Sent: <strong id="jobSent" style="color:#16a34a">0</strong></span>
+            <span>❌ Failed: <strong id="jobFailed" style="color:#dc2626">0</strong></span>
+            <span>⤼ Skipped: <strong id="jobSkipped" style="color:#854d0e">0</strong></span>
+            <span>⏳ Remaining: <strong id="jobPending">0</strong></span>
+            <span>Σ Total: <strong id="jobTotal">0</strong></span>
+          </div>
+          <div id="jobNote" style="font-size:12px;color:var(--muted);margin-bottom:10px"></div>
+
+          <!-- recipients breakdown -->
+          <details style="margin-top:6px">
+            <summary style="font-size:12px;font-weight:700;color:var(--blue);cursor:pointer">👁 Recipient breakdown (who got it, who didn't)</summary>
+            <div id="jobRecipients" style="max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;margin-top:8px;padding:6px 10px;font-size:12px"></div>
+          </details>
+        </div>
+      </div>
+
+      <!-- ══ RECENT SEND JOBS (resume / audit) ═════════════════════════════════ -->
+      <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.08);margin-bottom:24px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <h3 style="font-size:15px;font-weight:700">🗂 Recent send jobs</h3>
+          <button type="button" onclick="loadRecentJobs()" style="padding:5px 14px;font-size:12px;background:#e0f2fe;color:#0369a1;border:none;border-radius:6px;cursor:pointer;font-weight:700">↻ Refresh</button>
+        </div>
+        <div id="recentJobs" style="font-size:13px;color:var(--muted)">Loading…</div>
+      </div>
+
       <!-- campaign log -->
       <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.08)">
         <h3 style="font-size:15px;font-weight:700;margin-bottom:14px">📋 Campaign Log (this session)</h3>
@@ -10491,6 +10791,183 @@ router.get("/broadcast", requireSupplierAdmin, async (req, res) => {
       function syncSelectedField() {
         document.getElementById("selectedPhones").value = [..._selectedPhones].join("\\n");
       }
+
+      // ══ BATCH SENDER (client) ═══════════════════════════════════════════════
+      var _bcJob = null, _bcPoll = null, _bcConfirmed = false;
+      function _bcQV(sel){ var e=document.querySelector(sel); return e?e.value:''; }
+      function _bcGet(id){ var e=document.getElementById(id); return e?e.value:''; }
+      function _bcEsc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+      function _bcVar1(){
+        var ta=document.getElementById('var1Textarea');
+        var inp=document.getElementById('var1Input');
+        if(ta && ta.style.display!=='none' && !ta.disabled){ return ta.value.replace(/\\s+/g,' ').trim(); }
+        return inp?inp.value:'';
+      }
+
+      async function createBatchJob(){
+        var hint=document.getElementById('batchHint');
+        hint.style.color='var(--muted)'; hint.textContent='Building list…';
+        var bs=_bcGet('batchSizeSel'); if(bs==='custom') bs=_bcGet('batchSizeCustom');
+        var p=new URLSearchParams();
+        p.set('audienceMode', _bcGet('audienceMode')||'filter');
+        p.set('pool', _bcQV('[name=pool]'));
+        p.set('inactiveDays', _bcQV('[name=inactiveDays]'));
+        p.set('city', _bcQV('[name=city]'));
+        p.set('keyword', _bcQV('[name=keyword]'));
+        p.set('manualPhones', _bcQV('[name=manualPhones]'));
+        p.set('selectedPhones', _bcGet('selectedPhones'));
+        p.set('templateName', _bcGet('tplSelect'));
+        p.set('var1', _bcVar1());
+        p.set('var2', _bcQV('[name=var2]'));
+        p.set('mediaMode', _bcGet('mediaMode'));
+        p.set('uploadedMediaUrl', _bcGet('uploadedMediaUrl'));
+        p.set('uploadedMediaType', _bcGet('uploadedMediaType'));
+        p.set('headerMediaUrl', _bcGet('headerMediaUrl'));
+        p.set('headerType', _bcGet('headerType'));
+        p.set('headerFilename', _bcQV('[name=headerFilename]'));
+        p.set('batchSize', bs);
+        p.set('jobMode', _bcGet('jobModeSel'));
+        p.set('msPerMessage', _bcGet('batchPaceSel'));
+        p.set('skipAlreadySent', document.getElementById('skipAlready').checked?'1':'0');
+        p.set('dryRun', document.getElementById('batchDryRun').checked?'1':'0');
+        try{
+          var r=await fetch('/zq-admin/broadcast/job/create',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:p.toString()});
+          var d=await r.json();
+          if(!r.ok||!d.ok) throw new Error(d.error||'Could not build job');
+          _bcJob=d.jobId; _bcConfirmed=false;
+          hint.style.color='#15803d';
+          hint.innerHTML='✅ '+_bcEsc(d.message)+'. Review below, then press <strong>Start</strong>.';
+          var panel=document.getElementById('jobPanel'); panel.style.display='';
+          panel.scrollIntoView({behavior:'smooth',block:'nearest'});
+          bcPoll();
+          loadRecentJobs();
+        }catch(e){ hint.style.color='#dc2626'; hint.textContent='❌ '+e.message; }
+      }
+
+      async function _bcPost(action){
+        if(!_bcJob) return;
+        try{
+          var r=await fetch('/zq-admin/broadcast/job/'+_bcJob+'/'+action,{method:'POST'});
+          var d=await r.json();
+          if(!r.ok||!d.ok) throw new Error(d.error||'Action failed');
+        }catch(e){ alert(e.message); }
+      }
+
+      async function bcStart(){
+        if(!_bcJob) return;
+        var dry=document.getElementById('batchDryRun').checked;
+        if(!dry && !_bcConfirmed){
+          if(!confirm('Start sending REAL WhatsApp messages now? You can Pause or Abort at any time.')) return;
+          _bcConfirmed=true;
+        }
+        await _bcPost('start');
+        if(_bcPoll) clearTimeout(_bcPoll);
+        bcPoll();
+      }
+      async function bcPause(){ await _bcPost('pause'); setTimeout(bcPoll,300); }
+      async function bcAbort(){
+        if(!confirm('Abort this job? Remaining contacts will NOT be sent (you can start a new job later).')) return;
+        await _bcPost('abort'); setTimeout(bcPoll,300);
+      }
+
+      async function bcPoll(){
+        if(!_bcJob) return;
+        try{
+          var r=await fetch('/zq-admin/broadcast/job/'+_bcJob+'/status');
+          var d=await r.json();
+          if(!r.ok||!d.ok) throw new Error(d.error||'Status failed');
+          bcRender(d);
+          if(d.status==='running'){
+            if(_bcPoll) clearTimeout(_bcPoll);
+            _bcPoll=setTimeout(bcPoll,1500);
+          } else { loadRecentJobs(); }
+        }catch(e){ /* keep last view */ }
+      }
+
+      function bcRender(d){
+        var done=d.sent+d.failed+d.skipped;
+        var pct=d.total?Math.round(done*100/d.total):0;
+        document.getElementById('jobBar').style.width=pct+'%';
+        document.getElementById('jobSent').textContent=d.sent;
+        document.getElementById('jobFailed').textContent=d.failed;
+        document.getElementById('jobSkipped').textContent=d.skipped;
+        document.getElementById('jobPending').textContent=d.pending;
+        document.getElementById('jobTotal').textContent=d.total;
+        var badge=document.getElementById('jobStatusBadge');
+        var colors={ready:['#e0f2fe','#0369a1'],running:['#dcfce7','#15803d'],paused:['#fef9c3','#854d0e'],done:['#dcfce7','#15803d'],aborted:['#fee2e2','#b91c1c'],failed:['#fee2e2','#b91c1c']};
+        var cc=colors[d.status]||['#f1f5f9','#334155'];
+        badge.style.background=cc[0]; badge.style.color=cc[1];
+        badge.textContent=(d.dryRun?'DRY · ':'')+String(d.status).toUpperCase();
+        document.getElementById('jobMeta').textContent=d.templateName+'  ·  '+pct+'%  ·  batch '+d.batchSize+'  ·  '+d.mode;
+        document.getElementById('jobNote').textContent=d.note||'';
+        var canStart=(d.status==='ready'||d.status==='paused');
+        var sb=document.getElementById('jobStartBtn');
+        sb.style.display=canStart?'':'none';
+        sb.textContent=(d.status==='paused')?(d.mode==='manual'?'▶ Send next batch':'▶ Resume'):'▶ Start sending';
+        document.getElementById('jobPauseBtn').style.display=(d.status==='running')?'':'none';
+        document.getElementById('jobAbortBtn').style.display=(['ready','running','paused'].indexOf(d.status)>=0)?'':'none';
+        var box=document.getElementById('jobRecipients');
+        var dot={sent:'#16a34a',failed:'#dc2626',skipped:'#854d0e',pending:'#94a3b8'};
+        var rows=d.recipients||[], cap=500, html='';
+        for(var i=0;i<rows.length && i<cap;i++){
+          var x=rows[i];
+          html+='<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid #f1f5f9">'
+            +'<span style="width:9px;height:9px;border-radius:50%;background:'+(dot[x.status]||'#94a3b8')+';flex-shrink:0"></span>'
+            +'<span style="font-family:monospace;color:#0369a1;min-width:105px">'+_bcEsc(x.phone)+'</span>'
+            +'<span style="color:var(--muted);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+_bcEsc(x.name||'')+'</span>'
+            +'<span style="font-weight:700;color:'+(dot[x.status]||'#94a3b8')+'">'+x.status+'</span>'
+            +(x.error?'<span style="color:#dc2626;font-size:10px;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+_bcEsc(x.error)+'">'+_bcEsc(x.error)+'</span>':'')
+            +'</div>';
+        }
+        if(rows.length>cap) html+='<div style="padding:6px 0;color:var(--muted)">+'+(rows.length-cap)+' more…</div>';
+        box.innerHTML=html||'<div style="padding:8px;color:var(--muted)">No recipients.</div>';
+      }
+
+      async function loadRecentJobs(){
+        var el=document.getElementById('recentJobs'); if(!el) return;
+        try{
+          var r=await fetch('/zq-admin/broadcast/jobs');
+          var d=await r.json();
+          if(!r.ok||!d.ok) throw new Error(d.error||'Failed');
+          if(!d.jobs.length){ el.textContent='No send jobs yet.'; return; }
+          var sc={ready:'#0369a1',running:'#15803d',paused:'#854d0e',done:'#15803d',aborted:'#b91c1c',failed:'#b91c1c'};
+          var html='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse"><thead><tr style="background:#f8fafc;text-align:left">'
+            +'<th style="padding:6px 8px;font-size:11px;color:var(--muted)">When</th>'
+            +'<th style="padding:6px 8px;font-size:11px;color:var(--muted)">Template</th>'
+            +'<th style="padding:6px 8px;font-size:11px;color:var(--muted)">Status</th>'
+            +'<th style="padding:6px 8px;font-size:11px;color:var(--muted);text-align:center">Sent</th>'
+            +'<th style="padding:6px 8px;font-size:11px;color:var(--muted);text-align:center">Fail</th>'
+            +'<th style="padding:6px 8px;font-size:11px;color:var(--muted);text-align:center">Left</th>'
+            +'<th style="padding:6px 8px"></th></tr></thead><tbody>';
+          for(var i=0;i<d.jobs.length;i++){
+            var j=d.jobs[i];
+            var when=new Date(j.createdAt).toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+            var resumable=(j.status==='paused'||j.status==='ready');
+            html+='<tr style="border-bottom:1px solid #f1f5f9">'
+              +'<td style="padding:6px 8px;font-size:12px;white-space:nowrap">'+_bcEsc(when)+'</td>'
+              +'<td style="padding:6px 8px"><code style="font-size:11px;background:#f1f5f9;padding:1px 5px;border-radius:4px">'+_bcEsc(j.templateName)+'</code>'+(j.dryRun?' <span style="font-size:9px;color:#854d0e">DRY</span>':'')+'</td>'
+              +'<td style="padding:6px 8px;font-size:11px;font-weight:800;color:'+(sc[j.status]||'#334155')+'">'+String(j.status).toUpperCase()+'</td>'
+              +'<td style="padding:6px 8px;text-align:center;font-size:12px;color:#16a34a;font-weight:700">'+j.sent+'</td>'
+              +'<td style="padding:6px 8px;text-align:center;font-size:12px;color:'+(j.failed?'#dc2626':'var(--muted)')+'">'+j.failed+'</td>'
+              +'<td style="padding:6px 8px;text-align:center;font-size:12px">'+j.pending+'</td>'
+              +'<td style="padding:6px 8px;text-align:right"><button type="button" onclick="bcOpenJob(\\''+j.id+'\\')" style="padding:4px 10px;font-size:11px;background:'+(resumable?'#0d6b5e':'#f1f5f9')+';color:'+(resumable?'white':'var(--text)')+';border:none;border-radius:5px;cursor:pointer;font-weight:700">'+(resumable?'Open / Resume':'View')+'</button></td>'
+              +'</tr>';
+          }
+          html+='</tbody></table></div>';
+          el.innerHTML=html;
+        }catch(e){ el.textContent='Error: '+e.message; }
+      }
+
+      function bcOpenJob(id){
+        _bcJob=id; _bcConfirmed=false;
+        var panel=document.getElementById('jobPanel'); panel.style.display='';
+        document.getElementById('batchHint').innerHTML='';
+        panel.scrollIntoView({behavior:'smooth',block:'nearest'});
+        if(_bcPoll) clearTimeout(_bcPoll);
+        bcPoll();
+      }
+
+      loadRecentJobs();
       </script>
     `));
   } catch (err) {
@@ -10995,6 +11472,195 @@ router.post("/broadcast", requireSupplierAdmin, async (req, res) => {
   } catch (err) {
     res.redirect(`/zq-admin/broadcast?error=${encodeURIComponent(err.message)}`);
   }
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ── BATCH SENDER ROUTES  (/zq-admin/broadcast/job/*) ─────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+
+// Shared: turn the submitted audience fields into a de-duped phone array.
+async function _resolveAudiencePhones(body) {
+  const normPhone = p => {
+    let d = String(p || "").replace(/\D+/g, "");
+    if (d.startsWith("0") && d.length === 10) d = "263" + d.slice(1);
+    return d.length >= 10 ? d : null;
+  };
+  const { audienceMode = "filter", pool = "all", inactiveDays = "14",
+          city = "", keyword = "", manualPhones = "", selectedPhones = "" } = body;
+  let phones = [], audienceLabel = "";
+  if (audienceMode === "manual") {
+    phones = String(manualPhones || "").split(/[\n,;\s]+/).filter(Boolean).map(normPhone).filter(Boolean);
+    audienceLabel = `manual (${phones.length} entered)`;
+  } else if (audienceMode === "select") {
+    phones = String(selectedPhones || "").split(/[\n,;\s]+/).filter(Boolean).map(normPhone).filter(Boolean);
+    audienceLabel = `selected (${phones.length} picked)`;
+  } else {
+    const cutoffDays = parseInt(inactiveDays, 10) || 0;
+    phones = await _buildPhoneList({ pool, cutoffDays, city, keyword });
+    audienceLabel = `${pool} / ${cutoffDays}d inactive${city ? " / " + city : ""}${keyword ? ' / "' + keyword + '"' : ""}`;
+  }
+  phones = [...new Set(phones)];
+  return { phones, audienceLabel };
+}
+
+// Resolve display names for a set of phones (best-effort, one batched query each).
+async function _resolveNames(phones) {
+  const map = {};
+  try {
+    const SupProf = (await import("../models/supplierProfile.js")).default;
+    const Biz     = (await import("../models/business.js")).default;
+    const [profiles, bizDocs, searchDocs] = await Promise.all([
+      SupProf.find({ phone: { $in: phones } }, { phone:1, businessName:1, "location.city":1 }).lean(),
+      Biz.find({ phone: { $in: phones } }, { phone:1, sessionData:1 }).lean(),
+      SearchCommandLog.find({ phone: { $in: phones } }, { phone:1, rawText:1 }).sort({ createdAt:-1 }).lean()
+    ]);
+    profiles.forEach(p => { map[p.phone] = p.businessName + (p.location?.city ? " · " + p.location.city : ""); });
+    bizDocs.forEach(b => { if (!map[b.phone] && b.sessionData?.businessName) map[b.phone] = b.sessionData.businessName; });
+    searchDocs.forEach(s => { if (!map[s.phone]) map[s.phone] = s.rawText ? "Searched: " + String(s.rawText).slice(0, 36) : ""; });
+  } catch (_e) { /* names are cosmetic */ }
+  return map;
+}
+
+// POST /zq-admin/broadcast/job/create  → builds a persistent job (status "ready")
+router.post("/broadcast/job/create", requireSupplierAdmin, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const templateName = String(b.templateName || "").trim();
+    if (!templateName) throw new Error("Please select a template.");
+
+    const isCampaign = templateName.startsWith("zqm_campaign_") || templateName.startsWith("zqm_campaignimg_");
+    const isImage    = templateName === "zqm_broadcast_image";
+
+    // Template-safe variable text (same rules as the sync route)
+    const tplSafe = s => String(s || "").replace(/[\r\n\t]+/g, " ").replace(/ {4,}/g, "   ").trim();
+    const var1 = tplSafe(b.var1);
+    const var2 = tplSafe(b.var2);
+    if (!isCampaign && !isImage && !var1) throw new Error("{{1}} variable is required for this template.");
+
+    // Media
+    let media = {};
+    if (b.mediaMode === "upload" && String(b.uploadedMediaUrl || "").trim()) {
+      media = { url: String(b.uploadedMediaUrl).trim(), type: b.uploadedMediaType || "image", filename: "ZimQuote-Broadcast.pdf" };
+    } else if (b.mediaMode === "url" && String(b.headerMediaUrl || "").trim()) {
+      media = { url: String(b.headerMediaUrl).trim(), type: b.headerType || "image", filename: b.headerFilename || "ZimQuote.pdf" };
+    }
+    const dryRun = b.dryRun === "1" || b.dryRun === "true" || b.dryRun === true;
+    if (isImage && !media.url && !dryRun) throw new Error("zqm_broadcast_image needs an image. Attach one in Step 3, or tick Dry Run.");
+
+    // Audience
+    let { phones, audienceLabel } = await _resolveAudiencePhones(b);
+    if (!phones.length) throw new Error("No contacts matched your audience. Check Step 1.");
+
+    // Skip phones already SENT this same template in a previous job (no dupes)
+    let skippedAlready = 0;
+    if (b.skipAlreadySent === "1" || b.skipAlreadySent === "true" || b.skipAlreadySent === true) {
+      const prior = await BroadcastJob.aggregate([
+        { $match: { templateName } },
+        { $unwind: "$recipients" },
+        { $match: { "recipients.status": "sent" } },
+        { $group: { _id: "$recipients.phone" } }
+      ]);
+      const already = new Set(prior.map(d => d._id));
+      const before = phones.length;
+      phones = phones.filter(p => !already.has(p));
+      skippedAlready = before - phones.length;
+      if (!phones.length) throw new Error(`All ${before} contacts have already received "${templateName}". Nothing new to send.`);
+    }
+
+    let batchSize = parseInt(b.batchSize, 10); if (!batchSize || batchSize < 1) batchSize = 50;
+    if (batchSize > 1000) batchSize = 1000;
+    const mode = (b.jobMode === "manual") ? "manual" : "auto";
+    let msPerMessage = parseInt(b.msPerMessage, 10); if (isNaN(msPerMessage)) msPerMessage = 3000;
+    if (msPerMessage < 1000) msPerMessage = 1000; // protect the WA number from rate bans
+
+    const nameMap = await _resolveNames(phones);
+    const recipients = phones.map(p => ({ phone: p, name: nameMap[p] || "", status: "pending" }));
+
+    const job = await BroadcastJob.create({
+      templateName, audienceLabel,
+      variables: [var1, var2].filter(Boolean),
+      media, batchSize, msPerMessage, mode, dryRun,
+      status: "ready", total: recipients.length, recipients,
+      createdBy: (req.session?.supplierAdmin?.email || req.adminUser?.email || ""),
+      note: skippedAlready ? `${skippedAlready} contact(s) skipped (already sent this template).` : ""
+    });
+
+    res.json({
+      ok: true, jobId: String(job._id), total: job.total,
+      skippedAlready, batchSize, mode, dryRun, templateName,
+      message: `Job ready: ${job.total} recipient(s)` + (skippedAlready ? `, ${skippedAlready} skipped as already-sent` : "")
+    });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
+// POST /zq-admin/broadcast/job/:id/start  → start or resume (fire-and-forget)
+router.post("/broadcast/job/:id/start", requireSupplierAdmin, async (req, res) => {
+  try {
+    const job = await BroadcastJob.findById(req.params.id).lean();
+    if (!job) throw new Error("Job not found.");
+    if (["done", "aborted"].includes(job.status)) throw new Error(`Job is ${job.status}; nothing to send.`);
+    const c = _ctrl(job._id); c.abort = false; c.pause = false;
+    _runBroadcastJob(job._id);          // do NOT await - runs in background
+    res.json({ ok: true, status: "running" });
+  } catch (err) { res.status(400).json({ ok: false, error: err.message }); }
+});
+
+// POST /zq-admin/broadcast/job/:id/pause  → pause after the current message
+router.post("/broadcast/job/:id/pause", requireSupplierAdmin, async (req, res) => {
+  try {
+    const c = _ctrl(req.params.id); c.pause = true;
+    if (!c.active) await BroadcastJob.updateOne({ _id: req.params.id, status: { $in: ["running","ready"] } }, { $set: { status: "paused", note: "Paused." } });
+    res.json({ ok: true });
+  } catch (err) { res.status(400).json({ ok: false, error: err.message }); }
+});
+
+// POST /zq-admin/broadcast/job/:id/abort  → stop for good (remaining stay unsent)
+router.post("/broadcast/job/:id/abort", requireSupplierAdmin, async (req, res) => {
+  try {
+    const c = _ctrl(req.params.id); c.abort = true; c.pause = false;
+    if (!c.active) {
+      const fresh = await BroadcastJob.findById(req.params.id).lean();
+      const pending = (fresh?.recipients || []).filter(x => x.status === "pending").length;
+      await BroadcastJob.updateOne({ _id: req.params.id, status: { $nin: ["done"] } },
+        { $set: { status: "aborted", finishedAt: new Date(), note: "Aborted by admin - " + pending + " not sent." } });
+    }
+    res.json({ ok: true });
+  } catch (err) { res.status(400).json({ ok: false, error: err.message }); }
+});
+
+// GET /zq-admin/broadcast/job/:id/status  → live progress (JSON, for polling)
+router.get("/broadcast/job/:id/status", requireSupplierAdmin, async (req, res) => {
+  try {
+    const job = await BroadcastJob.findById(req.params.id).lean();
+    if (!job) return res.status(404).json({ ok: false, error: "Job not found." });
+    const done = job.sent + job.failed + job.skipped;
+    const pending = job.total - done;
+    res.json({
+      ok: true, id: String(job._id), templateName: job.templateName, audienceLabel: job.audienceLabel,
+      status: job.status, mode: job.mode, dryRun: job.dryRun, batchSize: job.batchSize,
+      total: job.total, sent: job.sent, failed: job.failed, skipped: job.skipped, pending,
+      note: job.note || "", startedAt: job.startedAt, finishedAt: job.finishedAt,
+      recipients: (job.recipients || []).map(r => ({ phone: r.phone, name: r.name, status: r.status, error: r.error }))
+    });
+  } catch (err) { res.status(400).json({ ok: false, error: err.message }); }
+});
+
+// GET /zq-admin/broadcast/jobs  → recent jobs (JSON, for the history/resume list)
+router.get("/broadcast/jobs", requireSupplierAdmin, async (req, res) => {
+  try {
+    const jobs = await BroadcastJob.find({}, {
+      templateName:1, audienceLabel:1, status:1, mode:1, dryRun:1,
+      total:1, sent:1, failed:1, skipped:1, createdAt:1, startedAt:1, finishedAt:1
+    }).sort({ createdAt: -1 }).limit(25).lean();
+    res.json({ ok: true, jobs: jobs.map(j => ({
+      id: String(j._id), templateName: j.templateName, audienceLabel: j.audienceLabel,
+      status: j.status, mode: j.mode, dryRun: j.dryRun,
+      total: j.total, sent: j.sent, failed: j.failed, skipped: j.skipped,
+      pending: j.total - (j.sent + j.failed + j.skipped), createdAt: j.createdAt
+    })) });
+  } catch (err) { res.status(400).json({ ok: false, error: err.message }); }
 });
 
 // ══════════════════════════════════════════════════════════════════════════════

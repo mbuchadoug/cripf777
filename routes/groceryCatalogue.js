@@ -4,7 +4,7 @@
    here on the server, so no browser can ever underpay.
    SELLING price already includes your procurement margin.
    Prices reviewed: 2026-10-15 (fuel + cost increases; min order raised to $30).
-   Update SELLING prices here as your sourcing cost moves — the whole system follows.
+   Update SELLING prices here as your sourcing cost moves - the whole system follows.
    ========================================================================== */
 
 // sku: [display name, unit, SELLING price USD]
