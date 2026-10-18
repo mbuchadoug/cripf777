@@ -22,7 +22,7 @@ export const CATALOGUE = {
   cooking_oil:   ["Cooking oil", "2L", 4.90],
   bread:         ["Bread", "loaf", 1.30],
   chicken:       ["Chicken", "2kg", 7.50],
-  drumsticks:    ["Chicken drumsticks", "1kg", 7.50],
+  drumsticks:    ["Chicken drumsticks", "2kg", 14.00],
   beef:          ["Beef / meat", "1kg", 8.80],
   mince:         ["Beef mince", "1kg", 7.80],
   pork:          ["Pork", "1kg", 7.50],
