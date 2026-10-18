@@ -9,8 +9,8 @@
 
 // sku: [display name, unit, SELLING price USD]
 export const CATALOGUE = {
-  mealie_meal:   ["Mealie meal", "10kg", 7.00],
-  roller_meal:   ["Roller meal", "10kg", 6.50],
+  mealie_meal:   ["Mealie meal", "10kg", 8.50],
+  roller_meal:   ["Roller meal", "10kg", 7.50],
   rice:          ["Rice", "2kg", 3.60],
   flour:         ["Flour", "2kg", 2.60],
   self_raising:  ["Self-raising flour", "2kg", 3.00],
@@ -22,7 +22,7 @@ export const CATALOGUE = {
   cooking_oil:   ["Cooking oil", "2L", 4.90],
   bread:         ["Bread", "loaf", 1.30],
   chicken:       ["Chicken", "2kg", 7.50],
-  drumsticks:    ["Chicken drumsticks", "2kg", 7.50],
+  drumsticks:    ["Chicken drumsticks", "1kg", 7.50],
   beef:          ["Beef / meat", "1kg", 8.80],
   mince:         ["Beef mince", "1kg", 7.80],
   pork:          ["Pork", "1kg", 7.50],
