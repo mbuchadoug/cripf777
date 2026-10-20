@@ -15845,18 +15845,16 @@ router.get("/manual-request", requireSupplierAdmin, async (req, res) => {
     <div style="background:var(--white);border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.08)">
       <h2 style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px">3 · Who receives it</h2>
 
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
-        <button type="button" onclick="mrMatch()" class="btn btn-teal btn-sm" style="padding:7px 14px">🔎 Auto-match businesses</button>
-        <button type="button" onclick="document.getElementById('mrSearchWrap').style.display='';document.getElementById('mrSearchq').focus()" class="btn btn-gray btn-sm" style="padding:7px 14px">➕ Search &amp; pick</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+        <button type="button" onclick="mrMatch()" class="btn btn-teal btn-sm" style="padding:7px 14px">🔎 Tick best matches</button>
+        <button type="button" onclick="mrSelectAllVisible(true)" class="btn btn-gray btn-sm" style="padding:7px 14px">✓ Select all shown</button>
+        <button type="button" onclick="mrSelectAllVisible(false)" class="btn btn-gray btn-sm" style="padding:7px 14px">✕ Clear shown</button>
       </div>
 
-      <div id="mrSearchWrap" style="display:none;margin-bottom:10px">
-        <div style="display:flex;gap:6px">
-          <input id="mrSearchq" placeholder="Name, phone, category or city" onkeydown="if(event.key==='Enter'){event.preventDefault();mrSearch();}" style="flex:1;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px" />
-          <button type="button" onclick="mrSearch()" class="btn btn-blue btn-sm">Search</button>
-        </div>
-        <div id="mrSearchResults" style="max-height:170px;overflow-y:auto;margin-top:8px"></div>
-      </div>
+      <input id="mrFilter" placeholder="🔍 Filter businesses by name, phone or city…" oninput="mrRenderAll()"
+        style="width:100%;padding:9px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;margin-bottom:6px" />
+      <div id="mrAllMeta" style="font-size:11px;color:var(--muted);margin-bottom:6px">Loading businesses…</div>
+      <div id="mrAllList" style="max-height:260px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:6px"></div>
 
       <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Manual phone numbers <span style="color:var(--muted);font-weight:400">(one per line - for sellers / testing)</span></label>
       <textarea id="mrManual" rows="2" placeholder="0771234567" onchange="mrSyncManual()" onblur="mrSyncManual()"
@@ -15956,30 +15954,51 @@ router.get("/manual-request", requireSupplierAdmin, async (req, res) => {
     if(cb.checked) mrAdd(r); else mrRemove(mrNormDisplay(r.phone));
   }
 
+  // ── Load every business once, then filter/select client-side (fast) ──────
+  var MR_all = [];
+  function mrLoadAll(){
+    var list=document.getElementById('mrAllList');
+    list.innerHTML='<div style="padding:10px;color:var(--muted);font-size:12px">Loading businesses…</div>';
+    fetch('/zq-admin/manual-request/suppliers')
+      .then(function(r){return r.json();}).then(function(d){
+        if(!d.ok) throw new Error(d.error||'Load failed');
+        MR_all=d.suppliers||[];
+        mrRenderAll();
+      }).catch(function(e){ list.innerHTML='<div style="padding:10px;color:#b91c1c;font-size:12px">'+mrEsc(e.message)+'</div>'; });
+  }
+  function mrFiltered(){
+    var q=(document.getElementById('mrFilter').value||'').trim().toLowerCase();
+    if(!q) return MR_all;
+    return MR_all.filter(function(s){
+      return ((s.name||'')+' '+(s.phone||'')+' '+(s.city||'')+' '+(s.area||'')+' '+((s.cats||[]).join(' '))).toLowerCase().indexOf(q)>=0;
+    });
+  }
+  function mrRenderAll(){
+    var list=document.getElementById('mrAllList');
+    var rows=mrFiltered(); var cap=500;
+    document.getElementById('mrAllMeta').textContent = rows.length+' of '+MR_all.length+' businesses'+(rows.length>cap?(' (showing first '+cap+')'):'');
+    if(!MR_all.length){ list.innerHTML='<div style="padding:10px;color:var(--muted);font-size:12px">No businesses found.</div>'; return; }
+    if(!rows.length){ list.innerHTML='<div style="padding:10px;color:var(--muted);font-size:12px">No match for that filter.</div>'; return; }
+    list.innerHTML=rows.slice(0,cap).map(function(s){return mrRowHtml(s,2);}).join('');
+  }
+  function mrSelectAllVisible(on){
+    mrFiltered().slice(0,500).forEach(function(s){
+      if(on) mrAdd({phone:s.phone,id:s.id,name:s.name}); else mrRemove(mrNormDisplay(s.phone));
+    });
+    mrRenderAll();
+  }
   function mrMatch(){
     if(!document.getElementById('mrItems').value.trim()){ mrAlert('Add at least one item first.',false); return; }
-    var box=document.getElementById('mrSearchResults'); var wrap=document.getElementById('mrSearchWrap');
-    wrap.style.display=''; box.innerHTML='<div style="padding:10px;color:var(--muted);font-size:12px">Matching…</div>';
+    var meta=document.getElementById('mrAllMeta'); var prev=meta.textContent; meta.textContent='Matching…';
     fetch('/zq-admin/manual-request/match',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:mrBody().toString()})
       .then(function(r){return r.json();}).then(function(d){
         if(!d.ok) throw new Error(d.error||'Match failed');
-        if(!d.suppliers.length){ box.innerHTML='<div style="padding:10px;color:var(--muted);font-size:12px">No matching businesses. Try Search &amp; pick, or paste numbers.</div>'; return; }
-        box.innerHTML='<div style="font-size:11px;color:var(--muted);margin:4px 0">'+d.suppliers.length+' matched ('+mrEsc(d.intent||'')+') - tick to include:</div>'+d.suppliers.map(function(s){return mrRowHtml(s,0);}).join('');
-        d.suppliers.forEach(function(s){ mrAdd({phone:s.phone,id:s.id,name:s.name}); });
-        mrRender();
-      }).catch(function(e){ box.innerHTML='<div style="padding:10px;color:#b91c1c;font-size:12px">'+mrEsc(e.message)+'</div>'; });
-  }
-
-  function mrSearch(){
-    var q=document.getElementById('mrSearchq').value.trim();
-    var box=document.getElementById('mrSearchResults');
-    box.innerHTML='<div style="padding:10px;color:var(--muted);font-size:12px">Searching…</div>';
-    fetch('/zq-admin/manual-request/suppliers?q='+encodeURIComponent(q))
-      .then(function(r){return r.json();}).then(function(d){
-        if(!d.ok) throw new Error(d.error||'Search failed');
-        if(!d.suppliers.length){ box.innerHTML='<div style="padding:10px;color:var(--muted);font-size:12px">No businesses found.</div>'; return; }
-        box.innerHTML=d.suppliers.map(function(s){return mrRowHtml(s,1);}).join('');
-      }).catch(function(e){ box.innerHTML='<div style="padding:10px;color:#b91c1c;font-size:12px">'+mrEsc(e.message)+'</div>'; });
+        if(!d.suppliers.length){ meta.textContent=prev; mrAlert('No automatic matches — pick manually from the list below.',false); return; }
+        var known={}; MR_all.forEach(function(s){ known[mrNormDisplay(s.phone)]=1; });
+        d.suppliers.forEach(function(s){ if(!known[mrNormDisplay(s.phone)]) MR_all.unshift(s); mrAdd({phone:s.phone,id:s.id,name:s.name}); });
+        mrRenderAll();
+        mrAlert('✓ Ticked '+d.suppliers.length+' best match'+(d.suppliers.length===1?'':'es')+' ('+mrEsc(d.intent||'')+'). Review, then send.', true);
+      }).catch(function(e){ meta.textContent=prev; mrAlert(e.message,false); });
   }
 
   function mrSend(){
@@ -16012,6 +16031,7 @@ router.get("/manual-request", requireSupplierAdmin, async (req, res) => {
   }
 
   mrRender();
+  mrLoadAll();
   </script>`;
   res.send(layout("Manual Request", content));
 });
@@ -16049,8 +16069,8 @@ router.get("/manual-request/suppliers", requireSupplierAdmin, async (req, res) =
     const docs = await SupplierProfile.find(query)
       .select("businessName phone location profileType categories subscriptionStatus active suspended")
       .sort({ active: -1, businessName: 1 })
-      .limit(40).lean();
-    res.json({ ok: true, suppliers: docs.map(_mrSupplierRow) });
+      .limit(q ? 60 : 2000).lean();   // no query → load the whole book for client-side filtering
+    res.json({ ok: true, count: docs.length, suppliers: docs.map(_mrSupplierRow) });
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });
   }
