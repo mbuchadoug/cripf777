@@ -4520,6 +4520,7 @@ const isPresets     = t === "Presets" || t.startsWith("Preset:");
 { href: "/zq-admin/expiry",          label: "⏰ Subscriptions",       active: isExpiry },
     { href: "/zq-admin/broadcast-offer", label: "📣 Broadcast Offer",  active: isBroadcast },
     { href: "/zq-admin/broadcast",       label: "📡 Broadcast Hub",     active: isBroadcastHub },
+    { href: "/zq-admin/manual-request",  label: "🙋 Manual Request",    active: t === "Manual Request" },
     { href: "/zq-admin/reports-hub",      label: "📊 Reports Hub",       active: t === "Reports Hub" },
     { href: "/zq-admin/presets",         label: "🗂️ Presets",             active: isPresets },
     { href: "/zq-admin/vip-sellers",      label: "🔒 VIP Sellers",         active: t === "VIP Sellers" },
@@ -15720,4 +15721,476 @@ router.get("/suppliers/:id/recurring/ledger", requireSupplierAdmin, async (req, 
 
 
 export { layout, esc };
+// ══════════════════════════════════════════════════════════════════════════════
+// ── MANUAL BUYER REQUEST / ENQUIRY ON BEHALF OF A USER ───────────────────────
+// Admin composes a buyer request, picks exactly which businesses receive it,
+// and chooses whether sellers see the requestor's real number, no number, or a
+// masked/relay number (e.g. 263771440000). Recipients are reached OUTSIDE the
+// 24-hour window via the same approved request templates, and their
+// "awaiting_offer_intro" session is set so "View & Quote" works just like a live
+// request. Nothing in the existing flows is changed - this only ADDS routes.
+// ══════════════════════════════════════════════════════════════════════════════
+
+function _mrNorm(p) {
+  let d = String(p || "").replace(/\D+/g, "");
+  if (d.startsWith("0") && d.length === 10) d = "263" + d.slice(1);
+  return d.length >= 10 ? d : null;
+}
+
+// Mirror of chatbotEngine's _setSellerRequestSession so a cold seller can quote.
+async function _mrSetSellerSession(UserSession, targetPhone, reqId, role = "primary") {
+  const existing = await UserSession.findOne({ phone: targetPhone }).lean();
+  let map = {};
+  try {
+    const raw = existing?.tempData?.sellerPendingRequests;
+    map = raw ? (typeof raw === "object" && !Array.isArray(raw) ? raw : JSON.parse(raw)) : {};
+  } catch (_) { map = {}; }
+  const cutoff = Date.now() - 48 * 60 * 60 * 1000;
+  for (const k of Object.keys(map)) if ((map[k]?.storedAt || 0) < cutoff) delete map[k];
+  map[reqId] = { state: "awaiting_offer_intro", storedAt: Date.now(), requestId: reqId, role };
+  await UserSession.findOneAndUpdate(
+    { phone: targetPhone },
+    { $set: {
+        "tempData.sellerPendingRequests":   map,
+        "tempData.sellerRequestReplyState": "awaiting_offer_intro",
+        "tempData.sellerRequestId":          reqId
+      } },
+    { upsert: true }
+  );
+}
+
+// Shape a supplier doc into a light row for the picker UIs.
+function _mrSupplierRow(s) {
+  return {
+    id:     String(s._id),
+    name:   s.businessName || "(no name)",
+    phone:  s.phone || "",
+    area:   s.location?.area || "",
+    city:   s.location?.city || "",
+    type:   s.profileType || "",
+    cats:   Array.isArray(s.categories) ? s.categories.slice(0, 4) : [],
+    sub:    s.subscriptionStatus || "none",
+    active: s.active !== false && s.suspended !== true
+  };
+}
+
+// ── GET /zq-admin/manual-request  → the composer page ────────────────────────
+router.get("/manual-request", requireSupplierAdmin, async (req, res) => {
+  const DEFAULT_MASK = (process.env.ZQ_RELAY_DISPLAY_NUMBER || "263771440000").replace(/\D/g, "");
+  const content = `
+  <h1 style="font-size:22px;font-weight:800;margin-bottom:4px">🙋 Manual Request / Enquiry</h1>
+  <p style="color:var(--muted);font-size:13px;margin-bottom:20px;max-width:760px">
+    Raise a buyer request on behalf of someone and send it to the exact businesses you choose. Sellers receive it even if
+    they are outside the 24-hour window (via the approved request template), and can tap <strong>View &amp; Quote</strong> to reply.
+    You decide whether they see the requestor's number, no number, or a masked relay number.
+  </p>
+
+  <div id="mrAlert" style="display:none;margin-bottom:16px;padding:12px 16px;border-radius:8px;font-size:13px"></div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start">
+
+    <!-- LEFT: request details -->
+    <div style="background:var(--white);border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.08)">
+      <h2 style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:14px">1 · The request</h2>
+
+      <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Items / what they need <span style="color:var(--muted);font-weight:400">(one per line)</span></label>
+      <textarea id="mrItems" rows="5" placeholder="e.g.&#10;brake pads toyota aqua, 2 sets&#10;oil filter&#10;air filter"
+        style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;resize:vertical"></textarea>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px">
+        <div>
+          <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">City</label>
+          <input id="mrCity" list="mrCityList" placeholder="Harare" style="width:100%;padding:9px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px" />
+          <datalist id="mrCityList">
+            <option>Harare</option><option>Bulawayo</option><option>Mutare</option><option>Gweru</option>
+            <option>Kwekwe</option><option>Masvingo</option><option>Chinhoyi</option><option>Chitungwiza</option><option>Victoria Falls</option>
+          </datalist>
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Area / suburb</label>
+          <input id="mrArea" placeholder="e.g. Workington" style="width:100%;padding:9px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px" />
+        </div>
+      </div>
+
+      <div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:12px">
+        <label style="font-size:13px;display:flex;align-items:center;gap:6px"><input type="radio" name="mrType" value="product" checked onchange="mrTypeChange()"/> Product</label>
+        <label style="font-size:13px;display:flex;align-items:center;gap:6px"><input type="radio" name="mrType" value="service" onchange="mrTypeChange()"/> Service</label>
+        <label id="mrDelivWrap" style="font-size:13px;display:flex;align-items:center;gap:6px"><input type="checkbox" id="mrDelivery"/> Delivery needed</label>
+      </div>
+      <div id="mrServiceAddrWrap" style="display:none;margin-top:10px">
+        <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Service address <span style="color:var(--muted);font-weight:400">(optional)</span></label>
+        <input id="mrServiceAddr" placeholder="Where the work is needed" style="width:100%;padding:9px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px" />
+      </div>
+
+      <h2 style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:18px 0 10px">2 · Requestor &amp; number shown to sellers</h2>
+      <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Requestor's WhatsApp number <span style="color:var(--muted);font-weight:400">(where quotes are delivered)</span></label>
+      <input id="mrRequestor" placeholder="0771234567 or 263771234567" style="width:100%;padding:9px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px" />
+      <p style="font-size:11px;color:var(--muted);margin-top:4px">Quotes from sellers are routed here. Leave blank to route quotes to the relay number instead.</p>
+
+      <div style="margin-top:12px;display:flex;flex-direction:column;gap:8px">
+        <label style="font-size:13px;display:flex;align-items:center;gap:8px"><input type="radio" name="mrPhoneMode" value="hide" checked onchange="mrPhoneModeChange()"/> 🙈 Hide number - sellers see no contact</label>
+        <label style="font-size:13px;display:flex;align-items:center;gap:8px"><input type="radio" name="mrPhoneMode" value="show" onchange="mrPhoneModeChange()"/> 📞 Show the requestor's real number</label>
+        <label style="font-size:13px;display:flex;align-items:center;gap:8px"><input type="radio" name="mrPhoneMode" value="mask" onchange="mrPhoneModeChange()"/> 🛡 Show a masked / relay number</label>
+      </div>
+      <div id="mrMaskWrap" style="display:none;margin-top:8px">
+        <input id="mrMask" value="${esc(DEFAULT_MASK)}" style="width:100%;padding:9px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:monospace" />
+        <p style="font-size:11px;color:var(--muted);margin-top:4px">Sellers see this number instead of the buyer's - useful for unpaid buyers, so leads route through you.</p>
+      </div>
+
+      <label style="font-size:12px;font-weight:600;display:block;margin:16px 0 4px">Internal note <span style="color:var(--muted);font-weight:400">(optional, not sent)</span></label>
+      <input id="mrNotes" placeholder="e.g. walk-in customer, called the office" style="width:100%;padding:9px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px" />
+    </div>
+
+    <!-- RIGHT: recipients -->
+    <div style="background:var(--white);border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.08)">
+      <h2 style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px">3 · Who receives it</h2>
+
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+        <button type="button" onclick="mrMatch()" class="btn btn-teal btn-sm" style="padding:7px 14px">🔎 Auto-match businesses</button>
+        <button type="button" onclick="document.getElementById('mrSearchWrap').style.display='';document.getElementById('mrSearchq').focus()" class="btn btn-gray btn-sm" style="padding:7px 14px">➕ Search &amp; pick</button>
+      </div>
+
+      <div id="mrSearchWrap" style="display:none;margin-bottom:10px">
+        <div style="display:flex;gap:6px">
+          <input id="mrSearchq" placeholder="Name, phone, category or city" onkeydown="if(event.key==='Enter'){event.preventDefault();mrSearch();}" style="flex:1;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px" />
+          <button type="button" onclick="mrSearch()" class="btn btn-blue btn-sm">Search</button>
+        </div>
+        <div id="mrSearchResults" style="max-height:170px;overflow-y:auto;margin-top:8px"></div>
+      </div>
+
+      <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Manual phone numbers <span style="color:var(--muted);font-weight:400">(one per line - for sellers / testing)</span></label>
+      <textarea id="mrManual" rows="2" placeholder="0771234567" onchange="mrSyncManual()" onblur="mrSyncManual()"
+        style="width:100%;padding:9px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:monospace;resize:vertical"></textarea>
+
+      <div style="display:flex;align-items:center;justify-content:space-between;margin:14px 0 6px">
+        <span style="font-size:12px;font-weight:700;color:var(--text)">Selected recipients (<span id="mrCount">0</span>)</span>
+        <button type="button" onclick="mrClear()" style="font-size:11px;background:none;border:none;color:var(--red);cursor:pointer">Clear all</button>
+      </div>
+      <div id="mrSelected" style="max-height:230px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:8px"></div>
+
+      <div id="mrPace" style="margin-top:12px;font-size:12px;color:var(--muted)"></div>
+
+      <button type="button" onclick="mrSend()" id="mrSendBtn"
+        style="width:100%;margin-top:14px;background:var(--green);color:white;border:none;padding:12px;border-radius:9px;font-size:14px;font-weight:800;cursor:pointer">
+        📨 Send request to selected
+      </button>
+      <p style="font-size:11px;color:var(--muted);margin-top:8px;text-align:center">Tip: select just 1 recipient to send yourself a safe test first.</p>
+    </div>
+  </div>
+
+  <script>
+  var MR_sel = {};  // phone -> {phone, supplierId, name}
+  function mrAlert(msg, ok){
+    var el=document.getElementById('mrAlert');
+    el.style.display=''; el.textContent=msg;
+    el.style.background = ok ? '#dcfce7' : '#fee2e2';
+    el.style.color      = ok ? '#15803d' : '#b91c1c';
+    window.scrollTo({top:0,behavior:'smooth'});
+  }
+  function mrEsc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function mrNormDisplay(p){ var d=String(p||'').replace(/\\D+/g,''); if(d.startsWith('0')&&d.length===10) d='263'+d.slice(1); return d; }
+
+  function mrTypeChange(){
+    var t=document.querySelector('input[name=mrType]:checked').value;
+    document.getElementById('mrDelivWrap').style.display = (t==='product')?'':'none';
+    document.getElementById('mrServiceAddrWrap').style.display = (t==='service')?'':'none';
+  }
+  function mrPhoneModeChange(){
+    var m=document.querySelector('input[name=mrPhoneMode]:checked').value;
+    document.getElementById('mrMaskWrap').style.display = (m==='mask')?'':'none';
+  }
+
+  function mrAdd(r){
+    var phone=mrNormDisplay(r.phone); if(phone.length<10) return;
+    MR_sel[phone]={phone:phone, supplierId:r.supplierId||r.id||null, name:r.name||''};
+    mrRender();
+  }
+  function mrRemove(phone){ delete MR_sel[phone]; mrRender(); }
+  function mrClear(){ MR_sel={}; document.getElementById('mrManual').value=''; mrRender(); }
+
+  function mrRender(){
+    var keys=Object.keys(MR_sel);
+    document.getElementById('mrCount').textContent=keys.length;
+    var box=document.getElementById('mrSelected');
+    if(!keys.length){ box.innerHTML='<div style="color:var(--muted);font-size:12px;padding:8px;text-align:center">None yet - auto-match, search, or paste numbers.</div>'; }
+    else {
+      box.innerHTML = keys.map(function(k){ var r=MR_sel[k];
+        return '<div style="display:flex;align-items:center;gap:8px;padding:5px 2px;border-bottom:1px solid #f1f5f9">'
+          +'<span style="font-family:monospace;color:#0369a1;min-width:105px;font-size:12px">'+mrEsc(r.phone)+'</span>'
+          +'<span style="flex:1;color:var(--muted);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+mrEsc(r.name||'')+'</span>'
+          +'<button type="button" onclick="mrRemove(\\''+k+'\\')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:14px">&times;</button>'
+          +'</div>';
+      }).join('');
+    }
+    var secs=Math.round(keys.length*1.3);
+    document.getElementById('mrPace').textContent = keys.length ? ('≈ '+secs+'s to send all ('+keys.length+' message'+(keys.length===1?'':'s')+' at ~1.3s each).') : '';
+  }
+
+  function mrSyncManual(){
+    var raw=document.getElementById('mrManual').value.split(/[\\n,;\\s]+/);
+    for(var i=0;i<raw.length;i++){ var p=mrNormDisplay(raw[i]); if(p.length>=10){ if(!MR_sel[p]) MR_sel[p]={phone:p,supplierId:null,name:'(manual)'}; } }
+    mrRender();
+  }
+
+  function mrBody(){
+    var p=new URLSearchParams();
+    p.set('itemsText', document.getElementById('mrItems').value);
+    p.set('city', document.getElementById('mrCity').value);
+    p.set('area', document.getElementById('mrArea').value);
+    return p;
+  }
+
+  function mrRowHtml(s, where){
+    var cats=(s.cats||[]).join(', ');
+    var meta=[s.area,s.city].filter(Boolean).join(', ');
+    var sub = s.sub && s.sub!=='none' ? s.sub : '';
+    var badge = s.active ? '' : ' <span style="color:#b91c1c;font-size:10px">inactive</span>';
+    return '<label style="display:flex;align-items:flex-start;gap:8px;padding:6px 4px;border-bottom:1px solid #f1f5f9;cursor:pointer;font-size:12px">'
+      +'<input type="checkbox" '+(MR_sel[mrNormDisplay(s.phone)]?'checked':'')+' onchange="mrToggle(this,'+where+')" data-phone="'+mrEsc(s.phone)+'" data-id="'+mrEsc(s.id)+'" data-name="'+mrEsc(s.name)+'" style="margin-top:2px"/>'
+      +'<span style="flex:1"><strong>'+mrEsc(s.name)+'</strong>'+badge+'<br>'
+      +'<span style="color:var(--muted)">'+mrEsc(meta)+(cats?(' · '+mrEsc(cats)):'')+(sub?(' · '+mrEsc(sub)):'')+'</span></span>'
+      +'<span style="font-family:monospace;color:#0369a1">'+mrEsc(s.phone)+'</span></label>';
+  }
+  function mrToggle(cb){
+    var r={phone:cb.getAttribute('data-phone'), id:cb.getAttribute('data-id'), name:cb.getAttribute('data-name')};
+    if(cb.checked) mrAdd(r); else mrRemove(mrNormDisplay(r.phone));
+  }
+
+  function mrMatch(){
+    if(!document.getElementById('mrItems').value.trim()){ mrAlert('Add at least one item first.',false); return; }
+    var box=document.getElementById('mrSearchResults'); var wrap=document.getElementById('mrSearchWrap');
+    wrap.style.display=''; box.innerHTML='<div style="padding:10px;color:var(--muted);font-size:12px">Matching…</div>';
+    fetch('/zq-admin/manual-request/match',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:mrBody().toString()})
+      .then(function(r){return r.json();}).then(function(d){
+        if(!d.ok) throw new Error(d.error||'Match failed');
+        if(!d.suppliers.length){ box.innerHTML='<div style="padding:10px;color:var(--muted);font-size:12px">No matching businesses. Try Search &amp; pick, or paste numbers.</div>'; return; }
+        box.innerHTML='<div style="font-size:11px;color:var(--muted);margin:4px 0">'+d.suppliers.length+' matched ('+mrEsc(d.intent||'')+') - tick to include:</div>'+d.suppliers.map(function(s){return mrRowHtml(s,0);}).join('');
+        d.suppliers.forEach(function(s){ mrAdd({phone:s.phone,id:s.id,name:s.name}); });
+        mrRender();
+      }).catch(function(e){ box.innerHTML='<div style="padding:10px;color:#b91c1c;font-size:12px">'+mrEsc(e.message)+'</div>'; });
+  }
+
+  function mrSearch(){
+    var q=document.getElementById('mrSearchq').value.trim();
+    var box=document.getElementById('mrSearchResults');
+    box.innerHTML='<div style="padding:10px;color:var(--muted);font-size:12px">Searching…</div>';
+    fetch('/zq-admin/manual-request/suppliers?q='+encodeURIComponent(q))
+      .then(function(r){return r.json();}).then(function(d){
+        if(!d.ok) throw new Error(d.error||'Search failed');
+        if(!d.suppliers.length){ box.innerHTML='<div style="padding:10px;color:var(--muted);font-size:12px">No businesses found.</div>'; return; }
+        box.innerHTML=d.suppliers.map(function(s){return mrRowHtml(s,1);}).join('');
+      }).catch(function(e){ box.innerHTML='<div style="padding:10px;color:#b91c1c;font-size:12px">'+mrEsc(e.message)+'</div>'; });
+  }
+
+  function mrSend(){
+    mrSyncManual();
+    var keys=Object.keys(MR_sel);
+    if(!document.getElementById('mrItems').value.trim()){ mrAlert('Add at least one item.',false); return; }
+    if(!keys.length){ mrAlert('Select at least one recipient.',false); return; }
+    var mode=document.querySelector('input[name=mrPhoneMode]:checked').value;
+    var confirmMsg='Send this request to '+keys.length+' recipient'+(keys.length===1?'':'s')+'?';
+    if(mode==='show') confirmMsg+='\\n\\nSellers WILL see the requestor\\'s real number.';
+    if(!confirm(confirmMsg)) return;
+
+    var btn=document.getElementById('mrSendBtn'); btn.disabled=true; var old=btn.textContent; btn.textContent='Sending…';
+    var p=mrBody();
+    p.set('type', document.querySelector('input[name=mrType]:checked').value);
+    p.set('deliveryRequired', document.getElementById('mrDelivery').checked?'1':'0');
+    p.set('serviceAddress', document.getElementById('mrServiceAddr').value);
+    p.set('notes', document.getElementById('mrNotes').value);
+    p.set('requestorPhone', document.getElementById('mrRequestor').value);
+    p.set('phoneMode', mode);
+    p.set('maskPhone', document.getElementById('mrMask').value);
+    p.set('recipients', JSON.stringify(keys.map(function(k){return {phone:MR_sel[k].phone, supplierId:MR_sel[k].supplierId};})));
+    fetch('/zq-admin/manual-request/send',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:p.toString()})
+      .then(function(r){return r.json();}).then(function(d){
+        btn.disabled=false; btn.textContent=old;
+        if(!d.ok) throw new Error(d.error||'Send failed');
+        mrAlert('✅ Sent '+d.sent+' of '+d.total+' ('+d.ref+'). '+(d.failed?d.failed+' failed. ':'')+(d.skipped?d.skipped+' skipped.':'')+' Quotes will arrive at '+mrEsc(d.routedTo||'the relay number')+'.', true);
+        mrClear();
+      }).catch(function(e){ btn.disabled=false; btn.textContent=old; mrAlert('❌ '+e.message,false); });
+  }
+
+  mrRender();
+  </script>`;
+  res.send(layout("Manual Request", content));
+});
+
+// ── POST /zq-admin/manual-request/match  → matched suppliers (JSON) ──────────
+router.post("/manual-request/match", requireSupplierAdmin, async (req, res) => {
+  try {
+    const { parseItemListWithQty } = await import("../services/buyerRequests.js");
+    const { findSuppliersForRequest, classifyRequestItems } = await import("../services/requestMatchEngine.js");
+    const items = parseItemListWithQty(req.body.itemsText || "");
+    if (!items.length) return res.json({ ok: true, suppliers: [], intent: "" });
+    const suppliers = await findSuppliersForRequest({
+      items, city: req.body.city || null, area: req.body.area || null
+    });
+    let intent = "";
+    try { intent = classifyRequestItems(items).dominant || ""; } catch (_) {}
+    res.json({ ok: true, intent, suppliers: suppliers.map(_mrSupplierRow) });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
+// ── GET /zq-admin/manual-request/suppliers  → supplier search (JSON) ─────────
+router.get("/manual-request/suppliers", requireSupplierAdmin, async (req, res) => {
+  try {
+    const q = String(req.query.q || "").trim();
+    const query = {};
+    if (q) {
+      const rx = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+      query.$or = [
+        { businessName: rx }, { phone: rx }, { categories: rx },
+        { "location.city": rx }, { "location.area": rx }
+      ];
+    }
+    const docs = await SupplierProfile.find(query)
+      .select("businessName phone location profileType categories subscriptionStatus active suspended")
+      .sort({ active: -1, businessName: 1 })
+      .limit(40).lean();
+    res.json({ ok: true, suppliers: docs.map(_mrSupplierRow) });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
+// ── POST /zq-admin/manual-request/send  → create request + notify selected ───
+router.post("/manual-request/send", requireSupplierAdmin, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const { parseItemListWithQty } = await import("../services/buyerRequests.js");
+    const { notifySupplierNewRequestTemplate } = await import("../services/buyerRequestNotifications.js");
+    const UserSession = (await import("../models/userSession.js")).default;
+
+    const items = parseItemListWithQty(b.itemsText || "");
+    if (!items.length) throw new Error("Add at least one item.");
+
+    // Recipients (dedupe by normalized phone, cap 200)
+    let recipients = [];
+    try { recipients = JSON.parse(b.recipients || "[]"); } catch (_) { recipients = []; }
+    if (b.manualPhones) {
+      String(b.manualPhones).split(/[\n,;\s]+/).filter(Boolean).forEach(p => recipients.push({ phone: p }));
+    }
+    const seen = new Set();
+    recipients = recipients
+      .map(r => ({ phone: _mrNorm(r.phone), supplierId: r.supplierId || null }))
+      .filter(r => r.phone && !seen.has(r.phone) && seen.add(r.phone))
+      .slice(0, 200);
+    if (!recipients.length) throw new Error("Select at least one recipient.");
+
+    const isService = b.type === "service";
+    const deliveryRequired = b.deliveryRequired === "1" || b.deliveryRequired === "true";
+    const serviceAddress = String(b.serviceAddress || "").trim();
+    const city = String(b.city || "").trim() || null;
+    const area = String(b.area || "").trim() || null;
+
+    // Phone display + routing
+    const requestorPhone = _mrNorm(b.requestorPhone);
+    const maskPhone      = _mrNorm(b.maskPhone) || String(b.maskPhone || "").replace(/\D+/g, "") || null;
+    const phoneMode      = ["show", "hide", "mask"].includes(b.phoneMode) ? b.phoneMode : "hide";
+    // Routing: real requestor if given, else the relay/mask number (so quotes still land somewhere)
+    const routingPhone   = requestorPhone || maskPhone || "";
+    // What sellers SEE:
+    const displayPhone   = phoneMode === "show" ? requestorPhone
+                         : phoneMode === "mask" ? maskPhone
+                         : null;
+    const revealFlag     = (phoneMode === "show" || phoneMode === "mask") && !!displayPhone;
+
+    // Create the real BuyerRequest (quotes route to buyerPhone; View & Quote resolves by _id)
+    const request = await BuyerRequest.create({
+      buyerPhone:       routingPhone,
+      requestType:      "simple",
+      profileType:      isService ? "service" : "product",
+      rawText:          String(b.itemsText || "").slice(0, 1000),
+      items,
+      city, area,
+      deliveryRequired: isService ? false : deliveryRequired,
+      deliveryAddress:  "",
+      serviceAddress:   isService ? serviceAddress : "",
+      isServiceRequest: isService,
+      status:           "open",
+      imageStatus:      "none",
+      source:           "admin_manual",
+      adminNote:        String(b.notes || "").slice(0, 300),
+      phoneDisplayMode: phoneMode
+    });
+
+    const reqId = String(request._id);
+    const ref   = `REQ-${reqId.slice(-6).toUpperCase()}`;
+
+    const itemLines = items.map((it, i) => {
+      const qty  = Number(it.quantity || 1);
+      const unit = it.unitLabel && it.unitLabel !== "units" ? ` ${it.unitLabel}` : "";
+      return `${i + 1}. ${it.product} (${qty}${unit})`;
+    }).join("\n");
+    const locationText = area ? `${area}${city ? ", " + city : ""}` : (city || "Zimbabwe");
+    const deliveryLine = isService
+      ? (serviceAddress ? `📍 Service at: ${serviceAddress}` : "📍 Client will share their address")
+      : (deliveryRequired ? "🚚 Delivery to buyer needed" : "🏠 Collection / flexible");
+    const replyExamples = items.length === 1 ? "1=12.50"
+      : Array.from({ length: Math.min(items.length, 3) }, (_, i) => `${i + 1}=${(i * 5 + 10).toFixed(2)}`).join(", ");
+
+    let sent = 0, failed = 0, skipped = 0;
+    const notifiedIds = [];
+
+    for (const r of recipients) {
+      try {
+        const supplierDoc = r.supplierId
+          ? await SupplierProfile.findById(r.supplierId).lean()
+          : await SupplierProfile.findOne({ phone: r.phone }).lean();
+
+        // Force the per-send reveal choice (independent of the seller's standing flag)
+        const supplierForNotify = { ...(supplierDoc || {}), revealBuyerPhone: revealFlag, revealVisitorPhone: false };
+
+        await notifySupplierNewRequestTemplate({
+          supplierPhone:        r.phone,
+          supplier:             supplierForNotify,
+          notificationContacts: supplierDoc?.notificationContacts || [],
+          requestId:            reqId,
+          ref,
+          locationText,
+          itemCount:    items.length,
+          itemSummary:  itemLines,
+          deliveryLine,
+          fullItemLines: itemLines,
+          replyExamples,
+          buyerPhone:   displayPhone      // null = no-phone template; else with-phone template
+        });
+
+        // Make "View & Quote" work for a cold seller (and their notification contacts)
+        await _mrSetSellerSession(UserSession, r.phone, reqId, "primary");
+        for (const nc of (supplierDoc?.notificationContacts || [])) {
+          const n = _mrNorm(nc);
+          if (n) await _mrSetSellerSession(UserSession, n, reqId, "notification_only");
+        }
+
+        if (supplierDoc?._id) notifiedIds.push(supplierDoc._id);
+        sent++;
+        await new Promise(r2 => setTimeout(r2, 1200)); // gentle pace for Meta
+      } catch (err) {
+        failed++;
+        console.error("[MANUAL REQ] notify failed for", r.phone, "-", err.message);
+      }
+    }
+
+    // Stamp like the live flow so auto-close gives these sellers the grace period
+    try {
+      await BuyerRequest.findByIdAndUpdate(request._id, {
+        $set: { notifiedSuppliers: notifiedIds, lastNotifiedAt: new Date() }
+      });
+    } catch (_) {}
+
+    console.log(`[MANUAL REQ] ${ref} created by admin → sent ${sent}/${recipients.length} (mode=${phoneMode})`);
+    res.json({
+      ok: true, ref, requestId: reqId,
+      total: recipients.length, sent, failed, skipped,
+      routedTo: routingPhone ? `+${routingPhone}` : ""
+    });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
 export default router;
