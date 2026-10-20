@@ -44,15 +44,33 @@
         <input type="hidden" name="popup" value="true">
         <input type="hidden" name="username" id="u">
         <input type="hidden" name="password" id="p">
-        <label for="voucher">Enter your voucher code</label>
-        <input class="code" id="voucher" name="voucher" type="text" autocomplete="off"
-               autocapitalize="characters" autocorrect="off" spellcheck="false" placeholder="XXX-XXX" autofocus>
+
+        <!-- Default: voucher code (most guests) -->
+        <div id="mode-voucher">
+          <label for="voucher">Enter your voucher code</label>
+          <input class="code" id="voucher" type="text" autocomplete="off"
+                 autocapitalize="characters" autocorrect="off" spellcheck="false" placeholder="XXX-XXX" autofocus>
+        </div>
+
+        <!-- Members & tenants: username + password -->
+        <div id="mode-account" style="display:none">
+          <label for="acc-user">Username</label>
+          <input class="code" id="acc-user" type="text" autocomplete="username" autocapitalize="none"
+                 autocorrect="off" spellcheck="false" placeholder="username" style="text-transform:none;font-size:17px">
+          <label for="acc-pass" style="margin-top:12px">Password</label>
+          <input class="code" id="acc-pass" type="password" autocomplete="current-password"
+                 placeholder="password" style="text-transform:none;font-size:17px">
+        </div>
+
         <button type="submit">Connect</button>
       </form>
+
+      <a href="#" id="toggle" class="buy" style="margin-top:12px;border-color:rgba(255,255,255,.2)" onclick="toggleMode();return false;">Tenant or member? Sign in with your account</a>
 
       <div class="or">- or -</div>
       <a class="buy" href="http://cripfcnt.com/hotspot/buy">Buy a voucher with EcoCash</a>
       <a class="buy" style="margin-top:8px;border-color:rgba(255,255,255,.2)" href="http://cripfcnt.com/hotspot/status">Check my time / find my code</a>
+      <a class="buy" style="margin-top:8px;border-color:rgba(255,255,255,.2)" href="http://cripfcnt.com/hotspot/account">My account / renew</a>
 
       $(if error)
       <div class="err">$(error)</div>
@@ -62,7 +80,25 @@
     <div class="foot">Buy at reception, the bar, the restaurant - or with EcoCash above.</div>
   </div>
 <script>
+  var accountMode=false;
+  function toggleMode(){
+    accountMode=!accountMode;
+    document.getElementById('mode-voucher').style.display=accountMode?'none':'block';
+    document.getElementById('mode-account').style.display=accountMode?'block':'none';
+    document.getElementById('toggle').textContent=accountMode
+      ? 'Have a voucher code instead?'
+      : 'Tenant or member? Sign in with your account';
+    var f=document.getElementById(accountMode?'acc-user':'voucher'); if(f) f.focus();
+  }
   function prep(){
+    if(accountMode){
+      var user=document.getElementById('acc-user').value.trim().toLowerCase();
+      var pass=document.getElementById('acc-pass').value;
+      if(!user||!pass) return false;
+      document.getElementById('u').value=user;
+      document.getElementById('p').value=pass;
+      return true;
+    }
     var c=document.getElementById('voucher').value.trim().toUpperCase();
     if(!c) return false;
     document.getElementById('u').value=c;

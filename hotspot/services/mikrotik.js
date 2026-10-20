@@ -139,6 +139,47 @@ export async function addVoucherUser({ code, profile, limitUptimeMinutes }) {
   });
 }
 
+// ── Move a hotspot user to a different profile (changes speed / device cap) ──
+export async function setUserProfile(code, profile) {
+  return withConn(async (api) => {
+    const rows = await printAll(api, "/ip/hotspot/user/print");
+    const u = byName(rows, code);
+    if (!u) throw new MikrotikError(`user ${code} not on router`);
+    await api.write("/ip/hotspot/user/set", [`=.id=${rowId(u)}`, `=profile=${profile}`]);
+    return true;
+  });
+}
+
+// ── Change a hotspot user's password (used when an account password is reset) ──
+export async function setUserPassword(code, password) {
+  return withConn(async (api) => {
+    const rows = await printAll(api, "/ip/hotspot/user/print");
+    const u = byName(rows, code);
+    if (!u) throw new MikrotikError(`user ${code} not on router`);
+    await api.write("/ip/hotspot/user/set", [`=.id=${rowId(u)}`, `=password=${password}`]);
+    return true;
+  });
+}
+
+// ── Create OR update a long-lived account user (username + chosen password) ──
+// limitUptimeMinutes 0 = no uptime cap (subscription accounts rely on the app's
+// validUntil instead). Always leaves the user enabled.
+export async function upsertAccountUser({ username, password, profile, limitUptimeMinutes }) {
+  return withConn(async (api) => {
+    const rows = await printAll(api, "/ip/hotspot/user/print");
+    const u = byName(rows, username);
+    const params = [`=password=${password}`, `=profile=${profile}`, "=disabled=no"];
+    params.push(`=limit-uptime=${limitUptimeMinutes && limitUptimeMinutes > 0 ? minutesToRos(limitUptimeMinutes) : "0"}`);
+    if (u) {
+      await api.write("/ip/hotspot/user/set", [`=.id=${rowId(u)}`, ...params]);
+      return rowId(u);
+    }
+    await api.write("/ip/hotspot/user/add", [`=name=${username}`, ...params]);
+    const after = await printAll(api, "/ip/hotspot/user/print");
+    return rowId(byName(after, username));
+  });
+}
+
 export async function setUptimeLimit(code, totalMinutes) {
   return withConn(async (api) => {
     const rows = await printAll(api, "/ip/hotspot/user/print");
@@ -222,18 +263,20 @@ export async function snapshot() {
   });
 }
 
-// ── Bypass devices (cameras, reception) ──
-export async function addBypass(mac, comment) {
+// ── Bypass devices (cameras, reception, staff) ──
+// rateLimit is an optional "up/down" string (e.g. "2000k/8000k"). Empty/"" keeps
+// the device UNLIMITED (cameras). A value caps the device while it stays bypassed
+// - no login page, just a speed ceiling - so one staff phone can't starve the WiFi.
+export async function addBypass(mac, comment, rateLimit) {
   return withConn(async (api) => {
     const rows = await printAll(api, "/ip/hotspot/ip-binding/print");
     const existing = byField(rows, "mac-address", mac)[0];
+    const params = ["=type=bypassed", `=comment=${comment || ""}`, `=rate-limit=${rateLimit || ""}`];
     if (existing) {
-      await api.write("/ip/hotspot/ip-binding/set",
-        [`=.id=${rowId(existing)}`, "=type=bypassed", `=comment=${comment || ""}`]);
+      await api.write("/ip/hotspot/ip-binding/set", [`=.id=${rowId(existing)}`, ...params]);
       return rowId(existing);
     }
-    await api.write("/ip/hotspot/ip-binding/add",
-      [`=mac-address=${mac}`, "=type=bypassed", `=comment=${comment || ""}`]);
+    await api.write("/ip/hotspot/ip-binding/add", [`=mac-address=${mac}`, ...params]);
     const after = await printAll(api, "/ip/hotspot/ip-binding/print");
     return rowId(byField(after, "mac-address", mac)[0]);
   });

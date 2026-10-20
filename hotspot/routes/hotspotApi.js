@@ -10,11 +10,55 @@ import HotspotAdmin from "../models/hotspotAdmin.js";
 import HotspotPlan from "../models/hotspotPlan.js";
 import Voucher from "../models/voucher.js";
 import BypassDevice from "../models/bypassDevice.js";
+import HotspotAccount from "../models/hotspotAccount.js";
+import HotspotSetting from "../models/hotspotSetting.js";
 import * as mt from "../services/mikrotik.js";
 import { suggestPrice } from "../services/pricing.js";
 import { signToken, authRequired, ownerRequired, adminRequired } from "../middleware/hotspotAuth.js";
 
 const router = Router();
+
+// ── shared helpers (speed + profile naming, reused by vouchers & accounts) ──
+// RouterOS rate-limit is "rx/tx" = client-upload/client-download.
+function rateLimitFrom(downKbps, upKbps) {
+  return (upKbps || downKbps) ? `${upKbps || 0}k/${downKbps || 0}k` : null;
+}
+// A voucher batch reuses the plan's base profile when its caps match the plan,
+// otherwise it gets its own profile named by those caps (so the caps are real
+// on the router without touching the plan).
+function voucherProfileName(plan, deviceCap, downKbps, upKbps) {
+  const isCustom = deviceCap !== plan.deviceCap || downKbps !== plan.downKbps || upKbps !== plan.upKbps;
+  return isCustom ? `${plan.rosProfile()}_d${deviceCap}_${downKbps || 0}_${upKbps || 0}` : plan.rosProfile();
+}
+function accountProfileName(a) {
+  return `ha_${a.upKbps || 0}_${a.downKbps || 0}_d${a.deviceCap || 1}`;
+}
+function acctRemainingMin(a) {
+  if (a.billing === "prepaid") return Math.max(0, (a.timeAllowanceMin || 0) - Math.floor((a.uptimeUsedSec || 0) / 60));
+  if (a.validUntil) return Math.max(0, Math.round((new Date(a.validUntil) - new Date()) / 60000));
+  return 0;
+}
+// Create/refresh an account's hotspot user + profile on the router (best effort).
+async function ensureAccountOnRouter(a) {
+  if (!mt.isConfigured()) { a.syncedToRouter = false; return; }
+  try {
+    const profileName = accountProfileName(a);
+    await mt.ensureProfile({ name: profileName, sharedUsers: a.deviceCap, rateLimit: rateLimitFrom(a.downKbps, a.upKbps) });
+    a.rosUserId = await mt.upsertAccountUser({
+      username: a.username, password: a.password, profile: profileName,
+      limitUptimeMinutes: a.billing === "prepaid" ? a.timeAllowanceMin : 0
+    });
+    a.syncedToRouter = true; a.lastSyncError = null;
+  } catch (err) { a.syncedToRouter = false; a.lastSyncError = err?.message; }
+}
+function applyAccountTopup(a, minutes) {
+  if (a.billing === "prepaid") {
+    a.timeAllowanceMin = (a.timeAllowanceMin || 0) + minutes;
+  } else {
+    const base = (a.validUntil && new Date(a.validUntil) > new Date()) ? new Date(a.validUntil) : new Date();
+    a.validUntil = new Date(base.getTime() + minutes * 60000);
+  }
+}
 
 // Auto price for a duration + devices (whole-dollar). Used by the plan editor.
 router.get("/price/suggest", authRequired, (req, res) => {
@@ -286,6 +330,56 @@ router.post("/vouchers/:code/extend", authRequired, adminRequired, async (req, r
   }
 });
 
+// Edit a voucher - duration, speed, devices, price, note - even while it's ACTIVE.
+// Changing speed/devices moves the live session to a matching profile; changing
+// duration resets the router's uptime limit (or the clock window) in place.
+router.patch("/vouchers/:code", authRequired, adminRequired, async (req, res) => {
+  try {
+    const v = await Voucher.findOne({ code: req.params.code.toUpperCase() });
+    if (!v) return res.status(404).json({ error: "Voucher not found" });
+    const b = req.body || {};
+    const plan = await HotspotPlan.findOne({ key: v.planKey });
+
+    const oldDev = v.deviceCap, oldDown = v.downKbps, oldUp = v.upKbps;
+    const durationChanged = b.durationMinutes != null && Number(b.durationMinutes) !== v.durationMinutes;
+
+    if (b.durationMinutes != null) v.durationMinutes = Math.max(1, Number(b.durationMinutes));
+    if (b.deviceCap != null) v.deviceCap = Math.min(20, Math.max(1, Number(b.deviceCap)));
+    if (b.downKbps != null) v.downKbps = Math.max(0, Number(b.downKbps));
+    if (b.upKbps != null) v.upKbps = Math.max(0, Number(b.upKbps));
+    if (b.note != null) v.note = String(b.note);
+    if (b.price != null) v.price = Math.max(0, Number(b.price));
+
+    // Clock window follows the new duration once the voucher has started.
+    if (v.durationType === "clock" && durationChanged && v.firstUsedAt) {
+      v.validUntil = new Date(new Date(v.firstUsedAt).getTime() + v.durationMinutes * 60000);
+    }
+    // If it had run out but now has time again, bring it back.
+    if (["used", "expired"].includes(v.status) && v.remainingMinutes() > 0) {
+      v.status = v.firstUsedAt ? "active" : "unused";
+    }
+
+    if (mt.isConfigured()) {
+      try {
+        const capsChanged = v.deviceCap !== oldDev || v.downKbps !== oldDown || v.upKbps !== oldUp;
+        if (plan && capsChanged) {
+          const profileName = voucherProfileName(plan, v.deviceCap, v.downKbps, v.upKbps);
+          await mt.ensureProfile({ name: profileName, sharedUsers: v.deviceCap, rateLimit: rateLimitFrom(v.downKbps, v.upKbps) });
+          await mt.setUserProfile(v.code, profileName);
+        }
+        if (v.durationType === "uptime" && durationChanged) await mt.setUptimeLimit(v.code, v.durationMinutes);
+        if (v.status !== "disabled") await mt.setUserDisabled(v.code, false);
+        v.syncedToRouter = true; v.lastSyncError = null;
+      } catch (err) { v.syncedToRouter = false; v.lastSyncError = err?.message; }
+    }
+    await v.save();
+    res.json({ voucher: shapeVoucher(v, true) });
+  } catch (err) {
+    console.error("[hotspot voucher edit]", err);
+    res.status(500).json({ error: "Could not update voucher" });
+  }
+});
+
 // Revoke (disable) / restore.
 router.post("/vouchers/:code/disable", authRequired, adminRequired, async (req, res) => {
   const v = await Voucher.findOne({ code: req.params.code.toUpperCase() });
@@ -329,12 +423,14 @@ router.post("/bypass", authRequired, adminRequired, async (req, res) => {
       mac,
       label: String(req.body?.label || "Device").trim(),
       category: ["camera", "reception", "staff", "other"].includes(req.body?.category) ? req.body.category : "camera",
+      downKbps: Math.max(0, Number(req.body?.downKbps || 0)),
+      upKbps: Math.max(0, Number(req.body?.upKbps || 0)),
       active: true,
       createdByName: req.hsAdmin.displayName
     };
     const device = await BypassDevice.findOneAndUpdate({ mac }, doc, { upsert: true, new: true, setDefaultsOnInsert: true });
     if (mt.isConfigured()) {
-      try { device.rosBindingId = await mt.addBypass(mac, device.label); device.syncedToRouter = true; device.lastSyncError = null; }
+      try { device.rosBindingId = await mt.addBypass(mac, device.label, rateLimitFrom(device.downKbps, device.upKbps) || ""); device.syncedToRouter = true; device.lastSyncError = null; }
       catch (err) { device.syncedToRouter = false; device.lastSyncError = err?.message; }
       await device.save();
     }
@@ -345,11 +441,184 @@ router.post("/bypass", authRequired, adminRequired, async (req, res) => {
   }
 });
 
+// Edit a bypass device - rename, re-categorise, or set/clear its speed cap.
+router.patch("/bypass/:id", authRequired, adminRequired, async (req, res) => {
+  try {
+    const device = await BypassDevice.findById(req.params.id);
+    if (!device) return res.status(404).json({ error: "Device not found" });
+    const b = req.body || {};
+    if (b.label != null) device.label = String(b.label).trim() || device.label;
+    if (b.category && ["camera", "reception", "staff", "other"].includes(b.category)) device.category = b.category;
+    if (b.downKbps != null) device.downKbps = Math.max(0, Number(b.downKbps));
+    if (b.upKbps != null) device.upKbps = Math.max(0, Number(b.upKbps));
+    if (mt.isConfigured()) {
+      try { device.rosBindingId = await mt.addBypass(device.mac, device.label, rateLimitFrom(device.downKbps, device.upKbps) || ""); device.syncedToRouter = true; device.lastSyncError = null; }
+      catch (err) { device.syncedToRouter = false; device.lastSyncError = err?.message; }
+    }
+    await device.save();
+    res.json({ device });
+  } catch (err) {
+    console.error("[hotspot bypass edit]", err);
+    res.status(500).json({ error: "Could not update device" });
+  }
+});
+
 router.delete("/bypass/:id", authRequired, adminRequired, async (req, res) => {
   const device = await BypassDevice.findById(req.params.id);
   if (!device) return res.status(404).json({ error: "Device not found" });
   if (mt.isConfigured()) { try { await mt.removeBypass(device.mac); } catch { /* ignore */ } }
   await device.deleteOne();
+  res.json({ ok: true });
+});
+
+// ============================================================
+// 👤 USER ACCOUNTS  (tenants & regular clients who log in instead of using codes)
+// ============================================================
+
+// Global account cap (owner-tunable).
+router.get("/accounts/settings", authRequired, adminRequired, async (req, res) => {
+  const s = await HotspotSetting.get();
+  const accountCount = await HotspotAccount.countDocuments();
+  res.json({ maxAccounts: s.maxAccounts, accountCount });
+});
+
+router.patch("/accounts/settings", authRequired, ownerRequired, async (req, res) => {
+  const s = await HotspotSetting.get();
+  if (req.body?.maxAccounts != null) s.maxAccounts = Math.max(0, Number(req.body.maxAccounts));
+  s.updatedAt = new Date();
+  await s.save();
+  res.json({ maxAccounts: s.maxAccounts });
+});
+
+router.get("/accounts", authRequired, adminRequired, async (req, res) => {
+  try {
+    const q = {};
+    if (req.query.type) q.type = req.query.type;
+    if (req.query.status) q.status = req.query.status;
+    const search = String(req.query.q || "").trim();
+    if (search) q.$or = [
+      { username: new RegExp(search, "i") }, { displayName: new RegExp(search, "i") },
+      { phone: new RegExp(search, "i") }, { unit: new RegExp(search, "i") }
+    ];
+    const rows = await HotspotAccount.find(q).sort({ createdAt: -1 }).lean();
+    res.json({ accounts: rows.map((a) => shapeAccount(a)) });
+  } catch (err) {
+    console.error("[hotspot accounts list]", err);
+    res.status(500).json({ error: "Could not load accounts" });
+  }
+});
+
+router.post("/accounts", authRequired, adminRequired, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const username = String(b.username || "").toLowerCase().replace(/[^a-z0-9._-]/g, "");
+    if (!username || !b.password) return res.status(400).json({ error: "Username and password are required" });
+    if (await HotspotAccount.exists({ username })) return res.status(400).json({ error: "That username is taken" });
+    if (await Voucher.exists({ code: username.toUpperCase() })) return res.status(400).json({ error: "That name clashes with a voucher code" });
+
+    const s = await HotspotSetting.get();
+    const count = await HotspotAccount.countDocuments();
+    if (s.maxAccounts > 0 && count >= s.maxAccounts) {
+      return res.status(403).json({ error: `Account limit reached (${s.maxAccounts}). Raise it in Accounts → settings, or remove an account.` });
+    }
+
+    const billing = b.billing === "prepaid" ? "prepaid" : "subscription";
+    const durationMinutes = Math.max(1, Number(b.durationMinutes || 43200));
+    const a = new HotspotAccount({
+      username, password: String(b.password),
+      displayName: b.displayName || username, phone: String(b.phone || ""), unit: String(b.unit || ""),
+      type: ["client", "tenant", "staff"].includes(b.type) ? b.type : "client",
+      billing, durationMinutes,
+      deviceCap: Math.min(20, Math.max(1, Number(b.deviceCap || 2))),
+      downKbps: Math.max(0, Number(b.downKbps || 0)), upKbps: Math.max(0, Number(b.upKbps || 0)),
+      price: Math.max(0, Number(b.price || 0)), currency: b.currency || "USD",
+      createdByName: req.hsAdmin.displayName
+    });
+    if (billing === "subscription") a.validUntil = new Date(Date.now() + durationMinutes * 60000);
+    else a.timeAllowanceMin = durationMinutes;
+
+    await ensureAccountOnRouter(a);
+    await a.save();
+    res.json({ account: shapeAccount(a, true) });
+  } catch (err) {
+    console.error("[hotspot account add]", err);
+    res.status(500).json({ error: "Could not create account" });
+  }
+});
+
+router.get("/accounts/:id", authRequired, adminRequired, async (req, res) => {
+  const a = await HotspotAccount.findById(req.params.id).lean();
+  if (!a) return res.status(404).json({ error: "Account not found" });
+  res.json({ account: shapeAccount(a, true) });
+});
+
+// Edit speed / devices / validity / password / status - applies to the live user.
+router.patch("/accounts/:id", authRequired, adminRequired, async (req, res) => {
+  try {
+    const a = await HotspotAccount.findById(req.params.id);
+    if (!a) return res.status(404).json({ error: "Account not found" });
+    const b = req.body || {};
+
+    if (b.displayName != null) a.displayName = String(b.displayName);
+    if (b.phone != null) a.phone = String(b.phone);
+    if (b.unit != null) a.unit = String(b.unit);
+    if (b.type && ["client", "tenant", "staff"].includes(b.type)) a.type = b.type;
+    if (b.deviceCap != null) a.deviceCap = Math.min(20, Math.max(1, Number(b.deviceCap)));
+    if (b.downKbps != null) a.downKbps = Math.max(0, Number(b.downKbps));
+    if (b.upKbps != null) a.upKbps = Math.max(0, Number(b.upKbps));
+    if (b.price != null) a.price = Math.max(0, Number(b.price));
+    if (b.durationMinutes != null) a.durationMinutes = Math.max(1, Number(b.durationMinutes));
+    if (b.password) a.password = String(b.password);
+    if (b.validUntil) a.validUntil = new Date(b.validUntil);
+
+    let statusChange = null;
+    if (b.status && ["active", "suspended", "expired"].includes(b.status)) { a.status = b.status; statusChange = b.status; }
+
+    await ensureAccountOnRouter(a);
+    if (mt.isConfigured()) {
+      try {
+        if (b.password) await mt.setUserPassword(a.username, a.password);
+        if (statusChange === "suspended") { await mt.setUserDisabled(a.username, true); await mt.kick(a.username); }
+        if (statusChange === "active") await mt.setUserDisabled(a.username, false);
+      } catch (err) { a.lastSyncError = err?.message; }
+    }
+    await a.save();
+    res.json({ account: shapeAccount(a, true) });
+  } catch (err) {
+    console.error("[hotspot account edit]", err);
+    res.status(500).json({ error: "Could not update account" });
+  }
+});
+
+// Manual top-up (cash/complimentary at reception). Online EcoCash top-up lives
+// in the public self-service route.
+router.post("/accounts/:id/topup", authRequired, adminRequired, async (req, res) => {
+  try {
+    const a = await HotspotAccount.findById(req.params.id);
+    if (!a) return res.status(404).json({ error: "Account not found" });
+    const minutes = Math.max(1, Number(req.body?.minutes || a.durationMinutes));
+    const amount = Number(req.body?.amount != null ? req.body.amount : a.price) || 0;
+    const method = ["cash", "ecocash", "complimentary", "other"].includes(req.body?.method) ? req.body.method : "cash";
+
+    applyAccountTopup(a, minutes);
+    a.topups.push({ minutes, amount, currency: a.currency, method, by: req.hsAdmin.displayName, note: String(req.body?.note || "") });
+    if (a.status !== "active") a.status = "active";
+
+    await ensureAccountOnRouter(a);
+    if (mt.isConfigured()) { try { await mt.setUserDisabled(a.username, false); } catch { /* retried */ } }
+    await a.save();
+    res.json({ account: shapeAccount(a, true) });
+  } catch (err) {
+    console.error("[hotspot account topup]", err);
+    res.status(500).json({ error: "Could not top up account" });
+  }
+});
+
+router.delete("/accounts/:id", authRequired, ownerRequired, async (req, res) => {
+  const a = await HotspotAccount.findById(req.params.id);
+  if (!a) return res.status(404).json({ error: "Account not found" });
+  if (mt.isConfigured()) { try { await mt.removeVoucherUser(a.username); } catch { /* ignore */ } }
+  await a.deleteOne();
   res.json({ ok: true });
 });
 
@@ -487,6 +756,8 @@ function shapeVoucher(v, full = false) {
     durationType: v.durationType,
     durationMinutes: v.durationMinutes,
     deviceCap: v.deviceCap,
+    downKbps: v.downKbps || 0,
+    upKbps: v.upKbps || 0,
     price: v.price,
     currency: v.currency,
     paymentMethod: v.paymentMethod,
@@ -502,6 +773,37 @@ function shapeVoucher(v, full = false) {
     batchId: v.batchId
   };
   if (full) base.devices = v.devices || [];
+  return base;
+}
+
+// ── shaper: safe view of an account for the UI ──
+function shapeAccount(a, full = false) {
+  const base = {
+    id: a._id,
+    username: a.username,
+    displayName: a.displayName,
+    phone: a.phone,
+    unit: a.unit,
+    type: a.type,
+    billing: a.billing,
+    durationMinutes: a.durationMinutes,
+    deviceCap: a.deviceCap,
+    downKbps: a.downKbps || 0,
+    upKbps: a.upKbps || 0,
+    price: a.price,
+    currency: a.currency,
+    status: a.status,
+    validUntil: a.validUntil || null,
+    timeAllowanceMin: a.timeAllowanceMin || 0,
+    uptimeUsedMin: Math.floor((a.uptimeUsedSec || 0) / 60),
+    remainingMinutes: acctRemainingMin(a),
+    deviceCount: a.devices?.length || 0,
+    lastSeenAt: a.lastSeenAt,
+    syncedToRouter: a.syncedToRouter,
+    createdByName: a.createdByName,
+    createdAt: a.createdAt
+  };
+  if (full) { base.devices = a.devices || []; base.topups = a.topups || []; }
   return base;
 }
 

@@ -238,6 +238,7 @@ const NAV = [
   {id:"dashboard", label:"Dashboard", ic:"◧"},
   {id:"generate",  label:"Generate",  ic:"＋"},
   {id:"vouchers",  label:"Vouchers",  ic:"▤"},
+  {id:"accounts",  label:"Accounts",  ic:"☻", admin:true},
   {id:"live",      label:"Live",      ic:"◉", admin:true},
   {id:"devices",   label:"Devices",   ic:"▣", admin:true},
   {id:"reports",   label:"Reports",   ic:"◱", admin:true},
@@ -310,7 +311,7 @@ function go(v){
   document.querySelectorAll(".navitem,.tabitem").forEach(b=>b.classList.toggle("active",b.dataset.v===v));
   const n=NAV.find(x=>x.id===v);
   document.getElementById("page-title").textContent=n?n.label:v;
-  ({dashboard:viewDashboard,generate:viewGenerate,vouchers:viewVouchers,live:viewLive,devices:viewDevices,reports:viewReports,sellers:viewSellers}[v]||viewDashboard)();
+  ({dashboard:viewDashboard,generate:viewGenerate,vouchers:viewVouchers,accounts:viewAccounts,live:viewLive,devices:viewDevices,reports:viewReports,sellers:viewSellers}[v]||viewDashboard)();
 }
 const mount=html=>document.getElementById("view").innerHTML=html;
 
@@ -506,9 +507,24 @@ async function openVoucher(code){
         ${v.note?`<div class="kv"><span class="k">Note</span><span>${esc(v.note)}</span></div>`:""}
         ${v.syncedToRouter?"":`<div class="kv"><span class="k">Router</span><span class="tag t-expired">not synced yet</span></div>`}
       </div>
+      ${["owner","admin"].includes(ME.role)?`
+      <div class="card noprint" style="margin-top:12px">
+        <h2 style="font-size:15px;margin-bottom:10px">Edit this voucher</h2>
+        <p class="muted" style="font-size:12px;margin:-4px 0 12px">Changes apply live — even while it's active. Speeds in Mbps, 0 = unlimited.</p>
+        <div class="grid" style="grid-template-columns:1fr 1fr;gap:10px">
+          <div class="field" style="margin:0"><label>Total time (minutes)</label><input id="ev-dur" type="number" min="1" value="${v.durationMinutes}"></div>
+          <div class="field" style="margin:0"><label>Devices</label><input id="ev-dev" type="number" min="1" max="20" value="${v.deviceCap}"></div>
+          <div class="field" style="margin:0"><label>Download (Mbps)</label><input id="ev-down" type="number" min="0" step="0.5" value="${((v.downKbps||0)/1000)}"></div>
+          <div class="field" style="margin:0"><label>Upload (Mbps)</label><input id="ev-up" type="number" min="0" step="0.5" value="${((v.upKbps||0)/1000)}"></div>
+          <div class="field" style="margin:0"><label>Price ($)</label><input id="ev-price" type="number" min="0" value="${v.price}"></div>
+          <div class="field" style="margin:0"><label>Note</label><input id="ev-note" value="${esc(v.note||"")}"></div>
+        </div>
+        <button class="btn btn-gold btn-block" style="margin-top:12px" onclick="saveVoucherEdit('${v.code}')">Save changes</button>
+        <div class="err" id="ev-err"></div>
+      </div>`:""}
       <div class="section-title"><h2 style="font-size:15px">Phones that used it</h2></div>${devs}
       <div class="grid noprint" style="grid-template-columns:1fr 1fr;margin-top:16px;gap:10px">
-        <button class="btn btn-pine" onclick="extendV('${v.code}')">Extend time</button>
+        <button class="btn btn-pine" onclick="extendV('${v.code}')">Add time</button>
         ${v.status==="disabled"?`<button class="btn btn-ghost" onclick="enableV('${v.code}')">Turn back on</button>`:`<button class="btn btn-ghost" onclick="disableV('${v.code}')">Turn off</button>`}
       </div>
       ${ME.role==="owner"?`<button class="btn btn-ghost btn-block noprint" style="margin-top:10px;color:var(--danger);border-color:#f0cfcd" onclick="deleteV('${v.code}')">Delete permanently</button>`:""}`;
@@ -517,6 +533,20 @@ async function openVoucher(code){
 async function extendV(code){
   const mins=prompt("Add how many minutes?","60"); if(!mins)return;
   try{ await api(`/vouchers/${code}/extend`,{method:"POST",body:JSON.stringify({addMinutes:Number(mins)})}); openVoucher(code); if(curView==="vouchers")loadVouchers(); }catch(e){ alert(e.message); }
+}
+async function saveVoucherEdit(code){
+  const err=document.getElementById("ev-err"); if(err)err.textContent="";
+  const mbps=id=>Math.round(Math.max(0,Number(document.getElementById(id)?.value||0))*1000);
+  const body={
+    durationMinutes:Number(document.getElementById("ev-dur")?.value||0)||undefined,
+    deviceCap:Number(document.getElementById("ev-dev")?.value||0)||undefined,
+    downKbps:mbps("ev-down"), upKbps:mbps("ev-up"),
+    price:Number(document.getElementById("ev-price")?.value||0),
+    note:document.getElementById("ev-note")?.value||""
+  };
+  const btn=event&&event.target; if(btn){btn.disabled=true;btn.textContent="Saving…";}
+  try{ await api(`/vouchers/${code}`,{method:"PATCH",body:JSON.stringify(body)}); openVoucher(code); if(curView==="vouchers")loadVouchers(); }
+  catch(e){ if(err)err.textContent=e.message; else alert(e.message); if(btn){btn.disabled=false;btn.textContent="Save changes";} }
 }
 async function disableV(code){ try{ await api(`/vouchers/${code}/disable`,{method:"POST"}); openVoucher(code); if(curView==="vouchers")loadVouchers(); }catch(e){alert(e.message);} }
 async function enableV(code){ try{ await api(`/vouchers/${code}/enable`,{method:"POST"}); openVoucher(code); if(curView==="vouchers")loadVouchers(); }catch(e){alert(e.message);} }
@@ -542,36 +572,198 @@ async function viewLive(){
 async function viewDevices(){
   mount(`<div class="card noprint" style="margin-bottom:14px">
       <h2 style="font-size:16px;margin-bottom:4px">Always-allowed devices</h2>
-      <p class="muted" style="font-size:13px;margin:0 0 14px">Cameras, reception and staff go here. They skip the voucher page and stay online 24/7.</p>
+      <p class="muted" style="font-size:13px;margin:0 0 14px">Cameras, reception and staff go here. They skip the voucher page and stay online 24/7. Leave speed at 0 for cameras; cap a heavy staff device so it can't starve the WiFi.</p>
       <div class="grid" style="grid-template-columns:1fr 1fr;gap:10px">
         <div class="field" style="margin:0"><label>Name</label><input id="d-label" placeholder="Reception camera"></div>
         <div class="field" style="margin:0"><label>Type</label><select id="d-cat"><option value="camera">Camera</option><option value="reception">Reception</option><option value="staff">Staff</option><option value="other">Other</option></select></div>
       </div>
       <div class="field" style="margin-top:10px"><label>MAC address</label><input id="d-mac" placeholder="AA:BB:CC:DD:EE:FF" class="mono"></div>
-      <button class="btn btn-pine btn-block" onclick="addDevice()">Add device</button>
+      <div class="grid" style="grid-template-columns:1fr 1fr;gap:10px">
+        <div class="field" style="margin:0"><label>Download cap (Mbps, 0=∞)</label><input id="d-down" type="number" min="0" step="0.5" value="0"></div>
+        <div class="field" style="margin:0"><label>Upload cap (Mbps, 0=∞)</label><input id="d-up" type="number" min="0" step="0.5" value="0"></div>
+      </div>
+      <button class="btn btn-pine btn-block" style="margin-top:4px" onclick="addDevice()">Add device</button>
       <div class="err" id="d-err"></div>
     </div><div id="d-list"></div>`);
   loadDevices();
 }
+const mbpsTxt=k=>k?((k/1000)%1?(k/1000).toFixed(1):(k/1000))+" Mbps":"∞";
 async function loadDevices(){
   try{
     const {devices}=await api("/bypass");
     document.getElementById("d-list").innerHTML=devices.length?`<div class="tablewrap"><table>
-      <thead><tr><th>Name</th><th>Type</th><th>MAC</th><th></th></tr></thead>
+      <thead><tr><th>Name</th><th>Type</th><th>MAC</th><th>Speed cap</th><th></th></tr></thead>
       <tbody>${devices.map(d=>`<tr>
         <td data-label="Name">${esc(d.label)}</td><td data-label="Type">${esc(d.category)}</td>
         <td data-label="MAC" class="mono" style="font-size:12.5px">${esc(d.mac)}${d.syncedToRouter?"":' <span class="tag t-expired">queued</span>'}</td>
+        <td data-label="Speed cap">${(d.downKbps||d.upKbps)?`↓${mbpsTxt(d.downKbps)} ↑${mbpsTxt(d.upKbps)}`:'<span class="muted">unlimited</span>'} <a href="#" onclick="editDeviceSpeed('${d._id}',${d.downKbps||0},${d.upKbps||0});return false" style="color:var(--pine)">edit</a></td>
         <td data-label=""><button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="delDevice('${d._id}')">Remove</button></td>
       </tr>`).join("")}</tbody></table></div>`:`<div class="card muted">No devices yet. Add your cameras so they never lose connection.</div>`;
   }catch(e){ document.getElementById("d-list").innerHTML=`<div class="card">${esc(e.message)}</div>`; }
 }
 async function addDevice(){
   const err=document.getElementById("d-err");err.textContent="";
-  try{ await api("/bypass",{method:"POST",body:JSON.stringify({label:document.getElementById("d-label").value,category:document.getElementById("d-cat").value,mac:document.getElementById("d-mac").value})});
-    document.getElementById("d-label").value="";document.getElementById("d-mac").value=""; loadDevices();
+  const mbps=id=>Math.round(Math.max(0,Number(document.getElementById(id)?.value||0))*1000);
+  try{ await api("/bypass",{method:"POST",body:JSON.stringify({label:document.getElementById("d-label").value,category:document.getElementById("d-cat").value,mac:document.getElementById("d-mac").value,downKbps:mbps("d-down"),upKbps:mbps("d-up")})});
+    document.getElementById("d-label").value="";document.getElementById("d-mac").value="";document.getElementById("d-down").value=0;document.getElementById("d-up").value=0; loadDevices();
   }catch(e){ err.textContent=e.message; }
 }
+async function editDeviceSpeed(id,down,up){
+  const dMbps=prompt("Download cap in Mbps (0 = unlimited):",(down/1000)||0); if(dMbps===null)return;
+  const uMbps=prompt("Upload cap in Mbps (0 = unlimited):",(up/1000)||0); if(uMbps===null)return;
+  try{ await api("/bypass/"+id,{method:"PATCH",body:JSON.stringify({downKbps:Math.round(Math.max(0,Number(dMbps))*1000),upKbps:Math.round(Math.max(0,Number(uMbps))*1000)})}); loadDevices(); }catch(e){alert(e.message);}
+}
 async function delDevice(id){ if(!confirm("Remove this device from the allow list?"))return; try{ await api("/bypass/"+id,{method:"DELETE"}); loadDevices(); }catch(e){alert(e.message);} }
+
+// ---------- Accounts (tenants & members) ----------
+let acctFilter={type:"",status:"",q:""};
+function fmtMinsShort(mins){ if(mins<=0)return "0"; const d=Math.floor(mins/1440),h=Math.floor((mins%1440)/60); if(d>=1)return d+"d"+(h?" "+h+"h":""); const m=mins%60; return (h?h+"h ":"")+(m?m+"m":"")||"0m"; }
+async function viewAccounts(){
+  mount(`<div id="acct-top"></div>
+    <div class="card noprint" style="margin-bottom:14px">
+      <h2 style="font-size:16px;margin-bottom:4px">New account</h2>
+      <p class="muted" style="font-size:13px;margin:0 0 12px">For tenants &amp; regulars who sign in with a username instead of a code. Capped by speed, devices and a validity period you can top up.</p>
+      <div class="grid" style="grid-template-columns:1fr 1fr;gap:10px">
+        <div class="field" style="margin:0"><label>Display name</label><input id="ac-name" placeholder="Unit 12 — Mr Moyo"></div>
+        <div class="field" style="margin:0"><label>Type</label><select id="ac-type"><option value="tenant">Tenant</option><option value="client">Regular client</option><option value="staff">Staff</option></select></div>
+        <div class="field" style="margin:0"><label>Username (they type this)</label><input id="ac-user" placeholder="unit12" autocapitalize="none"></div>
+        <div class="field" style="margin:0"><label>Password</label><input id="ac-pass" type="text" placeholder="give them one"></div>
+        <div class="field" style="margin:0"><label>Phone (EcoCash)</label><input id="ac-phone" placeholder="0771234567"></div>
+        <div class="field" style="margin:0"><label>Unit / room (optional)</label><input id="ac-unit" placeholder="Flat 12"></div>
+        <div class="field" style="margin:0"><label>Billing</label><select id="ac-billing" onchange="acctBillingHint()"><option value="subscription">Subscription (monthly window)</option><option value="prepaid">Prepaid (pool of time)</option></select></div>
+        <div class="field" style="margin:0"><label><span id="ac-dur-lbl">Valid for</span></label>
+          <div class="row" style="gap:6px;flex-wrap:nowrap"><input id="ac-dur" type="number" min="1" value="30" style="flex:1"><select id="ac-durunit" style="width:98px"><option value="1440">days</option><option value="60">hours</option></select></div>
+        </div>
+        <div class="field" style="margin:0"><label>Devices</label><input id="ac-dev" type="number" min="1" max="20" value="2"></div>
+        <div class="field" style="margin:0"><label>Price $ (renew/top-up)</label><input id="ac-price" type="number" min="0" value="0"></div>
+        <div class="field" style="margin:0"><label>Download (Mbps, 0=∞)</label><input id="ac-down" type="number" min="0" step="0.5" value="0"></div>
+        <div class="field" style="margin:0"><label>Upload (Mbps, 0=∞)</label><input id="ac-up" type="number" min="0" step="0.5" value="0"></div>
+      </div>
+      <button class="btn btn-gold btn-block" style="margin-top:12px" onclick="createAccount()">Create account</button>
+      <div class="err" id="ac-err"></div>
+    </div>
+    <div class="card noprint" style="margin-bottom:14px">
+      <div class="field" style="margin:0 0 10px"><input id="acct-search" placeholder="Search name, username, phone or unit…" value="${esc(acctFilter.q)}" oninput="acctFilter.q=this.value" onkeydown="if(event.key==='Enter')loadAccounts()"></div>
+      <div class="chips" id="acct-chips"></div>
+    </div>
+    <div id="acct-list"></div>`);
+  const chips=[["","All"],["tenant","Tenants"],["client","Clients"],["staff","Staff"]];
+  document.getElementById("acct-chips").innerHTML=chips.map(([k,l])=>`<button class="chip ${acctFilter.type===k?'active':''}" onclick="acctFilter.type='${k}';loadAccounts()">${l}</button>`).join("");
+  loadAccounts();
+}
+function acctBillingHint(){ const b=document.getElementById("ac-billing")?.value; const l=document.getElementById("ac-dur-lbl"); if(l) l.textContent = b==="prepaid" ? "Time to grant" : "Valid for"; }
+async function loadAccounts(){
+  try{
+    const [s,{accounts}]=await Promise.all([api("/accounts/settings").catch(()=>({})), api("/accounts?"+new URLSearchParams(Object.fromEntries(Object.entries({type:acctFilter.type,q:acctFilter.q}).filter(([,v])=>v))).toString())]);
+    document.querySelectorAll("#acct-chips .chip").forEach(c=>{const keys=["","tenant","client","staff"];c.classList.toggle("active",acctFilter.type===keys[["All","Tenants","Clients","Staff"].indexOf(c.textContent)]);});
+    const top=document.getElementById("acct-top");
+    if(top && s && s.maxAccounts!=null){
+      const full=s.maxAccounts>0 && s.accountCount>=s.maxAccounts;
+      top.innerHTML=`<div class="card" style="margin-bottom:14px;border-color:${full?'#f0cfcd':'var(--line)'}"><b>${s.accountCount}</b> account${s.accountCount===1?'':'s'} ${s.maxAccounts>0?`of <b>${s.maxAccounts}</b> allowed`:'(no limit)'} ${full?'<span class="tag t-expired">limit reached</span>':''} ${ME.role==='owner'?`· <a href="#" onclick="setAccountCap(${s.maxAccounts});return false" style="color:var(--pine)">change limit</a>`:''}</div>`;
+    }
+    const el=document.getElementById("acct-list");
+    el.innerHTML=accounts.length?`<div class="tablewrap"><table>
+      <thead><tr><th>Name</th><th>Username</th><th>Type</th><th>Status</th><th>Left</th><th>Speed</th><th>Devices</th></tr></thead>
+      <tbody>${accounts.map(a=>`<tr style="cursor:pointer" onclick="openAccount('${a.id}')">
+        <td data-label="Name">${esc(a.displayName)}${a.unit?` <span class="muted">· ${esc(a.unit)}</span>`:''}</td>
+        <td data-label="Username" class="mono">${esc(a.username)}</td>
+        <td data-label="Type">${esc(a.type)}<span class="muted" style="font-size:11px"> · ${a.billing==='subscription'?'monthly':'prepaid'}</span></td>
+        <td data-label="Status"><span class="tag t-${a.status==='active'?'active':a.status==='expired'?'expired':'disabled'}">${a.status}</span></td>
+        <td data-label="Left">${a.billing==='subscription'?(a.validUntil?fmtMinsShort(a.remainingMinutes):'-'):fmtMinsShort(a.remainingMinutes)}</td>
+        <td data-label="Speed">${a.downKbps?mbpsTxt(a.downKbps):'<span class="muted">∞</span>'}</td>
+        <td data-label="Devices">${a.deviceCount}/${a.deviceCap}</td>
+      </tr>`).join("")}</tbody></table></div>`:`<div class="card muted">No accounts yet. Create one above for a tenant or a regular client.</div>`;
+  }catch(e){ document.getElementById("acct-list").innerHTML=`<div class="card">${esc(e.message)}</div>`; }
+}
+async function createAccount(){
+  const err=document.getElementById("ac-err"); err.textContent="";
+  const mbps=id=>Math.round(Math.max(0,Number(document.getElementById(id)?.value||0))*1000);
+  const durMin=Math.max(1,Number(document.getElementById("ac-dur")?.value||1))*Number(document.getElementById("ac-durunit")?.value||1440);
+  const body={
+    displayName:document.getElementById("ac-name").value, username:document.getElementById("ac-user").value,
+    password:document.getElementById("ac-pass").value, phone:document.getElementById("ac-phone").value,
+    unit:document.getElementById("ac-unit").value, type:document.getElementById("ac-type").value,
+    billing:document.getElementById("ac-billing").value, durationMinutes:durMin,
+    deviceCap:Number(document.getElementById("ac-dev").value||2), price:Number(document.getElementById("ac-price").value||0),
+    downKbps:mbps("ac-down"), upKbps:mbps("ac-up")
+  };
+  try{ await api("/accounts",{method:"POST",body:JSON.stringify(body)});
+    ["ac-name","ac-user","ac-pass","ac-phone","ac-unit"].forEach(id=>{const e=document.getElementById(id);if(e)e.value="";});
+    loadAccounts();
+  }catch(e){ err.textContent=e.message; }
+}
+async function setAccountCap(current){
+  const v=prompt("Maximum number of accounts (0 = no limit):",current); if(v===null)return;
+  try{ await api("/accounts/settings",{method:"PATCH",body:JSON.stringify({maxAccounts:Number(v)})}); loadAccounts(); }catch(e){alert(e.message);}
+}
+async function openAccount(id){
+  openDrawer(); document.getElementById("dr-title").textContent="Account";
+  document.getElementById("dr-body").innerHTML=`<div class="muted">Loading…</div>`;
+  try{
+    const {account:a}=await api("/accounts/"+id);
+    document.getElementById("dr-title").textContent=a.displayName;
+    const left=a.billing==='subscription'?(a.validUntil?fmtMinsShort(a.remainingMinutes)+" left":'no active period'):fmtMinsShort(a.remainingMinutes)+" left";
+    const devs=(a.devices||[]).map(dv=>`<div class="device"><div class="mac">${esc(dv.mac||"?")}</div><div class="muted">${esc(dv.hostname||"device")} · ${esc(dv.ip||"")}<br>last ${fmtDate(dv.lastSeen)}</div></div>`).join("")||`<div class="muted">No device has connected yet.</div>`;
+    document.getElementById("dr-body").innerHTML=`
+      <div class="card" style="text-align:center">
+        <div class="mono" style="font-size:22px;font-weight:700">${esc(a.username)}</div>
+        <div class="muted" style="font-size:13px">${esc(a.type)} · ${a.billing==='subscription'?'monthly':'prepaid'}</div>
+        <span class="tag t-${a.status==='active'?'active':a.status==='expired'?'expired':'disabled'}" style="margin-top:8px;display:inline-block">${a.status}</span>
+        <div style="margin-top:8px;font-weight:600">${left}</div>
+        ${a.syncedToRouter?"":`<div style="margin-top:6px"><span class="tag t-expired">not synced to router yet</span></div>`}
+      </div>
+      <div class="card" style="margin-top:12px">
+        <div class="kv"><span class="k">Password</span><span class="mono">${esc(a.password||"—")}</span></div>
+        <div class="kv"><span class="k">Phone</span><span>${esc(a.phone||"-")}</span></div>
+        ${a.unit?`<div class="kv"><span class="k">Unit</span><span>${esc(a.unit)}</span></div>`:""}
+        <div class="kv"><span class="k">Devices used</span><span>${a.deviceCount} / ${a.deviceCap}</span></div>
+        <div class="kv"><span class="k">Speed</span><span>↓${a.downKbps?mbpsTxt(a.downKbps):'∞'} ↑${a.upKbps?mbpsTxt(a.upKbps):'∞'}</span></div>
+        ${a.validUntil?`<div class="kv"><span class="k">Valid until</span><span>${fmtDate(a.validUntil)}</span></div>`:""}
+        <div class="kv"><span class="k">Price</span><span>${a.price} ${a.currency}</span></div>
+        <div class="kv"><span class="k">Created</span><span>${fmtDate(a.createdAt)} · ${esc(a.createdByName||"")}</span></div>
+      </div>
+
+      <div class="card noprint" style="margin-top:12px">
+        <h2 style="font-size:15px;margin-bottom:10px">Edit account</h2>
+        <div class="grid" style="grid-template-columns:1fr 1fr;gap:10px">
+          <div class="field" style="margin:0"><label>Devices</label><input id="ea-dev" type="number" min="1" max="20" value="${a.deviceCap}"></div>
+          <div class="field" style="margin:0"><label>Price $</label><input id="ea-price" type="number" min="0" value="${a.price}"></div>
+          <div class="field" style="margin:0"><label>Download (Mbps)</label><input id="ea-down" type="number" min="0" step="0.5" value="${(a.downKbps||0)/1000}"></div>
+          <div class="field" style="margin:0"><label>Upload (Mbps)</label><input id="ea-up" type="number" min="0" step="0.5" value="${(a.upKbps||0)/1000}"></div>
+          <div class="field" style="margin:0"><label>New password (optional)</label><input id="ea-pass" placeholder="leave blank to keep"></div>
+          <div class="field" style="margin:0"><label>Status</label><select id="ea-status"><option value="active"${a.status==='active'?' selected':''}>Active</option><option value="suspended"${a.status==='suspended'?' selected':''}>Suspended</option></select></div>
+        </div>
+        <button class="btn btn-gold btn-block" style="margin-top:12px" onclick="saveAccountEdit('${a.id}')">Save changes</button>
+        <div class="err" id="ea-err"></div>
+      </div>
+
+      <div class="card noprint" style="margin-top:12px">
+        <h2 style="font-size:15px;margin-bottom:10px">${a.billing==='subscription'?'Renew / extend':'Add time'}</h2>
+        <div class="grid" style="grid-template-columns:1fr 1fr;gap:10px">
+          <div class="field" style="margin:0"><label>${a.billing==='subscription'?'Add':'Add time'}</label>
+            <div class="row" style="gap:6px;flex-wrap:nowrap"><input id="tu-amt" type="number" min="1" value="${a.billing==='subscription'?30:1}" style="flex:1"><select id="tu-unit" style="width:90px"><option value="1440">days</option><option value="60">hours</option></select></div></div>
+          <div class="field" style="margin:0"><label>Payment</label><select id="tu-method"><option value="cash">Cash</option><option value="ecocash">EcoCash</option><option value="complimentary">Free</option></select></div>
+        </div>
+        <button class="btn btn-pine btn-block" style="margin-top:12px" onclick="topupAccount('${a.id}')">Apply top-up</button>
+      </div>
+
+      ${ME.role==="owner"?`<button class="btn btn-ghost btn-block noprint" style="margin-top:12px;color:var(--danger);border-color:#f0cfcd" onclick="deleteAccount('${a.id}')">Delete account</button>`:""}`;
+  }catch(e){ document.getElementById("dr-body").innerHTML=`<div class="card">${esc(e.message)}</div>`; }
+}
+async function saveAccountEdit(id){
+  const err=document.getElementById("ea-err"); if(err)err.textContent="";
+  const mbps=x=>Math.round(Math.max(0,Number(document.getElementById(x)?.value||0))*1000);
+  const body={deviceCap:Number(document.getElementById("ea-dev")?.value||1),price:Number(document.getElementById("ea-price")?.value||0),downKbps:mbps("ea-down"),upKbps:mbps("ea-up"),status:document.getElementById("ea-status")?.value};
+  const pw=document.getElementById("ea-pass")?.value; if(pw) body.password=pw;
+  try{ await api("/accounts/"+id,{method:"PATCH",body:JSON.stringify(body)}); openAccount(id); loadAccounts(); }
+  catch(e){ if(err)err.textContent=e.message; else alert(e.message); }
+}
+async function topupAccount(id){
+  const mins=Math.max(1,Number(document.getElementById("tu-amt")?.value||1))*Number(document.getElementById("tu-unit")?.value||1440);
+  const method=document.getElementById("tu-method")?.value;
+  try{ await api("/accounts/"+id+"/topup",{method:"POST",body:JSON.stringify({minutes:mins,method})}); openAccount(id); loadAccounts(); }catch(e){alert(e.message);}
+}
+async function deleteAccount(id){ if(!confirm("Delete this account for good?"))return; try{ await api("/accounts/"+id,{method:"DELETE"}); closeDrawer(); loadAccounts(); }catch(e){alert(e.message);} }
 
 // ---------- Reports ----------
 async function viewReports(){

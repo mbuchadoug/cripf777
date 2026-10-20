@@ -17,6 +17,7 @@ import paynow from "../../services/paynow.js";       // your existing Paynow ser
 import HotspotPayment from "../models/hotspotPayment.js";  // dedicated hotspot payments
 import HotspotPlan from "../models/hotspotPlan.js";
 import Voucher from "../models/voucher.js";
+import HotspotAccount from "../models/hotspotAccount.js";
 import * as mt from "../services/mikrotik.js";
 
 const router = Router();
@@ -252,6 +253,115 @@ router.get("/topup/poll/:reference", async (req, res) => {
     res.json({ status: "pending" });
   } catch (err) {
     console.error("[hotspot topup poll]", err);
+    res.json({ status: "pending" });
+  }
+});
+
+// ============================================================
+// 👤 ACCOUNT SELF-SERVICE  (tenants & members - log in, see status, top up)
+// ============================================================
+function acctRemaining(a) {
+  if (a.billing === "prepaid") return Math.max(0, (a.timeAllowanceMin || 0) - Math.floor((a.uptimeUsedSec || 0) / 60));
+  if (a.validUntil) return Math.max(0, Math.round((new Date(a.validUntil) - new Date()) / 60000));
+  return 0;
+}
+function shapeAcct(a) {
+  return {
+    username: a.username, displayName: a.displayName, type: a.type, billing: a.billing,
+    status: a.status, deviceCap: a.deviceCap, deviceCount: a.devices?.length || 0,
+    downKbps: a.downKbps, upKbps: a.upKbps, price: a.price, currency: a.currency,
+    durationMinutes: a.durationMinutes, validUntil: a.validUntil || null,
+    remainingMinutes: acctRemaining(a)
+  };
+}
+const acctRateStr = (a) => (a.upKbps || a.downKbps) ? `${a.upKbps || 0}k/${a.downKbps || 0}k` : null;
+const acctProfileStr = (a) => `ha_${a.upKbps || 0}_${a.downKbps || 0}_d${a.deviceCap || 1}`;
+
+// Log in to view your account (username + password).
+router.post("/account/login", async (req, res) => {
+  try {
+    const username = String(req.body?.username || "").toLowerCase().trim();
+    const password = String(req.body?.password || "");
+    const a = await HotspotAccount.findOne({ username });
+    if (!a || a.password !== password) return res.status(401).json({ error: "Wrong username or password" });
+    a.lastLogin = new Date();
+    await a.save();
+    res.json({ account: shapeAcct(a) });
+  } catch (err) {
+    console.error("[hotspot acct login]", err);
+    res.status(500).json({ error: "Login failed, try again" });
+  }
+});
+
+// Start an EcoCash top-up on your own account.
+router.post("/account/topup/init", async (req, res) => {
+  try {
+    const username = String(req.body?.username || "").toLowerCase().trim();
+    const password = String(req.body?.password || "");
+    const a = await HotspotAccount.findOne({ username });
+    if (!a || a.password !== password) return res.status(401).json({ error: "Wrong username or password" });
+
+    const amount = Number(a.price || 0);
+    if (amount <= 0) return res.status(400).json({ error: "This account has no online price set. Please renew at reception." });
+
+    const phone = String(req.body?.phone || a.phone || "").replace(/\s|-/g, "").replace(/^\+263/, "0").replace(/^263/, "0");
+    if (!/^07[7-8]\d{7}$/.test(phone)) return res.status(400).json({ error: "Enter a valid EcoCash number, e.g. 0771234567" });
+
+    const reference = `HA-${crypto.randomUUID()}`;
+    const paymentRequest = paynow.createPayment(reference, `${phone}@cripfcnt.com`);
+    paymentRequest.add(`WiFi account top-up (${a.username})`, amount);
+    const response = await paynow.sendMobile(paymentRequest, phone, "ecocash");
+    if (!response.success) return res.status(400).json({ error: response.error || "Could not send EcoCash prompt." });
+
+    await HotspotPayment.create({
+      reference, amount, currency: a.currency, planKey: `acct:${a.username}`,
+      voucherCode: a.username, phone, pollUrl: response.pollUrl, method: "ecocash-account", status: "pending"
+    });
+    res.json({ reference, message: `Check ${phone} and approve the EcoCash prompt.` });
+  } catch (err) {
+    console.error("[hotspot acct topup init]", err);
+    res.status(500).json({ error: "Top-up error. Please try again." });
+  }
+});
+
+router.get("/account/topup/poll/:reference", async (req, res) => {
+  try {
+    const payment = await HotspotPayment.findOne({ reference: req.params.reference });
+    if (!payment) return res.status(404).json({ status: "not_found" });
+    if (payment.status === "paid") return res.json({ status: "paid" });
+    if (["failed", "cancelled"].includes(payment.status)) return res.json({ status: payment.status });
+
+    if (payment.pollUrl) {
+      const pollResult = await paynow.pollTransaction(payment.pollUrl);
+      const statusStr = String(pollResult.status || "").toLowerCase();
+      if (statusStr === "paid") {
+        payment.status = "paid"; payment.paidAt = new Date(); await payment.save();
+        const a = await HotspotAccount.findOne({ username: payment.voucherCode });
+        if (a) {
+          const add = a.durationMinutes;
+          if (a.billing === "prepaid") a.timeAllowanceMin = (a.timeAllowanceMin || 0) + add;
+          else {
+            const base = (a.validUntil && new Date(a.validUntil) > new Date()) ? new Date(a.validUntil) : new Date();
+            a.validUntil = new Date(base.getTime() + add * 60000);
+          }
+          a.topups.push({ minutes: add, amount: payment.amount, currency: a.currency, method: "ecocash", by: "self-service" });
+          if (a.status !== "active") a.status = "active";
+          if (mt.isConfigured()) {
+            try {
+              await mt.ensureProfile({ name: acctProfileStr(a), sharedUsers: a.deviceCap, rateLimit: acctRateStr(a) });
+              await mt.upsertAccountUser({ username: a.username, password: a.password, profile: acctProfileStr(a), limitUptimeMinutes: a.billing === "prepaid" ? a.timeAllowanceMin : 0 });
+              await mt.setUserDisabled(a.username, false);
+            } catch { /* resynced by the loop */ }
+          }
+          await a.save();
+        }
+        return res.json({ status: "paid" });
+      }
+      if (["failed", "cancelled"].includes(statusStr)) { payment.status = statusStr; await payment.save(); return res.json({ status: statusStr }); }
+    }
+    res.json({ status: "pending" });
+  } catch (err) {
+    console.error("[hotspot acct topup poll]", err);
     res.json({ status: "pending" });
   }
 });

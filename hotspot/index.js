@@ -61,6 +61,7 @@ export default function mountHotspot(app, opts = {}) {
   // PUBLIC self-service purchase page (must be reachable via router Walled Garden).
   app.get(`${base}/buy`, (req, res) => res.sendFile(path.join(__dirname, "portal", "buy.html")));
   app.get(`${base}/status`, (req, res) => res.sendFile(path.join(__dirname, "portal", "status.html")));
+  app.get(`${base}/account`, (req, res) => res.sendFile(path.join(__dirname, "portal", "account.html")));
 
   // Admin panel - served with no-cache so browsers always get the latest after an update.
   app.use(base, express.static(path.join(__dirname, "public"), {

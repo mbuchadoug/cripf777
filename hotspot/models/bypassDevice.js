@@ -28,6 +28,13 @@ const BypassDeviceSchema = new mongoose.Schema({
 
   active: { type: Boolean, default: true, index: true },
 
+  // ── Optional speed cap (protects the WiFi from a heavy staff device) ──
+  // Cameras/reception normally stay 0/0 (unlimited). Staff devices can be
+  // capped WITHOUT forcing a login: the limit is applied straight on the
+  // router's ip-binding (rate-limit), so the device stays bypassed.
+  downKbps: { type: Number, default: 0 },   // 0 = unlimited
+  upKbps:   { type: Number, default: 0 },
+
   rosBindingId:   { type: String, default: null },   // *XX id on the router
   syncedToRouter: { type: Boolean, default: false },
   lastSyncError:  { type: String, default: null },
