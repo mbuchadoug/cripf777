@@ -510,7 +510,7 @@ async function openVoucher(code){
       ${["owner","admin"].includes(ME.role)?`
       <div class="card noprint" style="margin-top:12px">
         <h2 style="font-size:15px;margin-bottom:10px">Edit this voucher</h2>
-        <p class="muted" style="font-size:12px;margin:-4px 0 12px">Changes apply live — even while it's active. Speeds in Mbps, 0 = unlimited.</p>
+        <p class="muted" style="font-size:12px;margin:-4px 0 12px">Changes apply live - even while it's active. Speeds in Mbps, 0 = unlimited.</p>
         <div class="grid" style="grid-template-columns:1fr 1fr;gap:10px">
           <div class="field" style="margin:0"><label>Total time (minutes)</label><input id="ev-dur" type="number" min="1" value="${v.durationMinutes}"></div>
           <div class="field" style="margin:0"><label>Devices</label><input id="ev-dev" type="number" min="1" max="20" value="${v.deviceCap}"></div>
@@ -624,7 +624,7 @@ async function viewAccounts(){
       <h2 style="font-size:16px;margin-bottom:4px">New account</h2>
       <p class="muted" style="font-size:13px;margin:0 0 12px">For tenants &amp; regulars who sign in with a username instead of a code. Capped by speed, devices and a validity period you can top up.</p>
       <div class="grid" style="grid-template-columns:1fr 1fr;gap:10px">
-        <div class="field" style="margin:0"><label>Display name</label><input id="ac-name" placeholder="Unit 12 — Mr Moyo"></div>
+        <div class="field" style="margin:0"><label>Display name</label><input id="ac-name" placeholder="Unit 12 - Mr Moyo"></div>
         <div class="field" style="margin:0"><label>Type</label><select id="ac-type"><option value="tenant">Tenant</option><option value="client">Regular client</option><option value="staff">Staff</option></select></div>
         <div class="field" style="margin:0"><label>Username (they type this)</label><input id="ac-user" placeholder="unit12" autocapitalize="none"></div>
         <div class="field" style="margin:0"><label>Password</label><input id="ac-pass" type="text" placeholder="give them one"></div>
@@ -713,7 +713,7 @@ async function openAccount(id){
         ${a.syncedToRouter?"":`<div style="margin-top:6px"><span class="tag t-expired">not synced to router yet</span></div>`}
       </div>
       <div class="card" style="margin-top:12px">
-        <div class="kv"><span class="k">Password</span><span class="mono">${esc(a.password||"—")}</span></div>
+        <div class="kv"><span class="k">Password</span><span class="mono">${esc(a.password||"-")}</span></div>
         <div class="kv"><span class="k">Phone</span><span>${esc(a.phone||"-")}</span></div>
         ${a.unit?`<div class="kv"><span class="k">Unit</span><span>${esc(a.unit)}</span></div>`:""}
         <div class="kv"><span class="k">Devices used</span><span>${a.deviceCount} / ${a.deviceCap}</span></div>

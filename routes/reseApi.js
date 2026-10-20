@@ -203,6 +203,25 @@ async function sendOtpViaChatbot(phoneE164, code) {
   return { sent: false };
 }
 
+// Send the OTP through the CRIPFCnt WhatsApp number's APPROVED Authentication
+// template (copy-code button) via services/cripfcntWhatsApp.js. This is the
+// reliable path for brand-new users (works outside the 24h window). Dynamic
+// import so a missing/renamed file can never crash this route.
+async function sendOtpViaCripfcnt(phoneE164, code) {
+  const to = String(phoneE164).replace(/[^\d]/g, ""); // 2637...
+  try {
+    const m = await import("../services/cripfcntWhatsApp.js");
+    if (m && typeof m.sendAuthCode === "function") {
+      await m.sendAuthCode(to, code);
+      return { sent: true, via: "cripfcnt-template" };
+    }
+  } catch (e) {
+    const err = e.response?.data?.error;
+    console.warn("[rese otp] cripfcnt auth template failed:", err ? JSON.stringify(err) : e.message);
+  }
+  return { sent: false };
+}
+
 /* ══════════════════════════════════════════════════════════════
    AUTH
    ══════════════════════════════════════════════════════════════ */
@@ -220,9 +239,13 @@ router.post("/auth/request-code", async (req, res) => {
       return res.status(500).json({ error: "Could not start sign in. Try again." });
     }
 
-    // 1) chatbot senders, 2) direct Graph API, both guarded - never throw here.
+    // 1) CRIPFCnt approved auth template, 2) ZimQuote chatbot senders,
+    // 3) direct Graph API. All guarded - never throw here.
     let out = { sent: false };
-    try { out = await sendOtpViaChatbot(phone, code); } catch (e) { console.warn("[rese otp] chatbot error:", e.message); }
+    try { out = await sendOtpViaCripfcnt(phone, code); } catch (e) { console.warn("[rese otp] cripfcnt error:", e.message); }
+    if (!out.sent) {
+      try { out = await sendOtpViaChatbot(phone, code); } catch (e) { console.warn("[rese otp] chatbot error:", e.message); }
+    }
     if (!out.sent) {
       try { out = await sendWhatsAppOtp(phone, code); } catch (e) { console.warn("[rese otp] direct error:", e.message); }
     }

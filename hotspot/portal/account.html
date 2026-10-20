@@ -80,12 +80,12 @@
     box.innerHTML='<div class="box">'
       +'<div class="who">'+a.displayName+'</div>'
       +'<div class="sub">'+a.type+' account · '+(a.billing==="subscription"?"monthly":"prepaid")+'</div>'
-      +'<div class="big">'+ (a.billing==="subscription" ? (a.remainingMinutes>0?fmt(a.remainingMinutes):"—") : fmt(a.remainingMinutes)) +'</div>'
+      +'<div class="big">'+ (a.billing==="subscription" ? (a.remainingMinutes>0?fmt(a.remainingMinutes):"-") : fmt(a.remainingMinutes)) +'</div>'
       +'<div style="text-align:center;color:#9fd6b0;font-size:13px;margin-bottom:12px">'+timeLine+'</div>'
       +'<div class="row"><span class="k">Status</span><span>'+statusTxt+'</span></div>'
       +'<div class="row"><span class="k">Devices</span><span>'+a.deviceCount+' / '+a.deviceCap+'</span></div>'
       +'<div class="row"><span class="k">Speed</span><span>'+mbps(a.downKbps)+(a.downKbps?" down":"")+'</span></div>'
-      +(a.price>0?'<button onclick="startTopup()">'+(a.billing==="subscription"?"Renew":"Add time")+' — $'+a.price+'</button>':'<div style="text-align:center;color:#9fd6b0;font-size:13px;margin-top:12px">Renew at reception</div>')
+      +(a.price>0?'<button onclick="startTopup()">'+(a.billing==="subscription"?"Renew":"Add time")+' - $'+a.price+'</button>':'<div style="text-align:center;color:#9fd6b0;font-size:13px;margin-top:12px">Renew at reception</div>')
       +'</div>';
   }
 
@@ -114,7 +114,7 @@
     var msg=document.getElementById("tmsg"), tries=0;
     poll=setInterval(function(){ tries++;
       fetch(API+"/account/topup/poll/"+ref).then(r=>r.json()).then(d=>{
-        if(d.status==="paid"){ clearInterval(poll); msg.className="msg ok"; msg.innerHTML="✅ Payment received! Your account is renewed — reconnect if you were offline."; }
+        if(d.status==="paid"){ clearInterval(poll); msg.className="msg ok"; msg.innerHTML="✅ Payment received! Your account is renewed - reconnect if you were offline."; }
         else if(["failed","cancelled"].includes(d.status)){ clearInterval(poll); msg.className="msg err"; msg.textContent="Payment "+d.status+". Try again."; document.getElementById("tbtn").disabled=false; document.getElementById("tbtn").textContent="Pay $"+acct.price+" with EcoCash"; }
         if(tries>40) clearInterval(poll);
       }).catch(()=>{});
