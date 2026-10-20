@@ -1,0 +1,369 @@
+// ==============================
+// 🛒 PUBLIC SELF-SERVICE PURCHASE  (mounted at /hotspot/pay)
+// PUBLIC - no admin login. A guest behind the captive portal buys a voucher
+// with EcoCash and gets a code back. Reuses your existing Paynow service and
+// Payment model (same pattern as routes/payments.js).
+//
+// ⚠️ For a guest (not yet online) to reach this page + Paynow, you MUST add a
+// Walled Garden rule on the router so cripfcnt.com + paynow.co.zw are reachable
+// BEFORE login. See README for the two commands. EcoCash approval itself is a
+// USSD prompt on the phone's cellular line, so it works even without WiFi data.
+// ==============================
+
+import { Router } from "express";
+import crypto from "crypto";
+
+import paynow from "../../services/paynow.js";       // your existing Paynow service
+import HotspotPayment from "../models/hotspotPayment.js";  // dedicated hotspot payments
+import HotspotPlan from "../models/hotspotPlan.js";
+import Voucher from "../models/voucher.js";
+import HotspotAccount from "../models/hotspotAccount.js";
+import * as mt from "../services/mikrotik.js";
+
+const router = Router();
+
+const WIFI_NAME = process.env.HOTSPOT_WIFI_NAME || "Central Cyber WiFi";
+const ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+
+function randomCode() {
+  const pick = (n) => Array.from({ length: n }, () => ALPHABET[crypto.randomInt(ALPHABET.length)]).join("");
+  return `${pick(3)}-${pick(3)}`;
+}
+async function uniqueCode() {
+  for (let i = 0; i < 12; i++) {
+    const c = randomCode();
+    if (!(await Voucher.exists({ code: c }))) return c;
+  }
+  return `${randomCode()}-${Date.now().toString(36).slice(-3).toUpperCase()}`;
+}
+
+// Push a paid voucher onto the router (create the hotspot user).
+async function activateVoucher(v) {
+  const plan = await HotspotPlan.findOne({ key: v.planKey });
+  const profileName = plan ? plan.rosProfile() : `hs_${v.planKey}`;
+  if (mt.isConfigured()) {
+    try {
+      if (plan) await mt.ensureProfile({ name: profileName, sharedUsers: v.deviceCap, rateLimit: plan.rateLimitString() });
+      v.rosUserId = await mt.addVoucherUser({
+        code: v.code, profile: profileName,
+        limitUptimeMinutes: v.durationType === "uptime" ? v.durationMinutes : 0
+      });
+      v.syncedToRouter = true; v.lastSyncError = null;
+    } catch (err) { v.syncedToRouter = false; v.lastSyncError = err?.message; }
+  }
+  await v.save();
+}
+
+// Public plan list (only what a buyer needs).
+router.get("/plans", async (req, res) => {
+  const plans = await HotspotPlan.find({ active: true }).sort({ sortOrder: 1 }).lean();
+  res.json({
+    wifiName: WIFI_NAME,
+    plans: plans.map((p) => ({
+      key: p.key, label: p.label, durationMinutes: p.durationMinutes,
+      durationType: p.durationType, deviceCap: p.deviceCap, price: p.price, currency: p.currency
+    }))
+  });
+});
+
+// Start an EcoCash purchase → USSD prompt to the phone.
+router.post("/init", async (req, res) => {
+  try {
+    const { planKey, phone } = req.body || {};
+    const plan = await HotspotPlan.findOne({ key: String(planKey || "").toLowerCase(), active: true });
+    if (!plan) return res.status(400).json({ error: "Choose a valid plan." });
+
+    const normalizedPhone = String(phone || "").replace(/\s|-/g, "").replace(/^\+263/, "0").replace(/^263/, "0");
+    if (!/^07[7-8]\d{7}$/.test(normalizedPhone)) {
+      return res.status(400).json({ error: "Enter a valid EcoCash number, e.g. 0771234567" });
+    }
+
+    // Reserve the voucher up front (status unused; activated on payment).
+    const code = await uniqueCode();
+    const voucher = await Voucher.create({
+      code, planKey: plan.key, planLabel: plan.label,
+      durationType: plan.durationType, durationMinutes: plan.durationMinutes,
+      deviceCap: plan.deviceCap, downKbps: plan.downKbps, upKbps: plan.upKbps,
+      price: plan.price, currency: plan.currency, paymentMethod: "ecocash",
+      createdByName: "self-service", note: `EcoCash ${normalizedPhone}`, phone: normalizedPhone,
+      syncedToRouter: false
+    });
+
+    const reference = `HS-${crypto.randomUUID()}`;
+    const paymentRequest = paynow.createPayment(reference, `${normalizedPhone}@cripfcnt.com`);
+    paymentRequest.add(`${plan.label} - Central Cyber WiFi`, plan.price);
+
+    const response = await paynow.sendMobile(paymentRequest, normalizedPhone, "ecocash");
+    if (!response.success) {
+      await Voucher.deleteOne({ _id: voucher._id });
+      return res.status(400).json({ error: response.error || "Could not send EcoCash prompt. Check your number." });
+    }
+
+    await HotspotPayment.create({
+      reference, amount: plan.price, currency: plan.currency, planKey: plan.key,
+      voucherCode: code, phone: normalizedPhone, pollUrl: response.pollUrl,
+      method: "ecocash", status: "pending"
+    });
+
+    res.json({ reference, message: `Check ${normalizedPhone} and approve the EcoCash prompt.` });
+  } catch (err) {
+    console.error("[hotspot pay init]", err);
+    res.status(500).json({ error: "Payment error. Please try again." });
+  }
+});
+
+// Poll for payment; on success, activate the voucher and return the code.
+router.get("/poll/:reference", async (req, res) => {
+  try {
+    const payment = await HotspotPayment.findOne({ reference: req.params.reference });
+    if (!payment) return res.status(404).json({ status: "not_found" });
+
+    if (payment.status === "paid") {
+      const v = await Voucher.findOne({ code: payment.voucherCode });
+      return res.json({ status: "paid", code: v?.code, wifiName: WIFI_NAME });
+    }
+    if (["failed", "cancelled"].includes(payment.status)) return res.json({ status: payment.status });
+
+    if (payment.pollUrl) {
+      const pollResult = await paynow.pollTransaction(payment.pollUrl);
+      const statusStr = String(pollResult.status || "").toLowerCase();
+
+      if (statusStr === "paid") {
+        payment.status = "paid"; payment.paidAt = new Date(); await payment.save();
+        const v = await Voucher.findOne({ code: payment.voucherCode });
+        if (v) await activateVoucher(v);
+        return res.json({ status: "paid", code: v?.code, wifiName: WIFI_NAME });
+      }
+      if (["failed", "cancelled"].includes(statusStr)) {
+        payment.status = statusStr; await payment.save();
+        await Voucher.deleteOne({ code: payment.voucherCode });   // release reserved code
+        return res.json({ status: statusStr });
+      }
+    }
+    res.json({ status: "pending" });
+  } catch (err) {
+    console.error("[hotspot pay poll]", err);
+    res.json({ status: "pending" });
+  }
+});
+
+// ── remaining minutes for a voucher (uptime pauses; clock is wall-clock) ──
+function remainingMinutes(v) {
+  if (v.durationType === "uptime") {
+    return Math.max(0, v.durationMinutes - Math.floor((v.uptimeUsedSec || 0) / 60));
+  }
+  if (v.validUntil) return Math.max(0, Math.round((new Date(v.validUntil) - new Date()) / 60000));
+  return v.durationMinutes; // clock, not yet started
+}
+function shape(v) {
+  return {
+    code: v.code, planLabel: v.planLabel, status: v.status,
+    durationType: v.durationType, deviceCap: v.deviceCap,
+    deviceCount: v.devices?.length || 0,
+    remainingMinutes: remainingMinutes(v),
+    startsOnLogin: v.durationType === "clock" && !v.firstUsedAt,
+    validUntil: v.validUntil || null
+  };
+}
+
+// ── STATUS / RETRIEVE: by code or by phone ──
+router.get("/status", async (req, res) => {
+  try {
+    const code = String(req.query.code || "").toUpperCase().trim();
+    const phone = String(req.query.phone || "").replace(/\s|-/g, "").replace(/^\+263/, "0").replace(/^263/, "0").trim();
+
+    if (code) {
+      const v = await Voucher.findOne({ code });
+      if (!v) return res.status(404).json({ error: "Code not found. Check and try again." });
+      return res.json({ vouchers: [shape(v)] });
+    }
+    if (/^07[7-8]\d{7}$/.test(phone)) {
+      const vs = await Voucher.find({ phone, status: { $in: ["unused", "active"] } }).sort({ createdAt: -1 }).limit(10);
+      if (!vs.length) return res.status(404).json({ error: "No active codes found for that number." });
+      return res.json({ vouchers: vs.map(shape) });
+    }
+    return res.status(400).json({ error: "Enter your code or your EcoCash number." });
+  } catch (err) {
+    console.error("[hotspot status]", err);
+    res.status(500).json({ error: "Could not check status." });
+  }
+});
+
+// ── TOP-UP: pay EcoCash to add a plan's worth of time to an EXISTING code ──
+router.post("/topup/init", async (req, res) => {
+  try {
+    const code = String(req.body?.code || "").toUpperCase().trim();
+    const planKey = String(req.body?.planKey || "").toLowerCase();
+    const v = await Voucher.findOne({ code });
+    if (!v) return res.status(404).json({ error: "Code not found." });
+    const plan = await HotspotPlan.findOne({ key: planKey, active: true });
+    if (!plan) return res.status(400).json({ error: "Choose a valid top-up." });
+
+    const phone = String(req.body?.phone || v.phone || "").replace(/\s|-/g, "").replace(/^\+263/, "0").replace(/^263/, "0");
+    if (!/^07[7-8]\d{7}$/.test(phone)) return res.status(400).json({ error: "Enter a valid EcoCash number." });
+
+    const reference = `HT-${crypto.randomUUID()}`;
+    const paymentRequest = paynow.createPayment(reference, `${phone}@cripfcnt.com`);
+    paymentRequest.add(`Top-up ${plan.label} on ${code}`, plan.price);
+    const response = await paynow.sendMobile(paymentRequest, phone, "ecocash");
+    if (!response.success) return res.status(400).json({ error: response.error || "Could not send EcoCash prompt." });
+
+    await HotspotPayment.create({
+      reference, amount: plan.price, currency: plan.currency, planKey: plan.key,
+      voucherCode: code, phone, pollUrl: response.pollUrl, method: "ecocash-topup", status: "pending"
+    });
+    res.json({ reference, message: `Check ${phone} and approve the EcoCash prompt.` });
+  } catch (err) {
+    console.error("[hotspot topup init]", err);
+    res.status(500).json({ error: "Top-up error. Please try again." });
+  }
+});
+
+router.get("/topup/poll/:reference", async (req, res) => {
+  try {
+    const payment = await HotspotPayment.findOne({ reference: req.params.reference });
+    if (!payment) return res.status(404).json({ status: "not_found" });
+    if (payment.status === "paid") return res.json({ status: "paid", code: payment.voucherCode });
+    if (["failed", "cancelled"].includes(payment.status)) return res.json({ status: payment.status });
+
+    if (payment.pollUrl) {
+      const pollResult = await paynow.pollTransaction(payment.pollUrl);
+      const statusStr = String(pollResult.status || "").toLowerCase();
+      if (statusStr === "paid") {
+        payment.status = "paid"; payment.paidAt = new Date(); await payment.save();
+        const plan = await HotspotPlan.findOne({ key: payment.planKey });
+        const v = await Voucher.findOne({ code: payment.voucherCode });
+        if (v && plan) {
+          const add = plan.durationMinutes;
+          if (v.durationType === "uptime") {
+            v.durationMinutes += add;
+            if (mt.isConfigured()) { try { await mt.setUptimeLimit(v.code, v.durationMinutes); await mt.setUserDisabled(v.code, false); } catch {} }
+          } else {
+            const base = (v.validUntil && new Date(v.validUntil) > new Date()) ? new Date(v.validUntil) : new Date();
+            v.validUntil = new Date(base.getTime() + add * 60000);
+            if (mt.isConfigured()) { try { await mt.setUserDisabled(v.code, false); } catch {} }
+          }
+          if (["used", "expired"].includes(v.status)) v.status = v.firstUsedAt ? "active" : "unused";
+          await v.save();
+        }
+        return res.json({ status: "paid", code: payment.voucherCode });
+      }
+      if (["failed", "cancelled"].includes(statusStr)) { payment.status = statusStr; await payment.save(); return res.json({ status: statusStr }); }
+    }
+    res.json({ status: "pending" });
+  } catch (err) {
+    console.error("[hotspot topup poll]", err);
+    res.json({ status: "pending" });
+  }
+});
+
+// ============================================================
+// 👤 ACCOUNT SELF-SERVICE  (tenants & members - log in, see status, top up)
+// ============================================================
+function acctRemaining(a) {
+  if (a.billing === "prepaid") return Math.max(0, (a.timeAllowanceMin || 0) - Math.floor((a.uptimeUsedSec || 0) / 60));
+  if (a.validUntil) return Math.max(0, Math.round((new Date(a.validUntil) - new Date()) / 60000));
+  return 0;
+}
+function shapeAcct(a) {
+  return {
+    username: a.username, displayName: a.displayName, type: a.type, billing: a.billing,
+    status: a.status, deviceCap: a.deviceCap, deviceCount: a.devices?.length || 0,
+    downKbps: a.downKbps, upKbps: a.upKbps, price: a.price, currency: a.currency,
+    durationMinutes: a.durationMinutes, validUntil: a.validUntil || null,
+    remainingMinutes: acctRemaining(a)
+  };
+}
+const acctRateStr = (a) => (a.upKbps || a.downKbps) ? `${a.upKbps || 0}k/${a.downKbps || 0}k` : null;
+const acctProfileStr = (a) => `ha_${a.upKbps || 0}_${a.downKbps || 0}_d${a.deviceCap || 1}`;
+
+// Log in to view your account (username + password).
+router.post("/account/login", async (req, res) => {
+  try {
+    const username = String(req.body?.username || "").toLowerCase().trim();
+    const password = String(req.body?.password || "");
+    const a = await HotspotAccount.findOne({ username });
+    if (!a || a.password !== password) return res.status(401).json({ error: "Wrong username or password" });
+    a.lastLogin = new Date();
+    await a.save();
+    res.json({ account: shapeAcct(a) });
+  } catch (err) {
+    console.error("[hotspot acct login]", err);
+    res.status(500).json({ error: "Login failed, try again" });
+  }
+});
+
+// Start an EcoCash top-up on your own account.
+router.post("/account/topup/init", async (req, res) => {
+  try {
+    const username = String(req.body?.username || "").toLowerCase().trim();
+    const password = String(req.body?.password || "");
+    const a = await HotspotAccount.findOne({ username });
+    if (!a || a.password !== password) return res.status(401).json({ error: "Wrong username or password" });
+
+    const amount = Number(a.price || 0);
+    if (amount <= 0) return res.status(400).json({ error: "This account has no online price set. Please renew at reception." });
+
+    const phone = String(req.body?.phone || a.phone || "").replace(/\s|-/g, "").replace(/^\+263/, "0").replace(/^263/, "0");
+    if (!/^07[7-8]\d{7}$/.test(phone)) return res.status(400).json({ error: "Enter a valid EcoCash number, e.g. 0771234567" });
+
+    const reference = `HA-${crypto.randomUUID()}`;
+    const paymentRequest = paynow.createPayment(reference, `${phone}@cripfcnt.com`);
+    paymentRequest.add(`WiFi account top-up (${a.username})`, amount);
+    const response = await paynow.sendMobile(paymentRequest, phone, "ecocash");
+    if (!response.success) return res.status(400).json({ error: response.error || "Could not send EcoCash prompt." });
+
+    await HotspotPayment.create({
+      reference, amount, currency: a.currency, planKey: `acct:${a.username}`,
+      voucherCode: a.username, phone, pollUrl: response.pollUrl, method: "ecocash-account", status: "pending"
+    });
+    res.json({ reference, message: `Check ${phone} and approve the EcoCash prompt.` });
+  } catch (err) {
+    console.error("[hotspot acct topup init]", err);
+    res.status(500).json({ error: "Top-up error. Please try again." });
+  }
+});
+
+router.get("/account/topup/poll/:reference", async (req, res) => {
+  try {
+    const payment = await HotspotPayment.findOne({ reference: req.params.reference });
+    if (!payment) return res.status(404).json({ status: "not_found" });
+    if (payment.status === "paid") return res.json({ status: "paid" });
+    if (["failed", "cancelled"].includes(payment.status)) return res.json({ status: payment.status });
+
+    if (payment.pollUrl) {
+      const pollResult = await paynow.pollTransaction(payment.pollUrl);
+      const statusStr = String(pollResult.status || "").toLowerCase();
+      if (statusStr === "paid") {
+        payment.status = "paid"; payment.paidAt = new Date(); await payment.save();
+        const a = await HotspotAccount.findOne({ username: payment.voucherCode });
+        if (a) {
+          const add = a.durationMinutes;
+          if (a.billing === "prepaid") a.timeAllowanceMin = (a.timeAllowanceMin || 0) + add;
+          else {
+            const base = (a.validUntil && new Date(a.validUntil) > new Date()) ? new Date(a.validUntil) : new Date();
+            a.validUntil = new Date(base.getTime() + add * 60000);
+          }
+          a.topups.push({ minutes: add, amount: payment.amount, currency: a.currency, method: "ecocash", by: "self-service" });
+          if (a.status !== "active") a.status = "active";
+          if (mt.isConfigured()) {
+            try {
+              await mt.ensureProfile({ name: acctProfileStr(a), sharedUsers: a.deviceCap, rateLimit: acctRateStr(a) });
+              await mt.upsertAccountUser({ username: a.username, password: a.password, profile: acctProfileStr(a), limitUptimeMinutes: a.billing === "prepaid" ? a.timeAllowanceMin : 0 });
+              await mt.setUserDisabled(a.username, false);
+            } catch { /* resynced by the loop */ }
+          }
+          await a.save();
+        }
+        return res.json({ status: "paid" });
+      }
+      if (["failed", "cancelled"].includes(statusStr)) { payment.status = statusStr; await payment.save(); return res.json({ status: statusStr }); }
+    }
+    res.json({ status: "pending" });
+  } catch (err) {
+    console.error("[hotspot acct topup poll]", err);
+    res.json({ status: "pending" });
+  }
+});
+
+export default router;

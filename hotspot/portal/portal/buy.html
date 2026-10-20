@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Central Cyber WiFi - Buy a voucher</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;min-height:100dvh;background:radial-gradient(120% 90% at 0% 0%,#0B7A34 0%,#043D1A 75%);color:#eafaef;padding:20px;display:flex;justify-content:center}
+  .wrap{width:100%;max-width:400px}
+  .head{text-align:center;margin:8px 0 20px}
+  .brand{font-family:Georgia,serif;font-weight:700;font-size:22px;letter-spacing:.04em;color:#fff}
+  .tag{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#9fd6b0;margin-top:3px}
+  .plan{background:rgba(255,255,255,.07);border:1.5px solid rgba(255,255,255,.14);border-radius:14px;padding:15px;margin-bottom:10px;cursor:pointer;display:flex;justify-content:space-between;align-items:center}
+  .plan.sel{border-color:#fff;background:rgba(255,255,255,.14)}
+  .plan .l{font-weight:700;font-size:16px;color:#fff}
+  .plan .m{font-size:12px;color:#9fd6b0;margin-top:3px}
+  .plan .pr{font-family:"Courier New",monospace;font-weight:700;font-size:18px;color:#fff}
+  .cmp{font-size:11px;color:#7cc091;margin-top:2px}
+  label{display:block;font-size:13px;color:#9fd6b0;margin:16px 0 8px;font-weight:600}
+  input{width:100%;padding:14px;border:1.5px solid rgba(255,255,255,.22);border-radius:11px;background:#fff;color:#0B2E17;font-size:16px;outline:none}
+  input:focus{border-color:#fff}
+  button{width:100%;margin-top:16px;padding:15px;border:0;border-radius:11px;background:#fff;color:#075C27;font-size:16px;font-weight:700;cursor:pointer}
+  button:disabled{opacity:.5}
+  .msg{margin-top:14px;font-size:14px;padding:12px;border-radius:10px;text-align:center;line-height:1.5}
+  .msg.err{background:rgba(255,120,110,.18);border:1px solid rgba(255,120,110,.5);color:#ffdedb}
+  .msg.ok{background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.3);color:#fff}
+  .code{font-family:"Courier New",monospace;font-weight:700;font-size:28px;letter-spacing:.08em;color:#fff;margin:8px 0}
+  a.back{display:block;text-align:center;margin-top:16px;color:#9fd6b0;font-size:13px}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="head">
+      <div class="brand">CENTRAL CYBER</div>
+      <div class="tag">Buy WiFi with EcoCash</div>
+    </div>
+    <div id="plans"><div class="msg ok">Loading plans…</div></div>
+    <div id="form" style="display:none">
+      <label>EcoCash number</label>
+      <input id="phone" type="tel" inputmode="numeric" placeholder="0771234567">
+      <button id="payBtn" onclick="pay()">Pay with EcoCash</button>
+    </div>
+    <div id="msg"></div>
+    <a class="back" href="/hotspot/buy" onclick="location.reload();return false;">Start over</a>
+  </div>
+<script>
+  var API="/hotspot/pay", plans=[], sel=null, poll=null;
+  function money(p){return "$"+Number(p).toFixed(2);}
+  function dur(m,t){var d=Math.floor(m/1440),h=Math.floor(m/60);var s=d>=7?Math.round(d/7)+"wk":d>=1?d+"d":h+"h";return s+(t==="uptime"?" of use":"");}
+
+  fetch(API+"/plans").then(r=>r.json()).then(d=>{
+    plans=d.plans||[];
+    var el=document.getElementById("plans");
+    if(!plans.length){el.innerHTML='<div class="msg err">No plans available right now.</div>';return;}
+    el.innerHTML=plans.map((p,i)=>
+      '<div class="plan" data-i="'+i+'" onclick="pick('+i+')">'+
+      '<div><div class="l">'+p.label+'</div><div class="m">'+dur(p.durationMinutes,p.durationType)+' · '+p.deviceCap+' device'+(p.deviceCap>1?'s':'')+'</div></div>'+
+      '<div style="text-align:right"><div class="pr">'+money(p.price)+'</div></div></div>'
+    ).join("");
+    pick(0);
+    document.getElementById("form").style.display="block";
+  }).catch(()=>{document.getElementById("plans").innerHTML='<div class="msg err">Could not load plans. Check your connection.</div>';});
+
+  function pick(i){sel=i;document.querySelectorAll(".plan").forEach(function(el){el.classList.toggle("sel",Number(el.dataset.i)===i);});}
+
+  function pay(){
+    var phone=document.getElementById("phone").value.trim();
+    var msg=document.getElementById("msg"); msg.className=""; msg.innerHTML="";
+    if(sel===null){msg.className="msg err";msg.textContent="Pick a plan first.";return;}
+    if(!phone){msg.className="msg err";msg.textContent="Enter your EcoCash number.";return;}
+    var btn=document.getElementById("payBtn"); btn.disabled=true; btn.textContent="Sending prompt…";
+    fetch(API+"/init",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({planKey:plans[sel].key,phone:phone})})
+      .then(r=>r.json()).then(d=>{
+        if(d.error){msg.className="msg err";msg.textContent=d.error;btn.disabled=false;btn.textContent="Pay with EcoCash";return;}
+        msg.className="msg ok";msg.innerHTML="📲 "+ (d.message||"Approve the EcoCash prompt on your phone.") +"<br><br>Waiting for payment…";
+        watch(d.reference);
+      }).catch(()=>{msg.className="msg err";msg.textContent="Something went wrong. Try again.";btn.disabled=false;btn.textContent="Pay with EcoCash";});
+  }
+
+  function watch(ref){
+    var msg=document.getElementById("msg"), tries=0;
+    poll=setInterval(function(){
+      tries++;
+      fetch(API+"/poll/"+ref).then(r=>r.json()).then(d=>{
+        if(d.status==="paid"){
+          clearInterval(poll);
+          document.getElementById("form").style.display="none";
+          document.getElementById("plans").style.display="none";
+          msg.className="msg ok";
+          msg.innerHTML="✅ Payment received!<div class='code'>"+d.code+"</div>Go back to the sign-in page and enter this code. Take a screenshot!";
+        } else if(d.status==="failed"||d.status==="cancelled"){
+          clearInterval(poll);
+          msg.className="msg err";msg.textContent="Payment "+d.status+". Please try again.";
+          document.getElementById("payBtn").disabled=false;document.getElementById("payBtn").textContent="Pay with EcoCash";
+        }
+        if(tries>40){clearInterval(poll);}   // ~3.5 min timeout
+      }).catch(()=>{});
+    },5000);
+  }
+</script>
+</body>
+</html>

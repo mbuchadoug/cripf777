@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Central Cyber WiFi - My account</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;min-height:100dvh;background:radial-gradient(120% 90% at 0% 0%,#0B7A34 0%,#043D1A 75%);color:#eafaef;padding:20px;display:flex;justify-content:center}
+  .wrap{width:100%;max-width:400px}
+  .head{text-align:center;margin:6px 0 18px}
+  .brand{font-family:Georgia,serif;font-weight:700;font-size:22px;letter-spacing:.04em;color:#fff}
+  .tag{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#9fd6b0;margin-top:3px}
+  .box{background:rgba(255,255,255,.07);border:1.5px solid rgba(255,255,255,.14);border-radius:16px;padding:18px;margin-bottom:12px}
+  label{display:block;font-size:13px;color:#9fd6b0;margin:12px 0 8px;font-weight:600}
+  label:first-child{margin-top:0}
+  input{width:100%;padding:14px;border:1.5px solid rgba(255,255,255,.22);border-radius:11px;background:#fff;color:#0B2E17;font-size:16px;outline:none}
+  input:focus{border-color:#fff}
+  button{width:100%;margin-top:14px;padding:14px;border:0;border-radius:11px;background:#fff;color:#075C27;font-size:16px;font-weight:700;cursor:pointer}
+  button:disabled{opacity:.5}
+  .row{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.1);font-size:14px}
+  .row:last-child{border-bottom:0}
+  .k{color:#9fd6b0}
+  .big{font-family:"Courier New",monospace;font-weight:700;font-size:30px;color:#fff;text-align:center}
+  .who{font-family:Georgia,serif;font-size:19px;color:#fff;text-align:center;margin-bottom:2px}
+  .sub{text-align:center;color:#9fd6b0;font-size:13px;margin-bottom:12px;text-transform:capitalize}
+  .msg{margin-top:12px;font-size:14px;padding:11px;border-radius:10px;text-align:center;line-height:1.5}
+  .msg.err{background:rgba(255,120,110,.18);border:1px solid rgba(255,120,110,.5);color:#ffdedb}
+  .msg.ok{background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.3);color:#fff}
+  a.back{display:block;text-align:center;margin-top:14px;color:#9fd6b0;font-size:13px;text-decoration:none}
+  .hide{display:none}
+  .pill{display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700}
+  .pill.ok{background:rgba(120,230,170,.2);color:#d6ffe9}
+  .pill.bad{background:rgba(255,120,110,.2);color:#ffdedb}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="head"><div class="brand">CENTRAL CYBER</div><div class="tag">My account</div></div>
+
+    <div class="box" id="loginBox">
+      <label>Username</label>
+      <input id="u" autocomplete="username" autocapitalize="none" placeholder="e.g. unit12">
+      <label>Password</label>
+      <input id="p" type="password" autocomplete="current-password" placeholder="••••••••">
+      <button id="loginBtn" onclick="login()">Sign in</button>
+      <div id="lmsg"></div>
+    </div>
+
+    <div id="result" class="hide"></div>
+    <div id="topup" class="hide"></div>
+    <a class="back" href="/hotspot/account" onclick="location.reload();return false;">Sign in with a different account</a>
+  </div>
+<script>
+  var API="/hotspot/pay", acct=null, creds=null, poll=null;
+  function fmt(mins){ if(mins<=0) return "0 min"; var d=Math.floor(mins/1440),h=Math.floor((mins%1440)/60),m=mins%60; if(d>=1) return d+"d "+(h?h+"h":""); return (h?h+"h ":"")+(m?m+"m":"")||"0m"; }
+  function mbps(k){ return k ? (k/1000).toFixed(k%1000?1:0)+" Mbps" : "Unlimited"; }
+
+  function login(){
+    var u=document.getElementById("u").value.trim().toLowerCase();
+    var p=document.getElementById("p").value;
+    var msg=document.getElementById("lmsg"); msg.className=""; msg.textContent="";
+    if(!u||!p){ msg.className="msg err"; msg.textContent="Enter your username and password."; return; }
+    var btn=document.getElementById("loginBtn"); btn.disabled=true; btn.textContent="Signing in…";
+    fetch(API+"/account/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:u,password:p})})
+      .then(r=>r.json().then(j=>({ok:r.ok,j}))).then(d=>{
+        btn.disabled=false; btn.textContent="Sign in";
+        if(!d.ok){ msg.className="msg err"; msg.textContent=d.j.error||"Could not sign in."; return; }
+        creds={username:u,password:p}; acct=d.j.account; show();
+      }).catch(()=>{ btn.disabled=false; btn.textContent="Sign in"; msg.className="msg err"; msg.textContent="Something went wrong."; });
+  }
+
+  function show(){
+    document.getElementById("loginBox").classList.add("hide");
+    var a=acct, box=document.getElementById("result"); box.className="";
+    var statusTxt = a.status==="active" ? '<span class="pill ok">Active</span>' : '<span class="pill bad">'+(a.status==="expired"?"Expired":"Suspended")+'</span>';
+    var timeLine = a.billing==="subscription"
+      ? (a.validUntil ? "Valid until "+new Date(a.validUntil).toLocaleDateString([], {day:"2-digit",month:"short",year:"numeric"}) : "No active period")
+      : fmt(a.remainingMinutes)+" of connected time left";
+    box.innerHTML='<div class="box">'
+      +'<div class="who">'+a.displayName+'</div>'
+      +'<div class="sub">'+a.type+' account · '+(a.billing==="subscription"?"monthly":"prepaid")+'</div>'
+      +'<div class="big">'+ (a.billing==="subscription" ? (a.remainingMinutes>0?fmt(a.remainingMinutes):"-") : fmt(a.remainingMinutes)) +'</div>'
+      +'<div style="text-align:center;color:#9fd6b0;font-size:13px;margin-bottom:12px">'+timeLine+'</div>'
+      +'<div class="row"><span class="k">Status</span><span>'+statusTxt+'</span></div>'
+      +'<div class="row"><span class="k">Devices</span><span>'+a.deviceCount+' / '+a.deviceCap+'</span></div>'
+      +'<div class="row"><span class="k">Speed</span><span>'+mbps(a.downKbps)+(a.downKbps?" down":"")+'</span></div>'
+      +(a.price>0?'<button onclick="startTopup()">'+(a.billing==="subscription"?"Renew":"Add time")+' - $'+a.price+'</button>':'<div style="text-align:center;color:#9fd6b0;font-size:13px;margin-top:12px">Renew at reception</div>')
+      +'</div>';
+  }
+
+  function startTopup(){
+    var box=document.getElementById("topup"); box.className="";
+    box.innerHTML='<div class="box"><label>EcoCash number</label>'
+      +'<input id="tphone" type="tel" inputmode="numeric" placeholder="0771234567" value="">'
+      +'<button id="tbtn" onclick="payTopup()">Pay $'+acct.price+' with EcoCash</button><div id="tmsg"></div></div>';
+    box.scrollIntoView({behavior:"smooth"});
+  }
+
+  function payTopup(){
+    var phone=document.getElementById("tphone").value.trim();
+    var msg=document.getElementById("tmsg"); msg.className=""; msg.textContent="";
+    if(!phone){ msg.className="msg err"; msg.textContent="Enter your EcoCash number."; return; }
+    var btn=document.getElementById("tbtn"); btn.disabled=true; btn.textContent="Sending prompt…";
+    fetch(API+"/account/topup/init",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:creds.username,password:creds.password,phone:phone})})
+      .then(r=>r.json()).then(d=>{
+        if(d.error){ msg.className="msg err"; msg.textContent=d.error; btn.disabled=false; btn.textContent="Pay $"+acct.price+" with EcoCash"; return; }
+        msg.className="msg ok"; msg.innerHTML="📲 "+(d.message||"Approve the prompt.")+"<br><br>Waiting for payment…";
+        watch(d.reference);
+      }).catch(()=>{ msg.className="msg err"; msg.textContent="Something went wrong."; btn.disabled=false; btn.textContent="Pay $"+acct.price+" with EcoCash"; });
+  }
+
+  function watch(ref){
+    var msg=document.getElementById("tmsg"), tries=0;
+    poll=setInterval(function(){ tries++;
+      fetch(API+"/account/topup/poll/"+ref).then(r=>r.json()).then(d=>{
+        if(d.status==="paid"){ clearInterval(poll); msg.className="msg ok"; msg.innerHTML="✅ Payment received! Your account is renewed - reconnect if you were offline."; }
+        else if(["failed","cancelled"].includes(d.status)){ clearInterval(poll); msg.className="msg err"; msg.textContent="Payment "+d.status+". Try again."; document.getElementById("tbtn").disabled=false; document.getElementById("tbtn").textContent="Pay $"+acct.price+" with EcoCash"; }
+        if(tries>40) clearInterval(poll);
+      }).catch(()=>{});
+    },5000);
+  }
+
+  document.getElementById("p").addEventListener("keydown",function(e){ if(e.key==="Enter") login(); });
+</script>
+</body>
+</html>
