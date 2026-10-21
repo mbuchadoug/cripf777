@@ -46,6 +46,16 @@ const GRAPH_VERSION = process.env.GRAPH_API_VERSION || "v24.0";
 const DEV_OTP = String(process.env.RESE_DEV_OTP || "true").toLowerCase() === "true";
 const WEEKLY_FEE = Number(process.env.RESE_WEEKLY_FEE || 1);
 
+/* ── Worker access packages (EcoCash "corner fee"). Prices in .env so you can
+   tune them without a rebuild. Only WORKERS pay; requesters post for free. ── */
+const RESE_PACKAGES = {
+  week:  { id: "week",  name: "Weekly access",  amount: Number(process.env.RESE_PRICE_WEEK  || 1), days: 7,  tag: "Starter" },
+  month: { id: "month", name: "Monthly access", amount: Number(process.env.RESE_PRICE_MONTH || 3), days: 30, tag: "Best value" }
+};
+// Require active access before a worker can take jobs. OFF by default so the
+// marketplace can build up jobs first; set RESE_REQUIRE_WORKER_ACCESS=true to turn on.
+const REQUIRE_WORKER_ACCESS = String(process.env.RESE_REQUIRE_WORKER_ACCESS || "false").toLowerCase() === "true";
+
 /* ── OTP rate limiting (in-memory; per single pm2 instance) ────── */
 // request-code is public, so throttle hard to stop OTP-bombing of any
 // WhatsApp number and runaway WhatsApp spend.
@@ -496,6 +506,9 @@ router.post("/jobs/:id/offer", requireReseAuth, async (req, res) => {
   const job = await JobRequest.findById(req.params.id);
   if (!job || job.status !== "open") return res.status(400).json({ error: "Job not open" });
   if (job.posterPhone === u.phone) return res.status(400).json({ error: "Your own job" });
+  if (REQUIRE_WORKER_ACCESS && !u.accessActive) {
+    return res.status(402).json({ error: "Get access to take jobs.", code: "NEED_ACCESS" });
+  }
   job.offers = job.offers || [];
   if (!job.offers.some((o) => o.workerPhone === u.phone)) {
     job.offers.push({ workerPhone: u.phone, workerName: u.name || "Worker", note: String(req.body?.note || "").slice(0, 120), at: new Date() });
@@ -572,20 +585,35 @@ router.post("/push/register", requireReseAuth, async (req, res) => {
    PAYMENTS - worker "corner fee" via Paynow EcoCash
    ══════════════════════════════════════════════════════════════ */
 
+// List packages + the worker's current access status (the app renders this).
+router.get("/pay/packages", requireReseAuth, (req, res) => {
+  const u = req.reseUser;
+  res.json({
+    packages: Object.values(RESE_PACKAGES).map((p) => ({ id: p.id, name: p.name, amount: p.amount, days: p.days, tag: p.tag })),
+    access: !!u.accessActive,
+    expiresAt: u.access?.expiresAt || null,
+    requireAccess: REQUIRE_WORKER_ACCESS
+  });
+});
+
 router.post("/pay/init", requireReseAuth, async (req, res) => {
   try {
     const u = req.reseUser;
+    // Pick the package (default to weekly, keeps old callers working).
+    const pkg = RESE_PACKAGES[String(req.body?.package || "week")];
+    if (!pkg) return res.status(400).json({ error: "Choose a package." });
+
     const phone07 = to07(req.body?.phone || u.phone);
     if (!/^07[7-8]\d{7}$/.test(phone07)) return res.status(400).json({ error: "Enter a valid EcoCash number (07...)" });
 
     const reference = `RESE-${crypto.randomUUID()}`;
     const pr = paynow.createPayment(reference, `${phone07}@ecocash.local`);
-    pr.add("Rese Rese weekly access", WEEKLY_FEE);
+    pr.add(`Rese Rese - ${pkg.name}`, pkg.amount);
     const response = await paynow.sendMobile(pr, phone07, "ecocash");
     if (!response.success) return res.status(400).json({ error: response.error || "Could not send EcoCash prompt" });
 
-    await ResePayment.create({ userId: u._id, phone: phone07, reference, amount: WEEKLY_FEE, days: 7, pollUrl: response.pollUrl, status: "pending" });
-    res.json({ ok: true, reference, message: `Approve the EcoCash prompt on ${phone07}.` });
+    await ResePayment.create({ userId: u._id, phone: phone07, reference, amount: pkg.amount, days: pkg.days, plan: pkg.id, pollUrl: response.pollUrl, status: "pending" });
+    res.json({ ok: true, reference, amount: pkg.amount, days: pkg.days, message: `Approve the $${pkg.amount} EcoCash prompt on ${phone07}.` });
   } catch (err) {
     console.error("[rese pay init]", err);
     res.status(500).json({ error: "Payment error" });
