@@ -16224,6 +16224,24 @@ router.post("/manual-request/send", requireSupplierAdmin, async (req, res) => {
 // picker + /manual-request/suppliers endpoint. Adds only; nothing removed.
 // ══════════════════════════════════════════════════════════════════════════════
 
+// History log of manual views / enquiries - powers the history panel and the
+// "skip sellers contacted recently" de-duplication guard.
+const _ManualEnquirySchema = new mongoose.Schema({
+  supplierId:    { type: mongoose.Schema.Types.ObjectId, index: true },
+  supplierPhone: { type: String, index: true },
+  businessName:  String,
+  kind:          { type: String, enum: ["view", "enquiry"], default: "view" },
+  visitorPhone:  String,
+  note:          String,
+  source:        String,
+  contactShown:  Boolean,   // was the visitor's number revealed to the seller
+  sellerPaid:    Boolean,   // snapshot of the seller's paid status at send time
+  viewsAdded:    { type: Number, default: 0 },
+  alertSent:     Boolean,
+  createdBy:     String
+}, { timestamps: true });
+const ManualEnquiry = mongoose.models.ManualEnquiry || mongoose.model("ManualEnquiry", _ManualEnquirySchema);
+
 const _PV_SOURCES = {
   fb: "Facebook", wa: "WhatsApp Status", ig: "Instagram", tt: "TikTok",
   qr: "QR Code scan", sms: "SMS / Flyer", direct: "Direct link"
@@ -16237,19 +16255,19 @@ function _pvFmtPhone(raw = "") {
 
 // Post a profile-open template directly so we control every variable (incl. the
 // note folded into the "Via" line, which reliably lands outside the 24h window).
-async function _pvSendProfileOpen({ phone, businessName, source, note, reveal, visitorPhone }) {
+async function _pvSendProfileOpen({ phone, businessName, source, note, reveal, visitorPhone, kind = "view" }) {
   const PHONE_ID = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.META_PHONE_NUMBER_ID || process.env.PHONE_NUMBER_ID;
   const TOKEN    = process.env.META_ACCESS_TOKEN || process.env.WHATSAPP_ACCESS_TOKEN;
   const to       = _mrNorm(phone);
   if (!to) return { ok: false, error: "bad phone" };
 
-  const label    = _PV_SOURCES[source] || "ZimQuote link";
+  const label    = kind === "enquiry" ? "New customer enquiry" : (_PV_SOURCES[source] || "ZimQuote link");
   const noteClean = String(note || "").replace(/[\r\n\t]+/g, " ").replace(/ {2,}/g, " ").trim().slice(0, 160);
   const showPhone = reveal && !!visitorPhone;
   // Fold note (or an activation nudge when gating) into the "Via" variable {{2}}.
   let via = label;
   if (noteClean) via += " · " + noteClean;
-  else if (!showPhone) via += " · Activate your account to view their contact";
+  else if (!showPhone) via += (kind === "enquiry" ? " · Activate your account to view & reply" : " · Activate your account to view their contact");
   via = via.slice(0, 280);
 
   const timeStr = new Date().toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
@@ -16298,10 +16316,18 @@ router.get("/profile-activity", requireSupplierAdmin, async (req, res) => {
       <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Visitor's WhatsApp number <span style="color:var(--muted);font-weight:400">(optional - shown only if you reveal it)</span></label>
       <input id="pvVisitor" placeholder="263773XXXXXXX" style="width:100%;padding:9px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:monospace" />
 
-      <div style="margin-top:12px;display:flex;flex-direction:column;gap:8px">
-        <label style="font-size:13px;display:flex;align-items:center;gap:8px"><input type="radio" name="pvReveal" value="hide" checked/> 🔒 Hide contact - nudge them to activate to view it</label>
-        <label style="font-size:13px;display:flex;align-items:center;gap:8px"><input type="radio" name="pvReveal" value="show"/> 📞 Show the visitor's contact in the alert</label>
+      <div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:12px">
+        <label style="font-size:13px;display:flex;align-items:center;gap:6px"><input type="radio" name="pvKind" value="view" checked/> 👁 Profile view</label>
+        <label style="font-size:13px;display:flex;align-items:center;gap:6px"><input type="radio" name="pvKind" value="enquiry"/> 📩 Enquiry (note-only)</label>
       </div>
+
+      <label style="font-size:12px;font-weight:600;display:block;margin:12px 0 4px">Contact shown to the seller</label>
+      <select id="pvContactMode" style="width:100%;padding:9px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px">
+        <option value="hide" selected>🔒 Hide - seller can't see or reply; nudge to activate</option>
+        <option value="auto">🧩 Auto - reveal to PAID/active sellers, gate the rest</option>
+        <option value="show">📞 Show - reveal the visitor's number to the seller</option>
+      </select>
+      <p style="font-size:11px;color:var(--muted);margin-top:4px">Enquiry note-only means neither side gets a contact and there's nothing to reply to - pure demand signal that pushes activation.</p>
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px">
         <div>
@@ -16318,10 +16344,18 @@ router.get("/profile-activity", requireSupplierAdmin, async (req, res) => {
       <textarea id="pvNote" rows="3" placeholder="e.g. asked about brake pads for a Toyota Aqua" maxlength="160"
         style="width:100%;padding:9px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;resize:vertical"></textarea>
 
-      <div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:12px">
+      <div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:12px;align-items:center">
         <label style="font-size:13px;display:flex;align-items:center;gap:8px"><input type="checkbox" id="pvSendAlert" checked/> 📲 Send the WhatsApp alert</label>
       </div>
-      <p style="font-size:11px;color:var(--muted);margin-top:8px">Leave the alert on to notify them; add to the view counter to also bump the number they see in their dashboard. You can do either or both.</p>
+      <label style="font-size:12px;font-weight:600;display:block;margin:12px 0 4px">Don't repeat - skip sellers already contacted in the last</label>
+      <select id="pvSkipRecent" style="width:100%;padding:9px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px">
+        <option value="0">Off - allow repeats</option>
+        <option value="3">3 days</option>
+        <option value="7" selected>7 days</option>
+        <option value="14">14 days</option>
+        <option value="30">30 days</option>
+      </select>
+      <p style="font-size:11px;color:var(--muted);margin-top:8px">Leave the alert on to notify them; add to the view counter to also bump the number they see in their dashboard. Every send is logged below so you don't double-hit the same seller.</p>
     </div>
 
     <!-- RIGHT: recipients -->
@@ -16350,6 +16384,15 @@ router.get("/profile-activity", requireSupplierAdmin, async (req, res) => {
       </button>
       <p style="font-size:11px;color:var(--muted);margin-top:8px;text-align:center">Tip: pick 1 seller and send yourself a test first.</p>
     </div>
+  </div>
+
+  <!-- HISTORY -->
+  <div style="background:var(--white);border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.08);margin-top:20px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <h2 style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Recent manual views &amp; enquiries</h2>
+      <button type="button" onclick="pvLoadHistory()" style="padding:5px 14px;font-size:12px;background:#e0f2fe;color:#0369a1;border:none;border-radius:6px;cursor:pointer;font-weight:700">↻ Refresh</button>
+    </div>
+    <div id="pvHistory" style="font-size:13px;color:var(--muted)">Loading…</div>
   </div>
 
   <script>
@@ -16409,12 +16452,17 @@ router.get("/profile-activity", requireSupplierAdmin, async (req, res) => {
     var sendAlert=document.getElementById('pvSendAlert').checked;
     var views=parseInt(document.getElementById('pvViews').value,10)||0;
     if(!sendAlert && views<=0){ pvAlertMsg('Turn on the alert, or set a view-counter bump (or both).',false); return; }
-    var reveal=document.querySelector('input[name=pvReveal]:checked').value;
-    if(!confirm('Send profile activity to '+keys.length+' seller'+(keys.length===1?'':'s')+'?'+(sendAlert?'':' (counter bump only, no WhatsApp alert)'))) return;
+    var kind=document.querySelector('input[name=pvKind]:checked').value;
+    var contactMode=document.getElementById('pvContactMode').value;
+    var skip=document.getElementById('pvSkipRecent').value;
+    var cmLabel = contactMode==='show'?'the contact WILL be shown':(contactMode==='auto'?'contact shown to paid sellers only':'no contact shown');
+    if(!confirm('Send '+(kind==='enquiry'?'enquiry':'profile view')+' to '+keys.length+' seller'+(keys.length===1?'':'s')+'?\\n'+cmLabel+(sendAlert?'':' (counter bump only, no WhatsApp alert)'))) return;
     var btn=document.getElementById('pvSendBtn'); btn.disabled=true; var old=btn.textContent; btn.textContent='Sending…';
     var p=new URLSearchParams();
     p.set('visitorPhone', document.getElementById('pvVisitor').value);
-    p.set('reveal', reveal==='show'?'1':'0');
+    p.set('kind', kind);
+    p.set('contactMode', contactMode);
+    p.set('skipRecentDays', skip);
     p.set('source', document.getElementById('pvSource').value);
     p.set('note', document.getElementById('pvNote').value);
     p.set('sendAlert', sendAlert?'1':'0');
@@ -16424,12 +16472,42 @@ router.get("/profile-activity", requireSupplierAdmin, async (req, res) => {
       .then(function(r){return r.json();}).then(function(d){
         btn.disabled=false; btn.textContent=old;
         if(!d.ok) throw new Error(d.error||'Send failed');
-        pvAlertMsg('✅ Done - '+(d.alerted||0)+' alert'+(d.alerted===1?'':'s')+' sent, '+(d.bumped||0)+' counter bump'+(d.bumped===1?'':'s')+'.'+(d.failed?(' '+d.failed+' failed.'):''), true);
-        PV_sel={}; pvRenderSel(); pvRenderAll();
+        pvAlertMsg('✅ Done - '+(d.alerted||0)+' alert'+(d.alerted===1?'':'s')+' sent, '+(d.bumped||0)+' counter bump'+(d.bumped===1?'':'s')+'.'+(d.skippedRecent?(' '+d.skippedRecent+' skipped (contacted recently).'):'')+(d.failed?(' '+d.failed+' failed.'):''), true);
+        PV_sel={}; pvRenderSel(); pvRenderAll(); pvLoadHistory();
       }).catch(function(e){ btn.disabled=false; btn.textContent=old; pvAlertMsg('❌ '+e.message,false); });
+  }
+  function pvAgo(ts){ var s=Math.floor((Date.now()-new Date(ts).getTime())/1000);
+    if(s<3600) return Math.max(1,Math.floor(s/60))+'m ago';
+    if(s<86400) return Math.floor(s/3600)+'h ago';
+    return Math.floor(s/86400)+'d ago'; }
+  function pvLoadHistory(){
+    var el=document.getElementById('pvHistory'); if(!el) return;
+    fetch('/zq-admin/profile-activity/history').then(function(r){return r.json();}).then(function(d){
+      if(!d.ok) throw new Error(d.error||'Failed');
+      if(!d.rows.length){ el.textContent='No manual views or enquiries yet.'; return; }
+      var html='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse"><thead><tr style="background:#f8fafc;text-align:left">'
+        +'<th style="padding:6px 8px;font-size:11px;color:var(--muted)">When</th>'
+        +'<th style="padding:6px 8px;font-size:11px;color:var(--muted)">Business</th>'
+        +'<th style="padding:6px 8px;font-size:11px;color:var(--muted)">Type</th>'
+        +'<th style="padding:6px 8px;font-size:11px;color:var(--muted)">Note</th>'
+        +'<th style="padding:6px 8px;font-size:11px;color:var(--muted)">Contact</th>'
+        +'<th style="padding:6px 8px;font-size:11px;color:var(--muted)">Plan</th></tr></thead><tbody>';
+      for(var i=0;i<d.rows.length;i++){ var x=d.rows[i];
+        html+='<tr style="border-bottom:1px solid #f1f5f9">'
+          +'<td style="padding:6px 8px;font-size:12px;white-space:nowrap">'+pvEsc(pvAgo(x.at))+'</td>'
+          +'<td style="padding:6px 8px;font-size:12px"><strong>'+pvEsc(x.business||'')+'</strong><br><span style="font-family:monospace;color:#0369a1;font-size:11px">'+pvEsc(x.phone||'')+'</span></td>'
+          +'<td style="padding:6px 8px;font-size:12px">'+(x.kind==='enquiry'?'📩 Enquiry':'👁 View')+(x.views?(' +'+x.views):'')+'</td>'
+          +'<td style="padding:6px 8px;font-size:12px;color:var(--muted);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+pvEsc(x.note||'')+'">'+pvEsc(x.note||'')+'</td>'
+          +'<td style="padding:6px 8px;font-size:12px">'+(x.contactShown?'<span style="color:#15803d">shown</span>':'<span style="color:var(--muted)">hidden</span>')+'</td>'
+          +'<td style="padding:6px 8px;font-size:12px">'+(x.paid?'<span style="color:#15803d">paid</span>':'<span style="color:#b45309">unpaid</span>')+'</td></tr>';
+      }
+      html+='</tbody></table></div>';
+      el.innerHTML=html;
+    }).catch(function(e){ el.textContent='Error: '+e.message; });
   }
   pvRenderSel();
   pvLoadAll();
+  pvLoadHistory();
   </script>`;
   res.send(layout("Profile Activity", content));
 });
@@ -16448,21 +16526,38 @@ router.post("/profile-activity/send", requireSupplierAdmin, async (req, res) => 
     if (!recipients.length) throw new Error("Select at least one seller.");
 
     const visitorPhone = _mrNorm(b.visitorPhone);
-    const reveal       = b.reveal === "1" || b.reveal === "true";
+    const kind         = b.kind === "enquiry" ? "enquiry" : "view";
+    const contactMode  = ["hide", "show", "auto"].includes(b.contactMode) ? b.contactMode : "hide";
     const source       = _PV_SOURCES[b.source] ? b.source : "direct";
     const note         = String(b.note || "");
     const sendAlert    = b.sendAlert === "1" || b.sendAlert === "true";
     let viewsToAdd     = parseInt(b.viewsToAdd, 10); if (isNaN(viewsToAdd) || viewsToAdd < 0) viewsToAdd = 0;
     if (viewsToAdd > 500) viewsToAdd = 500;
+    let skipRecentDays = parseInt(b.skipRecentDays, 10); if (isNaN(skipRecentDays) || skipRecentDays < 0) skipRecentDays = 0;
     if (!sendAlert && viewsToAdd <= 0) throw new Error("Nothing to do: enable the alert or set a counter bump.");
 
-    let alerted = 0, bumped = 0, failed = 0;
+    // De-dup: who did we already contact within the window?
+    let recentSet = new Set();
+    if (skipRecentDays > 0) {
+      const cutoff = new Date(Date.now() - skipRecentDays * 86400000);
+      const recent = await ManualEnquiry.find({ createdAt: { $gte: cutoff }, alertSent: true }, { supplierPhone: 1 }).lean();
+      recentSet = new Set(recent.map(x => x.supplierPhone));
+    }
+
+    const createdBy = (req.session?.supplierAdmin?.email || req.adminUser?.email || "");
+    let alerted = 0, bumped = 0, failed = 0, skippedRecent = 0;
 
     for (const r of recipients) {
+      if (recentSet.has(r.phone)) { skippedRecent++; continue; }
+
       const supplierDoc = r.supplierId
         ? await SupplierProfile.findById(r.supplierId).lean()
         : await SupplierProfile.findOne({ phone: r.phone }).lean();
       const businessName = supplierDoc?.businessName || "Your business";
+
+      // Paid = active subscription and not suspended. "auto" reveals only to paid.
+      const sellerPaid = supplierDoc?.subscriptionStatus === "active" && supplierDoc?.suspended !== true;
+      const reveal = contactMode === "show" ? true : contactMode === "auto" ? sellerPaid : false;
 
       // Bump the dashboard view counters (hype), if requested
       if (viewsToAdd > 0 && supplierDoc?._id) {
@@ -16477,22 +16572,54 @@ router.post("/profile-activity/send", requireSupplierAdmin, async (req, res) => 
         } catch (e) { console.warn("[PROFILE ACT] bump failed", r.phone, e.message); }
       }
 
-      // Send the profile-open alert (+ notification contacts)
+      // Send the profile-open / enquiry alert (+ notification contacts)
+      let anyOk = false;
       if (sendAlert) {
         const targets = [...new Set([r.phone, ...(supplierDoc?.notificationContacts || []).map(_mrNorm)])].filter(Boolean);
-        let anyOk = false;
         for (const t of targets) {
-          const out = await _pvSendProfileOpen({ phone: t, businessName, source, note, reveal, visitorPhone });
+          const out = await _pvSendProfileOpen({ phone: t, businessName, source, note, reveal, visitorPhone, kind });
           if (out.ok) anyOk = true;
           else console.warn("[PROFILE ACT] alert failed", t, out.error);
         }
         if (anyOk) alerted++; else failed++;
         await new Promise(x => setTimeout(x, 1200)); // gentle pace
       }
+
+      // Log to history (powers the panel + future de-dup)
+      try {
+        await ManualEnquiry.create({
+          supplierId:   supplierDoc?._id,
+          supplierPhone: r.phone,
+          businessName,
+          kind,
+          visitorPhone: visitorPhone || "",
+          note:         note.slice(0, 200),
+          source,
+          contactShown: reveal && !!visitorPhone,
+          sellerPaid,
+          viewsAdded:   viewsToAdd,
+          alertSent:    sendAlert && anyOk,
+          createdBy
+        });
+      } catch (e) { console.warn("[PROFILE ACT] log failed", r.phone, e.message); }
     }
 
-    console.log(`[PROFILE ACT] admin → ${recipients.length} seller(s): ${alerted} alerted, ${bumped} bumped, ${failed} failed (reveal=${reveal}, +${viewsToAdd} views)`);
-    res.json({ ok: true, total: recipients.length, alerted, bumped, failed });
+    console.log(`[PROFILE ACT] admin → ${recipients.length} seller(s): ${alerted} alerted, ${bumped} bumped, ${skippedRecent} skipped, ${failed} failed (kind=${kind}, contact=${contactMode}, +${viewsToAdd} views)`);
+    res.json({ ok: true, total: recipients.length, alerted, bumped, failed, skippedRecent });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
+// ── GET /zq-admin/profile-activity/history  → recent manual activity (JSON) ──
+router.get("/profile-activity/history", requireSupplierAdmin, async (req, res) => {
+  try {
+    const rows = await ManualEnquiry.find({}).sort({ createdAt: -1 }).limit(80).lean();
+    res.json({ ok: true, rows: rows.map(x => ({
+      at: x.createdAt, business: x.businessName || "", phone: x.supplierPhone || "",
+      kind: x.kind || "view", visitor: x.visitorPhone || "", note: x.note || "",
+      contactShown: !!x.contactShown, paid: !!x.sellerPaid, views: x.viewsAdded || 0, alert: !!x.alertSent
+    })) });
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });
   }
