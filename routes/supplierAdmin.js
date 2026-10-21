@@ -4521,6 +4521,7 @@ const isPresets     = t === "Presets" || t.startsWith("Preset:");
     { href: "/zq-admin/broadcast-offer", label: "📣 Broadcast Offer",  active: isBroadcast },
     { href: "/zq-admin/broadcast",       label: "📡 Broadcast Hub",     active: isBroadcastHub },
     { href: "/zq-admin/manual-request",  label: "🙋 Manual Request",    active: t === "Manual Request" },
+    { href: "/zq-admin/profile-activity",label: "👁 Profile Activity",   active: t === "Profile Activity" },
     { href: "/zq-admin/reports-hub",      label: "📊 Reports Hub",       active: t === "Reports Hub" },
     { href: "/zq-admin/presets",         label: "🗂️ Presets",             active: isPresets },
     { href: "/zq-admin/vip-sellers",      label: "🔒 VIP Sellers",         active: t === "VIP Sellers" },
@@ -16208,6 +16209,290 @@ router.post("/manual-request/send", requireSupplierAdmin, async (req, res) => {
       total: recipients.length, sent, failed, skipped,
       routedTo: routingPhone ? `+${routingPhone}` : ""
     });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ── PROFILE ACTIVITY - manual "someone opened your profile" / enquiry alerts ──
+// Fires the approved supplier_link_opened / supplier_link_opened_with_phone
+// templates (deliver OUTSIDE the 24h window), on behalf of a visitor number, with
+// an optional note folded into the alert and an optional view-counter bump. Used
+// to (a) relay a genuine enquiry on someone's behalf, or (b) hype activity so
+// dormant sellers feel demand and activate. Reuses the Manual Request supplier
+// picker + /manual-request/suppliers endpoint. Adds only; nothing removed.
+// ══════════════════════════════════════════════════════════════════════════════
+
+const _PV_SOURCES = {
+  fb: "Facebook", wa: "WhatsApp Status", ig: "Instagram", tt: "TikTok",
+  qr: "QR Code scan", sms: "SMS / Flyer", direct: "Direct link"
+};
+
+function _pvFmtPhone(raw = "") {
+  const d = _mrNorm(raw) || String(raw || "").replace(/\D+/g, "");
+  if (d && d.startsWith("263") && d.length >= 12) return `+263 ${d.slice(3, 5)} ${d.slice(5, 8)} ${d.slice(8)}`;
+  return d ? `+${d}` : "";
+}
+
+// Post a profile-open template directly so we control every variable (incl. the
+// note folded into the "Via" line, which reliably lands outside the 24h window).
+async function _pvSendProfileOpen({ phone, businessName, source, note, reveal, visitorPhone }) {
+  const PHONE_ID = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.META_PHONE_NUMBER_ID || process.env.PHONE_NUMBER_ID;
+  const TOKEN    = process.env.META_ACCESS_TOKEN || process.env.WHATSAPP_ACCESS_TOKEN;
+  const to       = _mrNorm(phone);
+  if (!to) return { ok: false, error: "bad phone" };
+
+  const label    = _PV_SOURCES[source] || "ZimQuote link";
+  const noteClean = String(note || "").replace(/[\r\n\t]+/g, " ").replace(/ {2,}/g, " ").trim().slice(0, 160);
+  const showPhone = reveal && !!visitorPhone;
+  // Fold note (or an activation nudge when gating) into the "Via" variable {{2}}.
+  let via = label;
+  if (noteClean) via += " · " + noteClean;
+  else if (!showPhone) via += " · Activate your account to view their contact";
+  via = via.slice(0, 280);
+
+  const timeStr = new Date().toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+
+  const name = showPhone ? "supplier_link_opened_with_phone" : "supplier_link_opened";
+  const vars = showPhone
+    ? [businessName || "Your business", via, timeStr, _pvFmtPhone(visitorPhone)]
+    : [businessName || "Your business", via, timeStr];
+
+  try {
+    await axios.post(
+      `https://graph.facebook.com/v24.0/${PHONE_ID}/messages`,
+      {
+        messaging_product: "whatsapp", to, type: "template",
+        template: { name, language: { code: "en" },
+          components: [{ type: "body", parameters: vars.map(v => ({ type: "text", text: String(v).slice(0, 1024) })) }] }
+      },
+      { headers: { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json" } }
+    );
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.response?.data?.error?.message || err.message };
+  }
+}
+
+// ── GET /zq-admin/profile-activity  → composer page ──────────────────────────
+router.get("/profile-activity", requireSupplierAdmin, async (req, res) => {
+  const srcOpts = Object.entries(_PV_SOURCES).map(([k, v]) =>
+    `<option value="${esc(k)}"${k === "fb" ? " selected" : ""}>${esc(v)}</option>`).join("");
+  const content = `
+  <h1 style="font-size:22px;font-weight:800;margin-bottom:4px">👁 Profile Activity &amp; Enquiries</h1>
+  <p style="color:var(--muted);font-size:13px;margin-bottom:20px;max-width:780px">
+    Send a seller a "someone opened your profile / sent an enquiry" alert - on behalf of a real visitor, or to spark activity so dormant
+    sellers feel demand and activate. Alerts use the approved profile-view templates, so they land even outside the 24-hour window. You
+    choose whether the visitor's number is shown, or gated behind "activate your account to view their contact".
+  </p>
+
+  <div id="pvAlert" style="display:none;margin-bottom:16px;padding:12px 16px;border-radius:8px;font-size:13px"></div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start">
+
+    <!-- LEFT: the alert -->
+    <div style="background:var(--white);border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.08)">
+      <h2 style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:14px">1 · The activity</h2>
+
+      <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Visitor's WhatsApp number <span style="color:var(--muted);font-weight:400">(optional - shown only if you reveal it)</span></label>
+      <input id="pvVisitor" placeholder="263773XXXXXXX" style="width:100%;padding:9px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:monospace" />
+
+      <div style="margin-top:12px;display:flex;flex-direction:column;gap:8px">
+        <label style="font-size:13px;display:flex;align-items:center;gap:8px"><input type="radio" name="pvReveal" value="hide" checked/> 🔒 Hide contact - nudge them to activate to view it</label>
+        <label style="font-size:13px;display:flex;align-items:center;gap:8px"><input type="radio" name="pvReveal" value="show"/> 📞 Show the visitor's contact in the alert</label>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px">
+        <div>
+          <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Came via</label>
+          <select id="pvSource" style="width:100%;padding:9px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px">${srcOpts}</select>
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Add to view counter</label>
+          <input id="pvViews" type="number" min="0" max="500" value="1" style="width:100%;padding:9px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px" />
+        </div>
+      </div>
+
+      <label style="font-size:12px;font-weight:600;display:block;margin:14px 0 4px">Note / enquiry <span style="color:var(--muted);font-weight:400">(optional - appears inside the alert)</span></label>
+      <textarea id="pvNote" rows="3" placeholder="e.g. asked about brake pads for a Toyota Aqua" maxlength="160"
+        style="width:100%;padding:9px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;resize:vertical"></textarea>
+
+      <div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:12px">
+        <label style="font-size:13px;display:flex;align-items:center;gap:8px"><input type="checkbox" id="pvSendAlert" checked/> 📲 Send the WhatsApp alert</label>
+      </div>
+      <p style="font-size:11px;color:var(--muted);margin-top:8px">Leave the alert on to notify them; add to the view counter to also bump the number they see in their dashboard. You can do either or both.</p>
+    </div>
+
+    <!-- RIGHT: recipients -->
+    <div style="background:var(--white);border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.08)">
+      <h2 style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px">2 · Which seller(s)</h2>
+
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+        <button type="button" onclick="pvSelectAllVisible(true)" class="btn btn-gray btn-sm" style="padding:7px 14px">✓ Select all shown</button>
+        <button type="button" onclick="pvSelectAllVisible(false)" class="btn btn-gray btn-sm" style="padding:7px 14px">✕ Clear shown</button>
+      </div>
+      <input id="pvFilter" placeholder="🔍 Filter businesses by name, phone or city…" oninput="pvRenderAll()"
+        style="width:100%;padding:9px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;margin-bottom:6px" />
+      <div id="pvAllMeta" style="font-size:11px;color:var(--muted);margin-bottom:6px">Loading businesses…</div>
+      <div id="pvAllList" style="max-height:240px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:6px"></div>
+
+      <div style="display:flex;align-items:center;justify-content:space-between;margin:14px 0 6px">
+        <span style="font-size:12px;font-weight:700;color:var(--text)">Selected (<span id="pvCount">0</span>)</span>
+        <button type="button" onclick="pvClear()" style="font-size:11px;background:none;border:none;color:var(--red);cursor:pointer">Clear all</button>
+      </div>
+      <div id="pvSelected" style="max-height:180px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:8px"></div>
+
+      <div id="pvPace" style="margin-top:12px;font-size:12px;color:var(--muted)"></div>
+      <button type="button" onclick="pvSend()" id="pvSendBtn"
+        style="width:100%;margin-top:14px;background:var(--green);color:white;border:none;padding:12px;border-radius:9px;font-size:14px;font-weight:800;cursor:pointer">
+        👁 Send activity to selected
+      </button>
+      <p style="font-size:11px;color:var(--muted);margin-top:8px;text-align:center">Tip: pick 1 seller and send yourself a test first.</p>
+    </div>
+  </div>
+
+  <script>
+  var PV_sel = {}, PV_all = [];
+  function pvAlertMsg(msg, ok){ var el=document.getElementById('pvAlert'); el.style.display=''; el.textContent=msg;
+    el.style.background=ok?'#dcfce7':'#fee2e2'; el.style.color=ok?'#15803d':'#b91c1c'; window.scrollTo({top:0,behavior:'smooth'}); }
+  function pvEsc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function pvNorm(p){ var d=String(p||'').replace(/\\D+/g,''); if(d.startsWith('0')&&d.length===10) d='263'+d.slice(1); return d; }
+
+  function pvAdd(r){ var phone=pvNorm(r.phone); if(phone.length<10) return; PV_sel[phone]={phone:phone,supplierId:r.supplierId||r.id||null,name:r.name||''}; pvRenderSel(); }
+  function pvRemove(phone){ delete PV_sel[phone]; pvRenderSel(); }
+  function pvClear(){ PV_sel={}; pvRenderSel(); pvRenderAll(); }
+  function pvRenderSel(){
+    var keys=Object.keys(PV_sel); document.getElementById('pvCount').textContent=keys.length;
+    var box=document.getElementById('pvSelected');
+    if(!keys.length){ box.innerHTML='<div style="color:var(--muted);font-size:12px;padding:8px;text-align:center">None yet - tick sellers from the list.</div>'; }
+    else box.innerHTML=keys.map(function(k){ var r=PV_sel[k];
+      return '<div style="display:flex;align-items:center;gap:8px;padding:5px 2px;border-bottom:1px solid #f1f5f9">'
+        +'<span style="font-family:monospace;color:#0369a1;min-width:105px;font-size:12px">'+pvEsc(r.phone)+'</span>'
+        +'<span style="flex:1;color:var(--muted);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+pvEsc(r.name||'')+'</span>'
+        +'<button type="button" onclick="pvRemove(\\''+k+'\\')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:14px">&times;</button></div>';
+    }).join('');
+    var secs=Math.round(keys.length*1.2);
+    document.getElementById('pvPace').textContent = keys.length ? ('≈ '+secs+'s for '+keys.length+' seller'+(keys.length===1?'':'s')+'.') : '';
+  }
+  function pvRowHtml(s){
+    var meta=[s.area,s.city].filter(Boolean).join(', ');
+    var badge = s.active ? '' : ' <span style="color:#b91c1c;font-size:10px">inactive</span>';
+    var sub = s.sub && s.sub!=='none' ? (' · '+s.sub) : '';
+    return '<label style="display:flex;align-items:flex-start;gap:8px;padding:6px 4px;border-bottom:1px solid #f1f5f9;cursor:pointer;font-size:12px">'
+      +'<input type="checkbox" '+(PV_sel[pvNorm(s.phone)]?'checked':'')+' onchange="pvToggle(this)" data-phone="'+pvEsc(s.phone)+'" data-id="'+pvEsc(s.id)+'" data-name="'+pvEsc(s.name)+'" style="margin-top:2px"/>'
+      +'<span style="flex:1"><strong>'+pvEsc(s.name)+'</strong>'+badge+'<br><span style="color:var(--muted)">'+pvEsc(meta)+pvEsc(sub)+'</span></span>'
+      +'<span style="font-family:monospace;color:#0369a1">'+pvEsc(s.phone)+'</span></label>';
+  }
+  function pvToggle(cb){ var r={phone:cb.getAttribute('data-phone'),id:cb.getAttribute('data-id'),name:cb.getAttribute('data-name')};
+    if(cb.checked) pvAdd(r); else pvRemove(pvNorm(r.phone)); }
+  function pvFiltered(){ var q=(document.getElementById('pvFilter').value||'').trim().toLowerCase();
+    if(!q) return PV_all;
+    return PV_all.filter(function(s){ return ((s.name||'')+' '+(s.phone||'')+' '+(s.city||'')+' '+(s.area||'')).toLowerCase().indexOf(q)>=0; }); }
+  function pvRenderAll(){
+    var list=document.getElementById('pvAllList'); var rows=pvFiltered(); var cap=500;
+    document.getElementById('pvAllMeta').textContent = rows.length+' of '+PV_all.length+' businesses'+(rows.length>cap?(' (first '+cap+')'):'');
+    if(!PV_all.length){ list.innerHTML='<div style="padding:10px;color:var(--muted);font-size:12px">No businesses found.</div>'; return; }
+    if(!rows.length){ list.innerHTML='<div style="padding:10px;color:var(--muted);font-size:12px">No match.</div>'; return; }
+    list.innerHTML=rows.slice(0,cap).map(pvRowHtml).join('');
+  }
+  function pvSelectAllVisible(on){ pvFiltered().slice(0,500).forEach(function(s){ if(on) pvAdd({phone:s.phone,id:s.id,name:s.name}); else pvRemove(pvNorm(s.phone)); }); pvRenderAll(); }
+  function pvLoadAll(){
+    var list=document.getElementById('pvAllList'); list.innerHTML='<div style="padding:10px;color:var(--muted);font-size:12px">Loading…</div>';
+    fetch('/zq-admin/manual-request/suppliers').then(function(r){return r.json();}).then(function(d){
+      if(!d.ok) throw new Error(d.error||'Load failed'); PV_all=d.suppliers||[]; pvRenderAll();
+    }).catch(function(e){ list.innerHTML='<div style="padding:10px;color:#b91c1c;font-size:12px">'+pvEsc(e.message)+'</div>'; });
+  }
+  function pvSend(){
+    var keys=Object.keys(PV_sel);
+    if(!keys.length){ pvAlertMsg('Select at least one seller.',false); return; }
+    var sendAlert=document.getElementById('pvSendAlert').checked;
+    var views=parseInt(document.getElementById('pvViews').value,10)||0;
+    if(!sendAlert && views<=0){ pvAlertMsg('Turn on the alert, or set a view-counter bump (or both).',false); return; }
+    var reveal=document.querySelector('input[name=pvReveal]:checked').value;
+    if(!confirm('Send profile activity to '+keys.length+' seller'+(keys.length===1?'':'s')+'?'+(sendAlert?'':' (counter bump only, no WhatsApp alert)'))) return;
+    var btn=document.getElementById('pvSendBtn'); btn.disabled=true; var old=btn.textContent; btn.textContent='Sending…';
+    var p=new URLSearchParams();
+    p.set('visitorPhone', document.getElementById('pvVisitor').value);
+    p.set('reveal', reveal==='show'?'1':'0');
+    p.set('source', document.getElementById('pvSource').value);
+    p.set('note', document.getElementById('pvNote').value);
+    p.set('sendAlert', sendAlert?'1':'0');
+    p.set('viewsToAdd', String(views));
+    p.set('recipients', JSON.stringify(keys.map(function(k){return {phone:PV_sel[k].phone, supplierId:PV_sel[k].supplierId};})));
+    fetch('/zq-admin/profile-activity/send',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:p.toString()})
+      .then(function(r){return r.json();}).then(function(d){
+        btn.disabled=false; btn.textContent=old;
+        if(!d.ok) throw new Error(d.error||'Send failed');
+        pvAlertMsg('✅ Done - '+(d.alerted||0)+' alert'+(d.alerted===1?'':'s')+' sent, '+(d.bumped||0)+' counter bump'+(d.bumped===1?'':'s')+'.'+(d.failed?(' '+d.failed+' failed.'):''), true);
+        PV_sel={}; pvRenderSel(); pvRenderAll();
+      }).catch(function(e){ btn.disabled=false; btn.textContent=old; pvAlertMsg('❌ '+e.message,false); });
+  }
+  pvRenderSel();
+  pvLoadAll();
+  </script>`;
+  res.send(layout("Profile Activity", content));
+});
+
+// ── POST /zq-admin/profile-activity/send ─────────────────────────────────────
+router.post("/profile-activity/send", requireSupplierAdmin, async (req, res) => {
+  try {
+    const b = req.body || {};
+    let recipients = [];
+    try { recipients = JSON.parse(b.recipients || "[]"); } catch (_) { recipients = []; }
+    const seen = new Set();
+    recipients = recipients
+      .map(r => ({ phone: _mrNorm(r.phone), supplierId: r.supplierId || null }))
+      .filter(r => r.phone && !seen.has(r.phone) && seen.add(r.phone))
+      .slice(0, 300);
+    if (!recipients.length) throw new Error("Select at least one seller.");
+
+    const visitorPhone = _mrNorm(b.visitorPhone);
+    const reveal       = b.reveal === "1" || b.reveal === "true";
+    const source       = _PV_SOURCES[b.source] ? b.source : "direct";
+    const note         = String(b.note || "");
+    const sendAlert    = b.sendAlert === "1" || b.sendAlert === "true";
+    let viewsToAdd     = parseInt(b.viewsToAdd, 10); if (isNaN(viewsToAdd) || viewsToAdd < 0) viewsToAdd = 0;
+    if (viewsToAdd > 500) viewsToAdd = 500;
+    if (!sendAlert && viewsToAdd <= 0) throw new Error("Nothing to do: enable the alert or set a counter bump.");
+
+    let alerted = 0, bumped = 0, failed = 0;
+
+    for (const r of recipients) {
+      const supplierDoc = r.supplierId
+        ? await SupplierProfile.findById(r.supplierId).lean()
+        : await SupplierProfile.findOne({ phone: r.phone }).lean();
+      const businessName = supplierDoc?.businessName || "Your business";
+
+      // Bump the dashboard view counters (hype), if requested
+      if (viewsToAdd > 0 && supplierDoc?._id) {
+        try {
+          await SupplierProfile.findByIdAndUpdate(supplierDoc._id, {
+            $inc: {
+              viewCount: viewsToAdd, monthlyViews: viewsToAdd, zqLinkViews: viewsToAdd,
+              ["zqSourceViews." + source]: viewsToAdd
+            }
+          });
+          bumped++;
+        } catch (e) { console.warn("[PROFILE ACT] bump failed", r.phone, e.message); }
+      }
+
+      // Send the profile-open alert (+ notification contacts)
+      if (sendAlert) {
+        const targets = [...new Set([r.phone, ...(supplierDoc?.notificationContacts || []).map(_mrNorm)])].filter(Boolean);
+        let anyOk = false;
+        for (const t of targets) {
+          const out = await _pvSendProfileOpen({ phone: t, businessName, source, note, reveal, visitorPhone });
+          if (out.ok) anyOk = true;
+          else console.warn("[PROFILE ACT] alert failed", t, out.error);
+        }
+        if (anyOk) alerted++; else failed++;
+        await new Promise(x => setTimeout(x, 1200)); // gentle pace
+      }
+    }
+
+    console.log(`[PROFILE ACT] admin → ${recipients.length} seller(s): ${alerted} alerted, ${bumped} bumped, ${failed} failed (reveal=${reveal}, +${viewsToAdd} views)`);
+    res.json({ ok: true, total: recipients.length, alerted, bumped, failed });
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });
   }
