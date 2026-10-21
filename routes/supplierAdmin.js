@@ -15993,7 +15993,7 @@ router.get("/manual-request", requireSupplierAdmin, async (req, res) => {
     fetch('/zq-admin/manual-request/match',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:mrBody().toString()})
       .then(function(r){return r.json();}).then(function(d){
         if(!d.ok) throw new Error(d.error||'Match failed');
-        if(!d.suppliers.length){ meta.textContent=prev; mrAlert('No automatic matches — pick manually from the list below.',false); return; }
+        if(!d.suppliers.length){ meta.textContent=prev; mrAlert('No automatic matches - pick manually from the list below.',false); return; }
         var known={}; MR_all.forEach(function(s){ known[mrNormDisplay(s.phone)]=1; });
         d.suppliers.forEach(function(s){ if(!known[mrNormDisplay(s.phone)]) MR_all.unshift(s); mrAdd({phone:s.phone,id:s.id,name:s.name}); });
         mrRenderAll();

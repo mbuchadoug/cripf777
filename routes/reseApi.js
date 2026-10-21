@@ -46,6 +46,26 @@ const GRAPH_VERSION = process.env.GRAPH_API_VERSION || "v24.0";
 const DEV_OTP = String(process.env.RESE_DEV_OTP || "true").toLowerCase() === "true";
 const WEEKLY_FEE = Number(process.env.RESE_WEEKLY_FEE || 1);
 
+/* ── OTP rate limiting (in-memory; per single pm2 instance) ────── */
+// request-code is public, so throttle hard to stop OTP-bombing of any
+// WhatsApp number and runaway WhatsApp spend.
+const OTP_COOLDOWN_MS = 60 * 1000;      // 1 code per 60s per phone
+const OTP_PHONE_HOURLY_CAP = 4;         // max 4 codes per phone per hour
+const OTP_IP_HOURLY_CAP = 30;           // max 30 code requests per IP per hour
+const OTP_WINDOW_MS = 60 * 60 * 1000;   // the rolling 1-hour window
+const otpRate = new Map();              // phone -> { windowStart, count, lastSentAt }
+const ipRate = new Map();               // ip    -> { windowStart, count, lastSentAt }
+function otpWindow(map, key) {
+  const now = Date.now();
+  let rec = map.get(key);
+  if (!rec || now - rec.windowStart > OTP_WINDOW_MS) {
+    rec = { windowStart: now, count: 0, lastSentAt: rec ? rec.lastSentAt : 0 };
+    map.set(key, rec);
+  }
+  if (map.size > 5000) for (const [k, v] of map) if (now - v.windowStart > OTP_WINDOW_MS) map.delete(k);
+  return rec;
+}
+
 /* ── helpers ──────────────────────────────────────────────── */
 
 function normalizePhone(raw) {
@@ -231,6 +251,19 @@ router.post("/auth/request-code", async (req, res) => {
     const phone = normalizePhone(req.body?.phone);
     if (!phone) return res.status(400).json({ error: "Enter a valid phone number" });
 
+    // Abuse / flood protection (see OTP rate limiting above).
+    const ip = (req.headers["x-forwarded-for"] || "").split(",")[0].trim() || req.ip || "unknown";
+    const nowMs = Date.now();
+    const pr = otpWindow(otpRate, phone);
+    const ir = otpWindow(ipRate, ip);
+    if (nowMs - pr.lastSentAt < OTP_COOLDOWN_MS) {
+      // A code was just sent and is still valid - don't send another.
+      return res.json({ ok: true, channel: "cooldown" });
+    }
+    if (pr.count >= OTP_PHONE_HOURLY_CAP || ir.count >= OTP_IP_HOURLY_CAP) {
+      return res.status(429).json({ error: "Too many code requests. Please wait a while, then try again." });
+    }
+
     const code = ReseOtp.generateCode();
     try {
       await ReseOtp.create({ phone, codeHash: ReseOtp.hashCode(code) });
@@ -238,6 +271,9 @@ router.post("/auth/request-code", async (req, res) => {
       console.error("[rese otp] store failed:", e.message);
       return res.status(500).json({ error: "Could not start sign in. Try again." });
     }
+    // Count this send against the limits.
+    pr.lastSentAt = nowMs; pr.count += 1;
+    ir.count += 1;
 
     // 1) CRIPFCnt approved auth template, 2) ZimQuote chatbot senders,
     // 3) direct Graph API. All guarded - never throw here.
@@ -253,7 +289,9 @@ router.post("/auth/request-code", async (req, res) => {
     const resp = { ok: true, channel: out.sent ? (out.via || "whatsapp") : "none" };
     if (DEV_OTP) {
       console.log(`[rese otp] ${phone} -> ${code} (channel: ${resp.channel})`);
-      resp.devCode = code;
+      // Only ever expose the code in the HTTP response when the real WhatsApp
+      // send FAILED - never leak a working code to a public caller.
+      if (!out.sent) resp.devCode = code;
     }
     return res.json(resp);
   } catch (err) {
