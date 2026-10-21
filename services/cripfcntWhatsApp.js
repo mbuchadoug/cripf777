@@ -73,10 +73,45 @@ export const sendList = (to, body, buttonText, rows, sectionTitle = "Menu") =>
 export const markRead = (messageId) =>
   post({ status: "read", message_id: messageId }).catch(() => {});
 
+// ── Auth-code flood guard (sender-level: catches EVERY caller) ──────────────
+// Whatever route or loop triggers an auth code, it funnels through here, so the
+// throttle + kill switch below stop a flood no matter where it comes from.
+//   CRIPFCNT_WA_DISABLE_AUTH=1   -> hard off switch (no auth codes sent at all)
+// Per-recipient: 1 code / 60s and at most 6 / hour. In-memory (single instance).
+const _authRate = new Map(); // dest -> { windowStart, count, lastSentAt }
+const _AUTH_COOLDOWN_MS = 60 * 1000;
+const _AUTH_HOURLY_CAP = 6;
+const _AUTH_WINDOW_MS = 60 * 60 * 1000;
+function _authCaller() {
+  return (new Error().stack || "").split("\n").slice(3, 7).map((x) => x.trim()).join("  <-  ");
+}
+
 // Login / sign-up code via the approved Authentication template (copy-code button).
 // Works outside the 24-hour window, so it can be used by the web + mobile login.
-export const sendAuthCode = (to, code) =>
-  post({
+export const sendAuthCode = (to, code) => {
+  const dest = String(to).replace(/[^\d]/g, "");
+
+  // 1) Hard kill switch - set CRIPFCNT_WA_DISABLE_AUTH=1 in .env to stop instantly.
+  if (String(process.env.CRIPFCNT_WA_DISABLE_AUTH || "") === "1") {
+    console.warn(`[CRIPFCnt WA] AUTH suppressed (kill switch) to=${dest} caller: ${_authCaller()}`);
+    return Promise.resolve({ suppressed: true });
+  }
+
+  // 2) Per-recipient throttle - stops any loop or abuse from flooding a number.
+  const now = Date.now();
+  let r = _authRate.get(dest);
+  if (!r || now - r.windowStart > _AUTH_WINDOW_MS) r = { windowStart: now, count: 0, lastSentAt: r ? r.lastSentAt : 0 };
+  if (now - r.lastSentAt < _AUTH_COOLDOWN_MS || r.count >= _AUTH_HOURLY_CAP) {
+    _authRate.set(dest, r);
+    console.warn(`[CRIPFCnt WA] AUTH THROTTLED to=${dest} (cooldown/cap) caller: ${_authCaller()}`);
+    return Promise.resolve({ throttled: true });
+  }
+  r.lastSentAt = now; r.count += 1; _authRate.set(dest, r);
+
+  // 3) Log who triggered this send, so the real source is visible in pm2 logs.
+  console.log(`[CRIPFCnt WA] AUTH CODE -> ${dest} caller: ${_authCaller()}`);
+
+  return post({
     to, type: "template",
     template: {
       name: process.env.CRIPFCNT_WA_AUTH_TEMPLATE || "cripfcnt_login_code",
@@ -87,3 +122,4 @@ export const sendAuthCode = (to, code) =>
       ]
     }
   });
+};
