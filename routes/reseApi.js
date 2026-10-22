@@ -55,6 +55,10 @@ const RESE_PACKAGES = {
 // Require active access before a worker can take jobs. OFF by default so the
 // marketplace can build up jobs first; set RESE_REQUIRE_WORKER_ACCESS=true to turn on.
 const REQUIRE_WORKER_ACCESS = String(process.env.RESE_REQUIRE_WORKER_ACCESS || "false").toLowerCase() === "true";
+// A worker must be ID-verified (admin-approved) and account-active before taking
+// jobs. Payment gating is separate (REQUIRE_WORKER_ACCESS) so you can monetise later.
+const REQUIRE_VERIFICATION = String(process.env.RESE_REQUIRE_VERIFICATION || "true").toLowerCase() === "true";
+const REQUIRE_APPROVAL = String(process.env.RESE_REQUIRE_APPROVAL || "true").toLowerCase() === "true";
 
 /* ── OTP rate limiting (in-memory; per single pm2 instance) ────── */
 // request-code is public, so throttle hard to stop OTP-bombing of any
@@ -117,7 +121,25 @@ function putFile(buffer, filename, contentType) {
     up.end(buffer);
   });
 }
+// What a worker still needs before they can take jobs (drives the app's gating).
+function workerNeeds(u) {
+  if (u.status === "suspended") return ["suspended"];
+  const needs = [];
+  const hasDocs = !!(u.worker?.selfieFileId && u.worker?.idFileId);
+  const v = u.verification?.status || "unverified";
+  if (REQUIRE_VERIFICATION && v !== "approved") {
+    if (!hasDocs || v === "rejected") needs.push("verify");
+    else needs.push("review");
+  }
+  if (REQUIRE_APPROVAL && u.status === "pending" && !needs.includes("review") && !needs.includes("verify")) {
+    needs.push("review");
+  }
+  if (REQUIRE_WORKER_ACCESS && !u.accessActive) needs.push("access");
+  return needs;
+}
+
 function publicUser(u) {
+  const needs = workerNeeds(u);
   return {
     id: String(u._id),
     phone: u.phone,
@@ -127,8 +149,14 @@ function publicUser(u) {
     isRequester: u.isRequester,
     lastMode: u.lastMode,
     worker: { skills: u.worker?.skills || [], suburbs: u.worker?.suburbs || [] },
+    status: u.status,
     verification: u.verification?.status || "unverified",
+    hasDocs: !!(u.worker?.selfieFileId && u.worker?.idFileId),
     access: u.accessActive,
+    accessStatus: u.access?.status || "free",
+    accessExpiresAt: u.access?.expiresAt || null,
+    needs,
+    canWork: needs.length === 0,
     hasAvatar: !!u.avatarFileId
   };
 }
@@ -377,9 +405,12 @@ router.post(
     u.isWorker = true;
     if (req.files?.selfie?.[0]) u.worker.selfieFileId = await putFile(req.files.selfie[0].buffer, `selfie_${u._id}.jpg`, "image/jpeg");
     if (req.files?.id?.[0]) u.worker.idFileId = await putFile(req.files.id[0].buffer, `id_${u._id}.jpg`, "image/jpeg");
-    if (u.worker.selfieFileId && u.worker.idFileId) u.verification.status = "pending";
+    if (u.worker.selfieFileId && u.worker.idFileId) {
+      u.verification.status = "pending";
+      if (REQUIRE_APPROVAL) u.status = "pending"; // awaits admin reveal/approval
+    }
     await u.save();
-    res.json({ ok: true, verification: u.verification.status });
+    res.json({ ok: true, verification: u.verification.status, user: publicUser(u) });
   }
 );
 
@@ -402,7 +433,8 @@ function jobForViewer(job, viewerPhone) {
     expiresAt: job.expiresAt,
     mine: iPosted,
     offersCount: (job.offers || []).length,
-    iOffered: (job.offers || []).some((o) => o.workerPhone === viewerPhone)
+    iOffered: (job.offers || []).some((o) => o.workerPhone === viewerPhone),
+    iAmChosen: !!iAmChosen
   };
   if (iPosted) {
     base.offers = (job.offers || []).map((o) => ({ workerPhone: o.workerPhone, workerName: o.workerName, note: o.note, at: o.at }));
@@ -506,8 +538,13 @@ router.post("/jobs/:id/offer", requireReseAuth, async (req, res) => {
   const job = await JobRequest.findById(req.params.id);
   if (!job || job.status !== "open") return res.status(400).json({ error: "Job not open" });
   if (job.posterPhone === u.phone) return res.status(400).json({ error: "Your own job" });
-  if (REQUIRE_WORKER_ACCESS && !u.accessActive) {
-    return res.status(402).json({ error: "Get access to take jobs.", code: "NEED_ACCESS" });
+  const needs = workerNeeds(u);
+  if (needs.length) {
+    const code = needs.includes("suspended") ? "SUSPENDED"
+      : needs.includes("verify") ? "NEED_VERIFY"
+      : needs.includes("review") ? "PENDING_REVIEW" : "NEED_ACCESS";
+    const msg = { SUSPENDED: "Your account is suspended.", NEED_VERIFY: "Add your selfie and ID first.", PENDING_REVIEW: "Your account is waiting for approval.", NEED_ACCESS: "Get access to take jobs." }[code];
+    return res.status(code === "NEED_ACCESS" ? 402 : 403).json({ error: msg, code, needs });
   }
   job.offers = job.offers || [];
   if (!job.offers.some((o) => o.workerPhone === u.phone)) {
@@ -533,6 +570,12 @@ router.post("/jobs/:id/choose", requireReseAuth, async (req, res) => {
   await job.save();
   const chosen = await ReseUser.findOne({ phone: offer.workerPhone }).lean();
   if (chosen?.expoPushToken) sendPush([chosen.expoPushToken], "You were chosen! 🎉", `${job.description || job.category} · ${job.suburb}. You can talk now.`, { jobId: String(job._id) });
+  // Tell the other offerers the job was given to someone else.
+  const losers = (job.offers || []).map((o) => o.workerPhone).filter((ph) => ph && ph !== offer.workerPhone);
+  if (losers.length) {
+    const others = await ReseUser.find({ phone: { $in: losers }, expoPushToken: { $ne: null } }).lean();
+    sendPush(others.map((o) => o.expoPushToken), "Job taken", `The ${job.description || job.category} job was given to someone else.`, { jobId: String(job._id) });
+  }
   res.json({ job: jobForViewer(job, u.phone) });
 });
 
@@ -546,6 +589,29 @@ router.post("/jobs/:id/done", requireReseAuth, async (req, res) => {
   await job.save();
   if (job.workerPhone) await ReseUser.updateOne({ phone: job.workerPhone }, { $inc: { "worker.jobsDone": 1 } });
   res.json({ job: jobForViewer(job, u.phone) });
+});
+
+// Requester cancels their own job (open or accepted). Everyone involved is told.
+router.post("/jobs/:id/cancel", requireReseAuth, async (req, res) => {
+  try {
+    const u = req.reseUser;
+    const job = await JobRequest.findById(req.params.id);
+    if (!job) return res.status(404).json({ error: "Not found" });
+    if (job.posterPhone !== u.phone) return res.status(403).json({ error: "Not your job" });
+    if (job.status === "done") return res.status(400).json({ error: "Job already finished" });
+    job.status = "cancelled";
+    job.cancelledAt = new Date();
+    await job.save();
+    const phones = [...new Set([...(job.offers || []).map((o) => o.workerPhone), job.workerPhone].filter(Boolean))];
+    if (phones.length) {
+      const involved = await ReseUser.find({ phone: { $in: phones }, expoPushToken: { $ne: null } }).lean();
+      sendPush(involved.map((w) => w.expoPushToken), "Job cancelled", `${u.name || "The requester"} cancelled: ${job.description || job.category}.`, { jobId: String(job._id) });
+    }
+    res.json({ job: jobForViewer(job, u.phone) });
+  } catch (err) {
+    console.error("[rese jobs cancel]", err);
+    res.status(500).json({ error: "Could not cancel" });
+  }
 });
 
 router.post("/jobs/:id/rate", requireReseAuth, async (req, res) => {

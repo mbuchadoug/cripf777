@@ -18,6 +18,7 @@ import mongoose from "mongoose";
 import ReseUser from "../models/reseUser.js";
 import JobRequest from "../models/jobRequest.js";
 import ReseSetting from "../models/reseSetting.js";
+import ResePayment from "../models/resePayment.js";
 
 const router = Router();
 
@@ -148,6 +149,7 @@ function layout(title, content, active = "") {
     { href: "/rese-admin/verifications", label: "🪪 Verifications", key: "verify" },
     { divider: "MARKETPLACE" },
     { href: "/rese-admin/jobs", label: "🧾 Jobs", key: "jobs" },
+    { href: "/rese-admin/payments", label: "💳 Payments", key: "payments" },
     { divider: "SYSTEM" },
     { href: "/rese-admin/settings", label: "⚙️ Settings", key: "settings" }
   ];
@@ -252,7 +254,7 @@ label.chk{display:inline-flex;align-items:center;gap:7px;padding:8px 12px;border
 router.get("/", requireReseAdmin, async (req, res) => {
   try {
     const dayAgo = new Date(Date.now() - 86400000);
-    const [users, workers, pendingVerify, pendingApproval, openJobs, jobsToday, doneJobs, recent] =
+    const [users, workers, pendingVerify, pendingApproval, openJobs, jobsToday, doneJobs, recent, paidCount, revAgg] =
       await Promise.all([
         ReseUser.countDocuments({}),
         ReseUser.countDocuments({ isWorker: true }),
@@ -261,8 +263,11 @@ router.get("/", requireReseAdmin, async (req, res) => {
         JobRequest.countDocuments({ status: "open", removedByAdmin: { $ne: true } }),
         JobRequest.countDocuments({ createdAt: { $gte: dayAgo } }),
         JobRequest.countDocuments({ status: "done" }),
-        ReseUser.find({}).sort({ createdAt: -1 }).limit(8).lean()
+        ReseUser.find({}).sort({ createdAt: -1 }).limit(8).lean(),
+        ResePayment.countDocuments({ status: "paid" }),
+        ResePayment.aggregate([{ $match: { status: "paid" } }, { $group: { _id: null, total: { $sum: "$amount" } } }])
       ]);
+    const revenue = (revAgg && revAgg[0] && revAgg[0].total) || 0;
 
     const recentRows = recent
       .map(
@@ -289,6 +294,8 @@ router.get("/", requireReseAdmin, async (req, res) => {
         <div class="stat green"><div class="n">${openJobs}</div><div class="l">Open jobs</div></div>
         <div class="stat"><div class="n">${jobsToday}</div><div class="l">Jobs today</div></div>
         <div class="stat green"><div class="n">${doneJobs}</div><div class="l">Jobs completed</div></div>
+        <div class="stat green"><div class="n">$${revenue}</div><div class="l">Revenue (paid)</div></div>
+        <div class="stat blue"><div class="n">${paidCount}</div><div class="l">Paid subscriptions</div></div>
       </div>
       ${
         pendingVerify > 0 || pendingApproval > 0
@@ -411,6 +418,7 @@ router.get("/users/:id", requireReseAdmin, async (req, res) => {
             ${u.status !== "active" ? `<form method="post" action="/rese-admin/users/${u._id}/approve"><button class="btn green sm">✔ Approve account</button></form>` : ""}
             ${u.status !== "suspended" ? `<form method="post" action="/rese-admin/users/${u._id}/suspend"><button class="btn red sm">⛔ Suspend</button></form>` : `<form method="post" action="/rese-admin/users/${u._id}/approve"><button class="btn green sm">↺ Reactivate</button></form>`}
             <form method="post" action="/rese-admin/users/${u._id}/set-adult" onsubmit="return true"><input type="hidden" name="adult" value="${u.adultConfirmed ? "0" : "1"}"><button class="btn sm ghost">${u.adultConfirmed ? "Mark under-age" : "Confirm 18+"}</button></form>
+            <a class="btn sm ghost" href="/rese-admin/users/${u._id}/edit">✏️ Edit details</a>
           </div>
           <div class="muted" style="margin-top:14px;font-size:12px;text-transform:uppercase;letter-spacing:.5px">Manual activation (no payment)</div>
           <div class="actions" style="margin-top:8px">
@@ -433,7 +441,7 @@ router.get("/users/:id", requireReseAdmin, async (req, res) => {
           }
           ${u.verification?.reason ? `<p class="muted" style="margin-top:10px">Reason: ${esc(u.verification.reason)}</p>` : ""}
           <div class="actions" style="margin-top:14px">
-            <form method="post" action="/rese-admin/users/${u._id}/verify"><button class="btn green sm">✅ Approve verification</button></form>
+            <form method="post" action="/rese-admin/users/${u._id}/verify"><button class="btn green sm">✅ Approve &amp; activate</button></form>
             <form method="post" action="/rese-admin/users/${u._id}/reject" style="display:flex;gap:6px">
               <input name="reason" placeholder="Reason" style="flex:1">
               <button class="btn red sm">✕ Reject</button>
@@ -481,11 +489,14 @@ router.post("/users/:id/suspend", requireReseAdmin, async (req, res) => {
   res.redirect(`/rese-admin/users/${req.params.id}`);
 });
 router.post("/users/:id/verify", requireReseAdmin, async (req, res) => {
+  // Approving the ID also reveals/activates the account, so one click fully
+  // unblocks the worker (both gates the app checks: verification + status).
   await setUser(req.params.id, {
     "verification.status": "approved",
     "verification.reviewedAt": new Date(),
     "verification.reviewedBy": "admin",
-    "verification.reason": ""
+    "verification.reason": "",
+    status: "active"
   });
   res.redirect(`/rese-admin/users/${req.params.id}`);
 });
@@ -526,6 +537,116 @@ router.post("/users/:id/credits", requireReseAdmin, async (req, res) => {
 router.post("/users/:id/access-suspend", requireReseAdmin, async (req, res) => {
   await setUser(req.params.id, { "access.status": "suspended" });
   res.redirect(`/rese-admin/users/${req.params.id}`);
+});
+
+/* ── edit a user's basic details ──────────────────────────── */
+
+const inputStyle = "width:100%;padding:10px;border:1px solid var(--line,#ddd);border-radius:8px;font-size:15px";
+
+router.get("/users/:id/edit", requireReseAdmin, async (req, res) => {
+  const u = await ReseUser.findById(req.params.id).lean();
+  if (!u) return res.send(layout("Edit user", `<div class="alert red">User not found.</div>`, "users"));
+  const w = u.worker || {};
+  res.send(
+    layout(
+      "Edit " + (u.name || "user"),
+      `
+      <p style="margin-bottom:16px"><a class="btn sm ghost" href="/rese-admin/users/${u._id}">← Back</a></p>
+      <div class="card" style="max-width:560px">
+        <h3>Edit details</h3>
+        <form method="post" action="/rese-admin/users/${u._id}/edit" style="display:flex;flex-direction:column;gap:12px;margin-top:10px">
+          <label>Name<br><input name="name" value="${esc(u.name || "")}" style="${inputStyle}"></label>
+          <label>Phone (+263…)<br><input name="phone" value="${esc(u.phone || "")}" style="${inputStyle}"></label>
+          <label class="chk"><input type="checkbox" name="isWorker" ${u.isWorker ? "checked" : ""}> 💪 Worker</label>
+          <label class="chk"><input type="checkbox" name="isRequester" ${u.isRequester ? "checked" : ""}> 🙋 Requester</label>
+          <label>Skills (comma-separated)<br><input name="skills" value="${esc((w.skills || []).join(", "))}" style="${inputStyle}"></label>
+          <label>Areas (comma-separated)<br><input name="suburbs" value="${esc((w.suburbs || []).join(", "))}" style="${inputStyle}"></label>
+          <div><button class="btn green">Save changes</button></div>
+        </form>
+        <p class="muted" style="margin-top:12px;font-size:12px">Skill ids: ${Object.keys(CATS).join(", ")}</p>
+      </div>`,
+      "users"
+    )
+  );
+});
+
+router.post("/users/:id/edit", requireReseAdmin, async (req, res) => {
+  const b = req.body || {};
+  const csv = (v) => String(v || "").split(",").map((x) => x.trim()).filter(Boolean);
+  const patch = {
+    name: String(b.name || "").slice(0, 80),
+    phone: String(b.phone || "").slice(0, 20),
+    isWorker: b.isWorker === "on" || b.isWorker === "true",
+    isRequester: b.isRequester === "on" || b.isRequester === "true",
+    "worker.skills": csv(b.skills),
+    "worker.suburbs": csv(b.suburbs)
+  };
+  try {
+    await ReseUser.findByIdAndUpdate(req.params.id, patch, { runValidators: true });
+  } catch (e) {
+    return res.send(
+      layout("Edit user", `<div class="alert red">Could not save: ${esc(e.message)}</div><p style="margin-top:12px"><a class="btn sm ghost" href="/rese-admin/users/${req.params.id}/edit">← Back</a></p>`, "users")
+    );
+  }
+  res.redirect(`/rese-admin/users/${req.params.id}`);
+});
+
+/* ── payments ─────────────────────────────────────────────── */
+
+function payPill(st) {
+  const map = { paid: ["#E4F7EE", "#0A8A4F"], pending: ["#FFF1DD", "#B8730A"], failed: ["#FDE7E7", "#C0392B"], cancelled: ["#eee", "#666"] };
+  const [bg, fg] = map[st] || ["#eee", "#666"];
+  return `<span style="padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700;background:${bg};color:${fg}">${esc(st)}</span>`;
+}
+
+router.get("/payments", requireReseAdmin, async (req, res) => {
+  try {
+    const filter = {};
+    if (req.query.status) filter.status = String(req.query.status);
+    const pays = await ResePayment.find(filter).sort({ createdAt: -1 }).limit(200).lean();
+    const ids = [...new Set(pays.map((x) => String(x.userId)).filter(Boolean))];
+    const users = await ReseUser.find({ _id: { $in: ids } }).select("name phone").lean();
+    const byId = {};
+    users.forEach((u) => { byId[String(u._id)] = u; });
+    const rows = pays
+      .map((x) => {
+        const u = byId[String(x.userId)] || {};
+        return `<tr>
+          <td class="muted">${fmtDate(x.createdAt)}</td>
+          <td><b>${esc(u.name || "-")}</b><div class="muted">${esc(u.phone || x.phone || "")}</div></td>
+          <td>$${x.amount} · ${x.days}d</td>
+          <td>${payPill(x.status)}</td>
+          <td class="muted" style="font-size:12px">${esc(x.reference || "")}</td>
+          <td>${x.userId ? `<a class="btn sm ghost" href="/rese-admin/users/${x.userId}">User</a>` : ""}</td>
+        </tr>`;
+      })
+      .join("");
+    const totalPaid = pays.filter((x) => x.status === "paid").reduce((a, x) => a + (x.amount || 0), 0);
+    const tab = (q, label) => `<a class="btn sm ${((req.query.status || "") === q) ? "" : "ghost"}" href="/rese-admin/payments${q ? "?status=" + q : ""}">${label}</a>`;
+    res.send(
+      layout(
+        "Payments",
+        `
+      <div class="grid">
+        <div class="stat green"><div class="n">$${totalPaid}</div><div class="l">Paid total (shown)</div></div>
+        <div class="stat"><div class="n">${pays.length}</div><div class="l">Payments shown</div></div>
+      </div>
+      <div class="card">
+        <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+          ${tab("", "All")} ${tab("paid", "Paid")} ${tab("pending", "Pending")} ${tab("failed", "Failed")}
+        </div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>When</th><th>User</th><th>Package</th><th>Status</th><th>Reference</th><th></th></tr></thead>
+          <tbody>${rows || '<tr><td colspan="6" class="muted">No payments yet.</td></tr>'}</tbody>
+        </table></div>
+      </div>`,
+        "payments"
+      )
+    );
+  } catch (err) {
+    console.error("[rese-admin/payments]", err);
+    res.send(layout("Payments", `<div class="alert red">Error: ${esc(err.message)}</div>`, "payments"));
+  }
 });
 
 /* ── verification queue ───────────────────────────────────── */
