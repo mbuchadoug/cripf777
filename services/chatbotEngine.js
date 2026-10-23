@@ -8281,6 +8281,31 @@ if (!isMetaAction && supplierExists && supplierExists.active === false) {
   } catch (_) { /* non-blocking - fall through to normal handling */ }
 }
 
+// ── Release held lead photos once the seller is ACTIVE ───────────────────────
+// supplierAdmin's Profile Activity can attach photo(s) to a manual enquiry. The
+// picture is NEVER delivered to an inactive seller - it is held on their session
+// and released HERE the moment the seller is active: either an active seller
+// replying to the alert, or an inactive seller who has since reactivated (their
+// next inbound message now sees active===true). Non-blocking, does NOT return, so
+// normal handling continues straight after the photo(s) go out.
+if (supplierExists && supplierExists.active === true) {
+  try {
+    const _pvPhotos = _sessForOrderCheck?.tempData?.pvLeadPhotos;
+    const _pvUntil  = Number(_sessForOrderCheck?.tempData?.pvLeadPhotoUntil || 0);
+    if (Array.isArray(_pvPhotos) && _pvPhotos.length && (!_pvUntil || Date.now() < _pvUntil)) {
+      // Claim first (clear the hold) so a retry can never loop or double-send.
+      await UserSession.updateOne({ phone }, { $unset: {
+        "tempData.pvLeadPhotos": "", "tempData.pvLeadPhotoCaption": "", "tempData.pvLeadPhotoUntil": ""
+      } });
+      const _pvCap = String(_sessForOrderCheck?.tempData?.pvLeadPhotoCaption || "📸 Photo from a customer enquiry on ZimQuote.");
+      for (let _pi = 0; _pi < _pvPhotos.length; _pi++) {
+        try { await sendImage(from, { imageUrl: _pvPhotos[_pi], caption: _pi === 0 ? _pvCap : "" }); }
+        catch (_pe) { console.warn("[PV PHOTO] release failed", phone, _pe.message); }
+      }
+    }
+  } catch (_) { /* non-blocking */ }
+}
+
 if (
   !isMetaAction &&
   text.trim().length > 2 &&

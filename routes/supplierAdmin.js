@@ -16303,6 +16303,7 @@ const _ManualEnquirySchema = new mongoose.Schema({
   sellerPaid:    Boolean,   // snapshot of the seller's paid status at send time
   viewsAdded:    { type: Number, default: 0 },
   alertSent:     Boolean,
+  photos:        { type: [String], default: [] },   // uploaded photo URLs attached to this enquiry
   createdBy:     String
 }, { timestamps: true });
 const ManualEnquiry = mongoose.models.ManualEnquiry || mongoose.model("ManualEnquiry", _ManualEnquirySchema);
@@ -16319,7 +16320,7 @@ function _pvFmtPhone(raw = "") {
 }
 
 // Masked teaser of the visitor's number, e.g. 263772123456 → "+263 77 2XX XXXX".
-// Enough to feel real; not enough to use — the reactivation hook.
+// Enough to feel real; not enough to use - the reactivation hook.
 function _pvMaskPhone(raw = "") {
   const d = _mrNorm(raw) || String(raw || "").replace(/\D+/g, "");
   if (d && d.startsWith("263") && d.length >= 12) return `+263 ${d.slice(3, 5)} ${d.slice(5, 6)}XX XXXX`;
@@ -16331,7 +16332,7 @@ function _pvMaskPhone(raw = "") {
 // and it lands even outside the 24h window (approved templates). If
 // ZQ_ENQUIRY_TEMPLATE is set in .env, a dedicated template with a one-tap
 // "Activate" button is used instead (auto-fallback to the approved ones on error).
-async function _pvSendProfileOpen({ phone, businessName, source, note, contactMode = "hide", visitorPhone, kind = "view" }) {
+async function _pvSendProfileOpen({ phone, businessName, source, note, contactMode = "hide", visitorPhone, kind = "view", hasPhoto = false, photoLocked = false }) {
   const PHONE_ID = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.META_PHONE_NUMBER_ID || process.env.PHONE_NUMBER_ID;
   const TOKEN    = process.env.META_ACCESS_TOKEN || process.env.WHATSAPP_ACCESS_TOKEN;
   const to       = _mrNorm(phone);
@@ -16344,20 +16345,29 @@ async function _pvSendProfileOpen({ phone, businessName, source, note, contactMo
   const noteClean  = String(note || "").replace(/[\r\n\t]+/g, " ").replace(/ {2,}/g, " ").trim().slice(0, 160);
   const timeStr    = new Date().toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 
+  // Photo note: the image itself is NEVER put in the template (a template can't
+  // safely carry a plain image to a cold seller, and the picture is gated behind
+  // activation). We only MENTION it here; the actual photo is delivered as a
+  // WhatsApp image the moment the seller is active and replies (see chatbotEngine).
+  const photoTag = hasPhoto
+    ? (photoLocked ? " · 📸 photo attached (reply menu & Activate to view)" : " · 📸 photo attached (reply to view)")
+    : "";
+
   // Build the single-line {{2}} that carries BOTH the enquiry and the contact + CTA.
   let via = base;
   if (noteClean) via += " · " + noteClean;
-  if (showMask)       via += " · From " + _pvMaskPhone(visitorPhone) + " — reply menu & tap Activate to unlock their number & reply";
+  if (showMask)       via += " · From " + _pvMaskPhone(visitorPhone) + " - reply menu & tap Activate to unlock their number & reply";
   else if (!showFull) via += (kind === "enquiry" ? " · reply menu to Activate, view & reply" : " · reply menu to Activate & view their contact");
+  via += photoTag;
   via = via.slice(0, 300);
 
   // ── Optional dedicated enquiry template with a one-tap Activate button ──────
   const NEWTPL = String(process.env.ZQ_ENQUIRY_TEMPLATE || "").trim();
   if (NEWTPL) {
     try {
-      const contactVar = showFull ? _pvFmtPhone(visitorPhone) : showMask ? _pvMaskPhone(visitorPhone) : "—";
+      const contactVar = showFull ? _pvFmtPhone(visitorPhone) : showMask ? _pvMaskPhone(visitorPhone) : "-";
       const cta = showFull
-        ? "Reply fast — customers choose quick responders."
+        ? "Reply fast - customers choose quick responders."
         : "🔒 Reply menu and tap Activate to view the contact and reply.";
       await axios.post(
         `https://graph.facebook.com/v24.0/${PHONE_ID}/messages`,
@@ -16366,7 +16376,7 @@ async function _pvSendProfileOpen({ phone, businessName, source, note, contactMo
           template: {
             name: NEWTPL, language: { code: "en" },
             components: [
-              { type: "body", parameters: [businessName || "Your business", (noteClean || base), contactVar, cta]
+              { type: "body", parameters: [businessName || "Your business", ((noteClean || base) + photoTag), contactVar, cta]
                   .map(v => ({ type: "text", text: String(v).slice(0, 1024) })) },
               { type: "button", sub_type: "quick_reply", index: "0", parameters: [{ type: "payload", payload: "main_menu_back" }] }
             ]
@@ -16437,7 +16447,7 @@ router.get("/profile-activity", requireSupplierAdmin, async (req, res) => {
         <option value="auto">🧩 Auto - FULL number to PAID sellers, MASKED to the rest</option>
         <option value="show">📞 Show - reveal the full visitor number</option>
       </select>
-      <p style="font-size:11px;color:var(--muted);margin-top:4px">The enquiry text and the contact both go in the message. Masked is the money-maker: the seller sees a real lead they can only unlock by reactivating. Replies can't reach the buyer — they open the seller's menu, where inactive sellers see 💳 Activate Listing.</p>
+      <p style="font-size:11px;color:var(--muted);margin-top:4px">The enquiry text and the contact both go in the message. Masked is the money-maker: the seller sees a real lead they can only unlock by reactivating. Replies can't reach the buyer - they open the seller's menu, where inactive sellers see 💳 Activate Listing.</p>
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px">
         <div>
@@ -16453,6 +16463,13 @@ router.get("/profile-activity", requireSupplierAdmin, async (req, res) => {
       <label style="font-size:12px;font-weight:600;display:block;margin:14px 0 4px">Note / enquiry <span style="color:var(--muted);font-weight:400">(optional - appears inside the alert)</span></label>
       <textarea id="pvNote" rows="3" placeholder="e.g. asked about brake pads for a Toyota Aqua" maxlength="160"
         style="width:100%;padding:9px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;resize:vertical"></textarea>
+
+      <label style="font-size:12px;font-weight:600;display:block;margin:14px 0 4px">📎 Attach photo(s) <span style="color:var(--muted);font-weight:400">(optional - uploaded, not a link)</span></label>
+      <input type="file" id="pvPhotoInput" accept="image/*" multiple onchange="pvUploadPhotos(this)"
+        style="width:100%;padding:8px;border:1px dashed var(--border);border-radius:8px;font-size:12px;background:#f8fafc" />
+      <div id="pvPhotoStatus" style="font-size:11px;color:var(--muted);margin-top:4px"></div>
+      <div id="pvPhotoThumbs" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px"></div>
+      <p style="font-size:11px;color:var(--muted);margin-top:4px">Up to 4 photos (e.g. the item or job the customer is asking about). Inactive sellers see "📸 photo attached - activate to view"; the picture only opens once they reactivate. Active sellers receive it when they reply.</p>
 
       <div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:12px;align-items:center">
         <label style="font-size:13px;display:flex;align-items:center;gap:8px"><input type="checkbox" id="pvSendAlert" checked/> 📲 Send the WhatsApp alert</label>
@@ -16493,12 +16510,12 @@ router.get("/profile-activity", requireSupplierAdmin, async (req, res) => {
       <div id="pvPace" style="margin-top:12px;font-size:12px;color:var(--muted)"></div>
 
       <div style="margin-top:12px;padding:12px;border:1px dashed #94a3b8;border-radius:10px;background:#f8fafc">
-        <label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px">🧪 Test run — send to your own number first</label>
+        <label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px">🧪 Test run - send to your own number first</label>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <input id="pvTestPhone" placeholder="263772XXXXXXX" style="flex:1;min-width:150px;padding:9px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:monospace" />
           <button type="button" onclick="pvTest()" id="pvTestBtn" class="btn btn-sm" style="background:#0f172a;color:#fff;padding:9px 16px;font-weight:700">Send test</button>
         </div>
-        <p style="font-size:11px;color:var(--muted);margin-top:4px">Sends the enquiry AND a profile-view message to this number using the current settings — no suppliers touched, not logged.</p>
+        <p style="font-size:11px;color:var(--muted);margin-top:4px">Sends the enquiry AND a profile-view message to this number using the current settings - no suppliers touched, not logged.</p>
       </div>
 
       <button type="button" onclick="pvSend()" id="pvSendBtn"
@@ -16519,7 +16536,33 @@ router.get("/profile-activity", requireSupplierAdmin, async (req, res) => {
   </div>
 
   <script>
-  var PV_sel = {}, PV_all = [];
+  var PV_sel = {}, PV_all = [], PV_photos = [];
+  function pvRenderPhotoThumbs(){
+    var box=document.getElementById('pvPhotoThumbs'); if(!box) return;
+    box.innerHTML = PV_photos.map(function(u,i){
+      return '<span style="position:relative;display:inline-block">'
+        +'<img src="'+pvEsc(u)+'" style="width:54px;height:54px;object-fit:cover;border-radius:8px;border:1px solid var(--border)"/>'
+        +'<button type="button" onclick="pvPhotoRemove('+i+')" title="Remove" style="position:absolute;top:-6px;right:-6px;background:#ef4444;color:#fff;border:none;border-radius:50%;width:18px;height:18px;line-height:16px;font-size:12px;cursor:pointer">&times;</button>'
+        +'</span>';
+    }).join('');
+  }
+  function pvPhotoRemove(i){ PV_photos.splice(i,1); pvRenderPhotoThumbs();
+    var st=document.getElementById('pvPhotoStatus'); if(st) st.textContent = PV_photos.length ? ('✓ '+PV_photos.length+' photo(s) attached') : ''; }
+  function pvUploadPhotos(input){
+    var files=input.files; if(!files||!files.length) return;
+    var st=document.getElementById('pvPhotoStatus');
+    Array.prototype.forEach.call(files, function(f){
+      if(PV_photos.length>=4){ if(st) st.textContent='Max 4 photos.'; return; }
+      var fd=new FormData(); fd.append('broadcastFile', f);
+      if(st) st.textContent='Uploading '+(f.name||'photo')+'…';
+      fetch('/zq-admin/broadcast/upload',{method:'POST',body:fd})
+        .then(function(r){return r.json();})
+        .then(function(j){ if(j&&j.url){ PV_photos.push(j.url); pvRenderPhotoThumbs(); if(st) st.textContent='✓ '+PV_photos.length+' photo(s) attached'; }
+          else { if(st) st.textContent='⚠ '+((j&&j.error)||'upload failed'); } })
+        .catch(function(e){ if(st) st.textContent='⚠ '+e.message; });
+    });
+    input.value='';
+  }
   function pvAlertMsg(msg, ok){ var el=document.getElementById('pvAlert'); el.style.display=''; el.textContent=msg;
     el.style.background=ok?'#dcfce7':'#fee2e2'; el.style.color=ok?'#15803d':'#b91c1c'; window.scrollTo({top:0,behavior:'smooth'}); }
   function pvEsc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
@@ -16595,12 +16638,13 @@ router.get("/profile-activity", requireSupplierAdmin, async (req, res) => {
     p.set('sendAlert', sendAlert?'1':'0');
     p.set('viewsToAdd', String(views));
     p.set('recipients', JSON.stringify(keys.map(function(k){return {phone:PV_sel[k].phone, supplierId:PV_sel[k].supplierId};})));
+    p.set('photoUrls', JSON.stringify(PV_photos));
     fetch('/zq-admin/profile-activity/send',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:p.toString()})
       .then(function(r){return r.json();}).then(function(d){
         btn.disabled=false; btn.textContent=old;
         if(!d.ok) throw new Error(d.error||'Send failed');
-        pvAlertMsg('✅ Done - '+(d.alerted||0)+' alert'+(d.alerted===1?'':'s')+' sent, '+(d.bumped||0)+' counter bump'+(d.bumped===1?'':'s')+'.'+(d.skippedRecent?(' '+d.skippedRecent+' skipped (contacted recently).'):'')+(d.failed?(' '+d.failed+' failed.'):''), true);
-        PV_sel={}; pvRenderSel(); pvRenderAll(); pvLoadHistory();
+        pvAlertMsg('✅ Done - '+(d.alerted||0)+' alert'+(d.alerted===1?'':'s')+' sent, '+(d.bumped||0)+' counter bump'+(d.bumped===1?'':'s')+'.'+(d.photoHeld?(' '+d.photoHeld+' photo(s) held for activation.'):'')+(d.skippedRecent?(' '+d.skippedRecent+' skipped (contacted recently).'):'')+(d.failed?(' '+d.failed+' failed.'):''), true);
+        PV_sel={}; PV_photos=[]; pvRenderPhotoThumbs(); document.getElementById('pvPhotoStatus').textContent=''; pvRenderSel(); pvRenderAll(); pvLoadHistory();
       }).catch(function(e){ btn.disabled=false; btn.textContent=old; pvAlertMsg('❌ '+e.message,false); });
   }
   function pvTest(){
@@ -16613,11 +16657,12 @@ router.get("/profile-activity", requireSupplierAdmin, async (req, res) => {
     p.set('contactMode', document.getElementById('pvContactMode').value);
     p.set('source', document.getElementById('pvSource').value);
     p.set('note', document.getElementById('pvNote').value);
+    p.set('photoUrls', JSON.stringify(PV_photos));
     fetch('/zq-admin/profile-activity/test',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:p.toString()})
       .then(function(r){return r.json();}).then(function(d){
         btn.disabled=false; btn.textContent=old;
         if(!d.ok) throw new Error(d.error||'Test failed');
-        pvAlertMsg('🧪 Test sent to '+to+' — enquiry: '+(d.enquiry?'✅':'❌')+', profile view: '+(d.view?'✅':'❌')+'. Check that WhatsApp.'+((d.errors&&d.errors.length)?(' ('+d.errors.join('; ')+')'):''), d.enquiry||d.view);
+        pvAlertMsg('🧪 Test sent to '+to+' - enquiry: '+(d.enquiry?'✅':'❌')+', profile view: '+(d.view?'✅':'❌')+(d.photos?(', photo(s): '+(d.photos>0?'✅ '+d.photos:'❌')):'')+'. Check that WhatsApp.'+((d.errors&&d.errors.length)?(' ('+d.errors.join('; ')+')'):''), d.enquiry||d.view);
       }).catch(function(e){ btn.disabled=false; btn.textContent=old; pvAlertMsg('❌ '+e.message,false); });
   }
   function pvAgo(ts){ var s=Math.floor((Date.now()-new Date(ts).getTime())/1000);
@@ -16680,6 +16725,16 @@ router.post("/profile-activity/send", requireSupplierAdmin, async (req, res) => 
     let skipRecentDays = parseInt(b.skipRecentDays, 10); if (isNaN(skipRecentDays) || skipRecentDays < 0) skipRecentDays = 0;
     if (!sendAlert && viewsToAdd <= 0) throw new Error("Nothing to do: enable the alert or set a counter bump.");
 
+    // Uploaded photo URLs (from /zq-admin/broadcast/upload). The image is gated:
+    // it is only delivered once the seller is ACTIVE (see below + chatbotEngine).
+    let photoUrls = [];
+    try { photoUrls = JSON.parse(b.photoUrls || "[]"); } catch (_) { photoUrls = []; }
+    photoUrls = (Array.isArray(photoUrls) ? photoUrls : [])
+      .map(u => String(u || "").trim())
+      .filter(u => /^https?:\/\//i.test(u))
+      .slice(0, 4);
+    const hasPhoto = photoUrls.length > 0;
+
     // De-dup: who did we already contact within the window?
     let recentSet = new Set();
     if (skipRecentDays > 0) {
@@ -16691,7 +16746,7 @@ router.post("/profile-activity/send", requireSupplierAdmin, async (req, res) => 
     const createdBy = (req.session?.supplierAdmin?.email || req.adminUser?.email || "");
     const _pvUserSession = (await import("../models/userSession.js")).default;
     const PV_NUDGE_WINDOW_MS = 72 * 3600 * 1000; // a reply within 72h of the lead gets the reactivation nudge
-    let alerted = 0, bumped = 0, failed = 0, skippedRecent = 0;
+    let alerted = 0, bumped = 0, failed = 0, skippedRecent = 0, photoHeld = 0;
 
     for (const r of recipients) {
       if (recentSet.has(r.phone)) { skippedRecent++; continue; }
@@ -16704,6 +16759,12 @@ router.post("/profile-activity/send", requireSupplierAdmin, async (req, res) => 
       // Paid = active subscription and not suspended. "auto" → full for paid, masked for the rest.
       const sellerPaid = supplierDoc?.subscriptionStatus === "active" && supplierDoc?.suspended !== true;
       const effMode = contactMode === "auto" ? (sellerPaid ? "show" : "mask") : contactMode;
+
+      // Photo gating: an inactive seller can't open the picture. It is held and
+      // only released once they are active (delivered live below, or by the
+      // chatbotEngine when they next reply).
+      const sellerActive = supplierDoc?.active === true;
+      const photoLocked  = hasPhoto && !sellerActive;
 
       // Bump the dashboard view counters (hype), if requested
       if (viewsToAdd > 0 && supplierDoc?._id) {
@@ -16723,7 +16784,7 @@ router.post("/profile-activity/send", requireSupplierAdmin, async (req, res) => 
       if (sendAlert) {
         const targets = [...new Set([r.phone, ...(supplierDoc?.notificationContacts || []).map(_mrNorm)])].filter(Boolean);
         for (const t of targets) {
-          const out = await _pvSendProfileOpen({ phone: t, businessName, source, note, contactMode: effMode, visitorPhone, kind });
+          const out = await _pvSendProfileOpen({ phone: t, businessName, source, note, contactMode: effMode, visitorPhone, kind, hasPhoto, photoLocked });
           if (out.ok) anyOk = true;
           else console.warn("[PROFILE ACT] alert failed", t, out.error);
         }
@@ -16742,6 +16803,43 @@ router.post("/profile-activity/send", requireSupplierAdmin, async (req, res) => 
         await new Promise(x => setTimeout(x, 1200)); // gentle pace
       }
 
+      // ── Photo handling (gated behind activation) ────────────────────────────
+      // Active seller with an OPEN 24h session → deliver the picture(s) live now.
+      // Otherwise (cold active, or inactive) → HOLD on their session; the
+      // chatbotEngine releases held photos the moment the seller is active and
+      // replies. Inactive sellers therefore cannot open the picture until they
+      // reactivate - exactly the gate we want.
+      if (hasPhoto) {
+        const _cap = (note && note.trim()
+          ? ("📸 " + note.trim().slice(0, 160))
+          : "📸 A customer shared this with their enquiry on ZimQuote.")
+          + "\n\n💬 Reply here to respond.";
+        let _liveDelivered = false;
+        if (sellerActive && anyOk) {
+          try {
+            const { sendImage } = await import("../services/metaSender.js");
+            for (let _i = 0; _i < photoUrls.length; _i++) {
+              await sendImage(r.phone, { imageUrl: photoUrls[_i], caption: _i === 0 ? _cap : "" });
+            }
+            _liveDelivered = true;
+          } catch (_imgErr) { _liveDelivered = false; } // cold session → fall through to hold
+        }
+        if (!_liveDelivered) {
+          try {
+            await _pvUserSession.updateOne(
+              { phone: r.phone },
+              { $set: {
+                  "tempData.pvLeadPhotos":       photoUrls,
+                  "tempData.pvLeadPhotoCaption": _cap,
+                  "tempData.pvLeadPhotoUntil":   Date.now() + PV_NUDGE_WINDOW_MS
+              } },
+              { upsert: true }
+            );
+            photoHeld++;
+          } catch (e) { console.warn("[PROFILE ACT] photo hold failed", r.phone, e.message); }
+        }
+      }
+
       // Log to history (powers the panel + future de-dup)
       try {
         await ManualEnquiry.create({
@@ -16756,13 +16854,14 @@ router.post("/profile-activity/send", requireSupplierAdmin, async (req, res) => 
           sellerPaid,
           viewsAdded:   viewsToAdd,
           alertSent:    sendAlert && anyOk,
+          photos:       hasPhoto ? photoUrls : [],
           createdBy
         });
       } catch (e) { console.warn("[PROFILE ACT] log failed", r.phone, e.message); }
     }
 
-    console.log(`[PROFILE ACT] admin → ${recipients.length} seller(s): ${alerted} alerted, ${bumped} bumped, ${skippedRecent} skipped, ${failed} failed (kind=${kind}, contact=${contactMode}, +${viewsToAdd} views)`);
-    res.json({ ok: true, total: recipients.length, alerted, bumped, failed, skippedRecent });
+    console.log(`[PROFILE ACT] admin → ${recipients.length} seller(s): ${alerted} alerted, ${bumped} bumped, ${skippedRecent} skipped, ${failed} failed, ${photoHeld} photo-held (kind=${kind}, contact=${contactMode}, +${viewsToAdd} views, photos=${photoUrls.length})`);
+    res.json({ ok: true, total: recipients.length, alerted, bumped, failed, skippedRecent, photoHeld });
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });
   }
@@ -16784,10 +16883,17 @@ router.post("/profile-activity/test", requireSupplierAdmin, async (req, res) => 
     // unpaid (masked) variant, which is what most targets will see.
     const effMode = contactMode === "auto" ? "mask" : contactMode;
 
+    // Uploaded photos to preview (shown unlocked in a test so you see the picture).
+    let photoUrls = [];
+    try { photoUrls = JSON.parse(b.photoUrls || "[]"); } catch (_) { photoUrls = []; }
+    photoUrls = (Array.isArray(photoUrls) ? photoUrls : [])
+      .map(u => String(u || "").trim()).filter(u => /^https?:\/\//i.test(u)).slice(0, 4);
+    const hasPhoto = photoUrls.length > 0;
+
     const r1 = await _pvSendProfileOpen({
       phone: to, businessName: "Your Business (TEST)", source,
       note: note || "asked about your prices and availability",
-      contactMode: effMode, visitorPhone, kind: "enquiry"
+      contactMode: effMode, visitorPhone, kind: "enquiry", hasPhoto, photoLocked: false
     });
     await new Promise(x => setTimeout(x, 1200));
     const r2 = await _pvSendProfileOpen({
@@ -16795,8 +16901,24 @@ router.post("/profile-activity/test", requireSupplierAdmin, async (req, res) => 
       note: "", contactMode: effMode, visitorPhone, kind: "view"
     });
 
-    console.log(`[PROFILE ACT TEST] → ${to} (contact=${effMode}) enquiry=${r1.ok} view=${r2.ok}`);
-    res.json({ ok: true, enquiry: r1.ok, view: r2.ok, errors: [r1.error, r2.error].filter(Boolean) });
+    // Deliver the actual photo(s) to the test number so you can see them (a test
+    // number is your own, so it's treated as unlocked).
+    let photosSent = 0;
+    const photoErrors = [];
+    if (hasPhoto) {
+      try {
+        const { sendImage } = await import("../services/metaSender.js");
+        const _cap = (note && note.trim() ? ("📸 " + note.trim().slice(0, 160)) : "📸 Test photo preview from ZimQuote.") + "\n\n💬 Reply here to respond.";
+        for (let _i = 0; _i < photoUrls.length; _i++) {
+          await new Promise(x => setTimeout(x, 800));
+          try { await sendImage(to, { imageUrl: photoUrls[_i], caption: _i === 0 ? _cap : "" }); photosSent++; }
+          catch (e) { photoErrors.push("photo: " + e.message); }
+        }
+      } catch (e) { photoErrors.push("photo: " + e.message); }
+    }
+
+    console.log(`[PROFILE ACT TEST] → ${to} (contact=${effMode}) enquiry=${r1.ok} view=${r2.ok} photos=${photosSent}/${photoUrls.length}`);
+    res.json({ ok: true, enquiry: r1.ok, view: r2.ok, photos: photosSent, errors: [r1.error, r2.error, ...photoErrors].filter(Boolean) });
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });
   }

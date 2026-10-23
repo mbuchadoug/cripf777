@@ -246,7 +246,7 @@ export async function sendMainMenu(to) {
 
   // ── Case 2: Inactive/unpaid supplier ─────────────────────────────────────
   if (supplier && !supplier.active) {
-    return sendList(to, MENU_MSG + "\n\n⚠️ Your listing is saved but not yet live.", [
+    return sendList(to, MENU_MSG + "\n\n⚠️ Your listing is currently inactive - activate it to appear in search and receive customer enquiries.", [
       ...(hasStaffRole && isRealBiz ? [{ id: "biz_tools_menu", title: "📊 Business Tools" }] : []),
       { id: "sup_request_sellers", title: "⚡ Request Sellers" },
       { id: "find_supplier",       title: "🔍 Browse & Shop" },
