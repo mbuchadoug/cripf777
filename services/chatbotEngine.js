@@ -8258,6 +8258,29 @@ if (!isMetaAction && /^ZQ:GROUP:[a-z0-9_-]{1,60}$/i.test(text.trim())) {
   }
 }
 
+// ── Option B: reactivation nudge for a recently-messaged INACTIVE seller ─────
+// supplierAdmin's Profile Activity flags a phone (tempData.pvLeadNudge = expiry
+// ms) when it sends that inactive seller a manual enquiry / profile-view lead.
+// On their next TYPED reply (not a button tap), within the window, intercept
+// ONCE: tell them it's locked and open the menu - which, for an inactive
+// supplier, carries "💳 Activate Listing". Button taps (main_menu_back,
+// sup_upgrade_plan, …) are unaffected because they set isMetaAction=true and
+// already route to activation. Active sellers and buyers are never touched.
+if (!isMetaAction && supplierExists && supplierExists.active === false) {
+  try {
+    const _pvNudgeUntil = Number(_sessForOrderCheck?.tempData?.pvLeadNudge || 0);
+    if (_pvNudgeUntil && Date.now() < _pvNudgeUntil) {
+      await UserSession.updateOne({ phone }, { $unset: { "tempData.pvLeadNudge": "" } });
+      await sendText(from,
+        "📩 *You have a lead waiting on ZimQuote.*\n\n" +
+        "Your listing is currently *inactive*, so you can't view the customer's contact or reply yet.\n\n" +
+        "Reactivate below to unlock your enquiries and start replying 👇"
+      );
+      return sendMainMenu(from);
+    }
+  } catch (_) { /* non-blocking - fall through to normal handling */ }
+}
+
 if (
   !isMetaAction &&
   text.trim().length > 2 &&

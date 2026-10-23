@@ -16318,27 +16318,71 @@ function _pvFmtPhone(raw = "") {
   return d ? `+${d}` : "";
 }
 
-// Post a profile-open template directly so we control every variable (incl. the
-// note folded into the "Via" line, which reliably lands outside the 24h window).
-async function _pvSendProfileOpen({ phone, businessName, source, note, reveal, visitorPhone, kind = "view" }) {
+// Masked teaser of the visitor's number, e.g. 263772123456 → "+263 77 2XX XXXX".
+// Enough to feel real; not enough to use — the reactivation hook.
+function _pvMaskPhone(raw = "") {
+  const d = _mrNorm(raw) || String(raw || "").replace(/\D+/g, "");
+  if (d && d.startsWith("263") && d.length >= 12) return `+263 ${d.slice(3, 5)} ${d.slice(5, 6)}XX XXXX`;
+  return d ? `+${d.slice(0, 5)}XXXX` : "";
+}
+
+// Post a profile-open / enquiry alert. contactMode: "hide" | "mask" | "show".
+// Both the enquiry note AND the contact (full or masked) ride inside the message,
+// and it lands even outside the 24h window (approved templates). If
+// ZQ_ENQUIRY_TEMPLATE is set in .env, a dedicated template with a one-tap
+// "Activate" button is used instead (auto-fallback to the approved ones on error).
+async function _pvSendProfileOpen({ phone, businessName, source, note, contactMode = "hide", visitorPhone, kind = "view" }) {
   const PHONE_ID = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.META_PHONE_NUMBER_ID || process.env.PHONE_NUMBER_ID;
   const TOKEN    = process.env.META_ACCESS_TOKEN || process.env.WHATSAPP_ACCESS_TOKEN;
   const to       = _mrNorm(phone);
   if (!to) return { ok: false, error: "bad phone" };
 
-  const label    = kind === "enquiry" ? "New customer enquiry" : (_PV_SOURCES[source] || "ZimQuote link");
-  const noteClean = String(note || "").replace(/[\r\n\t]+/g, " ").replace(/ {2,}/g, " ").trim().slice(0, 160);
-  const showPhone = reveal && !!visitorPhone;
-  // Fold note (or an activation nudge when gating) into the "Via" variable {{2}}.
-  let via = label;
+  const hasVisitor = !!visitorPhone;
+  const showFull   = contactMode === "show" && hasVisitor;
+  const showMask   = contactMode === "mask" && hasVisitor;
+  const base       = kind === "enquiry" ? "New customer enquiry" : (_PV_SOURCES[source] || "ZimQuote link");
+  const noteClean  = String(note || "").replace(/[\r\n\t]+/g, " ").replace(/ {2,}/g, " ").trim().slice(0, 160);
+  const timeStr    = new Date().toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+
+  // Build the single-line {{2}} that carries BOTH the enquiry and the contact + CTA.
+  let via = base;
   if (noteClean) via += " · " + noteClean;
-  else if (!showPhone) via += (kind === "enquiry" ? " · Activate your account to view & reply" : " · Activate your account to view their contact");
-  via = via.slice(0, 280);
+  if (showMask)       via += " · From " + _pvMaskPhone(visitorPhone) + " — reply menu & tap Activate to unlock their number & reply";
+  else if (!showFull) via += (kind === "enquiry" ? " · reply menu to Activate, view & reply" : " · reply menu to Activate & view their contact");
+  via = via.slice(0, 300);
 
-  const timeStr = new Date().toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  // ── Optional dedicated enquiry template with a one-tap Activate button ──────
+  const NEWTPL = String(process.env.ZQ_ENQUIRY_TEMPLATE || "").trim();
+  if (NEWTPL) {
+    try {
+      const contactVar = showFull ? _pvFmtPhone(visitorPhone) : showMask ? _pvMaskPhone(visitorPhone) : "—";
+      const cta = showFull
+        ? "Reply fast — customers choose quick responders."
+        : "🔒 Reply menu and tap Activate to view the contact and reply.";
+      await axios.post(
+        `https://graph.facebook.com/v24.0/${PHONE_ID}/messages`,
+        {
+          messaging_product: "whatsapp", to, type: "template",
+          template: {
+            name: NEWTPL, language: { code: "en" },
+            components: [
+              { type: "body", parameters: [businessName || "Your business", (noteClean || base), contactVar, cta]
+                  .map(v => ({ type: "text", text: String(v).slice(0, 1024) })) },
+              { type: "button", sub_type: "quick_reply", index: "0", parameters: [{ type: "payload", payload: "main_menu_back" }] }
+            ]
+          }
+        },
+        { headers: { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json" } }
+      );
+      return { ok: true };
+    } catch (err) {
+      console.warn("[PROFILE ACT] enquiry template failed, falling back:", err.response?.data?.error?.message || err.message);
+    }
+  }
 
-  const name = showPhone ? "supplier_link_opened_with_phone" : "supplier_link_opened";
-  const vars = showPhone
+  // ── Fallback: proven approved templates (fold everything into {{2}}) ────────
+  const name = showFull ? "supplier_link_opened_with_phone" : "supplier_link_opened";
+  const vars = showFull
     ? [businessName || "Your business", via, timeStr, _pvFmtPhone(visitorPhone)]
     : [businessName || "Your business", via, timeStr];
 
@@ -16388,11 +16432,12 @@ router.get("/profile-activity", requireSupplierAdmin, async (req, res) => {
 
       <label style="font-size:12px;font-weight:600;display:block;margin:12px 0 4px">Contact shown to the seller</label>
       <select id="pvContactMode" style="width:100%;padding:9px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px">
-        <option value="hide" selected>🔒 Hide - seller can't see or reply; nudge to activate</option>
-        <option value="auto">🧩 Auto - reveal to PAID/active sellers, gate the rest</option>
-        <option value="show">📞 Show - reveal the visitor's number to the seller</option>
+        <option value="mask" selected>🕵️ Masked - show a teaser (+263 77 2XX XXXX); unlock on reactivate</option>
+        <option value="hide">🔒 Hide - no number at all; nudge to activate</option>
+        <option value="auto">🧩 Auto - FULL number to PAID sellers, MASKED to the rest</option>
+        <option value="show">📞 Show - reveal the full visitor number</option>
       </select>
-      <p style="font-size:11px;color:var(--muted);margin-top:4px">Enquiry note-only means neither side gets a contact and there's nothing to reply to - pure demand signal that pushes activation.</p>
+      <p style="font-size:11px;color:var(--muted);margin-top:4px">The enquiry text and the contact both go in the message. Masked is the money-maker: the seller sees a real lead they can only unlock by reactivating. Replies can't reach the buyer — they open the seller's menu, where inactive sellers see 💳 Activate Listing.</p>
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px">
         <div>
@@ -16433,6 +16478,9 @@ router.get("/profile-activity", requireSupplierAdmin, async (req, res) => {
       </div>
       <input id="pvFilter" placeholder="🔍 Filter businesses by name, phone or city…" oninput="pvRenderAll()"
         style="width:100%;padding:9px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;margin-bottom:6px" />
+      <label style="font-size:12px;display:flex;align-items:center;gap:8px;margin-bottom:6px;color:var(--text)">
+        <input type="checkbox" id="pvInactiveOnly" onchange="pvRenderAll()"/> 🔴 Only inactive sellers (reactivation targets)
+      </label>
       <div id="pvAllMeta" style="font-size:11px;color:var(--muted);margin-bottom:6px">Loading businesses…</div>
       <div id="pvAllList" style="max-height:240px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:6px"></div>
 
@@ -16443,11 +16491,21 @@ router.get("/profile-activity", requireSupplierAdmin, async (req, res) => {
       <div id="pvSelected" style="max-height:180px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:8px"></div>
 
       <div id="pvPace" style="margin-top:12px;font-size:12px;color:var(--muted)"></div>
+
+      <div style="margin-top:12px;padding:12px;border:1px dashed #94a3b8;border-radius:10px;background:#f8fafc">
+        <label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px">🧪 Test run — send to your own number first</label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <input id="pvTestPhone" placeholder="263772XXXXXXX" style="flex:1;min-width:150px;padding:9px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:monospace" />
+          <button type="button" onclick="pvTest()" id="pvTestBtn" class="btn btn-sm" style="background:#0f172a;color:#fff;padding:9px 16px;font-weight:700">Send test</button>
+        </div>
+        <p style="font-size:11px;color:var(--muted);margin-top:4px">Sends the enquiry AND a profile-view message to this number using the current settings — no suppliers touched, not logged.</p>
+      </div>
+
       <button type="button" onclick="pvSend()" id="pvSendBtn"
         style="width:100%;margin-top:14px;background:var(--green);color:white;border:none;padding:12px;border-radius:9px;font-size:14px;font-weight:800;cursor:pointer">
         👁 Send activity to selected
       </button>
-      <p style="font-size:11px;color:var(--muted);margin-top:8px;text-align:center">Tip: pick 1 seller and send yourself a test first.</p>
+      <p style="font-size:11px;color:var(--muted);margin-top:8px;text-align:center">Always test first, then blast selected sellers.</p>
     </div>
   </div>
 
@@ -16495,8 +16553,12 @@ router.get("/profile-activity", requireSupplierAdmin, async (req, res) => {
   function pvToggle(cb){ var r={phone:cb.getAttribute('data-phone'),id:cb.getAttribute('data-id'),name:cb.getAttribute('data-name')};
     if(cb.checked) pvAdd(r); else pvRemove(pvNorm(r.phone)); }
   function pvFiltered(){ var q=(document.getElementById('pvFilter').value||'').trim().toLowerCase();
-    if(!q) return PV_all;
-    return PV_all.filter(function(s){ return ((s.name||'')+' '+(s.phone||'')+' '+(s.city||'')+' '+(s.area||'')).toLowerCase().indexOf(q)>=0; }); }
+    var inactiveOnly=document.getElementById('pvInactiveOnly') && document.getElementById('pvInactiveOnly').checked;
+    return PV_all.filter(function(s){
+      if(inactiveOnly && s.active) return false;
+      if(!q) return true;
+      return ((s.name||'')+' '+(s.phone||'')+' '+(s.city||'')+' '+(s.area||'')).toLowerCase().indexOf(q)>=0;
+    }); }
   function pvRenderAll(){
     var list=document.getElementById('pvAllList'); var rows=pvFiltered(); var cap=500;
     document.getElementById('pvAllMeta').textContent = rows.length+' of '+PV_all.length+' businesses'+(rows.length>cap?(' (first '+cap+')'):'');
@@ -16520,7 +16582,7 @@ router.get("/profile-activity", requireSupplierAdmin, async (req, res) => {
     var kind=document.querySelector('input[name=pvKind]:checked').value;
     var contactMode=document.getElementById('pvContactMode').value;
     var skip=document.getElementById('pvSkipRecent').value;
-    var cmLabel = contactMode==='show'?'the contact WILL be shown':(contactMode==='auto'?'contact shown to paid sellers only':'no contact shown');
+    var cmLabel = contactMode==='show'?'the FULL contact will be shown':(contactMode==='auto'?'full to paid, masked to the rest':(contactMode==='mask'?'a MASKED teaser number will be shown':'no contact shown'));
     if(!confirm('Send '+(kind==='enquiry'?'enquiry':'profile view')+' to '+keys.length+' seller'+(keys.length===1?'':'s')+'?\\n'+cmLabel+(sendAlert?'':' (counter bump only, no WhatsApp alert)'))) return;
     var btn=document.getElementById('pvSendBtn'); btn.disabled=true; var old=btn.textContent; btn.textContent='Sending…';
     var p=new URLSearchParams();
@@ -16539,6 +16601,23 @@ router.get("/profile-activity", requireSupplierAdmin, async (req, res) => {
         if(!d.ok) throw new Error(d.error||'Send failed');
         pvAlertMsg('✅ Done - '+(d.alerted||0)+' alert'+(d.alerted===1?'':'s')+' sent, '+(d.bumped||0)+' counter bump'+(d.bumped===1?'':'s')+'.'+(d.skippedRecent?(' '+d.skippedRecent+' skipped (contacted recently).'):'')+(d.failed?(' '+d.failed+' failed.'):''), true);
         PV_sel={}; pvRenderSel(); pvRenderAll(); pvLoadHistory();
+      }).catch(function(e){ btn.disabled=false; btn.textContent=old; pvAlertMsg('❌ '+e.message,false); });
+  }
+  function pvTest(){
+    var to=document.getElementById('pvTestPhone').value;
+    if(!to || to.replace(/\\D+/g,'').length<10){ pvAlertMsg('Enter a valid test number first.',false); return; }
+    var btn=document.getElementById('pvTestBtn'); btn.disabled=true; var old=btn.textContent; btn.textContent='Sending…';
+    var p=new URLSearchParams();
+    p.set('testPhone', to);
+    p.set('visitorPhone', document.getElementById('pvVisitor').value);
+    p.set('contactMode', document.getElementById('pvContactMode').value);
+    p.set('source', document.getElementById('pvSource').value);
+    p.set('note', document.getElementById('pvNote').value);
+    fetch('/zq-admin/profile-activity/test',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:p.toString()})
+      .then(function(r){return r.json();}).then(function(d){
+        btn.disabled=false; btn.textContent=old;
+        if(!d.ok) throw new Error(d.error||'Test failed');
+        pvAlertMsg('🧪 Test sent to '+to+' — enquiry: '+(d.enquiry?'✅':'❌')+', profile view: '+(d.view?'✅':'❌')+'. Check that WhatsApp.'+((d.errors&&d.errors.length)?(' ('+d.errors.join('; ')+')'):''), d.enquiry||d.view);
       }).catch(function(e){ btn.disabled=false; btn.textContent=old; pvAlertMsg('❌ '+e.message,false); });
   }
   function pvAgo(ts){ var s=Math.floor((Date.now()-new Date(ts).getTime())/1000);
@@ -16592,7 +16671,7 @@ router.post("/profile-activity/send", requireSupplierAdmin, async (req, res) => 
 
     const visitorPhone = _mrNorm(b.visitorPhone);
     const kind         = b.kind === "enquiry" ? "enquiry" : "view";
-    const contactMode  = ["hide", "show", "auto"].includes(b.contactMode) ? b.contactMode : "hide";
+    const contactMode  = ["hide", "mask", "show", "auto"].includes(b.contactMode) ? b.contactMode : "mask";
     const source       = _PV_SOURCES[b.source] ? b.source : "direct";
     const note         = String(b.note || "");
     const sendAlert    = b.sendAlert === "1" || b.sendAlert === "true";
@@ -16610,6 +16689,8 @@ router.post("/profile-activity/send", requireSupplierAdmin, async (req, res) => 
     }
 
     const createdBy = (req.session?.supplierAdmin?.email || req.adminUser?.email || "");
+    const _pvUserSession = (await import("../models/userSession.js")).default;
+    const PV_NUDGE_WINDOW_MS = 72 * 3600 * 1000; // a reply within 72h of the lead gets the reactivation nudge
     let alerted = 0, bumped = 0, failed = 0, skippedRecent = 0;
 
     for (const r of recipients) {
@@ -16620,9 +16701,9 @@ router.post("/profile-activity/send", requireSupplierAdmin, async (req, res) => 
         : await SupplierProfile.findOne({ phone: r.phone }).lean();
       const businessName = supplierDoc?.businessName || "Your business";
 
-      // Paid = active subscription and not suspended. "auto" reveals only to paid.
+      // Paid = active subscription and not suspended. "auto" → full for paid, masked for the rest.
       const sellerPaid = supplierDoc?.subscriptionStatus === "active" && supplierDoc?.suspended !== true;
-      const reveal = contactMode === "show" ? true : contactMode === "auto" ? sellerPaid : false;
+      const effMode = contactMode === "auto" ? (sellerPaid ? "show" : "mask") : contactMode;
 
       // Bump the dashboard view counters (hype), if requested
       if (viewsToAdd > 0 && supplierDoc?._id) {
@@ -16642,11 +16723,22 @@ router.post("/profile-activity/send", requireSupplierAdmin, async (req, res) => 
       if (sendAlert) {
         const targets = [...new Set([r.phone, ...(supplierDoc?.notificationContacts || []).map(_mrNorm)])].filter(Boolean);
         for (const t of targets) {
-          const out = await _pvSendProfileOpen({ phone: t, businessName, source, note, reveal, visitorPhone, kind });
+          const out = await _pvSendProfileOpen({ phone: t, businessName, source, note, contactMode: effMode, visitorPhone, kind });
           if (out.ok) anyOk = true;
           else console.warn("[PROFILE ACT] alert failed", t, out.error);
         }
         if (anyOk) alerted++; else failed++;
+        // Option B: flag an INACTIVE seller we just messaged, so their next typed
+        // reply (within the window) is intercepted into the reactivation menu.
+        if (anyOk && supplierDoc && supplierDoc.active === false) {
+          try {
+            await _pvUserSession.updateOne(
+              { phone: r.phone },
+              { $set: { "tempData.pvLeadNudge": Date.now() + PV_NUDGE_WINDOW_MS } },
+              { upsert: true }
+            );
+          } catch (_) { /* non-blocking */ }
+        }
         await new Promise(x => setTimeout(x, 1200)); // gentle pace
       }
 
@@ -16660,7 +16752,7 @@ router.post("/profile-activity/send", requireSupplierAdmin, async (req, res) => 
           visitorPhone: visitorPhone || "",
           note:         note.slice(0, 200),
           source,
-          contactShown: reveal && !!visitorPhone,
+          contactShown: effMode === "show" && !!visitorPhone,
           sellerPaid,
           viewsAdded:   viewsToAdd,
           alertSent:    sendAlert && anyOk,
@@ -16671,6 +16763,40 @@ router.post("/profile-activity/send", requireSupplierAdmin, async (req, res) => 
 
     console.log(`[PROFILE ACT] admin → ${recipients.length} seller(s): ${alerted} alerted, ${bumped} bumped, ${skippedRecent} skipped, ${failed} failed (kind=${kind}, contact=${contactMode}, +${viewsToAdd} views)`);
     res.json({ ok: true, total: recipients.length, alerted, bumped, failed, skippedRecent });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
+// ── POST /zq-admin/profile-activity/test  → preview to your own number ───────
+// Sends the ENQUIRY and a PROFILE-VIEW message to the chosen number using the
+// current settings. Never touches suppliers; not logged to history.
+router.post("/profile-activity/test", requireSupplierAdmin, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const to = _mrNorm(b.testPhone);
+    if (!to) throw new Error("Enter a valid test number (e.g. 263772XXXXXXX).");
+    const visitorPhone = _mrNorm(b.visitorPhone);
+    const contactMode  = ["hide", "mask", "show", "auto"].includes(b.contactMode) ? b.contactMode : "mask";
+    const source       = _PV_SOURCES[b.source] ? b.source : "direct";
+    const note         = String(b.note || "");
+    // "auto" can't resolve a plan for an arbitrary test number → preview the
+    // unpaid (masked) variant, which is what most targets will see.
+    const effMode = contactMode === "auto" ? "mask" : contactMode;
+
+    const r1 = await _pvSendProfileOpen({
+      phone: to, businessName: "Your Business (TEST)", source,
+      note: note || "asked about your prices and availability",
+      contactMode: effMode, visitorPhone, kind: "enquiry"
+    });
+    await new Promise(x => setTimeout(x, 1200));
+    const r2 = await _pvSendProfileOpen({
+      phone: to, businessName: "Your Business (TEST)", source,
+      note: "", contactMode: effMode, visitorPhone, kind: "view"
+    });
+
+    console.log(`[PROFILE ACT TEST] → ${to} (contact=${effMode}) enquiry=${r1.ok} view=${r2.ok}`);
+    res.json({ ok: true, enquiry: r1.ok, view: r2.ok, errors: [r1.error, r2.error].filter(Boolean) });
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });
   }
