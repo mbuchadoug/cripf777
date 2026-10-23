@@ -271,12 +271,20 @@ export async function addBypass(mac, comment, rateLimit) {
   return withConn(async (api) => {
     const rows = await printAll(api, "/ip/hotspot/ip-binding/print");
     const existing = byField(rows, "mac-address", mac)[0];
-    const params = ["=type=bypassed", `=comment=${comment || ""}`, `=rate-limit=${rateLimit || ""}`];
+    const base = ["=type=bypassed", `=comment=${comment || ""}`];
     if (existing) {
-      await api.write("/ip/hotspot/ip-binding/set", [`=.id=${rowId(existing)}`, ...params]);
+      // On update: set the cap, or UNSET it (=!rate-limit=) when unlimited, so a
+      // previously-capped device can be cleared. RouterOS rejects an empty value.
+      const setParams = [`=.id=${rowId(existing)}`, ...base];
+      setParams.push(rateLimit ? `=rate-limit=${rateLimit}` : "=!rate-limit=");
+      await api.write("/ip/hotspot/ip-binding/set", setParams);
       return rowId(existing);
     }
-    await api.write("/ip/hotspot/ip-binding/add", [`=mac-address=${mac}`, ...params]);
+    // On add: only include rate-limit when there's a real cap. Sending an empty
+    // rate-limit here is what left unlimited devices stuck on "queued".
+    const addParams = [`=mac-address=${mac}`, ...base];
+    if (rateLimit) addParams.push(`=rate-limit=${rateLimit}`);
+    await api.write("/ip/hotspot/ip-binding/add", addParams);
     const after = await printAll(api, "/ip/hotspot/ip-binding/print");
     return rowId(byField(after, "mac-address", mac)[0]);
   });
