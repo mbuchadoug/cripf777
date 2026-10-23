@@ -509,9 +509,16 @@ router.get("/suppliers", requireSupplierAdmin, async (req, res) => {
             </form>
           </div>
         </div>
+        <div id="bulkBar" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 12px;padding:10px 14px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px">
+          <strong style="font-size:13px"><span id="bulkCount">0</span> selected</strong>
+          <button type="button" onclick="bulkStatus('activate')" class="btn btn-green btn-sm">✅ Activate selected</button>
+          <button type="button" onclick="bulkStatus('deactivate')" class="btn btn-sm" style="background:#ef4444;color:#fff">⛔ Deactivate selected</button>
+          <span style="font-size:12px;color:var(--muted)">Tick businesses below, then choose an action.</span>
+        </div>
         <table>
           <thead>
             <tr>
+              <th style="width:28px"><input type="checkbox" id="selAll" onchange="toggleAll(this)" title="Select all on this page" /></th>
               <th>Business</th><th>Phone</th><th>City</th><th>Type</th>
               <th>Tier</th><th>Status</th><th>Orders</th><th>Rating</th><th></th>
             </tr>
@@ -519,6 +526,7 @@ router.get("/suppliers", requireSupplierAdmin, async (req, res) => {
           <tbody>
             ${suppliers.map(s => `
             <tr>
+              <td><input type="checkbox" class="rowchk" value="${s._id}" onchange="bulkSync()" /></td>
               <td><strong>${esc(s.businessName)}</strong></td>
               <td>${esc(s.phone)}</td>
               <td>${esc(s.location?.city || "-")}</td>
@@ -546,9 +554,66 @@ router.get("/suppliers", requireSupplierAdmin, async (req, res) => {
           ).join("")}
         </div>` : ""}
       </div>
+
+      <form id="bulkForm" method="POST" action="/zq-admin/suppliers/bulk-status" style="display:none">
+        <input type="hidden" name="ids" id="bulkIds" />
+        <input type="hidden" name="action" id="bulkAction" />
+        <input type="hidden" name="rtn" value="${esc(qs(Number(page) || 1))}" />
+      </form>
+      <script>
+      function bulkSync(){
+        var all=document.querySelectorAll('.rowchk');
+        var n=document.querySelectorAll('.rowchk:checked').length;
+        var c=document.getElementById('bulkCount'); if(c) c.textContent=n;
+        var sa=document.getElementById('selAll'); if(sa){ sa.checked=(n>0 && n===all.length); sa.indeterminate=(n>0 && n<all.length); }
+      }
+      function toggleAll(cb){
+        var all=document.querySelectorAll('.rowchk');
+        for(var i=0;i<all.length;i++) all[i].checked=cb.checked;
+        bulkSync();
+      }
+      function bulkStatus(action){
+        var ids=[].slice.call(document.querySelectorAll('.rowchk:checked')).map(function(c){return c.value;});
+        if(!ids.length){ alert('Select at least one supplier first.'); return; }
+        var verb=action==='activate'?'Activate':'Deactivate';
+        if(!confirm(verb+' '+ids.length+' supplier'+(ids.length===1?'':'s')+'?')) return;
+        document.getElementById('bulkIds').value=ids.join(',');
+        document.getElementById('bulkAction').value=action;
+        document.getElementById('bulkForm').submit();
+      }
+      bulkSync();
+      </script>
     `));
   } catch (err) {
     res.send(layout("Suppliers", `<div class="alert red">Error: ${err.message}</div>`));
+  }
+});
+
+// ── POST /zq-admin/suppliers/bulk-status  → bulk activate / deactivate ───────
+// Sets ONLY the `active` flag on the selected suppliers (same flag the Status
+// column shows). Nothing else is touched. Returns to the same filtered list.
+router.post("/suppliers/bulk-status", requireSupplierAdmin, async (req, res) => {
+  const rtn  = (typeof req.body.rtn === "string" && req.body.rtn.startsWith("?")) ? req.body.rtn : "";
+  const back = "/zq-admin/suppliers" + rtn;
+  const sep  = rtn ? "&" : "?";
+  try {
+    const action = req.body.action === "activate" ? "activate"
+                 : req.body.action === "deactivate" ? "deactivate" : null;
+    if (!action) throw new Error("Unknown action.");
+
+    const ids = String(req.body.ids || "")
+      .split(/[,\s]+/).map(s => s.trim())
+      .filter(s => /^[a-f0-9]{24}$/i.test(s));
+    if (!ids.length) throw new Error("No suppliers selected.");
+
+    const active = action === "activate";
+    await SupplierProfile.updateMany({ _id: { $in: ids } }, { $set: { active } });
+
+    console.log(`[BULK STATUS] ${action} → ${ids.length} supplier(s)`);
+    return res.redirect(back + sep + "success=" +
+      encodeURIComponent(`${active ? "Activated" : "Deactivated"} ${ids.length} supplier(s).`));
+  } catch (err) {
+    return res.redirect(back + sep + "error=" + encodeURIComponent(err.message));
   }
 });
 
