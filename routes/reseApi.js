@@ -289,6 +289,12 @@ router.post("/auth/request-code", async (req, res) => {
     const phone = normalizePhone(req.body?.phone);
     if (!phone) return res.status(400).json({ error: "Enter a valid phone number" });
 
+    // Apple/Play reviewer demo number: skip the WhatsApp send so review can
+    // proceed without a real device. The fixed code is checked in /auth/verify.
+    if (phone === normalizePhone(process.env.RESE_REVIEWER_PHONE || "+263770000000")) {
+      return res.json({ ok: true, channel: "reviewer" });
+    }
+
     // Abuse / flood protection (see OTP rate limiting above).
     const ip = (req.headers["x-forwarded-for"] || "").split(",")[0].trim() || req.ip || "unknown";
     const nowMs = Date.now();
@@ -343,6 +349,18 @@ router.post("/auth/verify", async (req, res) => {
     const phone = normalizePhone(req.body?.phone);
     const code = String(req.body?.code || "").trim();
     if (!phone || !code) return res.status(400).json({ error: "Missing phone or code" });
+
+    // Reviewer demo login: one fixed phone + code, used only for app-store
+    // review. Does not affect real WhatsApp OTP for anyone else.
+    const reviewerPhone = normalizePhone(process.env.RESE_REVIEWER_PHONE || "+263770000000");
+    const reviewerCode = String(process.env.RESE_REVIEWER_CODE || "123456");
+    if (phone === reviewerPhone && code === reviewerCode) {
+      let ru = await ReseUser.findOne({ phone });
+      if (!ru) ru = await ReseUser.create({ phone, name: "App Reviewer", isRequester: true });
+      ru.lastActiveAt = new Date();
+      await ru.save();
+      return res.json({ token: signToken(ru), user: publicUser(ru) });
+    }
 
     const otp = await ReseOtp.findOne({ phone }).sort({ createdAt: -1 });
     if (!otp) return res.status(400).json({ error: "Code expired. Please ask again." });
