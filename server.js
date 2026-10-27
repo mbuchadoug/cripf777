@@ -96,6 +96,9 @@ import scoiMarketplaceRoutes from "./routes/scoi_marketplace.js";
 
 import scoiCheckoutRoutes from "./routes/scoi_checkout.js";
 
+// ── FOUNDERS 100 — institutional research access membership (additive) ──
+import foundersRoutes from "./routes/founders.js";
+
 import paymentsRouter from "./routes/payments.js";
 import arenaRoutes from "./routes/arena.js";
 
@@ -665,6 +668,9 @@ app.use(studentRoutes);
 app.use(scoiMarketplaceRoutes);
 
 app.use(scoiCheckoutRoutes);
+
+// ── FOUNDERS 100 membership (public sales page, checkout, portal, selection) ──
+app.use(foundersRoutes);
 
 app.use(adminPlacementImport);
 
