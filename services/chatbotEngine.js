@@ -8266,17 +8266,33 @@ if (!isMetaAction && /^ZQ:GROUP:[a-z0-9_-]{1,60}$/i.test(text.trim())) {
 // supplier, carries "💳 Activate Listing". Button taps (main_menu_back,
 // sup_upgrade_plan, …) are unaffected because they set isMetaAction=true and
 // already route to activation. Active sellers and buyers are never touched.
-if (!isMetaAction && supplierExists && supplierExists.active === false) {
+// NOTE: do NOT fire while the seller is already inside the activation/registration
+// flow (supplier_reg_* / school_reg_*). Otherwise the EcoCash number they type
+// during payment would be hijacked back to the plan chooser and never charged.
+if (!isMetaAction && supplierExists && supplierExists.active === false &&
+    !biz?.sessionState?.startsWith("supplier_reg_") &&
+    !biz?.sessionState?.startsWith("school_reg_")) {
   try {
     const _pvNudgeUntil = Number(_sessForOrderCheck?.tempData?.pvLeadNudge || 0);
     if (_pvNudgeUntil && Date.now() < _pvNudgeUntil) {
       await UserSession.updateOne({ phone }, { $unset: { "tempData.pvLeadNudge": "" } });
       await sendText(from,
         "📩 *You have a lead waiting on ZimQuote.*\n\n" +
-        "Your listing is currently *inactive*, so you can't view the customer's contact or reply yet.\n\n" +
-        "Reactivate below to unlock your enquiries and start replying 👇"
+        "Your listing is currently *inactive*, so the customer can't be connected to you yet.\n\n" +
+        "Activate now to unlock this lead and start receiving orders 👇"
       );
-      return sendMainMenu(from);
+      // One tap closer to paying: take them STRAIGHT to the plan chooser instead of
+      // the main menu (which needed an extra "Activate Listing" tap first).
+      return sendList(from,
+        "💳 *Choose Your Plan*\n\nAll plans include:\n✅ Listed in search\n✅ Phone number visible\n✅ Unlimited uploads\n✅ Unlimited orders\n\nPick a plan to activate instantly:",
+        [
+          { id: "sup_plan_basic_monthly",   title: "✅ Basic - $5/month",   description: "Up to 20 live items" },
+          { id: "sup_plan_basic_annual",    title: "✅ Basic - $50/year",   description: "Up to 20 live items · save $10" },
+          { id: "sup_plan_pro_monthly",     title: "⭐ Pro - $12/month",    description: "Up to 60 live items" },
+          { id: "sup_plan_pro_annual",      title: "⭐ Pro - $120/year",    description: "Up to 60 live items · save $24" },
+          { id: "sup_plan_featured_monthly",title: "🔥 Featured $25/mo",    description: "Up to 150 live items + featured badge" }
+        ]
+      );
     }
   } catch (_) { /* non-blocking - fall through to normal handling */ }
 }
@@ -8313,6 +8329,17 @@ if (
   !_orderBlockedStates.has(_activeOrderState) &&
   _schoolEnquiryState !== "school_parent_enquiry" &&
   !biz?.sessionState?.startsWith("sc_") &&
+  // ── CRITICAL FIX (payment/activation) ──────────────────────────────────────
+  // A registered seller who is activating/registering sits in a biz.sessionState
+  // like "supplier_reg_enter_ecocash" or "supplier_reg_payment_pending" (and the
+  // school equivalents). This EARLY "no-biz" shortcode block was swallowing the
+  // EcoCash number they type (and the word "same") as a PRODUCT SEARCH -> "Which
+  // city?" - so Paynow was never invoked and NO payment ever started. Exempt all
+  // supplier_reg_* and school_reg_* states so the number reaches the real payment
+  // handler (supplierRegistration.js). The later shortcode block already excludes
+  // these via shortcodeBlockedStates; this mirrors that protection here.
+  !biz?.sessionState?.startsWith("supplier_reg_") &&
+  !biz?.sessionState?.startsWith("school_reg_") &&
   // FIX: no-biz buyers in the sc_ quote flow store their state in UserSession.
   // Without this check, typed item selections (e.g. "1x3,6") hit the shortcode
   // search instead of being routed to handleSellerChatState.

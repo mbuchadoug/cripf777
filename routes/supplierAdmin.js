@@ -16332,15 +16332,19 @@ function _pvMaskPhone(raw = "") {
 // and it lands even outside the 24h window (approved templates). If
 // ZQ_ENQUIRY_TEMPLATE is set in .env, a dedicated template with a one-tap
 // "Activate" button is used instead (auto-fallback to the approved ones on error).
-async function _pvSendProfileOpen({ phone, businessName, source, note, contactMode = "hide", visitorPhone, kind = "view", hasPhoto = false, photoLocked = false }) {
+async function _pvSendProfileOpen({ phone, businessName, source, note, contactMode = "hide", visitorPhone, kind = "view", hasPhoto = false, photoLocked = false, sellerActive = false }) {
   const PHONE_ID = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.META_PHONE_NUMBER_ID || process.env.PHONE_NUMBER_ID;
   const TOKEN    = process.env.META_ACCESS_TOKEN || process.env.WHATSAPP_ACCESS_TOKEN;
   const to       = _mrNorm(phone);
   if (!to) return { ok: false, error: "bad phone" };
 
   const hasVisitor = !!visitorPhone;
-  const showFull   = contactMode === "show" && hasVisitor;
-  const showMask   = contactMode === "mask" && hasVisitor;
+  let   showFull   = contactMode === "show" && hasVisitor;
+  let   showMask   = contactMode === "mask" && hasVisitor;
+  // An ACTIVE (paid) seller is already entitled to the contact and can reply, so
+  // they must NEVER get an "Activate" nudge. Show the real number and just ask
+  // them to respond. (Admin can still send activity to active sellers.)
+  if (sellerActive && hasVisitor) { showFull = true; showMask = false; }
   const base       = kind === "enquiry" ? "New customer enquiry" : (_PV_SOURCES[source] || "ZimQuote link");
   const noteClean  = String(note || "").replace(/[\r\n\t]+/g, " ").replace(/ {2,}/g, " ").trim().slice(0, 160);
   const timeStr    = new Date().toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
@@ -16356,8 +16360,9 @@ async function _pvSendProfileOpen({ phone, businessName, source, note, contactMo
   // Build the single-line {{2}} that carries BOTH the enquiry and the contact + CTA.
   let via = base;
   if (noteClean) via += " · " + noteClean;
-  if (showMask)       via += " · From " + _pvMaskPhone(visitorPhone) + " - reply menu & tap Activate to unlock their number & reply";
-  else if (!showFull) via += (kind === "enquiry" ? " · reply menu to Activate, view & reply" : " · reply menu to Activate & view their contact");
+  if (sellerActive)   via += (kind === "enquiry" ? " · reply to respond" : " · reply to view & respond");
+  else if (showMask)  via += " · From " + _pvMaskPhone(visitorPhone) + " - tap Activate to unlock their number & reply";
+  else if (!showFull) via += (kind === "enquiry" ? " · tap Activate to view & reply" : " · tap Activate to view their contact");
   via += photoTag;
   via = via.slice(0, 300);
 
@@ -16366,9 +16371,14 @@ async function _pvSendProfileOpen({ phone, businessName, source, note, contactMo
   if (NEWTPL) {
     try {
       const contactVar = showFull ? _pvFmtPhone(visitorPhone) : showMask ? _pvMaskPhone(visitorPhone) : "-";
-      const cta = showFull
+      const cta = (sellerActive || showFull)
         ? "Reply fast - customers choose quick responders."
-        : "🔒 Reply menu and tap Activate to view the contact and reply.";
+        : "👇 Tap *Activate Now* below to unlock the contact and reply.";
+      // One-tap activation: an INACTIVE seller's button goes STRAIGHT to the plan
+      // chooser (sup_upgrade_plan) - no "type menu" step. An ACTIVE/paid seller just
+      // opens their menu. A tapped quick-reply opens the 24h window, so the bot's
+      // reply (Choose Your Plan) is delivered even to a cold seller.
+      const btnPayload = sellerActive ? "main_menu_back" : "sup_upgrade_plan";
       await axios.post(
         `https://graph.facebook.com/v24.0/${PHONE_ID}/messages`,
         {
@@ -16378,7 +16388,7 @@ async function _pvSendProfileOpen({ phone, businessName, source, note, contactMo
             components: [
               { type: "body", parameters: [businessName || "Your business", ((noteClean || base) + photoTag), contactVar, cta]
                   .map(v => ({ type: "text", text: String(v).slice(0, 1024) })) },
-              { type: "button", sub_type: "quick_reply", index: "0", parameters: [{ type: "payload", payload: "main_menu_back" }] }
+              { type: "button", sub_type: "quick_reply", index: "0", parameters: [{ type: "payload", payload: btnPayload }] }
             ]
           }
         },
@@ -16784,7 +16794,7 @@ router.post("/profile-activity/send", requireSupplierAdmin, async (req, res) => 
       if (sendAlert) {
         const targets = [...new Set([r.phone, ...(supplierDoc?.notificationContacts || []).map(_mrNorm)])].filter(Boolean);
         for (const t of targets) {
-          const out = await _pvSendProfileOpen({ phone: t, businessName, source, note, contactMode: effMode, visitorPhone, kind, hasPhoto, photoLocked });
+          const out = await _pvSendProfileOpen({ phone: t, businessName, source, note, contactMode: effMode, visitorPhone, kind, hasPhoto, photoLocked, sellerActive });
           if (out.ok) anyOk = true;
           else console.warn("[PROFILE ACT] alert failed", t, out.error);
         }
