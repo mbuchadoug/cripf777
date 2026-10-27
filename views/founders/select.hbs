@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Select your reports - Founders 100</title>
+  <style>
+    :root{--navy:#0F1C2E;--navy2:#1E3A5F;--gold:#C9A961;--gold2:#E5D4A6;--paper:#F8F9FA;--line:rgba(201,169,97,.28);--muted:#5b6b7f}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Arial,Helvetica,sans-serif;background:var(--paper);color:var(--navy)}
+    .bar{background:linear-gradient(160deg,var(--navy),var(--navy2));color:#fff;padding:26px 0;position:sticky;top:0;z-index:5}
+    .wrap{max-width:1040px;margin:0 auto;padding:0 20px}
+    h1{margin:0;font-family:Georgia,serif;font-size:24px}
+    .count{color:var(--gold2);font-size:14px;margin-top:4px}
+    .toolbar{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:14px}
+    input[type=search]{flex:1;min-width:200px;padding:11px 14px;border:0;border-radius:8px;font-size:15px}
+    .btn{font-weight:700;border-radius:8px;padding:12px 22px;border:0;cursor:pointer;text-decoration:none;display:inline-block}
+    .btn-gold{background:linear-gradient(135deg,var(--gold),#b8954f);color:var(--navy)}
+    .btn-ghost{background:rgba(255,255,255,.1);border:1px solid var(--line);color:#fff}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:22px 0 110px}
+    .r{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px 18px;display:flex;gap:14px;align-items:flex-start;cursor:pointer}
+    .r.chosen{opacity:.6}
+    .r.sel{border-color:var(--gold);box-shadow:0 10px 30px -18px rgba(15,28,46,.5)}
+    .r input{margin-top:3px;width:18px;height:18px;accent-color:var(--gold)}
+    .r .t{font-family:Georgia,serif;font-size:16px;line-height:1.3}
+    .r .m{color:var(--muted);font-size:12px;margin-top:5px}
+    .r .owned{color:#1f5a2a;font-size:12px;font-weight:700;margin-top:5px}
+    .dock{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--line);padding:14px 0;box-shadow:0 -10px 30px -20px rgba(0,0,0,.4)}
+    .dock .wrap{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+    .warn{color:#8a2b2b;font-size:13px}
+    @media(max-width:720px){.grid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <form method="POST" action="/founders/select" id="selForm">
+    <div class="bar">
+      <div class="wrap">
+        <h1>Select your SCOI reports</h1>
+        <div class="count">You've selected {{chosenCount}} of {{quota}}. <strong id="rem">{{remaining}}</strong> remaining this term.</div>
+        <div class="toolbar">
+          <input type="search" id="q" placeholder="Filter by title, subject or code…" />
+          <a class="btn btn-ghost" href="/founders/portal">Back to portal</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="wrap">
+      <div class="grid" id="list">
+        {{#each reports}}
+        <label class="r {{#if this.chosen}}chosen{{/if}}" data-text="{{this.title}} {{this.subject}} {{this.code}}">
+          {{#unless this.chosen}}
+            <input type="checkbox" name="pick" value="{{this.model}}:{{this.id}}" class="pick" />
+          {{else}}
+            <input type="checkbox" checked disabled />
+          {{/unless}}
+          <span>
+            <span class="t">{{this.title}}</span>
+            {{#if this.subject}}<span class="m">{{this.subject}}{{#if this.window}} · {{this.window}}{{/if}}{{#if this.code}} · {{this.code}}{{/if}}</span>{{/if}}
+            {{#if this.chosen}}<span class="owned">✓ Already in your selections</span>{{/if}}
+          </span>
+        </label>
+        {{/each}}
+      </div>
+    </div>
+
+    <div class="dock">
+      <div class="wrap">
+        <div><strong id="picked">0</strong> selected now · <span id="warn" class="warn"></span></div>
+        <button class="btn btn-gold" type="submit">Confirm selections →</button>
+      </div>
+    </div>
+  </form>
+
+  <script>
+    (function(){
+      var remaining = {{remaining}};
+      var q = document.getElementById('q');
+      var rows = Array.prototype.slice.call(document.querySelectorAll('.r'));
+      var picks = Array.prototype.slice.call(document.querySelectorAll('.pick'));
+      var pickedEl = document.getElementById('picked');
+      var warnEl = document.getElementById('warn');
+
+      function count(){ return picks.filter(function(p){return p.checked;}).length; }
+      function refresh(){
+        var n = count();
+        pickedEl.textContent = n;
+        if(n > remaining){ warnEl.textContent = 'Limit is ' + remaining + ' this term.'; }
+        else { warnEl.textContent=''; }
+        picks.forEach(function(p){
+          p.closest('.r').classList.toggle('sel', p.checked);
+          if(!p.checked && n >= remaining){ p.disabled = true; } else { p.disabled = false; }
+        });
+      }
+      picks.forEach(function(p){ p.addEventListener('change', refresh); });
+
+      q.addEventListener('input', function(){
+        var s = q.value.toLowerCase();
+        rows.forEach(function(r){
+          var t = (r.getAttribute('data-text')||'').toLowerCase();
+          r.style.display = t.indexOf(s) > -1 ? '' : 'none';
+        });
+      });
+      refresh();
+    })();
+  </script>
+</body>
+</html>

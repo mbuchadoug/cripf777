@@ -148,6 +148,28 @@ router.post("/", async (req, res) => {
       }
     }
 
+    // 7️⃣ FOUNDERS 100 - first-year membership ($5,000)
+    if (meta.type === "founders_membership" && meta.userId) {
+      try {
+        const { activateFoundersMembership } = await import("./founders.js");
+        await activateFoundersMembership(meta.userId, session);
+        console.log(`✅ Founders membership activated via Stripe for user ${meta.userId}`);
+      } catch (err) {
+        console.error("[founders membership webhook]", err.message);
+      }
+    }
+
+    // 8️⃣ FOUNDERS 100 - annual renewal ($250)
+    if (meta.type === "founders_renewal" && meta.userId) {
+      try {
+        const { renewFoundersMembership } = await import("./founders.js");
+        await renewFoundersMembership(meta.userId, session);
+        console.log(`✅ Founders renewal applied via Stripe for user ${meta.userId}`);
+      } catch (err) {
+        console.error("[founders renewal webhook]", err.message);
+      }
+    }
+
     // 5️⃣ GROCERY ORDER (ZimQuote delivery)
     if (meta.type === "grocery_order" && meta.reference) {
       try {

@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Your Founders 100 Membership - CRIPFCnt SCOI</title>
+  <style>
+    :root{--navy:#0F1C2E;--navy2:#1E3A5F;--gold:#C9A961;--gold2:#E5D4A6;--paper:#F8F9FA;--line:rgba(201,169,97,.28);--muted:#5b6b7f}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Arial,Helvetica,sans-serif;background:var(--paper);color:var(--navy)}
+    .bar{background:linear-gradient(160deg,var(--navy),var(--navy2));color:#fff;padding:30px 0}
+    .wrap{max-width:980px;margin:0 auto;padding:0 20px}
+    .num{font-family:Georgia,serif;color:var(--gold2);letter-spacing:.06em}
+    h1{margin:6px 0 0;font-family:Georgia,serif;font-size:30px}
+    .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin:26px 0}
+    .stat{background:#fff;border:1px solid var(--line);border-radius:12px;padding:18px}
+    .stat .k{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+    .stat .v{font-size:26px;font-weight:700;color:var(--navy);font-family:Georgia,serif;margin-top:4px}
+    .card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:24px;margin:16px 0}
+    .card h2{font-family:Georgia,serif;font-size:20px;margin:0 0 14px}
+    .btn{display:inline-block;font-weight:700;border-radius:8px;padding:13px 22px;text-decoration:none;border:0;cursor:pointer}
+    .btn-gold{background:linear-gradient(135deg,var(--gold),#b8954f);color:var(--navy)}
+    .btn-ghost{background:transparent;border:1px solid var(--line);color:var(--navy)}
+    label{display:block;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:12px 0 5px}
+    input{width:100%;padding:11px 13px;border:1px solid #d8dee6;border-radius:8px;font-size:15px;font-family:inherit}
+    .seats{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    table{width:100%;border-collapse:collapse;margin-top:6px}
+    th,td{text-align:left;padding:10px 8px;border-bottom:1px solid #eee;font-size:14px}
+    th{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+    .pill{display:inline-block;background:#eef7ee;color:#1f5a2a;border-radius:999px;padding:3px 10px;font-size:12px}
+    .muted{color:var(--muted);font-size:13px}
+    @media(max-width:720px){.grid{grid-template-columns:1fr 1fr}.seats{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <div class="bar">
+    <div class="wrap">
+      <div class="num">Founding Membership #{{m.membershipNumber}}</div>
+      <h1>Institutional Research Access</h1>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <div class="grid">
+      <div class="stat"><div class="k">Status</div><div class="v" style="font-size:18px;text-transform:capitalize">{{m.status}}</div></div>
+      <div class="stat"><div class="k">Reports selected</div><div class="v">{{m.reportsSelected.length}}</div></div>
+      <div class="stat"><div class="k">Remaining</div><div class="v">{{remaining}}</div></div>
+      <div class="stat"><div class="k">Quota</div><div class="v">{{m.reportQuota}}</div></div>
+    </div>
+
+    <div class="card">
+      <h2>Your report selections</h2>
+      {{#if m.reportsSelected.length}}
+        <table>
+          <tr><th>Report</th><th>Selected</th><th></th></tr>
+          {{#each m.reportsSelected}}
+          <tr>
+            <td>{{this.title}}</td>
+            <td class="muted">{{this.selectedAt}}</td>
+            <td><a href="/scoi/audits/{{this.auditId}}/view" style="color:var(--navy2)">View</a> · <a href="/scoi/audits/{{this.auditId}}/download" style="color:var(--navy2)">PDF</a></td>
+          </tr>
+          {{/each}}
+        </table>
+      {{else}}
+        <p class="muted">You haven't selected any reports yet. You can select up to {{remaining}}.</p>
+      {{/if}}
+      {{#if remaining}}
+        <p style="margin-top:16px"><a class="btn btn-gold" href="/founders/select">Select reports ({{remaining}} available) →</a></p>
+      {{/if}}
+    </div>
+
+    <div class="card">
+      <h2>Institution &amp; named users <span class="muted">(up to {{seatLimit}})</span></h2>
+      <form method="POST" action="/founders/institution">
+        <label>Institution name</label>
+        <input name="institutionName" value="{{m.institution.name}}" placeholder="e.g. Harare Institute of Policy Research" />
+        <div class="seats" style="margin-top:4px">
+          <div><label>Primary contact</label><input name="contactName" value="{{m.institution.contactName}}" placeholder="Full name" /></div>
+          <div><label>Contact email</label><input name="contactEmail" value="{{m.institution.contactEmail}}" placeholder="name@institution.org" /></div>
+        </div>
+        <label style="margin-top:18px">Named users</label>
+        {{#each m.seats}}
+          <div class="seats"><input name="seatName" value="{{this.name}}" placeholder="User name" /><input name="seatEmail" value="{{this.email}}" placeholder="user@institution.org" /></div>
+        {{/each}}
+        <div class="seats"><input name="seatName" placeholder="User name" /><input name="seatEmail" placeholder="user@institution.org" /></div>
+        <div class="seats"><input name="seatName" placeholder="User name" /><input name="seatEmail" placeholder="user@institution.org" /></div>
+        <p style="margin-top:16px"><button class="btn btn-ghost" type="submit">Save institution details</button></p>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>Membership &amp; renewal</h2>
+      <p class="muted">Term ends: {{termEnds}} · Renewals: {{m.renewalsCount}} · <span class="pill">Transferable</span></p>
+      <p style="margin-top:14px">
+        <a class="btn btn-gold" href="/founders/renew">Renew - US$250 (adds 5 reports) →</a>
+      </p>
+      <p class="muted" style="margin-top:10px">The founding membership right is transferable to another eligible institution, subject to membership terms. Contact CRIPFCnt Resources to record a transfer.</p>
+    </div>
+  </div>
+</body>
+</html>

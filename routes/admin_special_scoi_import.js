@@ -3,42 +3,31 @@ import multer from "multer";
 import PlacementAudit from "../models/placementAudit.js";
 import SpecialScoiAudit from "../models/specialScoiAudit.js";
 import { ensureAuth } from "../middleware/authGuard.js";
+import { normalizeScoiAudit } from "../utils/scoiImportNormalizer.js";
 
 const router = Router();
 
-// Multer config for JSON uploads
+// Multer config for uploads.
+// RELAXED (flexible import): accept .json and .txt (and files with no extension),
+// so differently-packaged reports can be uploaded without renaming. The content
+// itself is parsed/normalized downstream, so a wrong extension is harmless.
 const upload = multer({
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  limits: { fileSize: 8 * 1024 * 1024 }, // 8MB
   fileFilter(req, file, cb) {
-    if (!file.originalname.endsWith(".json")) {
-      return cb(new Error("Only JSON files allowed"));
+    const name = (file.originalname || "").toLowerCase();
+    const ok = name.endsWith(".json") || name.endsWith(".txt") || !name.includes(".");
+    if (!ok) {
+      return cb(new Error("Please upload a .json or .txt file (or paste the content)."));
     }
     cb(null, true);
   }
 });
 
 // ──────────────────────────────────────────────────────────────────────────────
-// mergeAuditObjects
-// ──────────────────────────────────────────────────────────────────────────────
-// ROOT-CAUSE FIX for "Imported 0 reports. Skipped 12 duplicates."
-//
+// mergeAuditObjects - unchanged behaviour.
 // The SCOI JSON format allows a single audit to be represented as an ARRAY of
-// partial objects, each contributing different fields:
-//
-//   [ { "subject": {...}, "auditType": "..." },   ← metadata chunk
-//     { "purpose": "..." },                        ← purpose chunk
-//     { "context": {...} },                        ← context chunk
-//     ...
-//   ]
-//
-// The old code treated each object individually. Because no single object
-// contained BOTH subject.name AND purpose, EVERY object failed validation and
-// was counted as a skipped "duplicate" (actually a validation failure).
-//
-// FIX: detect when the array looks like a single split audit (no object has
-// both subject.name and auditType on its own, or they share a common
-// "framework" / "auditType" key) and deep-merge them into one document before
-// validation and deduplication.
+// partial objects, each contributing different fields. We deep-merge those into
+// one document before validation and deduplication.
 // ──────────────────────────────────────────────────────────────────────────────
 function mergeAuditObjects(arr) {
   if (!Array.isArray(arr) || arr.length === 0) return [];
@@ -91,63 +80,91 @@ function deepMerge(target, source) {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// Shared import logic - accepts a merged audit array + auditType string
+// Shared import logic.
 //
-// How it works:
-//   Both the file-upload path and the paste path call this after parsing JSON.
-//   No duplication of the core validation/upsert logic.
+// FLEXIBLE IMPORT: each merged audit is run through normalizeScoiAudit(), which
+// guarantees the required fields (auditType, subject.name, purpose) are present -
+// deriving them from whatever structure the submission uses - and preserves the
+// COMPLETE original in `raw`. This removes the need to hand-reformat every report.
+//
+// `inputs` may be an array of objects, a single object, or a single string
+// (plain text). Backwards compatible with all previously-working imports.
 // ──────────────────────────────────────────────────────────────────────────────
-async function runScoiImport(rawAudits, auditType) {
-  const audits = mergeAuditObjects(rawAudits);
-  console.log(`[SCOI import] Raw objects: ${rawAudits.length}, merged audits: ${audits.length}`);
+async function runScoiImport(inputs, auditType) {
+  // Plain-text submission arrives as a single string.
+  let audits;
+  if (typeof inputs === "string") {
+    audits = [inputs];
+  } else {
+    const arr = Array.isArray(inputs) ? inputs : [inputs];
+    audits = mergeAuditObjects(arr);
+  }
+
+  console.log(`[SCOI import] inputs → ${audits.length} audit(s) to process`);
 
   let imported = 0;
   let skipped  = 0;
   const errors = [];
+  const notes  = [];
 
-  for (const audit of audits) {
+  for (const item of audits) {
+    let record, raw, priceCents, warnings;
     try {
-      if (!audit.subject?.name) {
-        console.warn("[SCOI import] Skipping - missing subject.name:", JSON.stringify(audit).slice(0, 120));
+      ({ record, raw, priceCents, warnings } = normalizeScoiAudit(item));
+    } catch (normErr) {
+      console.warn("[SCOI import] normalize failed:", normErr.message);
+      skipped++;
+      errors.push(`normalize: ${normErr.message}`);
+      continue;
+    }
+
+    try {
+      // Safety net: the normalizer guarantees these, but double-check.
+      if (!record.subject?.name) {
         skipped++;
+        errors.push("Skipped: could not determine a subject name.");
         continue;
       }
-      if (!audit.purpose) {
-        console.warn("[SCOI import] Skipping - missing purpose for:", audit.subject?.name);
-        skipped++;
-        continue;
+      if (!record.auditType) record.auditType = "special_report";
+      if (!record.purpose)   record.purpose   = record.title || record.subject.name;
+
+      const Model = auditType === "placement" ? PlacementAudit : SpecialScoiAudit;
+
+      // Dedup on subject.name (+ window label when available).
+      const dupQuery = { "subject.name": record.subject.name };
+      if (record.assessmentWindow?.label) {
+        dupQuery["assessmentWindow.label"] = record.assessmentWindow.label;
       }
-
-      const Model = auditType === "special" ? SpecialScoiAudit : PlacementAudit;
-
-      const dupQuery = { "subject.name": audit.subject.name };
-      if (audit.assessmentWindow?.label) {
-        dupQuery["assessmentWindow.label"] = audit.assessmentWindow.label;
-      }
-
       const exists = await Model.findOne(dupQuery).lean();
       if (exists) {
-        console.log(`[SCOI import] Duplicate skipped: "${audit.subject.name}"`);
+        console.log(`[SCOI import] Duplicate skipped: "${record.subject.name}"`);
         skipped++;
         continue;
       }
 
-      // Store the COMPLETE original (raw) so nothing is dropped, and map the
-      // display price from commercialStatus.fullReportPriceUSD when present.
-      const priceCents = (audit.commercialStatus && Number(audit.commercialStatus.fullReportPriceUSD) > 0)
-        ? Math.round(Number(audit.commercialStatus.fullReportPriceUSD) * 100)
-        : (Number.isInteger(audit.price) && audit.price > 0 ? audit.price : 29900);
-      await Model.create({ framework: "CRIPFCnt SCOI", ...audit, raw: audit, price: priceCents });
-      console.log(`[SCOI import] ✅ Imported: "${audit.subject.name}"`);
+      // Resolve price: normalizer's derived price → legacy default $299.
+      const finalPrice = (priceCents && priceCents > 0) ? priceCents : 29900;
+
+      await Model.create({
+        framework: "CRIPFCnt SCOI",
+        ...record,
+        raw,              // COMPLETE original - nothing dropped, renders generically
+        price: finalPrice
+      });
+
+      if (warnings && warnings.length) {
+        notes.push(`"${record.subject.name}": ${warnings.join(" ")}`);
+      }
+      console.log(`[SCOI import] ✅ Imported: "${record.subject.name}"`);
       imported++;
     } catch (docErr) {
       console.error("[SCOI import] Error saving audit:", docErr.message);
-      errors.push(`${audit.subject?.name || "unknown"}: ${docErr.message}`);
+      errors.push(`${record?.subject?.name || "unknown"}: ${docErr.message}`);
       skipped++;
     }
   }
 
-  return { imported, skipped, errors };
+  return { imported, skipped, errors, notes };
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -161,51 +178,48 @@ router.get("/admin/scoi/import", ensureAuth, (req, res) => {
 });
 
 // ──────────────────────────────────────────────────────────────────────────────
-// POST - Import via file upload OR pasted JSON
+// POST - Import via file upload OR pasted content.
 //
-// How it works:
-//   1. multer runs - if a file was sent it populates req.file, otherwise no-op
-//   2. We check req.file first (file upload path, unchanged behaviour)
-//   3. If no file, we look for req.body.auditJson (the textarea input)
-//   4. Both paths parse JSON → mergeAuditObjects → runScoiImport
+// Accepts: a .json file, a .txt file, pasted JSON, or pasted plain text.
+// JSON that fails to parse is imported as plain text rather than rejected.
 // ──────────────────────────────────────────────────────────────────────────────
 router.post(
   "/admin/scoi/import",
   ensureAuth,
-  upload.single("auditFile"),   // always present; harmless when no file sent
+  upload.single("auditFile"),
   async (req, res) => {
     const renderPage = (props) =>
       res.render("admin/scoi_import", { user: req.user, ...props });
 
     try {
-      const { auditType } = req.body; // 'placement' or 'special'
-      let raw;
+      const auditType = req.body?.auditType || "special"; // 'placement' | 'special'
+      let rawText;
 
       if (req.file) {
-        // ── Path A: file upload (original behaviour) ──
-        raw = req.file.buffer.toString("utf8");
+        rawText = req.file.buffer.toString("utf8");
       } else if (req.body?.auditJson?.trim()) {
-        // ── Path B: pasted JSON text ──
-        raw = req.body.auditJson.trim();
+        rawText = req.body.auditJson.trim();
       } else {
-        return renderPage({ error: "Please upload a JSON file or paste JSON text" });
+        return renderPage({ error: "Please upload a file or paste the report content." });
       }
 
-      let data;
+      // Try JSON first; if it isn't JSON, import as plain text.
+      let payload;
       try {
-        data = JSON.parse(raw);
-      } catch (parseErr) {
-        return renderPage({ error: `Invalid JSON: ${parseErr.message}` });
+        payload = JSON.parse(rawText);
+      } catch {
+        payload = rawText; // plain-text path
       }
 
-      const rawAudits = Array.isArray(data) ? data : [data];
-      const { imported, skipped, errors } = await runScoiImport(rawAudits, auditType);
+      const { imported, skipped, errors, notes } = await runScoiImport(payload, auditType);
 
-      const message = `✅ Imported ${imported} report${imported !== 1 ? "s" : ""}. Skipped ${skipped} (duplicates or invalid).`;
+      const message = `✅ Imported ${imported} report${imported !== 1 ? "s" : ""}. ` +
+                      `Skipped ${skipped} (duplicates or unreadable).`;
 
       return renderPage({
         success:      message,
-        importErrors: errors.length ? errors : null
+        importErrors: errors.length ? errors : null,
+        importNotes:  notes && notes.length ? notes : null
       });
     } catch (err) {
       console.error("[SCOI import]", err);
