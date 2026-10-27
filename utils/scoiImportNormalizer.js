@@ -1,34 +1,35 @@
 // utils/scoiImportNormalizer.js
 // ─────────────────────────────────────────────────────────────────────────────
-// FLEXIBLE SCOI IMPORT NORMALIZER
+// FLEXIBLE SCOI IMPORT NORMALIZER  (v2 — structure-agnostic)
 //
-// Goal: accept SCOI report submissions in ANY shape - the "standard" flat format,
-// the newer schema_version / section_NN_* format (e.g. Martin Butler), a bare
-// metadata+sections object, an array of partial chunks, or even plain text - and
-// turn each into a document that SpecialScoiAudit / PlacementAudit will accept
-// WITHOUT dropping anything.
+// Goal: accept a SCOI report in ANY shape and turn it into a document the
+// SpecialScoiAudit / PlacementAudit models will accept, WITHOUT dropping
+// anything and WITHOUT ever skipping a readable report.
+//
+// It copes with, among others:
+//   • the "standard" flat format        ({ subject:{name}, purpose, ... })
+//   • the section_NN_* format            (Martin Butler)
+//   • metadata-based formats under ANY key:
+//       metadata / report_metadata / reportMetadata / meta / audit_metadata …
+//   • reports with NO subject field at all (name is derived, or generated)
+//   • an array of partial chunks         (deep-merged into one)
+//   • plain text
 //
 // Design rules (so nothing that already works breaks):
-//   1. NON-DESTRUCTIVE: a field that is already present on the submission is never
-//      overwritten. We only FILL the required fields that are missing.
-//   2. FULL FIDELITY: the complete original submission is preserved verbatim in
-//      `raw`, which is what the generic renderer (scoiCompleteHtml) displays. So
-//      a format this schema has never seen still shows every section.
-//   3. SCHEMA-SAFE: the three things the pipeline needs are always produced -
-//        • auditType      (SpecialScoiAudit schema: required:true)
-//        • subject.name   (importer validation + dedup + PDF filename)
-//        • purpose        (importer validation)
-//      plus title, assessmentWindow.label and a price, all derived from whatever
-//      the submission actually contains.
+//   1. NON-DESTRUCTIVE — a field already present is never overwritten; we only
+//      FILL what's missing.
+//   2. FULL FIDELITY — the complete original is preserved verbatim in `raw`,
+//      which is what the generic renderer (scoiCompleteHtml) displays.
+//   3. NEVER SKIP — subject.name, auditType and purpose are ALWAYS produced,
+//      deriving them from whatever the report contains, and generating a
+//      last-resort name rather than rejecting the report.
 //
-// This file has NO external dependencies and is safe to import anywhere.
+// No external dependencies — safe to import anywhere.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Deep clone that is safe for the plain-JSON objects we import. */
 function clone(obj) {
-  try {
-    if (typeof structuredClone === "function") return structuredClone(obj);
-  } catch { /* fall through */ }
+  try { if (typeof structuredClone === "function") return structuredClone(obj); }
+  catch { /* fall through */ }
   return JSON.parse(JSON.stringify(obj));
 }
 
@@ -36,7 +37,7 @@ function isPlainObject(v) {
   return v && typeof v === "object" && !Array.isArray(v);
 }
 
-/** First non-empty string from a list of candidates. */
+/** First non-empty trimmed string from the candidates. */
 function firstString(...vals) {
   for (const v of vals) {
     if (typeof v === "string" && v.trim()) return v.trim();
@@ -44,75 +45,108 @@ function firstString(...vals) {
   return null;
 }
 
-/** Pull a human subject name out of a free-text subject like
- *  "Martin Butler - five-minute discussion on dishonesty" → "Martin Butler". */
+/** Pull a human name out of a free-text subject such as
+ *  "Martin Butler — five-minute discussion" → "Martin Butler", or
+ *  "Original Johari Window model (Luft and Ingham, 1955)" → "Original Johari Window model". */
 function leadName(str) {
   if (typeof str !== "string") return null;
-  const cut = str.split(/[-–\-:|,(]/)[0];
-  return (cut || str).trim() || null;
+  const cut = str.split(/[—–:|(]| - /)[0];
+  const out = (cut || str).trim();
+  return out || null;
 }
 
-/** Collect the section_NN_* / sectionNN keys (newer format) in order. */
-function sectionKeys(obj) {
-  return Object.keys(obj)
-    .filter(k => /^section[_]?\d+/i.test(k))
-    .sort();
+/** Every object whose KEY looks like metadata, merged into one lookup view.
+ *  Handles metadata, report_metadata, reportMetadata, meta, audit_metadata … */
+function gatherMeta(obj) {
+  const merged = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (isPlainObject(v) && /meta(data)?$/i.test(k)) {
+      Object.assign(merged, v);
+    }
+  }
+  // also fold in a top-level `meta` even if named oddly
+  if (isPlainObject(obj.metadata)) Object.assign(merged, obj.metadata);
+  return merged;
 }
 
-/** Best-effort purpose text from whatever summary-like content exists. */
-function derivePurpose(src) {
-  const exec =
-    src.section_01_executive_summary ||
-    src.executiveSummary ||
-    src.section_1_executive_summary ||
-    null;
-
-  return firstString(
-    src.purpose,
-    exec && (exec.summary || exec.central_question || exec.reframed_question || exec.overview),
-    src.summary,
-    src.marketplace && src.marketplace.summary,
-    src.CRIPFCntInterpretation && src.CRIPFCntInterpretation.summary,
-    src.metadata && src.metadata.disclaimer,
-    src.abstract,
-    src.overview
-  );
-}
-
-/** Price in CENTS from any of the known price locations; null if none found. */
-function derivePriceCents(src) {
-  // commercialStatus.fullReportPriceUSD (dollars) - standard format
-  const cs = src.commercialStatus;
-  if (cs && Number(cs.fullReportPriceUSD) > 0) {
-    return Math.round(Number(cs.fullReportPriceUSD) * 100);
+/** Recursively search for the first string value whose key matches `keyRe`.
+ *  Shallow-first, bounded depth, skips the giant `raw`-like noise. */
+function deepFindString(obj, keyRe, maxDepth = 4) {
+  const queue = [[obj, 0]];
+  while (queue.length) {
+    const [cur, depth] = queue.shift();
+    if (!isPlainObject(cur) || depth > maxDepth) continue;
+    for (const [k, v] of Object.entries(cur)) {
+      if (typeof v === "string" && v.trim() && keyRe.test(k)) return v.trim();
+    }
+    for (const v of Object.values(cur)) {
+      if (isPlainObject(v)) queue.push([v, depth + 1]);
+      else if (Array.isArray(v)) v.forEach(it => isPlainObject(it) && queue.push([it, depth + 1]));
+    }
   }
-  // metadata.access_price.amount (dollars) - newer format
-  const ap = src.metadata && src.metadata.access_price;
-  if (ap && Number(ap.amount) > 0) {
-    return Math.round(Number(ap.amount) * 100);
-  }
-  // access_price at root (dollars)
-  if (src.access_price && Number(src.access_price.amount) > 0) {
-    return Math.round(Number(src.access_price.amount) * 100);
-  }
-  // price already in cents (integer) - standard stored form
-  if (Number.isInteger(src.price) && src.price > 0) return src.price;
-  // priceUSD / priceUsd (dollars)
-  const dollars = Number(src.priceUSD || src.priceUsd);
-  if (dollars > 0) return Math.round(dollars * 100);
   return null;
 }
 
-/** assessmentWindow.label used for dedup + list display. */
-function deriveWindowLabel(src) {
+/** Collect section_NN_* keys (for the warning note). */
+function sectionKeys(obj) {
+  return Object.keys(obj).filter(k => /^section[_]?\d+/i.test(k));
+}
+
+/** Best-effort purpose text from any summary-like content, any format. */
+function derivePurpose(src, meta) {
+  const exec =
+    src.section_01_executive_summary ||
+    src.executiveSummary ||
+    src.executive_summary ||              // ← Johari uses snake_case
+    src.section_1_executive_summary ||
+    null;
+
+  // executive_summary may itself be a plain string
+  if (typeof exec === "string" && exec.trim()) return exec.trim();
+
+  return firstString(
+    src.purpose,
+    exec && (exec.summary || exec.finding || exec.central_question ||
+             exec.reframed_question || exec.overview || exec.interpretation),
+    src.summary,
+    src.abstract,
+    src.overview,
+    src.marketplace && src.marketplace.summary,
+    src.CRIPFCntInterpretation && src.CRIPFCntInterpretation.summary,
+    src.civilization_insight,
+    meta.disclaimer,
+    meta.description,
+    deepFindString(src, /^(summary|finding|purpose|abstract|overview)$/i)
+  );
+}
+
+/** Price in CENTS from any known location; null if none found. */
+function derivePriceCents(src, meta) {
+  const fromAccess = (ap) => (ap && Number(ap.amount) > 0) ? Math.round(Number(ap.amount) * 100) : null;
+  const cs = src.commercialStatus;
+  if (cs && Number(cs.fullReportPriceUSD) > 0) return Math.round(Number(cs.fullReportPriceUSD) * 100);
+  return (
+    fromAccess(meta.access_price) ||
+    fromAccess(src.access_price) ||
+    (Number.isInteger(src.price) && src.price > 0 ? src.price : null) ||
+    (Number(src.priceUSD || src.priceUsd) > 0 ? Math.round(Number(src.priceUSD || src.priceUsd) * 100) : null)
+  );
+}
+
+/** assessmentWindow.label — used for dedup + list display. */
+function deriveWindowLabel(src, meta) {
   return firstString(
     src.assessmentWindow && src.assessmentWindow.label,
     src.assessmentDate && (src.assessmentDate.label || src.assessmentDate.date),
-    src.metadata && src.metadata.reference_date,
-    src.metadata && src.metadata.publication_date,
+    typeof src.assessmentDate === "string" ? src.assessmentDate : null,
+    meta.period,                                   // ← Johari "2026"
+    meta.reference_date,
+    meta.historical_reference_date,
+    meta.publication_date,
     src.reference_date,
-    src.assessmentDate && typeof src.assessmentDate === "string" ? src.assessmentDate : null,
-    src.metadata && src.metadata.version && `v${src.metadata.version}`,
+    src.temporal_controls && (src.temporal_controls.historical_as_of || src.temporal_controls.report_prepared),
+    meta.version && `v${meta.version}`,
+    src.version && `v${src.version}`,
     src.date
   );
 }
@@ -121,10 +155,6 @@ function deriveWindowLabel(src) {
 // normalizeScoiAudit(input)
 //   input: an object (any shape) OR a string (plain text / stringified JSON)
 //   returns: { record, raw, priceCents, warnings[] }
-//     record     → merged into Model.create({ framework, ...record, raw, price })
-//     raw        → the pristine original, stored verbatim for the renderer
-//     priceCents → resolved price in cents (caller may still default it)
-//     warnings   → human-readable notes about what was auto-derived
 // ─────────────────────────────────────────────────────────────────────────────
 export function normalizeScoiAudit(input) {
   const warnings = [];
@@ -142,7 +172,7 @@ export function normalizeScoiAudit(input) {
       body: text
     };
     const raw = { document_type: "plain_text_import", title, content: text };
-    warnings.push("Imported as plain text - title/subject derived from the first line.");
+    warnings.push("Imported as plain text — title/subject derived from the first line.");
     return { record, raw, priceCents: null, warnings };
   }
 
@@ -150,28 +180,44 @@ export function normalizeScoiAudit(input) {
     throw new Error("Unsupported import payload (expected an object or text).");
   }
 
-  const raw = clone(input);            // pristine, full-fidelity copy for the renderer
-  const record = clone(input);         // working copy we fill required fields on
-  const meta = isPlainObject(record.metadata) ? record.metadata : {};
+  const raw    = clone(input);   // pristine, full-fidelity copy for the renderer
+  const record = clone(input);   // working copy we fill required fields on
+  const meta   = gatherMeta(record);   // metadata under ANY key, merged
 
-  // ── subject.name ───────────────────────────────────────────────────────────
-  if (!record.subject || typeof record.subject !== "object") record.subject = {};
+  // ── subject.name (always ends up set) ───────────────────────────────────────
+  if (!record.subject || typeof record.subject !== "object") {
+    // keep a string subject as a hint but make subject an object
+    if (typeof record.subject === "string" && record.subject.trim()) {
+      record.subject = { name: leadName(record.subject) || record.subject.trim() };
+    } else {
+      record.subject = {};
+    }
+  }
   if (!record.subject.name) {
     const derived = firstString(
-      typeof record.subject === "string" ? record.subject : null,
       record.subjectName,
+      record.subject_name,
       record.section_03_subject_and_context && record.section_03_subject_and_context.speaker_name,
       record.section_03_subject_and_context && record.section_03_subject_and_context.subject_name,
       leadName(meta.subject),
+      meta.subject_name,
+      meta.entity,
       leadName(record.subject_description),
+      // a nested subject object anywhere (e.g. subject.name deeper in the tree)
+      deepFindString(record, /^(name|speaker_name|subject_name|entity|entity_name|organization|organisation|company|person|title)$/i),
       meta.title,
       record.title,
       record.name,
-      meta.report_id
+      meta.report_id,
+      record.report_id
     );
     if (derived) {
       record.subject.name = derived;
       warnings.push(`subject.name auto-derived → "${derived}".`);
+    } else {
+      // Last resort: never skip. Generate a stable-ish name so it imports.
+      record.subject.name = `Imported SCOI Report ${new Date().toISOString().slice(0,19).replace("T"," ")}`;
+      warnings.push("subject.name could not be found — a placeholder name was generated so the report still imports. You can rename it later.");
     }
   }
 
@@ -184,11 +230,8 @@ export function normalizeScoiAudit(input) {
   // ── auditType (schema requires this) ───────────────────────────────────────
   if (!record.auditType) {
     const at = firstString(
-      record.audit_type,
-      record.document_type,
-      record.reportType,
-      record.type,
-      "special_report"
+      record.audit_type, record.document_type, meta.document_type,
+      meta.assessment_type, record.reportType, record.type, "special_report"
     );
     record.auditType = at;
     warnings.push(`auditType auto-derived → "${at}".`);
@@ -196,26 +239,20 @@ export function normalizeScoiAudit(input) {
 
   // ── purpose (importer requires this) ───────────────────────────────────────
   if (!record.purpose) {
-    const p = derivePurpose(record);
-    record.purpose = p || record.title || record.subject.name || "SCOI structured audit report.";
+    record.purpose = derivePurpose(record, meta) || record.title || record.subject.name || "SCOI structured audit report.";
     warnings.push("purpose auto-derived from executive summary / metadata.");
   }
 
   // ── assessmentWindow.label (dedup + list display) ──────────────────────────
-  const label = deriveWindowLabel(record);
+  const label = deriveWindowLabel(record, meta);
   if (label) {
-    if (!isPlainObject(record.assessmentWindow)) {
-      // keep any existing assessmentWindow data, but guarantee a label
-      record.assessmentWindow = isPlainObject(record.assessmentWindow)
-        ? record.assessmentWindow
-        : {};
-    }
+    if (!isPlainObject(record.assessmentWindow)) record.assessmentWindow = {};
     if (!record.assessmentWindow.label) record.assessmentWindow.label = label;
   }
 
-  // ── reportCode (nice-to-have, used in PDF filename) ────────────────────────
+  // ── reportCode (PDF filename) ──────────────────────────────────────────────
   if (!record.reportCode) {
-    const rc = firstString(meta.report_id, record.report_id, record.code);
+    const rc = firstString(meta.report_id, record.report_id, record.code, meta.report_code);
     if (rc) record.reportCode = rc;
   }
 
@@ -224,12 +261,9 @@ export function normalizeScoiAudit(input) {
   if (!record.author) record.author = firstString(meta.author, meta.publisher) || undefined;
 
   // ── price ──────────────────────────────────────────────────────────────────
-  const priceCents = derivePriceCents(record);
+  const priceCents = derivePriceCents(record, meta);
   if (priceCents != null) warnings.push(`price resolved → $${(priceCents / 100).toFixed(2)}.`);
 
-  // Ensure the newer section_NN_* format is never lost at the top level:
-  // declared schema fields populate where they match; everything else lives in
-  // `raw` and is rendered by scoiCompleteHtml. Nothing is dropped.
   const secs = sectionKeys(record);
   if (secs.length) warnings.push(`${secs.length} section_* block(s) preserved via raw.`);
 
