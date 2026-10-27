@@ -32,6 +32,22 @@ import AuditPurchase from "../models/auditPurchase.js";
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const router = Router();
 
+// ── Admin / mock-test gate ──────────────────────────────────────────────────
+// Mock routes are allowed for ADMIN_EMAILS, or when FOUNDERS_MOCK=1 is set in the
+// environment (handy for a staging box). They let you walk the full post-payment
+// flow without charging a card - they call the SAME activation code the Stripe
+// webhook calls, so what you see is exactly what a real payer would get.
+function isAdminUser(user) {
+  const admins = new Set(
+    (process.env.ADMIN_EMAILS || "")
+      .split(",").map(s => s.trim().toLowerCase()).filter(Boolean)
+  );
+  return !!user?.email && admins.has(user.email.toLowerCase());
+}
+function mockAllowed(req) {
+  return isAdminUser(req.user) || process.env.FOUNDERS_MOCK === "1";
+}
+
 const MAX_MEMBERSHIPS = 100;
 const SEAT_LIMIT      = 5;
 const FIRST_YEAR_CENTS = 500000; // $5,000
@@ -442,6 +458,78 @@ router.get("/founders/renew/success", ensureAuth, async (req, res) => {
     console.error("[founders renew success]", err.message);
   }
   return res.redirect("/founders/portal");
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// MOCK / TEST ROUTES (no real payment)
+//
+// Simulate a successful payment so you can test the whole flow end-to-end.
+// Admin-only (ADMIN_EMAILS) or when FOUNDERS_MOCK=1. Safe to leave in place -
+// a normal visitor cannot reach these. Remove this block for a hard lockdown.
+//
+//   /founders/mock/activate  → pretend the $5,000 first-year payment succeeded
+//   /founders/mock/renew     → pretend a $250 renewal succeeded (+5 reports, +1yr)
+//   /founders/mock/reset     → delete YOUR membership + its granted access (re-test)
+// ═════════════════════════════════════════════════════════════════════════════
+router.get("/founders/mock/activate", ensureAuth, async (req, res) => {
+  if (!mockAllowed(req)) return res.status(403).send("Mock testing is admin-only.");
+  try {
+    // A fresh synthetic 'session' each call so you can reset + re-activate cleanly.
+    const fakeSession = {
+      id: `mock_cs_${Date.now()}`,
+      payment_intent: `mock_pi_${Date.now()}`,
+      customer_email: req.user.email,
+      payment_status: "paid"
+    };
+    const m = await activateFoundersMembership(req.user._id, fakeSession);
+    if (!m) return res.send("Could not activate (cap of 100 reached, or already active). Try /founders/mock/reset first.");
+    console.log(`[founders MOCK] activated #${m.membershipNumber} for ${req.user.email}`);
+    return res.redirect("/founders/portal");
+  } catch (err) {
+    console.error("[founders mock activate]", err);
+    res.status(500).send("Mock activation failed: " + err.message);
+  }
+});
+
+router.get("/founders/mock/renew", ensureAuth, async (req, res) => {
+  if (!mockAllowed(req)) return res.status(403).send("Mock testing is admin-only.");
+  try {
+    const fakeSession = { id: `mock_ren_${Date.now()}`, payment_status: "paid" };
+    const m = await renewFoundersMembership(req.user._id, fakeSession);
+    if (!m) return res.send("No active membership to renew. Run /founders/mock/activate first.");
+    console.log(`[founders MOCK] renewed #${m.membershipNumber} → quota ${m.reportQuota}`);
+    return res.redirect("/founders/portal");
+  } catch (err) {
+    console.error("[founders mock renew]", err);
+    res.status(500).send("Mock renewal failed: " + err.message);
+  }
+});
+
+router.get("/founders/mock/reset", ensureAuth, async (req, res) => {
+  if (!mockAllowed(req)) return res.status(403).send("Mock testing is admin-only.");
+  try {
+    const memberships = await FoundersMembership.find({ userId: req.user._id });
+    // Remove the access grants this membership created (synthetic 'founders:*' purchases).
+    const delPurchases = await AuditPurchase.deleteMany({
+      userId: req.user._id,
+      stripeSessionId: { $regex: "^founders:" }
+    });
+    const delMemberships = await FoundersMembership.deleteMany({ userId: req.user._id });
+    console.log(`[founders MOCK] reset for ${req.user.email}: removed ${delMemberships.deletedCount} membership(s), ${delPurchases.deletedCount} access grant(s)`);
+    return res.send(
+      `<div style="font-family:system-ui;max-width:560px;margin:60px auto;padding:24px;border:1px solid #e5e7eb;border-radius:12px">
+        <h2 style="font-family:Georgia,serif;color:#0F1C2E">Founders test state reset</h2>
+        <p>Removed <b>${delMemberships.deletedCount}</b> membership record(s) and <b>${delPurchases.deletedCount}</b> report-access grant(s) for <b>${req.user.email}</b>.</p>
+        <p style="margin-top:16px">
+          <a href="/founders/mock/activate" style="background:#C9A961;color:#0F1C2E;text-decoration:none;font-weight:700;padding:12px 20px;border-radius:8px">▶ Simulate a $5,000 payment again</a>
+        </p>
+        <p style="margin-top:10px"><a href="/founders">← Back to the Founders page</a></p>
+      </div>`
+    );
+  } catch (err) {
+    console.error("[founders mock reset]", err);
+    res.status(500).send("Mock reset failed: " + err.message);
+  }
 });
 
 export default router;

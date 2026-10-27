@@ -96,7 +96,7 @@ import scoiMarketplaceRoutes from "./routes/scoi_marketplace.js";
 
 import scoiCheckoutRoutes from "./routes/scoi_checkout.js";
 
-// ── FOUNDERS 100 — institutional research access membership (additive) ──
+// ── FOUNDERS 100 - institutional research access membership (additive) ──
 import foundersRoutes from "./routes/founders.js";
 
 import paymentsRouter from "./routes/payments.js";
