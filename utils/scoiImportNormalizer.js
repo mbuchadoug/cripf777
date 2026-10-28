@@ -1,6 +1,6 @@
 // utils/scoiImportNormalizer.js
 // ─────────────────────────────────────────────────────────────────────────────
-// FLEXIBLE SCOI IMPORT NORMALIZER  (v2 — structure-agnostic)
+// FLEXIBLE SCOI IMPORT NORMALIZER  (v2 - structure-agnostic)
 //
 // Goal: accept a SCOI report in ANY shape and turn it into a document the
 // SpecialScoiAudit / PlacementAudit models will accept, WITHOUT dropping
@@ -16,15 +16,15 @@
 //   • plain text
 //
 // Design rules (so nothing that already works breaks):
-//   1. NON-DESTRUCTIVE — a field already present is never overwritten; we only
+//   1. NON-DESTRUCTIVE - a field already present is never overwritten; we only
 //      FILL what's missing.
-//   2. FULL FIDELITY — the complete original is preserved verbatim in `raw`,
+//   2. FULL FIDELITY - the complete original is preserved verbatim in `raw`,
 //      which is what the generic renderer (scoiCompleteHtml) displays.
-//   3. NEVER SKIP — subject.name, auditType and purpose are ALWAYS produced,
+//   3. NEVER SKIP - subject.name, auditType and purpose are ALWAYS produced,
 //      deriving them from whatever the report contains, and generating a
 //      last-resort name rather than rejecting the report.
 //
-// No external dependencies — safe to import anywhere.
+// No external dependencies - safe to import anywhere.
 // ─────────────────────────────────────────────────────────────────────────────
 
 function clone(obj) {
@@ -46,11 +46,11 @@ function firstString(...vals) {
 }
 
 /** Pull a human name out of a free-text subject such as
- *  "Martin Butler — five-minute discussion" → "Martin Butler", or
+ *  "Martin Butler - five-minute discussion" → "Martin Butler", or
  *  "Original Johari Window model (Luft and Ingham, 1955)" → "Original Johari Window model". */
 function leadName(str) {
   if (typeof str !== "string") return null;
-  const cut = str.split(/[—–:|(]| - /)[0];
+  const cut = str.split(/[-–:|(]| - /)[0];
   const out = (cut || str).trim();
   return out || null;
 }
@@ -133,7 +133,7 @@ function derivePriceCents(src, meta) {
   );
 }
 
-/** assessmentWindow.label — used for dedup + list display. */
+/** assessmentWindow.label - used for dedup + list display. */
 function deriveWindowLabel(src, meta) {
   return firstString(
     src.assessmentWindow && src.assessmentWindow.label,
@@ -172,7 +172,7 @@ export function normalizeScoiAudit(input) {
       body: text
     };
     const raw = { document_type: "plain_text_import", title, content: text };
-    warnings.push("Imported as plain text — title/subject derived from the first line.");
+    warnings.push("Imported as plain text - title/subject derived from the first line.");
     return { record, raw, priceCents: null, warnings };
   }
 
@@ -217,7 +217,7 @@ export function normalizeScoiAudit(input) {
     } else {
       // Last resort: never skip. Generate a stable-ish name so it imports.
       record.subject.name = `Imported SCOI Report ${new Date().toISOString().slice(0,19).replace("T"," ")}`;
-      warnings.push("subject.name could not be found — a placeholder name was generated so the report still imports. You can rename it later.");
+      warnings.push("subject.name could not be found - a placeholder name was generated so the report still imports. You can rename it later.");
     }
   }
 

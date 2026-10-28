@@ -296,6 +296,31 @@ router.get("/vouchers", authRequired, async (req, res) => {
   }
 });
 
+// Export ALL matching vouchers (no pagination) for Excel / code list / printing.
+// Same filters as the list; issuers still see only their own. Capped for safety.
+// MUST stay above "/vouchers/:code" so "export" isn't read as a code.
+router.get("/vouchers/export", authRequired, async (req, res) => {
+  try {
+    const q = {};
+    if (req.query.status) q.status = req.query.status;
+    if (req.query.planKey) q.planKey = req.query.planKey;
+    if (req.query.batchId) q.batchId = req.query.batchId;
+    if (req.hsAdmin.role === "issuer") q.createdBy = req.hsAdmin._id;
+    if (req.query.from || req.query.to) {
+      q.createdAt = {};
+      if (req.query.from) q.createdAt.$gte = new Date(req.query.from);
+      if (req.query.to) q.createdAt.$lte = new Date(req.query.to);
+    }
+    const search = String(req.query.q || "").trim().toUpperCase();
+    if (search) q.$or = [{ code: new RegExp(search, "i") }, { "devices.mac": new RegExp(search, "i") }, { note: new RegExp(search, "i") }];
+    const rows = await Voucher.find(q).sort({ createdAt: -1 }).limit(5000).lean();
+    res.json({ count: rows.length, vouchers: rows.map(shapeVoucher) });
+  } catch (err) {
+    console.error("[hotspot export]", err);
+    res.status(500).json({ error: "Could not export vouchers" });
+  }
+});
+
 router.get("/vouchers/:code", authRequired, async (req, res) => {
   const v = await Voucher.findOne({ code: req.params.code.toUpperCase() }).lean();
   if (!v) return res.status(404).json({ error: "Voucher not found" });

@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700&family=Inter:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 :root{
   --ink:#0d2417; --bg:#f2f5f1; --surface:#fff; --surface-2:#f8faf7;
@@ -265,6 +266,80 @@ function dur(mins,type){
   return s.trim()+(type==="uptime"?" of use":"");
 }
 
+// ---------- Export (Excel / codes) + professional paper tickets ----------
+let WIFI_NAME="Central Cyber WiFi";   // updated from the generate response
+let lastBatch=null;                   // the most recent generated batch (for its buttons)
+let curVoucher=null;                  // the voucher open in the drawer (for single print)
+const stamp=()=>new Date().toISOString().slice(0,10);
+function downloadBlob(blob,filename){ const u=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=u; a.download=filename; document.body.appendChild(a); a.click(); setTimeout(()=>{try{URL.revokeObjectURL(u);a.remove();}catch{}} ,1000); }
+function flash(msg){ try{ const d=document.createElement("div"); d.textContent=msg; d.style.cssText="position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:var(--pine);color:#fff;padding:10px 16px;border-radius:10px;font-size:14px;font-weight:600;z-index:9999;box-shadow:0 6px 20px rgba(0,0,0,.2)"; document.body.appendChild(d); setTimeout(()=>{try{d.remove();}catch{}} ,1800);}catch{ alert(msg);} }
+function copyList(codes){ const t=codes.join("\n"); if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(t).then(()=>flash(codes.length+" code"+(codes.length>1?"s":"")+" copied")).catch(()=>window.prompt("Copy the codes:",t)); } else window.prompt("Copy the codes:",t); }
+const exportRows=vs=>vs.map((v,i)=>({ "#":i+1, Code:v.code, Plan:v.planLabel||"", Duration:dur(v.durationMinutes,v.durationType), Devices:v.deviceCap, Price:v.price, Currency:v.currency||"USD", Status:v.status, "Made by":v.createdByName||"", Created:fmtDate(v.createdAt), Note:v.note||"", Batch:v.batchId||"" }));
+function exportExcel(vs, filename){
+  if(!vs||!vs.length){ flash("No codes to export"); return; }
+  const rows=exportRows(vs);
+  if(typeof XLSX!=="undefined"){
+    const ws=XLSX.utils.json_to_sheet(rows);
+    ws["!cols"]=[{wch:4},{wch:12},{wch:16},{wch:12},{wch:8},{wch:7},{wch:8},{wch:10},{wch:14},{wch:18},{wch:16},{wch:14}];
+    const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,"Codes");
+    XLSX.writeFile(wb, filename.replace(/\.csv$/,".xlsx"));
+  } else {  // CDN blocked / offline → CSV that Excel opens fine
+    const head=Object.keys(rows[0]); const q=s=>`"${String(s==null?"":s).replace(/"/g,'""')}"`;
+    const csv=[head.join(",")].concat(rows.map(r=>head.map(h=>q(r[h])).join(","))).join("\r\n");
+    downloadBlob(new Blob([csv],{type:"text/csv;charset=utf-8"}), filename.replace(/\.xlsx$/,".csv"));
+  }
+}
+const cardFromVoucher=v=>({ code:v.code, meta:dur(v.durationMinutes,v.durationType)+" · "+v.deviceCap+" device"+(v.deviceCap>1?"s":""), price:v.price?("$"+v.price):"" });
+// Print branded tickets in an ISOLATED iframe so it never disturbs the app's own
+// print styles (the QR-slip print on the Generate page keeps working untouched).
+function printCodeCards(cards, opts){
+  opts=opts||{}; if(!cards||!cards.length){ flash("Nothing to print"); return; }
+  const wifi=esc(opts.wifi||WIFI_NAME); const single=!!opts.single;
+  const card=c=>`<div class="tk">
+      <div class="tk-top"><span class="tk-brand">CENTRAL CYBER</span><span class="tk-sub">WiFi</span></div>
+      <div class="tk-conn">Connect to &ldquo;${wifi}&rdquo;</div>
+      <div class="tk-code">${esc(c.code)}</div>
+      <div class="tk-meta">${esc(c.meta||"")}${c.price?` &middot; <b>${esc(c.price)}</b>`:""}</div>
+      <ol class="tk-steps"><li>Turn on WiFi, tap &ldquo;${wifi}&rdquo;.</li><li>The sign-in page opens by itself.</li><li>Type this code &mdash; you're online.</li></ol>
+      <div class="tk-foot">Powered by Central Cyber</div>
+    </div>`;
+  const html=`<!doctype html><html><head><meta charset="utf-8"><title>Codes</title><style>
+    @page{size:A4;margin:9mm}
+    *{box-sizing:border-box;font-family:-apple-system,"Segoe UI",Roboto,Arial,sans-serif}
+    body{margin:0}
+    .sheet{display:grid;grid-template-columns:repeat(${single?1:2},1fr);gap:6mm}
+    .tk{border:1.5px dashed #0B7A34;border-radius:7px;padding:11px 13px 8px;page-break-inside:avoid;${single?"max-width:96mm;margin:8mm auto;":""}}
+    .tk-top{display:flex;justify-content:space-between;align-items:baseline;border-bottom:2px solid #0B7A34;padding-bottom:5px}
+    .tk-brand{font-weight:800;letter-spacing:.03em;color:#0B7A34;font-size:13pt}
+    .tk-sub{color:#0B7A34;font-size:8.5pt;letter-spacing:.16em;text-transform:uppercase}
+    .tk-conn{font-size:9pt;color:#555;margin-top:7px;text-align:center}
+    .tk-code{font-family:"Courier New",monospace;font-weight:800;font-size:25pt;letter-spacing:.06em;color:#0B2E17;text-align:center;margin:3px 0 1px}
+    .tk-meta{text-align:center;font-size:10pt;color:#0B7A34}
+    .tk-meta b{color:#0B2E17}
+    .tk-steps{margin:8px 0 7px 17px;padding:0;font-size:8.5pt;color:#333;line-height:1.55}
+    .tk-foot{text-align:center;font-size:7pt;letter-spacing:.14em;text-transform:uppercase;color:#9aa89f;border-top:1px solid #eee;padding-top:5px;margin-top:4px}
+  </style></head><body><div class="sheet">${cards.map(card).join("")}</div>
+  <script>window.onload=function(){setTimeout(function(){window.focus();window.print();},150);}<\/script></body></html>`;
+  const f=document.createElement("iframe");
+  f.style.cssText="position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden";
+  document.body.appendChild(f);
+  const doc=f.contentWindow.document; doc.open(); doc.write(html); doc.close();
+  setTimeout(()=>{try{document.body.removeChild(f);}catch{}} ,120000);
+}
+// Pull the full filtered set (all pages) for export/print on the Vouchers view.
+async function fetchExportSet(){
+  const p=new URLSearchParams(); if(vFilter.status)p.set("status",vFilter.status); if(vFilter.q)p.set("q",vFilter.q);
+  const d=await api("/vouchers/export?"+p.toString()); return d.vouchers||[];
+}
+async function exportVouchersExcel(){ try{ const vs=await fetchExportSet(); exportExcel(vs, `central-cyber-codes-${stamp()}.xlsx`);}catch(e){ flash(e.message); } }
+async function copyVouchersCodes(){ try{ const vs=await fetchExportSet(); if(!vs.length)return flash("No codes"); copyList(vs.map(v=>v.code)); }catch(e){ flash(e.message); } }
+async function printVouchersCards(){ try{ const vs=await fetchExportSet(); if(!vs.length)return flash("No codes"); if(vs.length>60 && !confirm(vs.length+" tickets will print. Continue?"))return; printCodeCards(vs.map(cardFromVoucher)); }catch(e){ flash(e.message); } }
+// Generate-result buttons (operate on the batch just made).
+function exportBatchExcel(){ if(lastBatch) exportExcel(lastBatch.vouchers, `central-cyber-${(lastBatch.batchId||stamp())}.xlsx`); }
+function copyBatchCodes(){ if(lastBatch) copyList(lastBatch.vouchers.map(v=>v.code)); }
+function printBatchCards(){ if(lastBatch) printCodeCards(lastBatch.vouchers.map(cardFromVoucher),{wifi:lastBatch.wifiName}); }
+function printOneCode(){ if(curVoucher) printCodeCards([cardFromVoucher(curVoucher)],{single:true}); }
+
 // ---------- auth ----------
 async function doLogin(){
   const username=document.getElementById("lg-user").value, password=document.getElementById("lg-pass").value;
@@ -432,8 +507,13 @@ async function generate(){
 function renderSlips(d){
   const box=document.getElementById("g-result");
   if(!box || !d || !Array.isArray(d.vouchers)) return;
+  lastBatch=d; if(d.wifiName) WIFI_NAME=d.wifiName;
   box.innerHTML=`<div class="section-title"><h2>${d.vouchers.length} voucher${d.vouchers.length>1?'s':''} ready</h2>
-      <div class="row noprint">${d.routerOnline?'':'<span class="tag t-expired">saved - will sync to router</span>'}<button class="btn btn-ghost btn-sm" onclick="window.print()">Print</button></div></div>
+      <div class="row noprint">${d.routerOnline?'':'<span class="tag t-expired">saved - will sync to router</span>'}
+        <button class="btn btn-ghost btn-sm" onclick="exportBatchExcel()">Excel</button>
+        <button class="btn btn-ghost btn-sm" onclick="copyBatchCodes()">Copy codes</button>
+        <button class="btn btn-ghost btn-sm" onclick="printBatchCards()">Print tickets</button>
+        <button class="btn btn-ghost btn-sm" onclick="window.print()">Print QR slips</button></div></div>
     <div class="slips" id="slips"></div>`;
   const wifi=d.wifiName, plan=d.plan||{};
   const slipsEl=document.getElementById("slips"); if(!slipsEl) return;
@@ -454,7 +534,15 @@ let vFilter={status:"",q:"",page:1};
 async function viewVouchers(){
   mount(`<div class="card noprint" style="margin-bottom:14px">
       <div class="field" style="margin:0 0 12px"><input id="v-search" placeholder="Search code, phone MAC or note…" value="${esc(vFilter.q)}" oninput="vFilter.q=this.value" onkeydown="if(event.key==='Enter'){vFilter.page=1;loadVouchers()}"></div>
-      <div class="chips" id="v-chips"></div>
+      <div class="row spread" style="align-items:flex-end;gap:10px">
+        <div class="chips" id="v-chips"></div>
+        <div class="row" style="gap:6px">
+          <button class="btn btn-ghost btn-sm" onclick="exportVouchersExcel()" title="Download the filtered list as Excel">⬇ Excel</button>
+          <button class="btn btn-ghost btn-sm" onclick="copyVouchersCodes()" title="Copy the codes for WhatsApp">Copy codes</button>
+          <button class="btn btn-ghost btn-sm" onclick="printVouchersCards()" title="Print the filtered codes as paper tickets">Print tickets</button>
+        </div>
+      </div>
+      <div class="muted" style="font-size:12px;margin-top:8px">Export &amp; print act on the current filter (all pages), not just this page.</div>
     </div>
     <div id="v-list"></div><div id="v-pager" class="row noprint" style="justify-content:center;margin-top:14px"></div>`);
   const chips=[["","All"],["unused","Unused"],["active","Active"],["used","Used"],["expired","Expired"],["disabled","Off"]];
@@ -492,6 +580,7 @@ async function openVoucher(code){
   document.getElementById("dr-body").innerHTML=`<div class="muted">Loading…</div>`;
   try{
     const {voucher:v}=await api("/vouchers/"+code);
+    curVoucher=v;
     const devs=(v.devices||[]).map(dv=>`<div class="device"><div class="mac">${esc(dv.mac||"?")}</div><div class="muted">${esc(dv.hostname||"unknown phone")} · ${esc(dv.ip||"")}<br>first ${fmtDate(dv.firstSeen)} · last ${fmtDate(dv.lastSeen)}</div></div>`).join("")||`<div class="muted">No phone has used this yet.</div>`;
     document.getElementById("dr-body").innerHTML=`
       <div class="card" style="text-align:center"><div class="mono" style="font-size:26px;font-weight:700">${esc(v.code)}</div><span class="tag t-${v.status}" style="margin-top:8px;display:inline-block">${v.status}</span></div>
@@ -523,7 +612,8 @@ async function openVoucher(code){
         <div class="err" id="ev-err"></div>
       </div>`:""}
       <div class="section-title"><h2 style="font-size:15px">Phones that used it</h2></div>${devs}
-      <div class="grid noprint" style="grid-template-columns:1fr 1fr;margin-top:16px;gap:10px">
+      <button class="btn btn-gold btn-block noprint" style="margin-top:14px" onclick="printOneCode()">🖨 Print this code (paper ticket)</button>
+      <div class="grid noprint" style="grid-template-columns:1fr 1fr;margin-top:10px;gap:10px">
         <button class="btn btn-pine" onclick="extendV('${v.code}')">Add time</button>
         ${v.status==="disabled"?`<button class="btn btn-ghost" onclick="enableV('${v.code}')">Turn back on</button>`:`<button class="btn btn-ghost" onclick="disableV('${v.code}')">Turn off</button>`}
       </div>
