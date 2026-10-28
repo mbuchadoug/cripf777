@@ -5087,12 +5087,30 @@ try {
     biz &&
     !isGhostSupplierBiz &&
     biz.isSupplier &&
-    biz.subscriptionStatus === "active" &&
     (biz.sessionState === "supplier_reg_enter_ecocash" ||
      biz.sessionState === "supplier_reg_payment_pending")
   ) {
-    biz.sessionState = "ready";
-    await saveBizSafe(biz);
+    // ── ROOT-CAUSE FIX ───────────────────────────────────────────────────────
+    // Clear a stuck payment state ONLY when the SUPPLIER LISTING is genuinely
+    // active (i.e. payment actually completed). This block previously tested
+    // biz.subscriptionStatus === "active" - a BUSINESS-level field that can be
+    // "active" while the supplier's marketplace listing (SupplierProfile.active)
+    // is still inactive. For such sellers it wiped the payment state to "ready"
+    // on the very message that carried the EcoCash number, so the number then
+    // fell through to the product-search block ("Which city?") and Paynow was
+    // NEVER called. We now check the real supplier active flag.
+    try {
+      // Use findSupplierByPhone so 0-prefix / 263 phone variants all match - a
+      // lookup miss must never wrongly clear (or keep) the state.
+      const _supActiveChk = await findSupplierByPhone(phone).catch(() => null);
+      if (_supActiveChk?.active === true) {
+        biz.sessionState = "ready";
+        await saveBizSafe(biz);
+        console.log(`[AUTO-RESET] cleared stuck payment state for ACTIVE supplier ${phone}`);
+      }
+    } catch (e) {
+      console.warn(`[AUTO-RESET] supplier active check failed for ${phone}: ${e.message}`);
+    }
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
