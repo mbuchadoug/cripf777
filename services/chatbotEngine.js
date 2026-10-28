@@ -5146,6 +5146,49 @@ try {
       "💳 To activate, enter your *EcoCash number* (e.g. 0772123456)\n\nOr type *same* to use this WhatsApp number, or *cancel* to go back.");
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 💳 PAY-GUARD (NET 2) — pending-plan EcoCash capture (spaces / state drift)
+  // ───────────────────────────────────────────────────────────────────────────
+  // The PAY-GUARD above catches the number only while sessionState is exactly
+  // supplier_reg_enter_ecocash / supplier_reg_payment_pending. If that state has
+  // drifted (ghost biz, an async reset, a menu round-trip) the EcoCash number the
+  // seller types - especially WITH SPACES like "0777 646 818", which looks even
+  // less like a command - slips past and a search block logs it as "Unknown",
+  // so Paynow is never called. This net re-captures it, but ONLY when the seller
+  // has ALREADY picked a plan (biz.sessionData.supplierPayment.tier is stored).
+  // Ordinary buyers never have that field, so normal searches - including a buyer
+  // typing a phone number - are completely unaffected. The registration handler
+  // itself strips spaces/+/263, so we only need a loose "looks like a number" gate.
+  if (
+    !isMetaAction &&
+    biz &&
+    biz.sessionData?.supplierPayment?.tier &&
+    biz.sessionState !== "supplier_reg_payment_pending"
+  ) {
+    const _rawPay = String(text || "").trim();
+    const _lowPay = _rawPay.toLowerCase();
+    if (_lowPay === "cancel" || _lowPay === "menu" || _lowPay === "back") {
+      biz.sessionState = "ready";
+      if (biz.sessionData) delete biz.sessionData.supplierPayment;
+      await saveBizSafe(biz);
+      return sendMainMenu(from);
+    }
+    // Loose gate only (handler re-normalizes): strip to digits the same way.
+    let _dig = _lowPay === "same" ? String(phone || "") : _rawPay.replace(/\D+/g, "");
+    if (_dig.startsWith("263") && _dig.length === 12) _dig = "0" + _dig.slice(3);
+    if (_dig.length === 9 && _dig.startsWith("7")) _dig = "0" + _dig;
+    const _looksEcocash = _lowPay === "same" || (_dig.startsWith("0") && _dig.length === 10);
+    if (_looksEcocash) {
+      console.log(`[PAY-GUARD-NET2] pending-plan ecocash capture from=${from} text="${text}" state=${biz.sessionState}`);
+      biz.sessionState = "supplier_reg_enter_ecocash";
+      await saveBizSafe(biz);
+      const _netHandled = await handleSupplierRegistrationStates({
+        state: "supplier_reg_enter_ecocash", from, text, biz, saveBiz: saveBizSafe.bind(null, biz)
+      });
+      if (_netHandled) return;
+    }
+  }
+
   // =========================
   // 📨 BUYER REQUEST / SELLER RESPONSE TEXT STATES
   // =========================
@@ -8320,20 +8363,36 @@ if (!isMetaAction && /^ZQ:GROUP:[a-z0-9_-]{1,60}$/i.test(text.trim())) {
 // NOTE: do NOT fire while the seller is already inside the activation/registration
 // flow (supplier_reg_* / school_reg_*). Otherwise the EcoCash number they type
 // during payment would be hijacked back to the plan chooser and never charged.
-if (!isMetaAction && supplierExists && supplierExists.active === false &&
-    !biz?.sessionState?.startsWith("supplier_reg_") &&
-    !biz?.sessionState?.startsWith("school_reg_")) {
+// A lead-flagged inactive seller's reply must be redirected to ACTIVATION, not
+// dropped into the buyer search flow. We catch BOTH free text (!isMetaAction) AND
+// the buyer-search taps (sup_search_city_*) that the city-picker produces - that
+// is the "select city" step the seller kept hitting. The flag is NOT cleared, so
+// EVERY reply keeps redirecting until the seller activates (then active===true and
+// this stops) or the 72h window ends. Plan/activation taps (sup_plan_*,
+// sup_upgrade_plan, sup_renew_plan, main_menu_back) are NOT search taps, so they
+// pass straight through to payment. Registration/payment states are excluded so
+// the EcoCash flow is never hijacked. Active sellers & non-sellers are untouched.
+const _isBuyerSearchTap = isMetaAction && typeof a === "string" &&
+  a.startsWith("sup_search_city_");
+if (
+  supplierExists && supplierExists.active === false &&
+  !biz?.sessionState?.startsWith("supplier_reg_") &&
+  !biz?.sessionState?.startsWith("school_reg_") &&
+  (!isMetaAction || _isBuyerSearchTap)
+) {
   try {
     const _pvNudgeUntil = Number(_sessForOrderCheck?.tempData?.pvLeadNudge || 0);
     if (_pvNudgeUntil && Date.now() < _pvNudgeUntil) {
-      await UserSession.updateOne({ phone }, { $unset: { "tempData.pvLeadNudge": "" } });
+      // Clear any half-started buyer search so they don't resume it after activating.
+      await UserSession.updateOne({ phone }, { $unset: {
+        "tempData.supplierSearchProduct": "", "tempData.supplierSearchMode": ""
+      } }).catch(() => {});
       await sendText(from,
         "📩 *You have a lead waiting on ZimQuote.*\n\n" +
         "Your listing is currently *inactive*, so the customer can't be connected to you yet.\n\n" +
         "Activate now to unlock this lead and start receiving orders 👇"
       );
-      // One tap closer to paying: take them STRAIGHT to the plan chooser instead of
-      // the main menu (which needed an extra "Activate Listing" tap first).
+      // Take them STRAIGHT to the plan chooser (one tap from paying).
       return sendList(from,
         "💳 *Choose Your Plan*\n\nAll plans include:\n✅ Listed in search\n✅ Phone number visible\n✅ Unlimited uploads\n✅ Unlimited orders\n\nPick a plan to activate instantly:",
         [
