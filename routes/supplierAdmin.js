@@ -16360,15 +16360,21 @@ async function _pvSendProfileOpen({ phone, businessName, source, note, contactMo
   // Build the single-line {{2}} that carries BOTH the enquiry and the contact + CTA.
   let via = base;
   if (noteClean) via += " · " + noteClean;
-  if (sellerActive)   via += (kind === "enquiry" ? " · reply to respond" : " · reply to view & respond");
-  else if (showMask)  via += " · From " + _pvMaskPhone(visitorPhone) + " - tap Activate to unlock their number & reply";
-  else if (!showFull) via += (kind === "enquiry" ? " · tap Activate to view & reply" : " · tap Activate to view their contact");
+  // Wording distinguishes ACTIVE vs INACTIVE sellers. For inactive sellers we use
+  // REPLY-based wording (not "tap a button"): any reply opens the session and the
+  // bot takes them straight to Choose Your Plan. If a button template is configured
+  // (ZQ_ENQUIRY_TEMPLATE), the one-tap "Activate Now" button is added below as well.
+  if (sellerActive)   via += (kind === "enquiry" ? " · reply to respond to this customer" : " · reply to view & respond");
+  else if (showMask)  via += " · From " + _pvMaskPhone(visitorPhone) + " - reply *menu* to activate & unlock their number";
+  else if (!showFull) via += (kind === "enquiry" ? " · reply *menu* to activate your listing & reply" : " · reply *menu* to activate your listing & see their contact");
   via += photoTag;
   via = via.slice(0, 300);
 
   // ── Optional dedicated enquiry template with a one-tap Activate button ──────
+  // Used ONLY for INACTIVE sellers, so the "💳 Activate Now" button is always
+  // correct. Active/paid sellers fall through to the standard template below.
   const NEWTPL = String(process.env.ZQ_ENQUIRY_TEMPLATE || "").trim();
-  if (NEWTPL) {
+  if (NEWTPL && !sellerActive) {
     try {
       const contactVar = showFull ? _pvFmtPhone(visitorPhone) : showMask ? _pvMaskPhone(visitorPhone) : "-";
       const cta = (sellerActive || showFull)

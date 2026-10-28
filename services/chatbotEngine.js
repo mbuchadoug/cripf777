@@ -5095,6 +5095,39 @@ try {
     await saveBizSafe(biz);
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 💳 LASTING PAYMENT FIX — EcoCash entry must beat EVERY search block
+  // ───────────────────────────────────────────────────────────────────────────
+  // When a seller picks a plan, biz.sessionState becomes "supplier_reg_enter_ecocash"
+  // (then "supplier_reg_payment_pending"). Three different search intercepts further
+  // down (no-biz, with-biz, ghost-biz) were each racing to grab the EcoCash number
+  // the seller types and treat it as a product search -> "Which city?". The result:
+  // Paynow was NEVER called and NO activation payment ever completed. We handle these
+  // two states HERE, before any of those blocks can run, for REAL and GHOST biz alike.
+  // Escape words still let the seller back out.
+  if (
+    !isMetaAction &&
+    biz &&
+    (biz.sessionState === "supplier_reg_enter_ecocash" ||
+     biz.sessionState === "supplier_reg_payment_pending")
+  ) {
+    const _payTxt = String(text || "").trim().toLowerCase();
+    if (_payTxt === "cancel" || _payTxt === "menu" || _payTxt === "back") {
+      biz.sessionState = "ready";
+      if (biz.sessionData) delete biz.sessionData.supplierPayment;
+      await saveBizSafe(biz);
+      return sendMainMenu(from);
+    }
+    console.log(`[PAY-GUARD] intercept ecocash entry: state=${biz.sessionState} from=${from} text="${text}"`);
+    const _payHandled = await handleSupplierRegistrationStates({
+      state: biz.sessionState, from, text, biz, saveBiz: saveBizSafe.bind(null, biz)
+    });
+    if (_payHandled) return;
+    // Handler didn't take it (unexpected) - re-prompt rather than fall into search.
+    return sendText(from,
+      "💳 To activate, enter your *EcoCash number* (e.g. 0772123456)\n\nOr type *same* to use this WhatsApp number, or *cancel* to go back.");
+  }
+
   // =========================
   // 📨 BUYER REQUEST / SELLER RESPONSE TEXT STATES
   // =========================
