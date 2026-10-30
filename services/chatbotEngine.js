@@ -5114,7 +5114,7 @@ try {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // 💳 LASTING PAYMENT FIX — EcoCash entry must beat EVERY search block
+  // 💳 LASTING PAYMENT FIX - EcoCash entry must beat EVERY search block
   // ───────────────────────────────────────────────────────────────────────────
   // When a seller picks a plan, biz.sessionState becomes "supplier_reg_enter_ecocash"
   // (then "supplier_reg_payment_pending"). Three different search intercepts further
@@ -5147,7 +5147,7 @@ try {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // 💳 PAY-GUARD (NET 2) — pending-plan EcoCash capture (spaces / state drift)
+  // 💳 PAY-GUARD (NET 2) - pending-plan EcoCash capture (spaces / state drift)
   // ───────────────────────────────────────────────────────────────────────────
   // The PAY-GUARD above catches the number only while sessionState is exactly
   // supplier_reg_enter_ecocash / supplier_reg_payment_pending. If that state has

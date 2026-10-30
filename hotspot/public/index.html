@@ -876,7 +876,7 @@ async function viewSellers(){
   mount(`<div id="adm"><div class="muted">Loading…</div></div>`);
   try{
     const {admins}=await api("/admins");
-    const {plans}=await api("/plans");
+    const {plans}=await api("/plans"); adminPlans=plans||[];
     document.getElementById("adm").innerHTML=`
       <div class="card noprint" style="margin-bottom:14px">
         <h2 style="font-size:16px;margin-bottom:12px">Add an admin</h2>
@@ -902,6 +902,11 @@ async function viewSellers(){
 
       <div class="section-title"><h2>Plans</h2></div>
       <div class="card noprint" style="margin-bottom:14px">
+        <div class="row spread" style="margin-bottom:10px">
+          <h3 id="p-form-title" style="font-size:15px">Add a package</h3>
+          <button class="btn btn-ghost btn-sm" onclick="newPlan()">New / clear</button>
+        </div>
+        <p class="muted" style="font-size:12px;margin:-4px 0 12px">Click <b>Edit</b> on any package below to change its name, time, price or speed, then Save. Existing codes already sold keep their original time.</p>
         <div class="grid" style="grid-template-columns:1fr 1fr;gap:10px">
           <div class="field" style="margin:0"><label>Name shown</label><input id="p-label" placeholder="Lunch - 2 hours"></div>
           <div class="field" style="margin:0"><label>Short key</label><input id="p-key" placeholder="lunch2h"></div>
@@ -915,10 +920,17 @@ async function viewSellers(){
         <button class="btn btn-pine btn-block" style="margin-top:12px" onclick="savePlan()">Save plan</button>
         <div class="err" id="p-err"></div>
       </div>
-      <div class="tablewrap"><table><thead><tr><th>Plan</th><th>Allows</th><th>Price</th></tr></thead>
-        <tbody>${plans.map(p=>`<tr><td data-label="Plan">${esc(p.label)} <span class="muted mono">${esc(p.key)}</span></td>
-          <td data-label="Allows">${dur(p.durationMinutes,p.durationType)} · ${p.deviceCap}d</td>
-          <td data-label="Price">${p.price} ${p.currency}</td></tr>`).join("")}</tbody></table></div>`;
+      <div class="tablewrap"><table><thead><tr><th>Plan</th><th>Allows</th><th>Price</th><th>Status</th><th></th></tr></thead>
+        <tbody>${plans.map(p=>`<tr>
+          <td data-label="Plan">${esc(p.label)} <span class="muted mono">${esc(p.key)}</span></td>
+          <td data-label="Allows">${dur(p.durationMinutes,p.durationType)} · ${p.deviceCap}d${p.downKbps?` · ${(p.downKbps/1000)}Mbps`:''}</td>
+          <td data-label="Price">${p.price} ${p.currency}</td>
+          <td data-label="Status">${p.active===false?'<span class="tag t-disabled">hidden</span>':'<span class="tag t-active">live</span>'}</td>
+          <td data-label=""><div class="row" style="gap:6px;justify-content:flex-end">
+            <button class="btn btn-ghost btn-sm" onclick="editPlan('${esc(p.key)}')">Edit</button>
+            <button class="btn btn-ghost btn-sm" onclick="togglePlan('${esc(p.key)}')">${p.active===false?'Show':'Hide'}</button>
+            <button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="delPlan('${esc(p.key)}')">Delete</button>
+          </div></td></tr>`).join("")}</tbody></table></div>`;
     suggestPlanPrice();
   }catch(e){ document.getElementById("adm").innerHTML=`<div class="card">${esc(e.message)}</div>`; }
 }
@@ -939,6 +951,21 @@ async function suggestPlanPrice(){
     if(hint){ hint.innerHTML=`suggested <b style="color:var(--pine)">$${r.price}</b> <a href="#" onclick="document.getElementById('p-price').value=${r.price};return false" style="color:var(--pine)">use</a>`; }
   }catch{ if(hint) hint.textContent=""; }
 }
+let adminPlans=[];
+function fillPlanForm(p){
+  const set=(id,v)=>{const el=document.getElementById(id); if(el) el.value=v;};
+  set("p-label",p?p.label:""); set("p-key",p?p.key:"");
+  set("p-min",p?p.durationMinutes:120); set("p-dev",p?p.deviceCap:1);
+  set("p-price",p?p.price:1); set("p-down",p?(p.downKbps||0):4000); set("p-up",p?(p.upKbps||0):1000);
+  const t=document.getElementById("p-type"); if(t) t.value=(p&&p.durationType==="clock")?"clock":"uptime";
+  const h=document.getElementById("p-form-title"); if(h) h.textContent = p?`Edit "${p.label}"`:"Add a package";
+  const e=document.getElementById("p-err"); if(e) e.textContent="";
+  suggestPlanPrice();
+}
+function editPlan(key){ const p=adminPlans.find(x=>x.key===key); if(!p)return; fillPlanForm(p); try{document.getElementById("p-form-title").scrollIntoView({behavior:"smooth",block:"center"});}catch{} }
+function newPlan(){ fillPlanForm(null); try{document.getElementById("p-label").focus();}catch{} }
+async function togglePlan(key){ const p=adminPlans.find(x=>x.key===key); if(!p)return; try{ await api("/plans",{method:"POST",body:JSON.stringify({label:p.label,key:p.key,durationType:p.durationType,durationMinutes:p.durationMinutes,deviceCap:p.deviceCap,price:p.price,downKbps:p.downKbps||0,upKbps:p.upKbps||0,active:p.active===false})}); viewSellers(); }catch(e){ alert(e.message); } }
+async function delPlan(key){ if(!confirm('Delete package "'+key+'"?\nCodes already sold keep working - it just stops being offered to new buyers.'))return; try{ await api("/plans/"+encodeURIComponent(key),{method:"DELETE"}); viewSellers(); }catch(e){ alert(e.message); } }
 async function savePlan(){
   const err=document.getElementById("p-err");err.textContent="";
   try{ await api("/plans",{method:"POST",body:JSON.stringify({label:document.getElementById("p-label").value,key:document.getElementById("p-key").value,durationType:document.getElementById("p-type").value,durationMinutes:document.getElementById("p-min").value,deviceCap:document.getElementById("p-dev").value,price:document.getElementById("p-price").value,downKbps:document.getElementById("p-down").value,upKbps:document.getElementById("p-up").value})}); viewSellers(); }catch(e){ err.textContent=e.message; }

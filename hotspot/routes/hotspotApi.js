@@ -163,6 +163,15 @@ router.post("/plans", authRequired, ownerRequired, async (req, res) => {
   }
 });
 
+// Delete a package (owner). Existing vouchers keep their snapshot terms and keep
+// working; the package just stops being offered. The router profile is left as-is.
+router.delete("/plans/:key", authRequired, ownerRequired, async (req, res) => {
+  const key = String(req.params.key || "").toLowerCase();
+  const plan = await HotspotPlan.findOneAndDelete({ key });
+  if (!plan) return res.status(404).json({ error: "Package not found" });
+  res.json({ ok: true });
+});
+
 // ============================================================
 // 🎟️ VOUCHERS
 // ============================================================
