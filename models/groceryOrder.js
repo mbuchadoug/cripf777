@@ -41,7 +41,7 @@ const GroceryOrderSchema = new mongoose.Schema({
   },
 
   delivery: {
-    zone:     { type: String, enum: ["cbd", "mid", "outer"], required: true },
+    zone:     { type: String, enum: ["cbd", "mid", "outer", "collect"], required: true },
     area:     { type: String, default: "" },     // suburb / township
     address:  { type: String, default: "" },     // house / street or description
     landmark: { type: String, default: "" },     // Zimbabwe reality: landmarks > addresses

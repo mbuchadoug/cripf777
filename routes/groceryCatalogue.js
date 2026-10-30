@@ -79,9 +79,11 @@ export const CATALOGUE = {
 // Delivery zones from Harare CBD - flat fees set ABOVE real rider fuel+time.
 // Raised 2026-10-15 for higher fuel (CG125 ~$0.85 mid / ~$2 outer round-trip + rider pay).
 export const ZONES = {
-  cbd:   { label: "CBD / Avenues / inner (≤5km)", fee: 4 },
-  mid:   { label: "Mid suburbs (Borrowdale, Waterfalls, Mbare, Highfield…)", fee: 6 },
-  outer: { label: "Outer / Chitungwiza / Norton edge (12–25km)", fee: 10 }
+  cbd:     { label: "CBD / Avenues / inner (≤5km)", fee: 4 },
+  mid:     { label: "Mid suburbs (Borrowdale, Waterfalls, Mbare, Highfield…)", fee: 6 },
+  outer:   { label: "Outer / Chitungwiza / Norton edge (12–25km)", fee: 10 },
+  // Collection / pickup: customer collects from the ZimQuote point, no delivery fee.
+  collect: { label: "Collection / pickup (no delivery fee)", fee: 0 }
 };
 
 export const MIN_GOODS = 30;
