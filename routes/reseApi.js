@@ -34,7 +34,7 @@ const router = Router();
 router.use(express.json());
 router.use(express.urlencoded({ extended: true }));
 
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 6 * 1024 * 1024 } });
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 12 * 1024 * 1024 } });
 
 const JWT_SECRET = process.env.RESE_JWT_SECRET || process.env.JWT_SECRET || "rese_dev_secret_change_me";
 // Reuse the SAME WhatsApp credentials the ZimQuote chatbot already uses.
@@ -425,21 +425,41 @@ router.post("/me/avatar", requireReseAuth, upload.single("photo"), async (req, r
 });
 
 // selfie + national ID → sets verification to "pending" for admin review
+// Multer is run manually so its errors return JSON (not an HTML 500) and are
+// logged — this is what tells us WHY an upload fails.
+const verifyUpload = upload.fields([{ name: "selfie", maxCount: 1 }, { name: "id", maxCount: 1 }]);
 router.post(
   "/me/verify",
   requireReseAuth,
-  upload.fields([{ name: "selfie", maxCount: 1 }, { name: "id", maxCount: 1 }]),
+  (req, res, next) => {
+    verifyUpload(req, res, (err) => {
+      if (err) {
+        console.error("[rese verify] multer error:", err.code || "", err.message);
+        return res.status(400).json({ error: "upload_error", detail: err.code || err.message });
+      }
+      next();
+    });
+  },
   async (req, res) => {
-    const u = req.reseUser;
-    u.isWorker = true;
-    if (req.files?.selfie?.[0]) u.worker.selfieFileId = await putFile(req.files.selfie[0].buffer, `selfie_${u._id}.jpg`, "image/jpeg");
-    if (req.files?.id?.[0]) u.worker.idFileId = await putFile(req.files.id[0].buffer, `id_${u._id}.jpg`, "image/jpeg");
-    if (u.worker.selfieFileId && u.worker.idFileId) {
-      u.verification.status = "pending";
-      if (REQUIRE_APPROVAL) u.status = "pending"; // awaits admin reveal/approval
+    try {
+      const u = req.reseUser;
+      const sel = req.files?.selfie?.[0];
+      const idf = req.files?.id?.[0];
+      console.log("[rese verify] user=%s selfie=%s(%s) id=%s(%s)", String(u._id), !!sel, sel?.size, !!idf, idf?.size);
+      u.isWorker = true;
+      if (sel) u.worker.selfieFileId = await putFile(sel.buffer, `selfie_${u._id}.jpg`, "image/jpeg");
+      if (idf) u.worker.idFileId = await putFile(idf.buffer, `id_${u._id}.jpg`, "image/jpeg");
+      if (u.worker.selfieFileId && u.worker.idFileId) {
+        u.verification.status = "pending";
+        if (REQUIRE_APPROVAL) u.status = "pending"; // awaits admin reveal/approval
+      }
+      await u.save();
+      console.log("[rese verify] OK user=%s verification=%s", String(u._id), u.verification.status);
+      res.json({ ok: true, verification: u.verification.status, user: publicUser(u) });
+    } catch (err) {
+      console.error("[rese verify] handler error:", err);
+      res.status(500).json({ error: "verify_failed", detail: err.message });
     }
-    await u.save();
-    res.json({ ok: true, verification: u.verification.status, user: publicUser(u) });
   }
 );
 
