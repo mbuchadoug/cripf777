@@ -356,7 +356,18 @@ router.post("/auth/verify", async (req, res) => {
     const reviewerCode = String(process.env.RESE_REVIEWER_CODE || "123456");
     if (phone === reviewerPhone && code === reviewerCode) {
       let ru = await ReseUser.findOne({ phone });
-      if (!ru) ru = await ReseUser.create({ phone, name: "App Reviewer", isRequester: true });
+      if (!ru) ru = await ReseUser.create({ phone, name: "App Reviewer" });
+      // Fully unblock the reviewer: both roles, approved worker, no gating, and
+      // a broad profile so the job feed is populated (skills "any", all areas).
+      ru.name = ru.name || "App Reviewer";
+      ru.isRequester = true;
+      ru.isWorker = true;
+      ru.status = "active";
+      ru.verification = ru.verification || {};
+      ru.verification.status = "approved";
+      ru.worker = ru.worker || {};
+      ru.worker.skills = (ru.worker.skills && ru.worker.skills.length) ? ru.worker.skills : ["any"];
+      ru.worker.suburbs = []; // empty = see jobs in every area
       ru.lastActiveAt = new Date();
       await ru.save();
       return res.json({ token: signToken(ru), user: publicUser(ru) });
