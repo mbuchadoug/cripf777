@@ -237,6 +237,7 @@ export async function sendMainMenu(to) {
     // Trial supplier (no invoicing tools yet) → keep marketplace-first menu.
     return sendList(to, MENU_MSG, [
       { id: "sup_request_sellers", title: "⚡ Request Sellers" },
+      { id: "biker_request_rider", title: "🏍️ Request a Rider" },
       { id: "find_supplier",       title: "🔍 Browse & Shop" },
       { id: "my_orders",           title: "📋 My Orders" },
       { id: "find_school",         title: "🎓 Schools & Tutors" },
@@ -249,6 +250,7 @@ export async function sendMainMenu(to) {
     return sendList(to, MENU_MSG + "\n\n⚠️ Your listing is currently inactive - activate it to appear in search and receive customer enquiries.", [
       ...(hasStaffRole && isRealBiz ? [{ id: "biz_tools_menu", title: "📊 Business Tools" }] : []),
       { id: "sup_request_sellers", title: "⚡ Request Sellers" },
+      { id: "biker_request_rider", title: "🏍️ Request a Rider" },
       { id: "find_supplier",       title: "🔍 Browse & Shop" },
       { id: "my_orders",           title: "📋 My Orders" },
       { id: "find_school",         title: "🎓 Schools & Tutors" },
@@ -385,6 +387,7 @@ export async function sendBusinessHomeMenu(to, biz, { isOwner = false } = {}) {
 export async function sendMarketplaceMenu(to, biz, { isOwner = false } = {}) {
   const items = [
     { id: "sup_request_sellers", title: "⚡ Request Sellers" },
+    { id: "biker_request_rider", title: "🏍️ Request a Rider" },
     { id: "find_supplier",       title: "🔍 Browse & Shop" },
     { id: "my_orders",           title: "📋 My Orders" },
     { id: "find_school",         title: "🎓 Schools & Tutors" },
