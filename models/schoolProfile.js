@@ -299,6 +299,10 @@ const schoolProfileSchema = new mongoose.Schema({
     type: [{
       id:            { type: String, default: () => Date.now().toString(36) + Math.random().toString(36).slice(2,5) },
       name:          { type: String, required: true },
+      // Branch level/type - a branch can be a different level from the head office
+      // (e.g. head office is Secondary, a branch is a Preschool in another suburb).
+      //   "ecd" | "primary" | "ecd_primary" | "secondary" | "combined" | ""
+      schoolType:    { type: String, default: "" },
       suburb:        { type: String, default: "" },
       city:          { type: String, default: "" },
       address:       { type: String, default: "" },

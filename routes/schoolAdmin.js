@@ -1974,6 +1974,117 @@ router.get("/schools/:id/edit", requireSupplierAdmin, async (req, res) => {
         </form>
       </div>
 
+      <!-- ── BRANCHES / CAMPUSES ─ separate panel outside the main edit form ── -->
+      <div class="panel" style="max-width:900px;margin-top:24px">
+        <h3>🏫 Branches / Campuses</h3>
+        <p style="font-size:13px;color:var(--muted);margin-bottom:16px">
+          Register this school <strong>once</strong> and add its other campuses here. A branch can be a
+          <strong>different level</strong> (Preschool, Primary, Secondary, Combined) and in a
+          <strong>different area</strong>. When a parent opens this school's smart link or search result,
+          they first pick a branch, then see that branch's level, contact, admissions and fee note.
+          Enquiries go to that branch's own notification numbers (plus the school primary).
+          Leave empty for a single-location school - nothing changes.
+        </p>
+
+        ${(school.branches||[]).length ? `
+        <table style="width:100%;border-collapse:collapse;margin-bottom:18px;font-size:13px">
+          <thead><tr style="background:var(--bg)">
+            <th style="padding:9px 10px;text-align:left;border-bottom:1px solid var(--border)">Branch</th>
+            <th style="padding:9px 10px;text-align:left;border-bottom:1px solid var(--border)">Level</th>
+            <th style="padding:9px 10px;text-align:left;border-bottom:1px solid var(--border)">Area</th>
+            <th style="padding:9px 10px;text-align:left;border-bottom:1px solid var(--border)">Contact / Alerts</th>
+            <th style="padding:9px 10px;border-bottom:1px solid var(--border)"></th>
+          </tr></thead>
+          <tbody>
+          ${(school.branches||[]).map(b=>{
+            const _tl = (SCHOOL_TYPES.find(t=>t.id===b.schoolType)?.label) || "General";
+            return `<tr>
+              <td style="padding:9px 10px;border-bottom:1px solid var(--border);font-weight:600">${esc(b.name)}
+                ${b.admissionsOpen?'<span style="color:#16a34a;font-size:11px">· 🟢 Open</span>':'<span style="color:#b91c1c;font-size:11px">· 🔴 Closed</span>'}
+                ${b.active===false?'<span style="color:#b91c1c;font-size:11px"> (hidden)</span>':''}</td>
+              <td style="padding:9px 10px;border-bottom:1px solid var(--border)">${esc(_tl)}</td>
+              <td style="padding:9px 10px;border-bottom:1px solid var(--border)">${esc([b.suburb,b.city||school.city].filter(Boolean).join(', ')||'-')}</td>
+              <td style="padding:9px 10px;border-bottom:1px solid var(--border)">
+                ${b.contactPhone?esc(b.contactPhone):'<span style="color:var(--muted)">-</span>'}
+                ${(b.notificationContacts&&b.notificationContacts.length)?`<br><span style="color:var(--muted);font-size:11px">🔔 ${esc(b.notificationContacts.join(', '))}</span>`:''}
+                ${b.ecocashNumber?`<br><span style="color:var(--muted);font-size:11px">📲 ${esc(b.ecocashNumber)}</span>`:''}
+                ${b.feeNote?`<br><span style="color:var(--muted);font-size:11px">💵 ${esc(b.feeNote)}</span>`:''}
+              </td>
+              <td style="padding:9px 10px;border-bottom:1px solid var(--border);text-align:right">
+                <form method="POST" action="/zq-admin/schools/${esc(String(school._id))}/branches/${esc(String(b.id))}/delete" style="margin:0"
+                      onsubmit="return confirm('Remove the ${esc(String(b.name).replace(/'/g,''))} branch?');">
+                  <button type="submit" class="btn btn-red" style="padding:5px 10px">🗑</button>
+                </form>
+              </td>
+            </tr>`;
+          }).join("")}
+          </tbody>
+        </table>` : `<p style="font-size:13px;color:var(--muted);margin-bottom:16px">No extra branches yet. The main profile above is the Head Office.</p>`}
+
+        <form method="POST" action="/zq-admin/schools/${esc(String(school._id))}/branches" style="border-top:1px dashed var(--border);padding-top:16px">
+          <h4 style="margin:0 0 12px;font-size:14px">➕ Add a branch</h4>
+          <div class="form-grid">
+            <div class="fg">
+              <label>Branch name *</label>
+              <input name="name" required placeholder="e.g. Borrowdale Campus" />
+            </div>
+            <div class="fg">
+              <label>Branch level / type</label>
+              <select name="schoolType">
+                <option value="">General / same as main</option>
+                ${SCHOOL_TYPES.map(t=>`<option value="${esc(t.id)}">${esc(t.label)}</option>`).join("")}
+              </select>
+            </div>
+            <div class="fg">
+              <label>Suburb / area</label>
+              <input name="suburb" placeholder="e.g. Borrowdale" />
+            </div>
+            <div class="fg">
+              <label>City</label>
+              <select name="city">
+                <option value="">Same as main (${esc(school.city||'')})</option>
+                ${SCHOOL_CITIES.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join("")}
+              </select>
+            </div>
+            <div class="fg">
+              <label>Contact phone (shown to parents)</label>
+              <input name="contactPhone" placeholder="e.g. 0712345678" />
+            </div>
+            <div class="fg">
+              <label>EcoCash number</label>
+              <input name="ecocashNumber" placeholder="e.g. 0712345678" />
+            </div>
+            <div class="fg">
+              <label>Branch email</label>
+              <input name="email" type="email" placeholder="branch@school.co.zw" />
+            </div>
+            <div class="fg">
+              <label>Admissions</label>
+              <select name="admissionsOpen">
+                <option value="true">🟢 Open</option>
+                <option value="false">🔴 Closed</option>
+              </select>
+            </div>
+            <div class="fg full">
+              <label>Physical address</label>
+              <input name="address" placeholder="Street address of this branch" />
+            </div>
+            <div class="fg full">
+              <label>Fee note (optional - shown to parents)</label>
+              <input name="feeNote" placeholder="e.g. Primary $450/term, ECD $300/term" />
+            </div>
+            <div class="fg full">
+              <label>Branch notification numbers (comma or new-line separated, international format)</label>
+              <textarea name="notificationContacts" rows="2" placeholder="2637XXXXXXXX, 2637XXXXXXXX" style="font-family:monospace"></textarea>
+              <span style="font-size:11px;color:var(--muted)">These numbers get a WhatsApp alert when a parent enquires to THIS branch.</span>
+            </div>
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn btn-blue">➕ Add branch</button>
+          </div>
+        </form>
+      </div>
+
       <!-- ── SMART LINK FLYERS ─ separate panel outside the main edit form ──── -->
       <div class="panel" style="max-width:900px;margin-top:24px">
         <h3>🖼️ Smart Link Flyers</h3>
@@ -2783,6 +2894,53 @@ router.post("/schools/:id/toggle-admissions", requireSupplierAdmin, async (req, 
     await school.save();
   }
   res.redirect(`/zq-admin/schools/${req.params.id}`);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BRANCHES / CAMPUSES
+// POST /zq-admin/schools/:id/branches            → add a branch
+// POST /zq-admin/schools/:id/branches/:bid/delete → remove a branch
+// A branch can have its own level (schoolType), area, contact, EcoCash, admissions
+// and notification numbers. Additive - single-location schools are unaffected.
+// ─────────────────────────────────────────────────────────────────────────────
+router.post("/schools/:id/branches", requireSupplierAdmin, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const name = String(b.name || "").trim();
+    if (!name) {
+      return res.redirect(`/zq-admin/schools/${req.params.id}?success=${encodeURIComponent("⚠️ Branch name is required.")}`);
+    }
+    const notif = String(b.notificationContacts || "")
+      .split(/[\n,;\s]+/).map(s => s.replace(/\D+/g, "")).filter(s => s.length >= 9);
+    const branch = {
+      id:            Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
+      name:          name.slice(0, 80),
+      schoolType:    String(b.schoolType || "").trim(),
+      suburb:        String(b.suburb || "").trim(),
+      city:          String(b.city || "").trim(),
+      address:       String(b.address || "").trim(),
+      contactPhone:  String(b.contactPhone || "").trim(),
+      ecocashNumber: String(b.ecocashNumber || "").trim(),
+      email:         String(b.email || "").trim(),
+      admissionsOpen: String(b.admissionsOpen) !== "false",
+      notificationContacts: [...new Set(notif)],
+      feeNote:       String(b.feeNote || "").trim(),
+      active:        true
+    };
+    await SchoolProfile.findByIdAndUpdate(req.params.id, { $push: { branches: branch } });
+    res.redirect(`/zq-admin/schools/${req.params.id}?success=${encodeURIComponent(`Branch "${branch.name}" added.`)}`);
+  } catch (err) {
+    res.redirect(`/zq-admin/schools/${req.params.id}?success=${encodeURIComponent("⚠️ " + err.message)}`);
+  }
+});
+
+router.post("/schools/:id/branches/:bid/delete", requireSupplierAdmin, async (req, res) => {
+  try {
+    await SchoolProfile.findByIdAndUpdate(req.params.id, { $pull: { branches: { id: req.params.bid } } });
+    res.redirect(`/zq-admin/schools/${req.params.id}?success=${encodeURIComponent("Branch removed.")}`);
+  } catch (err) {
+    res.redirect(`/zq-admin/schools/${req.params.id}?success=${encodeURIComponent("⚠️ " + err.message)}`);
+  }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

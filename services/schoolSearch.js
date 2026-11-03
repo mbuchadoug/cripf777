@@ -403,6 +403,27 @@ export async function runSchoolShortcodeSearch({ from, text, biz, saveBiz }) {
 // ─────────────────────────────────────────────────────────────────────────────
 export async function handleSchoolFreeTextSearch({ from, text, biz, saveBiz }) {
   const raw = String(text || "").trim();
+  if (raw.length < 1) return false;
+
+  // ── Reply with a NUMBER → open that school from the last numbered list ───────
+  if (/^\d{1,3}$/.test(raw)) {
+    let resultIds = [];
+    try {
+      const { default: UserSession } = await import("../models/userSession.js");
+      const sess = await UserSession.findOne({ phone: from.replace(/\D+/g, "") }).lean();
+      resultIds = sess?.tempData?.schoolResultIds || [];
+    } catch (_) {}
+    if (Array.isArray(resultIds) && resultIds.length) {
+      const idx = parseInt(raw, 10) - 1;
+      if (idx >= 0 && idx < resultIds.length) {
+        return _openSchoolResult(from, resultIds[idx], biz, saveBiz);
+      }
+      await sendText(from, `Please reply with a number between 1 and ${resultIds.length}.`);
+      return true;
+    }
+    // No active result list - fall through and treat the digits as a new search.
+  }
+
   if (raw.length < 2) return false;
 
   // Try a structured filter parse first (city / type / fees / curriculum / etc.).
@@ -416,20 +437,34 @@ export async function handleSchoolFreeTextSearch({ from, text, biz, saveBiz }) {
     biz.sessionData  = { ...(biz.sessionData || {}), schoolSearch: search };
     await saveBiz(biz);
   } else {
-    // Consume the one-shot non-biz marker and stash the search for pagination.
+    // Keep the non-biz search ARMED (do NOT clear schoolSearchActive) so the
+    // numbered-list reply that follows is routed back here.
     try {
       const { default: UserSession } = await import("../models/userSession.js");
       const phone = from.replace(/\D+/g, "");
       await UserSession.findOneAndUpdate(
         { phone },
-        { $set:   { "tempData.schoolSearch": search },
-          $unset: { "tempData.schoolSearchActive": "" } },
+        { $set: { "tempData.schoolSearch": search, "tempData.schoolSearchActive": true } },
         { upsert: true }
       );
     } catch (_) {}
   }
 
   return _runSchoolSearch(from, search);
+}
+
+// ── Open a school from a numbered-list reply (branch-aware) ───────────────────
+// Multi-branch schools go through the branch picker (showSchoolFAQMenu); single-
+// branch schools show the full detail card. Mirrors the school_view_ handler.
+async function _openSchoolResult(from, schoolId, biz, saveBiz) {
+  try {
+    const _sc = await SchoolProfile.findById(schoolId).select("branches").lean();
+    if (_sc && (_sc.branches || []).some(b => b && b.name && b.active !== false)) {
+      const { showSchoolFAQMenu } = await import("./schoolFAQ.js");
+      return showSchoolFAQMenu(from, String(schoolId), biz, biz ? saveBiz : async () => {}, { source: "search" });
+    }
+  } catch (_) {}
+  return _showSchoolDetail(from, schoolId, biz);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1379,19 +1414,13 @@ async function notifyBranchOrSchoolEnquiry(school, fromPhone, message, branch) {
 // PRIVATE: run the MongoDB query and format results
 // ─────────────────────────────────────────────────────────────────────────────
 async function _runSchoolSearch(from, search = {}) {
-  const PAGE_SIZE = 5;
-  const page      = search.page || 0;
-  const skip      = page * PAGE_SIZE;
-
-  // Results are being shown - consume any lingering non-biz school-search marker
-  // so later unrelated messages are not misrouted back into school search.
-  try {
-    const { default: UserSession } = await import("../models/userSession.js");
-    await UserSession.updateOne(
-      { phone: from.replace(/\D+/g, "") },
-      { $unset: { "tempData.schoolSearchActive": "" } }
-    );
-  } catch (_) {}
+  // NUMBERED-LIST MODE: show up to 30 results in a single numbered message; the
+  // parent replies with a number to open a school (no page-by-page tapping). We
+  // KEEP the school-search armed (do NOT clear schoolSearchActive) so a typed
+  // number is routed back here/to the open handler. Nav tokens (menu/0) exit.
+  const PAGE_SIZE = 30;
+  const page      = 0;
+  const skip      = 0;
 
 // Academic search must exclude specialised institutions (culinary/driving/college
 // etc.) which live in the same SchoolProfile collection with institutionType set.
@@ -1557,37 +1586,52 @@ _Filters tried: ${filterSummary}_
     }
   }
 
-  // ── Build result cards ────────────────────────────────────────────────────
-  const rows = schools.map(s => {
+  // ── Build a NUMBERED text list (reply with a number to open a school) ───
+  const lines = schools.map((s, i) => {
     const verifiedBadge  = s.verified ? " ✅" : "";
     const featuredBadge  = s.tier === "featured" ? " 🔥" : "";
     const admissions     = s.admissionsOpen ? "🟢 Open" : "🔴 Closed";
-    const topFacilities  = (s.facilities || []).slice(0, 4).map(facilityIcon).join(" ");
     const feeText        = s.fees?.term1 ? `$${s.fees.term1}/term` : feeRangeLabel(s.feeRange);
+    const loc            = `${s.suburb ? s.suburb + ", " : ""}${s.city}`;
+    const branchTag      = (s.branches || []).some(b => b && b.name && b.active !== false) ? " · 🏫 branches" : "";
+    return `*${i + 1}.* 🏫 ${s.schoolName}${verifiedBadge}${featuredBadge}\n     ${loc} · ${feeText} · ${admissions}${branchTag}`;
+  }).join("\n\n");
 
-    return {
-      id:          `school_view_${s._id}`,
-      title:       `🏫 ${s.schoolName}${verifiedBadge}${featuredBadge}`,
-      description: `${s.suburb ? s.suburb + ", " : ""}${s.city} · ${feeText} · ${admissions}`
-    };
-  });
-
-  // Pagination rows
-  const paginationRows = [];
-  if (page > 0) {
-    paginationRows.push({ id: `school_search_page_${page - 1}`, title: "⬅ Previous" });
-  }
-  if (skip + PAGE_SIZE < total) {
-    paginationRows.push({ id: `school_search_page_${page + 1}`, title: "➡ Next" });
-  }
-  paginationRows.push({ id: "school_search_refine", title: "🔄 New Search" });
+  // Persist the ordered ids so a typed number opens the right school. Stored in
+  // UserSession (keyed by phone) so it works for biz AND non-biz parents, and the
+  // school-search stays armed.
+  const resultIds = schools.map(s => String(s._id));
+  try {
+    const { default: UserSession } = await import("../models/userSession.js");
+    await UserSession.findOneAndUpdate(
+      { phone: from.replace(/\D+/g, "") },
+      { $set: { "tempData.schoolResultIds": resultIds, "tempData.schoolSearchActive": true } },
+      { upsert: true }
+    );
+  } catch (_) {}
 
   const filterSummary = _buildFilterSummary(search);
-  const headerText = fallbackLabel
-    ? `\u26a0\ufe0f ${fallbackLabel}\n\n_Tap a school to see details_`
-    : `🏫 *Schools Found: ${total}*\n📍 ${filterSummary}\n\n_Tap a school to see details_`;
+  const header = fallbackLabel
+    ? `⚠️ ${fallbackLabel}`
+    : `🏫 *Schools found: ${total}*\n📍 ${filterSummary}`;
 
-  return sendList(from, headerText, [...rows, ...paginationRows]);
+  await sendText(from,
+`${header}
+
+${lines}
+
+👉 *Reply with a number* (1-${schools.length}) to open that school - you'll see full details, fees, branches and an enquiry option.
+
+_Or type a new search, e.g. "primary borrowdale" or a school name._`
+  );
+
+  return sendButtons(from, {
+    text: "Or:",
+    buttons: [
+      { id: "school_search_refine", title: "🔄 New Search" },
+      { id: "main_menu_back",       title: "🏠 Main Menu" }
+    ]
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

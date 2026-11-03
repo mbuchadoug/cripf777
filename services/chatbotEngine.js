@@ -5007,6 +5007,33 @@ try {
     }
   }
 
+  // ── GROUP numbered-list reply (open seller / school / tutor #N) ─────────────
+  // After a group smart link (ZQ:GROUP / ZQ:SGROUP / ZQ:TGROUP) shows a numbered
+  // list, the visitor replies with a number to open that entry. Only fires when a
+  // group list is armed AND the visitor is not mid-flow (quote/order/enquiry) and
+  // not inside an armed tutor/school search (those own their own numbers).
+  if (!isMetaAction && /^\d{1,3}$/.test(text.trim())) {
+    try {
+      const _gc = await UserSession.findOne({ phone }).lean();
+      const _td = _gc?.tempData || {};
+      const _ids = _td.grpListIds;
+      const _gtype = _td.grpListType;
+      const _busy = _td.scState || _td.buyerRequestState || _td.orderState ||
+                    _td.tutorEnquiryState || _td.schoolEnquiryState ||
+                    _td.schoolSearchActive || _td.tutorSearchActive || _td.instSearchActive ||
+                    String(_td.sfaqState || "").startsWith("sfaq_awaiting");
+      const _bizBusy = !!biz && biz.sessionState && !["ready", ""].includes(biz.sessionState);
+      if (Array.isArray(_ids) && _ids.length && _gtype && !_busy && !_bizBusy) {
+        const { openGroupEntryByNumber } = await import("./groupSmartLink.js");
+        const handled = await openGroupEntryByNumber({
+          from, index: parseInt(text.trim(), 10) - 1, type: _gtype, ids: _ids,
+          biz, saveBiz: biz ? saveBizSafe : async () => {}
+        });
+        if (handled !== false) return handled;
+      }
+    } catch (_) {}
+  }
+
   // ── School search FREE-TEXT (typed school name / city inside the funnel) ─────
   // If the user is in the parent school-search funnel and types free text instead
   // of tapping a city button, route it to SCHOOL search - not the Request Sellers
@@ -5014,7 +5041,9 @@ try {
   // Runs AFTER the "find ..." shortcode block and BEFORE the Request Sellers
   // catch-all further down, so a typed school name is never hijacked. A bare name
   // like "hellenic academy" is handled as a NAME search inside the handler.
-  if (!isMetaAction && !isSchoolShortcodeQuery && text.trim().length > 1) {
+  // NOTE: length >= 1 (not > 1) so a single-digit reply like "1" opens school #1
+  // from the numbered results list. "0"/"menu"/etc. are still caught by _navTok.
+  if (!isMetaAction && !isSchoolShortcodeQuery && text.trim().length >= 1) {
     const _navTok = /^(0|00|menu|main menu|back|cancel|exit|home|hi|hie|hey|hello|start)$/i.test(text.trim());
     if (!_navTok) {
       let _inSchoolSearch =
@@ -5026,7 +5055,10 @@ try {
           _inSchoolSearch =
             !!_ssCheck?.tempData?.schoolSearchActive &&
             !_ssCheck?.tempData?.buyerRequestState &&
-            !_ssCheck?.tempData?.orderState;
+            !_ssCheck?.tempData?.orderState &&
+            // An active sfaq "awaiting" input (enquiry/tour/grade) must win over the
+            // armed school-search, so a bare-number enquiry isn't read as "open #N".
+            !String(_ssCheck?.tempData?.sfaqState || "").startsWith("sfaq_awaiting");
         } catch (_) {}
       }
 

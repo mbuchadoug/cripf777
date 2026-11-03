@@ -17,7 +17,14 @@ import {
   notifySchoolNewLead,
   notifyAllSchoolEnquiry
 } from "./schoolNotifications.js";
-import { SCHOOL_FACILITIES, SCHOOL_EXTRAMURALACTIVITIES } from "./schoolPlans.js";
+import { SCHOOL_FACILITIES, SCHOOL_EXTRAMURALACTIVITIES, SCHOOL_TYPES } from "./schoolPlans.js";
+
+// Readable branch-level label (ECD / Primary / Secondary / Combined / …)
+function _branchTypeLabel(id) {
+  if (!id) return "";
+  const t = (SCHOOL_TYPES || []).find(x => x.id === id);
+  return t ? t.label.replace(/^[^\w]+/, "").trim() : "";
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // LEVEL METADATA
@@ -229,7 +236,8 @@ async function _sendBranchPicker(from, school, parentName = "") {
   const rows = branches.map(b => ({
     id:    `sfaq_br_${sid}_${b.id}`,
     title: _btn("🏫 " + b.name).slice(0, 24),
-    description: [b.suburb, b.city || school.city].filter(Boolean).join(", ").slice(0, 72) || undefined
+    description: [_branchTypeLabel(b.schoolType), [b.suburb, b.city || school.city].filter(Boolean).join(", ")]
+                   .filter(Boolean).join(" · ").slice(0, 72) || undefined
   }));
   rows.push({ id: `sfaq_brmain_${sid}`, title: "🏢 Main / Head Office" });
   rows.push({ id: "main_menu_back",     title: "🏠 Main Menu" });
@@ -272,8 +280,10 @@ export async function showSchoolFAQMenu(from, schoolId, biz, saveBiz, { source =
     const _bLoc  = [_branch.suburb, _branch.city || school.city].filter(Boolean).join(", ");
     const _bPh   = _branch.contactPhone || school.contactPhone || school.phone || "";
     const _bAdm  = _branch.admissionsOpen ? "🟢 Admissions OPEN" : "🔴 Admissions closed";
+    const _bType = _branchTypeLabel(_branch.schoolType);
     await sendText(from,
       `🏫 *${school.schoolName} - ${_branch.name}*\n` +
+      (_bType ? `📗 ${_bType}\n` : "") +
       (_bLoc ? `📍 ${_bLoc}\n` : "") +
       `${_bAdm}\n` +
       (_bPh ? `📞 ${_bPh.startsWith("263") ? "0" + _bPh.slice(3) : _bPh}\n` : "") +

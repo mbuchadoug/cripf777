@@ -1098,11 +1098,9 @@ async function _saveSchoolAndOfferPlans(from, biz, saveBiz, phone, reg) {
 Now choose a plan to go live and start receiving parent inquiries.`
   );
 
-  return sendList(from, "💳 *Choose Your Plan*\n\nAll plans include:\n✅ Listed in parent search\n✅ Downloadable school profile PDF\n✅ Online application link\n✅ Parent inquiry alerts on WhatsApp", [
-    { id: "school_plan_basic_monthly",   title: "✅ Basic - $15/month",  description: "Listed in search + profile PDF + application link" },
-    { id: "school_plan_basic_annual",    title: "✅ Basic - $150/year",  description: "Save $30 vs monthly" },
-    { id: "school_plan_featured_monthly",title: "🔥 Featured - $35/month", description: "Top of results + verified badge + analytics" },
-    { id: "school_plan_featured_annual", title: "🔥 Featured - $350/year", description: "Save $70 vs monthly" }
+  return sendList(from, "💳 *Choose Your Plan*\n\nSchool listings are billed *annually*.\n\nAll plans include:\n✅ Listed in parent search\n✅ Downloadable school profile PDF\n✅ Online application link\n✅ Parent enquiry alerts on WhatsApp", [
+    { id: "school_plan_basic_annual",    title: "✅ List my school - $50/year", description: "Everything you need to get found by parents" },
+    { id: "school_plan_featured_annual", title: "🔥 Featured - $120/year", description: "Top of results + verified badge + analytics" }
   ]);
 }
 

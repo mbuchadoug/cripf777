@@ -48,6 +48,74 @@ import { showSellerMenu }                   from "./sellerChat.js";
 const BOT_NUMBER  = (process.env.WHATSAPP_BOT_NUMBER || "263771143904").replace(/\D/g, "");
 const BOT_WA_URL  = `https://wa.me/${BOT_NUMBER}`;
 
+// Max entries shown in a numbered group list (one text message, reply with a number)
+const GROUP_LIST_MAX = 30;
+
+// ─── Numbered-list helpers (type a number to open an entry) ───────────────────
+// Instead of paginated interactive lists, group links now show a NUMBERED text
+// list; the visitor replies with a number to open that seller/school/tutor. We
+// store the ordered ids + the list type in UserSession so the chatbot engine can
+// route the next numeric reply to openGroupEntryByNumber().
+async function _armGroupList(from, type, ids) {
+  try {
+    const { default: UserSession } = await import("../models/userSession.js");
+    await UserSession.findOneAndUpdate(
+      { phone: String(from).replace(/\D+/g, "") },
+      { $set: { "tempData.grpListType": type, "tempData.grpListIds": ids.map(String) } },
+      { upsert: true }
+    );
+  } catch (_) {}
+}
+
+/**
+ * Open a group entry (seller / school / tutor) by its 0-based index in the armed
+ * list. Called from the chatbot engine when a visitor replies with a number.
+ * Returns true if handled.
+ */
+export async function openGroupEntryByNumber({ from, index, type, ids, biz, saveBiz }) {
+  if (!Array.isArray(ids) || !ids.length) return false;
+  if (index < 0 || index >= ids.length) {
+    await sendText(from, `Please reply with a number between 1 and ${ids.length}.`);
+    return true;
+  }
+  const id = ids[index];
+  const _sb = biz ? saveBiz : (async () => {});
+  try {
+    if (type === "supplier") {
+      import("../models/supplierProfile.js").then(({ default: SP }) => {
+        SP.findByIdAndUpdate(id, { $inc: { viewCount: 1, monthlyViews: 1 } }).catch(() => {});
+      }).catch(() => {});
+      await showSellerMenu(from, id, biz, _sb, { source: "group" });
+      return true;
+    }
+    if (type === "school") {
+      const { showSchoolFAQMenu } = await import("./schoolFAQ.js");
+      // Notify the school of the view (template-first, fans out to its contacts)
+      try {
+        const { default: SchoolProfile } = await import("../models/schoolProfile.js");
+        SchoolProfile.findById(id).lean().then(async (sch) => {
+          if (!sch) return;
+          const { notifyAllSchoolProfileView } = await import("./schoolNotifications.js");
+          const disp = String(from).startsWith("263") ? "0" + String(from).slice(3) : from;
+          notifyAllSchoolProfileView(sch, disp).catch(() => {});
+        }).catch(() => {});
+      } catch (_) {}
+      await showSchoolFAQMenu(from, id, biz, _sb, { source: "school_group" });
+      return true;
+    }
+    if (type === "tutor") {
+      const { showTutorProfile } = await import("./tutorSearch.js");
+      await showTutorProfile(from, id, biz, _sb, { source: "tutor_group" });
+      return true;
+    }
+    return false;
+  } catch (e) {
+    console.error("[GROUP OPEN #]", e.message);
+    try { await sendText(from, "❌ Could not open that one. Please reply with another number."); } catch (_) {}
+    return true;
+  }
+}
+
 // ─── Mongoose model ───────────────────────────────────────────────────────────
 
 const supplierGroupSchema = new mongoose.Schema(
@@ -231,19 +299,19 @@ export async function handleGroupSmartLink({ from, slug, biz, saveBiz }) {
       .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
       .map(s => s.supplierId);
 
-    // ── Build the CTA row (always shown, regardless of seller count) ──────────
-    const ctaLabel       = group.ctaText || "➕ List Your Business";
-    const ctaDescription = "Tap to register and get found by buyers";
-    const ctaRow = {
-      id:          `zqg_register_${group.slug}`,
-      title:       ctaLabel.slice(0, 24),       // WhatsApp hard limit: 24 chars
-      description: ctaDescription.slice(0, 72)  // WhatsApp hard limit: 72 chars
-    };
+    const ctaLabel = (group.ctaText || "➕ List Your Business").slice(0, 24);
+    const _ctaBtns = [
+      { id: `zqg_register_${group.slug}`, title: ctaLabel },
+      { id: "main_menu_back",             title: "🏠 Main Menu" }
+    ];
 
     // ── No sellers yet - still show the CTA so they can register ─────────────
     if (!sellerIds.length) {
-      const header = `🏪 *${group.name}*\n\nNo businesses listed yet - be the first!`;
-      await sendList(from, header, [ctaRow]);
+      await _armGroupList(from, "supplier", []);
+      await sendButtons(from, {
+        text: `🏪 *${group.name}*\n\nNo businesses listed yet - be the first!`,
+        buttons: _ctaBtns
+      });
       return true;
     }
 
@@ -257,29 +325,37 @@ export async function handleGroupSmartLink({ from, slug, biz, saveBiz }) {
     // Preserve admin-defined order
     const orderedSellers = sellerIds
       .map(id => sellers.find(s => String(s._id) === String(id)))
-      .filter(Boolean);
+      .filter(Boolean)
+      .slice(0, GROUP_LIST_MAX);
 
     if (!orderedSellers.length) {
-      const header = `😕 No active sellers in *${group.name}* right now.\n\nBe the first to get listed!`;
-      await sendList(from, header, [ctaRow]);
+      await _armGroupList(from, "supplier", []);
+      await sendButtons(from, {
+        text: `😕 No active sellers in *${group.name}* right now.\n\nBe the first to get listed!`,
+        buttons: _ctaBtns
+      });
       return true;
     }
 
-    // ── Build seller rows (max 9 sellers + 1 CTA = 10 rows total, WA list limit) ─
-    const sellerRows = orderedSellers.slice(0, 9).map(s => {
+    // ── NUMBERED text list (reply with a number to open a business) ───────────
+    const lines = orderedSellers.map((s, i) => {
       const loc = [s.location?.area, s.location?.city].filter(Boolean).join(", ");
-      return {
-        id:          `zqg_sel_${s._id}`,
-        title:       (s.businessName || "Seller").slice(0, 24),
-        description: (loc || undefined)
-      };
-    });
+      return `*${i + 1}.* 🏪 ${s.businessName || "Seller"}${loc ? `\n     ${loc}` : ""}`;
+    }).join("\n\n");
 
-    const tagline = group.tagline || "Tap a business to view their profile, catalogue and request a quote.";
-    const header  = `🏪 *${group.name}*\n\n${tagline}`;
+    await _armGroupList(from, "supplier", orderedSellers.map(s => s._id));
 
-    // Sellers first, CTA last
-    await sendList(from, header, [...sellerRows, ctaRow]);
+    const tagline = group.tagline || "Reply with a number to view a business - their profile, catalogue and get a quote.";
+    await sendText(from,
+`🏪 *${group.name}*
+
+${tagline}
+
+${lines}
+
+👉 *Reply with a number* (1-${orderedSellers.length}) to open that business.`
+    );
+    await sendButtons(from, { text: "Or:", buttons: _ctaBtns });
     return true;
 
   } catch (err) {
@@ -623,13 +699,11 @@ export async function handleSchoolGroupSmartLink({ from, slug, biz, saveBiz }) {
     const cleanPhone = String(from || "").replace(/\D/g, "");
     const visitorIsSchool = !!(await SchoolProfile.findOne({ phone: cleanPhone }, { _id: 1 }).lean());
 
-    // ── Build CTA row (only for non-registered visitors) ──────────────────────
+    // ── Build CTA buttons (register CTA only for non-registered visitors) ─────
     const ctaLabel = (group.ctaText || "🏫 Add My School").slice(0, 24);
-    const ctaRow = visitorIsSchool ? null : {
-      id:          `zqsg_register_${group.slug}`,
-      title:       ctaLabel,
-      description: "Tap to list your school for free"
-    };
+    const _ctaBtns = [];
+    if (!visitorIsSchool) _ctaBtns.push({ id: `zqsg_register_${group.slug}`, title: ctaLabel });
+    _ctaBtns.push({ id: "main_menu_back", title: "🏠 Main Menu" });
 
     const schoolIds = (group.schools || [])
       .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
@@ -637,54 +711,49 @@ export async function handleSchoolGroupSmartLink({ from, slug, biz, saveBiz }) {
 
     // ── No schools yet ────────────────────────────────────────────────────────
     if (!schoolIds.length) {
-      const header = `🏫 *${group.name}*\n\nNo schools listed yet - be the first!`;
-      const rows = ctaRow ? [ctaRow] : [];
-      if (!rows.length) {
-        await sendText(from, `❌ *${group.name}* has no schools yet. Check back soon!`);
-        return true;
-      }
-      await sendList(from, header, rows);
+      await _armGroupList(from, "school", []);
+      await sendButtons(from, { text: `🏫 *${group.name}*\n\nNo schools listed yet - be the first!`, buttons: _ctaBtns });
       return true;
     }
 
     // ── Load active school profiles ───────────────────────────────────────────
     const schools = await SchoolProfile.find(
       { _id: { $in: schoolIds }, active: true },
-      { schoolName: 1, city: 1, suburb: 1, type: 1, _id: 1 }
+      { schoolName: 1, city: 1, suburb: 1, type: 1, branches: 1, _id: 1 }
     ).lean();
 
     // Preserve admin-defined order
     const orderedSchools = schoolIds
       .map(id => schools.find(s => String(s._id) === String(id)))
-      .filter(Boolean);
+      .filter(Boolean)
+      .slice(0, GROUP_LIST_MAX);
 
     if (!orderedSchools.length) {
-      const header = `😕 No active schools in *${group.name}* right now.`;
-      const rows = ctaRow ? [ctaRow] : [];
-      if (!rows.length) {
-        await sendText(from, `😕 No active schools in *${group.name}* right now. Try again later.`);
-        return true;
-      }
-      await sendList(from, header, rows);
+      await _armGroupList(from, "school", []);
+      await sendButtons(from, { text: `😕 No active schools in *${group.name}* right now.`, buttons: _ctaBtns });
       return true;
     }
 
-    // ── Build school rows ─────────────────────────────────────────────────────
-    const maxSchools = ctaRow ? 9 : 10;
-    const schoolRows = orderedSchools.slice(0, maxSchools).map(s => {
+    // ── NUMBERED text list (reply with a number to open a school) ─────────────
+    const lines = orderedSchools.map((s, i) => {
       const loc = [s.suburb, s.city].filter(Boolean).join(", ");
-      return {
-        id:          `zqsg_sch_${s._id}`,
-        title:       (s.schoolName || "School").slice(0, 24),
-        description: (loc || undefined)
-      };
-    });
+      const branchTag = (s.branches || []).some(b => b && b.name && b.active !== false) ? " · 🏫 branches" : "";
+      return `*${i + 1}.* 🏫 ${s.schoolName || "School"}${loc ? `\n     ${loc}${branchTag}` : ""}`;
+    }).join("\n\n");
 
-    const tagline = group.tagline || "Tap a school to view fees, facilities and enquire about admissions.";
-    const header  = `🏫 *${group.name}*\n\n${tagline}`;
+    await _armGroupList(from, "school", orderedSchools.map(s => s._id));
 
-    const rows = ctaRow ? [...schoolRows, ctaRow] : schoolRows;
-    await sendList(from, header, rows);
+    const tagline = group.tagline || "Reply with a number to view a school - fees, facilities and enquire about admissions.";
+    await sendText(from,
+`🏫 *${group.name}*
+
+${tagline}
+
+${lines}
+
+👉 *Reply with a number* (1-${orderedSchools.length}) to open that school.`
+    );
+    await sendButtons(from, { text: "Or:", buttons: _ctaBtns });
     return true;
 
   } catch (err) {
@@ -1055,13 +1124,10 @@ export async function handleTutorGroupSmartLink({ from, slug, biz, saveBiz, offs
       { phone: cleanPhone, profileType: "tutor" }, { _id: 1 }
     ).lean());
 
-    // ── Build CTA row (only for non-tutor visitors) ───────────────────────────
+    // ── Build CTA buttons (register CTA only for non-tutor visitors) + subject search
     const ctaLabel = (group.ctaText || "🧑‍🏫 List as a Tutor").slice(0, 24);
-    const ctaRow = visitorIsTutor ? null : {
-      id:          `zqtg_register_${group.slug}`,
-      title:       ctaLabel,
-      description: "Tap to list yourself and get found by parents".slice(0, 72)
-    };
+    const _ctaBtns = [{ id: `zqtg_search_${group.slug}`, title: "🔍 Search by subject" }];
+    if (!visitorIsTutor) _ctaBtns.push({ id: `zqtg_register_${group.slug}`, title: ctaLabel });
 
     const tutorIds = (group.tutors || [])
       .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
@@ -1069,13 +1135,8 @@ export async function handleTutorGroupSmartLink({ from, slug, biz, saveBiz, offs
 
     // ── No tutors yet ─────────────────────────────────────────────────────────
     if (!tutorIds.length) {
-      const header = `🧑‍🏫 *${group.name}*\n\nNo tutors listed yet - be the first!`;
-      const rows = ctaRow ? [ctaRow] : [];
-      if (!rows.length) {
-        await sendText(from, `❌ *${group.name}* has no tutors yet. Check back soon!`);
-        return true;
-      }
-      await sendList(from, header, rows);
+      await _armGroupList(from, "tutor", []);
+      await sendButtons(from, { text: `🧑‍🏫 *${group.name}*\n\nNo tutors listed yet - be the first!`, buttons: _ctaBtns });
       return true;
     }
 
@@ -1088,16 +1149,12 @@ export async function handleTutorGroupSmartLink({ from, slug, biz, saveBiz, offs
     // Preserve admin-defined order
     const orderedTutors = tutorIds
       .map(id => tutors.find(t => String(t._id) === String(id)))
-      .filter(Boolean);
+      .filter(Boolean)
+      .slice(0, GROUP_LIST_MAX);
 
     if (!orderedTutors.length) {
-      const header = `😕 No active tutors in *${group.name}* right now.`;
-      const rows = ctaRow ? [ctaRow] : [];
-      if (!rows.length) {
-        await sendText(from, `😕 No active tutors in *${group.name}* right now. Try again later.`);
-        return true;
-      }
-      await sendList(from, header, rows);
+      await _armGroupList(from, "tutor", []);
+      await sendButtons(from, { text: `😕 No active tutors in *${group.name}* right now.`, buttons: _ctaBtns });
       return true;
     }
 
@@ -1105,54 +1162,28 @@ export async function handleTutorGroupSmartLink({ from, slug, biz, saveBiz, offs
     let tutorSubjectLabel = (id) => id;
     try { ({ tutorSubjectLabel } = await import("./schoolPlans.js")); } catch (_) {}
 
-    // ── Paginate so the selection stays sensible as the list grows ────────────
-    // WhatsApp lists cap at 10 rows. Budget: up to 7 tutors + 🔍 Search + ▶ More
-    // + CTA = 10. Parents can page forward or jump into a subject search.
-    const PER_PAGE   = 7;
-    const total      = orderedTutors.length;
-    const startIdx   = Math.min(Math.max(0, offset), Math.max(0, total - 1));
-    const pageTutors = orderedTutors.slice(startIdx, startIdx + PER_PAGE);
-    const hasMore    = total > startIdx + PER_PAGE;
-
-    const tutorRows = pageTutors.map(t => {
+    // ── NUMBERED text list (reply with a number to open a tutor) ──────────────
+    const lines = orderedTutors.map((t, i) => {
       const subj = (t.subjects || []).slice(0, 2).map(tutorSubjectLabel).join(", ");
-      const rate = t.hourlyRate > 0 ? `$${t.hourlyRate}/hr` : null;
+      const rate = t.hourlyRate > 0 ? `$${t.hourlyRate}/hr` : "rate on request";
       const desc = [subj, rate].filter(Boolean).join(" · ")
         || [t.location?.area, t.location?.city].filter(Boolean).join(", ");
-      return {
-        id:          `zqtg_tut_${t._id}`,
-        title:       (t.businessName || "Tutor").slice(0, 24),
-        description: (desc || undefined)
-      };
-    });
+      return `*${i + 1}.* 🧑‍🏫 ${t.businessName || "Tutor"}${desc ? `\n     ${desc}` : ""}`;
+    }).join("\n\n");
 
-    // Navigation rows
-    const navRows = [];
-    // 🔍 Search by subject → drops the parent/student into the full tutor search
-    navRows.push({
-      id:          `zqtg_search_${group.slug}`,
-      title:       "🔍 Search by subject",
-      description: "Find a tutor by subject, level or area".slice(0, 72)
-    });
-    // ▶ More tutors → next page (only when there are more)
-    if (hasMore) {
-      navRows.push({
-        id:          `zqtg_more_${group.slug}_${startIdx + PER_PAGE}`,
-        title:       "▶ More tutors",
-        description: `See tutors ${startIdx + PER_PAGE + 1}-${Math.min(total, startIdx + 2 * PER_PAGE)} of ${total}`.slice(0, 72)
-      });
-    }
+    await _armGroupList(from, "tutor", orderedTutors.map(t => t._id));
 
-    const shownTo  = startIdx + pageTutors.length;
-    const countLine = total > PER_PAGE
-      ? `\n\n👥 Showing ${startIdx + 1}-${shownTo} of ${total} tutors`
-      : "";
-    const tagline = group.tagline || "Tap a tutor to view their subjects, rates & message them directly.";
-    const header  = `🧑‍🏫 *${group.name}*\n\n${tagline}${countLine}`;
+    const tagline = group.tagline || "Reply with a number to view a tutor - subjects, rates & message them directly.";
+    await sendText(from,
+`🧑‍🏫 *${group.name}*
 
-    // Assemble within the 10-row limit (tutors → nav → CTA), CTA never dropped.
-    const rows = [...tutorRows, ...navRows, ...(ctaRow ? [ctaRow] : [])].slice(0, 10);
-    await sendList(from, header, rows);
+${tagline}
+
+${lines}
+
+👉 *Reply with a number* (1-${orderedTutors.length}) to open that tutor.`
+    );
+    await sendButtons(from, { text: "Or:", buttons: _ctaBtns });
     return true;
 
   } catch (err) {

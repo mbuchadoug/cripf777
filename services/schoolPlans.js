@@ -204,22 +204,28 @@ export const SCHOOL_GRADE_TO = [
 ];
 
 // ── Subscription plans ────────────────────────────────────────────────────────
+// School listings are billed ANNUALLY only, at a flat $50/year (same simple pricing
+// as tutors). There is no monthly school plan - the activation CTA always offers
+// the $50/year basic plan. (Featured kept as an optional annual upgrade.)
 export const SCHOOL_PLANS = {
   basic: {
     id:       "basic",
     name:     "Basic",
-    monthly:  { price: 15, label: "$15/month", id: "school_plan_basic_monthly" },
-    annual:   { price: 150, label: "$150/year (save $30)", id: "school_plan_basic_annual" },
-    features: "Listed in search · Profile PDF · Application link"
+    monthly:  { price: 50, label: "$50/year", id: "school_plan_basic_annual" },
+    annual:   { price: 50, label: "$50/year", id: "school_plan_basic_annual" },
+    features: "Listed in search · Profile PDF · Application link · Parent enquiry alerts"
   },
   featured: {
     id:       "featured",
     name:     "Featured",
-    monthly:  { price: 35, label: "$35/month", id: "school_plan_featured_monthly" },
-    annual:   { price: 350, label: "$350/year (save $70)", id: "school_plan_featured_annual" },
+    monthly:  { price: 120, label: "$120/year", id: "school_plan_featured_annual" },
+    annual:   { price: 120, label: "$120/year (save vs Basic add-ons)", id: "school_plan_featured_annual" },
     features: "Top of results · Verified badge · Analytics · All Basic features"
   }
 };
+
+// Canonical annual price used by the activation CTA / masked-number nudge.
+export const SCHOOL_ANNUAL_PRICE = 50;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SPECIALISED INSTITUTIONS (culinary, driving, music, vocational, college, ...)

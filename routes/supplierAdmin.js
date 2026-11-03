@@ -17116,6 +17116,14 @@ router.get("/school-activity", requireSupplierAdmin, async (req, res) => {
       <textarea id="saNote" rows="4" placeholder="e.g. Looking for a place in Grade 1 for 2027, is there space and what are the fees?"
         style="width:100%;padding:9px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;resize:vertical"></textarea>
 
+      <label style="font-size:12px;font-weight:600;display:block;margin:14px 0 4px">Contact shown to the school</label>
+      <select id="saContactMode" style="width:100%;padding:9px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px">
+        <option value="auto" selected>🧩 Auto - FULL number to active schools, MASKED to inactive</option>
+        <option value="mask">🕵️ Masked - teaser only (+263 77 2XX XXXX); unlock on activation</option>
+        <option value="show">📞 Show - reveal the full visitor number</option>
+      </select>
+      <p style="font-size:11px;color:var(--muted);margin-top:4px">Inactive schools see a masked teaser and are told to reply <b>menu</b> and activate ($50/year) to see the full number and reply. Active schools see the real number.</p>
+
       <div id="saViewsWrap" style="margin-top:14px">
         <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Add to view counter</label>
         <input id="saViews" type="number" min="0" max="500" value="1" style="width:120px;padding:9px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px" />
@@ -17200,6 +17208,7 @@ router.get("/school-activity", requireSupplierAdmin, async (req, res) => {
     var p=new URLSearchParams();
     p.set('kind',kind); p.set('note',note);
     p.set('visitorPhone',document.getElementById('saVisitor').value);
+    p.set('contactMode',document.getElementById('saContactMode').value);
     p.set('viewsToAdd',document.getElementById('saViews').value||'0');
     p.set('schoolIds',JSON.stringify(ids));
     fetch('/zq-admin/school-activity/send',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:p.toString()})
@@ -17233,19 +17242,59 @@ router.post("/school-activity/send", requireSupplierAdmin, async (req, res) => {
     ids = [...new Set(ids.filter(Boolean))].slice(0, 300);
     if (!ids.length) throw new Error("Select at least one school.");
 
-    let sent = 0, failed = 0;
-    const parentLabel = visitor || "A parent";
+    // contactMode: "auto" (default) = full number to ACTIVE schools, MASKED to
+    // inactive ones; "mask" = always masked; "show" = always full.
+    const contactMode = ["auto", "mask", "show"].includes(b.contactMode) ? b.contactMode : "auto";
+
+    let sent = 0, failed = 0, masked = 0;
     for (const id of ids) {
       try {
         const school = await SP.findById(id).lean();
         if (!school) { failed++; continue; }
+        const isActive = !!school.active;
+
+        // Decide what the school SEES for the visitor's number.
+        let showFull = !visitor ? false
+                     : contactMode === "show" ? true
+                     : contactMode === "mask" ? false
+                     : isActive; // auto → full only for paid/active schools
+        const contactDisplay = !visitor ? ""
+                             : showFull ? _pvFmtPhone(visitor)
+                             : _pvMaskPhone(visitor);
+        if (visitor && !showFull) masked++;
+
+        // The activate nudge: shown to schools that can't yet see/reply (inactive
+        // or masked). Reply-based so a tap/reply opens the 24h window → the bot
+        // takes them to Choose Your Plan ($50/year).
+        const lockedForReply = !isActive;
+        const nudge = lockedForReply
+          ? (kind === "enquiry"
+              ? " - Reply *menu* and activate your listing ($50/year) to see their full number and reply to this parent."
+              : " - Reply *menu* and activate your listing ($50/year) to see who viewed you and get found by parents.")
+          : "";
+
+        // Build the message body (folds in the contact + nudge). We always route
+        // through the ENQUIRY template because it carries a free-text field, so the
+        // contact teaser + activate nudge are delivered even outside the 24h window.
+        let body;
         if (kind === "enquiry") {
-          await SN.notifyAllSchoolEnquiry(school, parentLabel, note || "(enquiry via ZimQuote)");
-          SP.findByIdAndUpdate(id, { $inc: { inquiries: 1 } }).catch(() => {});
+          body = (note || "A parent is enquiring about your school.")
+               + (contactDisplay ? ` - Contact: ${contactDisplay}` : "")
+               + nudge;
         } else {
-          await SN.notifyAllSchoolProfileView(school, parentLabel);
+          body = "A parent viewed your school profile on ZimQuote."
+               + (note ? ` Note: ${note}` : "")
+               + (contactDisplay ? ` - Contact: ${contactDisplay}` : "")
+               + nudge;
           if (viewsToAdd > 0) SP.findByIdAndUpdate(id, { $inc: { monthlyViews: viewsToAdd } }).catch(() => {});
         }
+
+        // parentPhone variable = what the school sees (full or masked). When no
+        // visitor number was given, pass a neutral label.
+        const parentVar = contactDisplay || "A parent";
+        await SN.notifyAllSchoolEnquiry(school, parentVar, body);
+        if (kind === "enquiry") SP.findByIdAndUpdate(id, { $inc: { inquiries: 1 } }).catch(() => {});
+
         sent++;
         await new Promise(r2 => setTimeout(r2, 1200)); // gentle pace for Meta
       } catch (err) {
@@ -17253,8 +17302,8 @@ router.post("/school-activity/send", requireSupplierAdmin, async (req, res) => {
         console.error("[SCHOOL ACTIVITY] send failed for", id, "-", err.message);
       }
     }
-    console.log(`[SCHOOL ACTIVITY] kind=${kind} → sent ${sent}/${ids.length}`);
-    res.json({ ok: true, total: ids.length, sent, failed });
+    console.log(`[SCHOOL ACTIVITY] kind=${kind} mode=${contactMode} → sent ${sent}/${ids.length} (masked ${masked})`);
+    res.json({ ok: true, total: ids.length, sent, failed, masked });
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });
   }
