@@ -360,6 +360,15 @@ export async function sendBusinessHomeMenu(to, biz, { isOwner = false } = {}) {
 
   let filtered = await filterMenuByRole({ from: to, biz, items });
 
+  // ── Always show "Request a Rider" just above Marketplace (both user types) ──
+  // Injected AFTER role filtering so it is never dropped, regardless of role.
+  if (!filtered.some(i => i.id === "biker_request_rider")) {
+    const _mpIdx = filtered.findIndex(i => i.id === "marketplace_menu");
+    const _riderRow = { id: "biker_request_rider", title: "🏍️ Request a Rider" };
+    if (_mpIdx >= 0) filtered.splice(_mpIdx, 0, _riderRow);
+    else filtered.push(_riderRow);
+  }
+
   // WhatsApp interactive lists are capped at 10 rows. Same fold pattern as
   // Business Tools: collapse Branches + Users into one row when we overflow.
   if (filtered.length > 10) {
@@ -370,10 +379,12 @@ export async function sendBusinessHomeMenu(to, biz, { isOwner = false } = {}) {
       filtered.splice(bIdx, 0, { id: "branches_users_menu", title: "🏬 Branches & Users" });
     }
   }
-  // Hard safety: never send more than 10 rows, but always keep Marketplace.
+  // Hard safety: never send more than 10 rows, but always keep Request a Rider + Marketplace.
   if (filtered.length > 10) {
     const mp = filtered.find(i => i.id === "marketplace_menu");
-    filtered = filtered.filter(i => i.id !== "marketplace_menu").slice(0, 9);
+    const rr = filtered.find(i => i.id === "biker_request_rider");
+    filtered = filtered.filter(i => i.id !== "marketplace_menu" && i.id !== "biker_request_rider").slice(0, 8);
+    if (rr) filtered.push(rr);
     if (mp) filtered.push(mp);
   }
 

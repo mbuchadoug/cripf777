@@ -66,6 +66,29 @@ function cityEq(a = "", b = "") {
 function jobRef(id) {
   return `RIDE-${String(id).slice(-4).toUpperCase()}`;
 }
+// Split "CBD to Avondale" / "CBD → Avondale" / "from CBD to Avondale" / "CBD - Avondale"
+// into { pickup, dropoff }. Returns empty strings if it can't find two places.
+function splitRoute(raw = "") {
+  let s = String(raw || "").trim().replace(/^from\s+/i, "");
+  let parts = s.split(/\s*(?:→|->|=>|-|–)\s*|\s+to\s+/i).map(x => x.trim()).filter(Boolean);
+  if (parts.length >= 2) return { pickup: parts[0].slice(0, 120), dropoff: parts.slice(1).join(" to ").slice(0, 120) };
+  parts = s.split(/\s+-\s+/).map(x => x.trim()).filter(Boolean);
+  if (parts.length >= 2) return { pickup: parts[0].slice(0, 120), dropoff: parts[1].slice(0, 120) };
+  return { pickup: "", dropoff: "" };
+}
+// Parse one combined message: "<what>, <from> to <to>"  OR  "<what> from X to Y".
+function parseWhatWhere(raw = "") {
+  const s = String(raw || "").trim();
+  if (s.includes(",")) {
+    const i = s.indexOf(",");
+    const task = s.slice(0, i).trim();
+    const { pickup, dropoff } = splitRoute(s.slice(i + 1));
+    return { task: task.slice(0, 200), pickup, dropoff };
+  }
+  // no comma: try to find a route inside the whole sentence
+  const { pickup, dropoff } = splitRoute(s);
+  return { task: s.slice(0, 200), pickup, dropoff };
+}
 function isEscape(text) {
   return /^(0|00|menu|main menu|back|cancel|exit|home|stop)$/i.test(String(text || "").trim());
 }
@@ -116,6 +139,7 @@ export async function handleBikerMessage({ from, text = "", action = "", biz = n
     if (a.startsWith("biker_busy_"))     return _riderBusy({ from, jobId: a.replace("biker_busy_", "") });
     if (a.startsWith("biker_choose_"))   return _customerChoose({ from, saveBiz, payload: a.replace("biker_choose_", "") });
     if (a.startsWith("biker_skipphoto")) return _regPhoto({ from, biz, saveBiz, imageUrl: null });
+    if (a === "biker_areas_whole")       return _regAreas({ from, biz, saveBiz, areas: "__whole__" });
 
     // 3) Group link  ZQ:BGROUP:<city>
     if (/^ZQ:BGROUP:/i.test(txt)) return _bikerGroupLink({ from, slug: txt.replace(/^ZQ:BGROUP:/i, "").trim() });
@@ -138,15 +162,13 @@ async function _routeState({ from, txt, a, biz, saveBiz, state }) {
   // Registration states
   if (state === "biker_reg_name")   return _regName({ from, biz, saveBiz, name: txt });
   if (state === "biker_reg_city")   return _regCityPicked({ from, biz, saveBiz, city: a.startsWith("biker_regcity_") ? a.replace("biker_regcity_", "") : txt });
-  if (state === "biker_reg_areas")  return _regAreas({ from, biz, saveBiz, areas: txt });
+  if (state === "biker_reg_areas")  return _regAreas({ from, biz, saveBiz, areas: a === "biker_areas_whole" ? "__whole__" : txt });
   if (state === "biker_reg_plate")  return _regPlate({ from, biz, saveBiz, plate: txt });
   if (state === "biker_reg_photo")  return _regPhoto({ from, biz, saveBiz, imageUrl: null }); // photo arrives via engine image handler; typed = skip
-  // Request states
-  if (state === "biker_req_task")   return _reqTask({ from, biz, saveBiz, task: txt });
+  // Request states (fast flow: what+where → city → go)
+  if (state === "biker_req_what")   return _reqWhat({ from, biz, saveBiz, raw: txt });
+  if (state === "biker_req_route")  return _reqRoute({ from, biz, saveBiz, raw: txt });
   if (state === "biker_req_city")   return _reqCityPicked({ from, biz, saveBiz, city: a.startsWith("biker_reqcity_") ? a.replace("biker_reqcity_", "") : txt });
-  if (state === "biker_req_pickup") return _reqPickup({ from, biz, saveBiz, pickup: txt });
-  if (state === "biker_req_drop")   return _reqDrop({ from, biz, saveBiz, drop: txt });
-  if (state === "biker_req_when")   return _reqWhenPicked({ from, biz, saveBiz, when: txt });
   // Rider entering a fare for a job
   if (state.startsWith("biker_fare_")) return _riderFare({ from, biz, saveBiz, jobId: state.replace("biker_fare_", ""), input: txt });
   return false;
@@ -171,9 +193,9 @@ export async function startBikerRegistration({ from, biz, saveBiz }) {
   }
   await sendText(from,
     "🏍️ *Become a ZimQuote Rider*\n\n" +
-    "Get delivery & errand jobs on WhatsApp. Keep 100% of every fare. Just $5/month.\n\n" +
-    "Let's set you up in a few quick steps.\n\n" +
-    "*1. What's your name?*"
+    "Get delivery jobs on WhatsApp. Keep 100% of every fare. Just $5/month.\n\n" +
+    "Quick setup - 4 short steps.\n\n" +
+    "*1. Your name?*\n_e.g. Tapiwa Moyo_"
   );
   return true;
 }
@@ -196,21 +218,29 @@ async function _regCityPicked({ from, biz, saveBiz, city }) {
   biz.sessionData.bikerReg = { ...(biz.sessionData.bikerReg || {}), city: c };
   biz.sessionState = "biker_reg_areas";
   await _save(biz, saveBiz);
-  await sendText(from,
-    `📍 *${c}*. \n\n*3. Which areas do you cover?*\n` +
-    `Type them separated by commas, e.g. _CBD, Avondale, Mount Pleasant_`
-  );
+  await sendButtons(from, {
+    text:
+      `📍 *${c}*.\n\n*3. Which areas do you cover?*\n` +
+      `Type them with commas - _e.g. CBD, Avondale, Mount Pleasant_\n\n` +
+      `Or tap *Whole city* to get jobs from anywhere in ${c}.`,
+    buttons: [{ id: "biker_areas_whole", title: `🌍 Whole city` }]
+  });
   return true;
 }
 
 async function _regAreas({ from, biz, saveBiz, areas }) {
-  const list = String(areas || "").split(",").map(s => s.trim()).filter(Boolean).slice(0, 12);
-  if (!list.length) { await sendText(from, "Please type at least one area you cover."); return true; }
+  let list;
+  if (areas === "__whole__") {
+    list = [];  // empty = covers the whole city
+  } else {
+    list = String(areas || "").split(",").map(s => s.trim()).filter(Boolean).slice(0, 12);
+    if (!list.length) { await sendText(from, "Type the areas you cover (e.g. CBD, Avondale), or tap *Whole city*."); return true; }
+  }
   biz.sessionData.bikerReg = { ...(biz.sessionData.bikerReg || {}), areas: list };
   biz.sessionState = "biker_reg_plate";
   await _save(biz, saveBiz);
   await sendText(from,
-    `✅ Areas saved.\n\n*4. What's your bike number plate?*\n(e.g. _AEX 1234_)`
+    `✅ Got it.\n\n*4. Your bike number plate?*\n_e.g. AEX 1234_`
   );
   return true;
 }
@@ -218,16 +248,12 @@ async function _regAreas({ from, biz, saveBiz, areas }) {
 async function _regPlate({ from, biz, saveBiz, plate }) {
   const p = String(plate || "").trim().toUpperCase().slice(0, 16);
   if (!p || p.length < 3) { await sendText(from, "Please type your bike number plate, e.g. AEX 1234."); return true; }
-  biz.sessionData.bikerReg = { ...(biz.sessionData.bikerReg || {}), plate: p };
-  biz.sessionState = "biker_reg_photo";
+  const reg = { ...(biz.sessionData.bikerReg || {}), plate: p };
+  biz.sessionData.bikerReg = reg;
   await _save(biz, saveBiz);
-  await sendButtons(from, {
-    text:
-      `🔢 Plate *${p}* saved.\n\n*5. Last step - send a photo of you with your bike.*\n` +
-      `This gets you a ✅ Verified badge so customers trust you.\n\n` +
-      `_Send the photo now, or tap Skip to add it later._`,
-    buttons: [{ id: "biker_skipphoto", title: "Skip for now" }]
-  });
+  // Straight to activation - no photo step. Riders can add a photo later from
+  // "My Rider Account" to earn the ✅ Verified badge.
+  await _finishBikerRegistration({ from, biz, saveBiz, reg });
   return true;
 }
 
@@ -293,9 +319,9 @@ async function _finishBikerRegistration({ from, biz, saveBiz, reg }) {
   await sendList(from,
     `✅ *Almost done, ${name.split(/\s+/)[0]}!*\n\n` +
     `Your rider profile is ready. Activate to start getting job requests:\n\n` +
-    `• 📍 ${city}${areas.length ? "  ·  " + areas.join(", ") : ""}\n` +
+    `• 📍 ${city} · ${areas.length ? areas.join(", ") : "Whole city"}\n` +
     `• 🏍️ Plate: ${reg.plate || "-"}\n\n` +
-    `_Pay by EcoCash on the next step. We'll verify your details and switch you on._`,
+    `_Pay by EcoCash on the next step. Tip: add a photo later in My Rider Account to get a ✅ Verified badge._`,
     [
       { id: "sup_plan_basic_monthly", title: "✅ Activate - $5/month", description: "Get delivery jobs on WhatsApp" },
       { id: "sup_plan_basic_annual",  title: "⭐ Save - $50/year",     description: "2 months free" }
@@ -341,78 +367,70 @@ export async function bikerAccount({ from, biz, saveBiz, toggle = false, existin
 // ═════════════════════════════════════════════════════════════════════════════
 export async function startRiderRequest({ from, biz, saveBiz }) {
   if (biz) {
-    biz.sessionState = "biker_req_task";
+    biz.sessionState = "biker_req_what";
     biz.sessionData = { ...(biz.sessionData || {}), bikerJob: {} };
     await _save(biz, saveBiz);
   }
+  // ONE message captures what + where. Default time is "Now" (no extra step).
   await sendText(from,
     "🏍️ *Request a Rider*\n\n" +
-    "Tell us what you need and we'll find an available rider near you.\n\n" +
-    "*1. What do you need done?*\n" +
-    "_e.g. Collect documents from CBD and drop in Avondale_"
+    "In *one message*, tell us *what* you need and *where* (from → to):\n\n" +
+    "📝 _Collect documents, CBD to Avondale_\n" +
+    "📝 _Buy & deliver 2 loaves, Mbare to Highfield_\n" +
+    "📝 _Pick parcel from Joina City to Borrowdale_"
   );
   return true;
 }
 
-async function _reqTask({ from, biz, saveBiz, task }) {
-  if (!task || task.length < 3) { await sendText(from, "Please describe what you need done."); return true; }
-  biz.sessionData.bikerJob = { ...(biz.sessionData.bikerJob || {}), task: task.slice(0, 300) };
+// Step 1: combined what + where. If the route is clear, go straight to city.
+async function _reqWhat({ from, biz, saveBiz, raw }) {
+  if (!raw || raw.length < 3) {
+    await sendText(from, "Please tell us what you need and where.\n_e.g. Collect documents, CBD to Avondale_");
+    return true;
+  }
+  const { task, pickup, dropoff } = parseWhatWhere(raw);
+  biz.sessionData.bikerJob = { ...(biz.sessionData.bikerJob || {}), task, pickup, dropoff };
+  if (pickup && dropoff) {
+    biz.sessionState = "biker_req_city";
+    await _save(biz, saveBiz);
+    return _askReqCity(from, biz, saveBiz, { pickup, dropoff });
+  }
+  // Route unclear → one quick follow-up, keep the task.
+  biz.sessionState = "biker_req_route";
+  await _save(biz, saveBiz);
+  await sendText(from,
+    "📍 *From → To?* (one line)\n" +
+    "_e.g. CBD to Avondale_"
+  );
+  return true;
+}
+
+// Step 1b (only if route wasn't clear): capture "from → to".
+async function _reqRoute({ from, biz, saveBiz, raw }) {
+  const { pickup, dropoff } = splitRoute(raw);
+  if (!pickup || !dropoff) {
+    await sendText(from, "Please send it as *from → to*.\n_e.g. CBD to Avondale_");
+    return true;
+  }
+  biz.sessionData.bikerJob = { ...(biz.sessionData.bikerJob || {}), pickup, dropoff };
   biz.sessionState = "biker_req_city";
   await _save(biz, saveBiz);
+  return _askReqCity(from, biz, saveBiz, { pickup, dropoff });
+}
+
+async function _askReqCity(from, biz, saveBiz, { pickup, dropoff }) {
   await sendList(from,
-    "*2. Which city?*\n(Tap one, or type your city.)",
+    `📍 *${pickup} → ${dropoff}*\n\nLast thing - *which city?* (tap one, or type it)`,
     CITY_ROWS.map(c => ({ id: `biker_reqcity_${c}`, title: c }))
   );
   return true;
 }
 
+// Step 2: city → dispatch immediately (time defaults to "Now").
 async function _reqCityPicked({ from, biz, saveBiz, city }) {
   const c = titleCity(city);
   if (!c) { await sendText(from, "Please tap or type the city."); return true; }
-  biz.sessionData.bikerJob = { ...(biz.sessionData.bikerJob || {}), city: c };
-  biz.sessionState = "biker_req_pickup";
-  await _save(biz, saveBiz);
-  await sendText(from, `📍 *${c}*.\n\n*3. Pickup area?*\n_e.g. CBD, near Joina City_`);
-  return true;
-}
-
-async function _reqPickup({ from, biz, saveBiz, pickup }) {
-  if (!pickup || pickup.length < 2) { await sendText(from, "Please type the pickup area."); return true; }
-  biz.sessionData.bikerJob = { ...(biz.sessionData.bikerJob || {}), pickup: pickup.slice(0, 120) };
-  biz.sessionState = "biker_req_drop";
-  await _save(biz, saveBiz);
-  await sendText(from, `*4. Drop-off area?*\n_e.g. Avondale shops_`);
-  return true;
-}
-
-async function _reqDrop({ from, biz, saveBiz, drop }) {
-  if (!drop || drop.length < 2) { await sendText(from, "Please type the drop-off area."); return true; }
-  biz.sessionData.bikerJob = { ...(biz.sessionData.bikerJob || {}), dropoff: drop.slice(0, 120) };
-  biz.sessionState = "biker_req_when";
-  await _save(biz, saveBiz);
-  await sendButtons(from, {
-    text: "*5. When do you need it?*",
-    buttons: [
-      { id: "biker_when_now",   title: "🚀 Now" },
-      { id: "biker_when_today", title: "🕒 Later today" },
-      { id: "biker_when_custom",title: "📅 Pick a time" }
-    ]
-  });
-  return true;
-}
-
-async function _reqWhenPicked({ from, biz, saveBiz, when }) {
-  const map = { now: "Now", today: "Later today", custom: "" };
-  let label = map[when] !== undefined ? map[when] : String(when || "").slice(0, 60);
-  if (when === "custom") {
-    // Ask them to type a time; stay in the "when" state to capture free text.
-    biz.sessionState = "biker_req_when";
-    await _save(biz, saveBiz);
-    await sendText(from, "Please type the time you need the rider, e.g. _today 3pm_ or _tomorrow morning_.");
-    return true;
-  }
-  if (!label) label = "Now";
-  biz.sessionData.bikerJob = { ...(biz.sessionData.bikerJob || {}), when: label };
+  biz.sessionData.bikerJob = { ...(biz.sessionData.bikerJob || {}), city: c, when: "Now" };
   await _save(biz, saveBiz);
   return _createAndDispatchJob({ from, biz, saveBiz });
 }
