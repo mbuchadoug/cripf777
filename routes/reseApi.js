@@ -426,7 +426,7 @@ router.post("/me/avatar", requireReseAuth, upload.single("photo"), async (req, r
 
 // selfie + national ID → sets verification to "pending" for admin review
 // Multer is run manually so its errors return JSON (not an HTML 500) and are
-// logged — this is what tells us WHY an upload fails.
+// logged - this is what tells us WHY an upload fails.
 const verifyUpload = upload.fields([{ name: "selfie", maxCount: 1 }, { name: "id", maxCount: 1 }]);
 router.post(
   "/me/verify",

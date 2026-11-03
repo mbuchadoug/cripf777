@@ -94,6 +94,7 @@ import {
   startSupplierRegistration,
   handleSupplierRegistrationStates
 } from "./supplierRegistration.js";
+import { handleBikerMessage } from "./bikerDispatch.js";
 import {
   startSupplierSearch,
   runSupplierSearch,
@@ -3636,6 +3637,8 @@ a === "my_orders" ||
       a === "reg_type_school" ||
       a === "reg_type_product" ||
       a === "reg_type_service" ||
+      a === "reg_type_biker" ||
+      a.startsWith("biker_") ||
       a.startsWith("sup_hosp_type_") ||
       a === "sup_hosp_facilities_done" ||
       a === "sup_skip_rest_rates" ||
@@ -5187,6 +5190,23 @@ try {
       });
       if (_netHandled) return;
     }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 🏍️  BIKERS / RIDERS - early intercept (before ALL search + request blocks)
+  // ───────────────────────────────────────────────────────────────────────────
+  // Owns every "biker_" session state and action, so biker input (including a
+  // typed city) can NEVER fall through to the generic "Which city?" search.
+  // Registration finishes by handing off to the existing
+  // sup_plan_basic_monthly → supplier_reg_enter_ecocash → PAY-GUARD payment path.
+  // Returns true → fully handled (we return); false → not a biker message.
+  try {
+    const _bikerHandled = await handleBikerMessage({
+      from, text, action: a, biz, saveBiz: saveBizSafe
+    });
+    if (_bikerHandled) return;
+  } catch (_bErr) {
+    console.error("[BIKER HOOK]", _bErr.message);
   }
 
   // =========================

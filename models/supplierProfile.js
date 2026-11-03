@@ -114,11 +114,31 @@ const SupplierProfileSchema = new mongoose.Schema({
   // "tutor"       = private teacher / lessons provider (rides on supplier rails:
   //                 smart link, seller chat, viewer-phone notifications all reused).
   //                 Billed on the $5/mo supplier "basic" plan.
+  // "biker"       = motorbike rider / courier. Rides on the SAME supplier rails as
+  //                 tutor (smart link, seller chat, EcoCash activation, ratings).
+  //                 Billed on the $5/mo supplier "basic" plan. Matched to rider
+  //                 requests by location.city + riderAreas[]. See services/bikerDispatch.js.
   profileType: {
     type:    String,
-    enum:    ["product", "service", "hospitality", "tutor"],
+    enum:    ["product", "service", "hospitality", "tutor", "biker"],
     default: "product"
   },
+
+  // ── Biker / rider fields (populated when profileType = "biker") ─────────────
+  // Additive & isolated: no other profile type reads these, so existing suppliers
+  // are unaffected. Matching uses location.city + riderAreas[].
+  bike: {
+    plate:         { type: String, default: "" },   // number plate, e.g. "AEX 1234"
+    licenceOnFile: { type: Boolean, default: false },// rider confirmed a valid driver's licence
+    idOnFile:      { type: Boolean, default: false },// national ID captured
+    insurance:     { type: Boolean, default: false },// has third-party insurance (self-declared)
+    photoUrl:      { type: String, default: "" },    // photo of rider + bike (for admin review)
+    verifiedAt:    { type: Date,   default: null }
+  },
+  riderAreas:  { type: [String], default: [], index: true }, // suburbs/zones covered in their city
+  riderActive: { type: Boolean, default: true },   // rider is ONLINE / taking jobs right now
+  baseFare:    { type: Number, default: 0 },        // optional indicative starting fare (USD)
+  completedTrips: { type: Number, default: 0 },
 
   // ── Service-provider specific ──────────────────────────────────────────────
   rates: {

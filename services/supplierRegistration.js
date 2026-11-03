@@ -209,6 +209,7 @@ What would you like to list?`,
         { id: "reg_type_product", title: "📦 I Sell Products" },
         { id: "reg_type_service", title: "🧰 I Offer Services" },
         { id: "reg_type_tutor",   title: "🧑‍🏫 Private Tutor" },
+        { id: "reg_type_biker",   title: "🏍️ Delivery Rider" },
         { id: "reg_type_school",  title: "🏫 I Run a School" }
       ]
     );
@@ -231,6 +232,7 @@ What would you like to list?`,
       { id: "reg_type_product",     title: "📦 I Sell Products"         },
       { id: "reg_type_service",     title: "🧰 I Offer Services"        },
       { id: "reg_type_tutor",       title: "🧑‍🏫 Private Tutor"     },
+      { id: "reg_type_biker",       title: "🏍️ Delivery Rider"        },
       { id: "reg_type_hospitality", title: "🏨 Lodge / Hotel / Tourism" },
       { id: "reg_type_school",      title: "🏫 I Run a School"          }
     ]

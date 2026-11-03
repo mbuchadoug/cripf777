@@ -268,6 +268,7 @@ export async function sendMainMenu(to) {
   // ── Case 5: Brand new user - no biz, no supplier, no role ─────────────────
   return sendList(to, MENU_MSG, [
     { id: "register_supplier",   title: "🏪 List My Business" },
+    { id: "biker_request_rider", title: "🏍️ Request a Rider" },
     { id: "sup_request_sellers", title: "⚡ Request Sellers" },
     { id: "find_supplier",       title: "🔍 Browse & Shop" },
     { id: "my_orders",           title: "📋 My Orders" },
