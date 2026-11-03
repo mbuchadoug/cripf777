@@ -573,6 +573,14 @@ export async function handleSchoolSlugSearch({ from, text, biz, saveBiz }) {
     if (school.phone) {
       notifyAllSchoolProfileView(school, from).catch(() => {});
     }
+    // Multi-branch schools go through the branch picker (FAQ view).
+    if ((school.branches || []).some(b => b && b.name && b.active !== false)) {
+      try {
+        const { showSchoolFAQMenu } = await import("./schoolFAQ.js");
+        await showSchoolFAQMenu(from, String(school._id), biz, biz ? saveBiz : async () => {}, { source: "slug_search" });
+        return true;
+      } catch (_) {}
+    }
     await _showSchoolDetail(from, String(school._id), biz, "slug_search");
     return true;
   }
@@ -819,6 +827,14 @@ export async function handleSchoolSearchActions({ action: a, from, biz, saveBiz 
   // ── Result: parent taps a school card ─────────────────────────────────────
   if (a.startsWith("school_view_")) {
     const schoolId = a.replace("school_view_", "");
+    // Multi-branch schools go through the richer FAQ view (branch picker first).
+    try {
+      const _sc = await SchoolProfile.findById(schoolId).select("branches").lean();
+      if (_sc && (_sc.branches || []).some(b => b && b.name && b.active !== false)) {
+        const { showSchoolFAQMenu } = await import("./schoolFAQ.js");
+        return showSchoolFAQMenu(from, schoolId, biz, biz ? saveBiz : async () => {}, { source: "search" });
+      }
+    } catch (_) {}
     return _showSchoolDetail(from, schoolId, biz);
   }
 
@@ -847,7 +863,15 @@ if (a.startsWith("school_enquiry_")) {
       await saveBiz(biz);
     }
 
-    // ALWAYS store in UserSession so non-biz parents are covered
+    // ALWAYS store in UserSession so non-biz parents are covered.
+    // CRITICAL FIX: clear any stale search markers at the SAME time. Without this,
+    // a parent who had browsed tutors/colleges/schools earlier still had
+    // tempData.tutorSearchActive / instSearchActive / schoolSearchActive set, so
+    // their typed enquiry was grabbed by the tutor/college free-text search block
+    // (which runs earlier in chatbotEngine) and answered with "No exact match -
+    // here are tutors". Clearing those markers here means the next typed message
+    // is routed to the school-enquiry handler, not a search. (Belt-and-braces: the
+    // engine also now short-circuits an active enquiry before any search block.)
     const phone = from.replace(/\D+/g, "");
     const { default: UserSession } = await import("../models/userSession.js");
     await UserSession.findOneAndUpdate(
@@ -856,6 +880,14 @@ if (a.startsWith("school_enquiry_")) {
         $set: {
           "tempData.schoolEnquiryState": "school_parent_enquiry",
           "tempData.enquirySchoolId":    schoolId
+        },
+        $unset: {
+          "tempData.tutorSearchActive":  "",
+          "tempData.tutorEnquiryState":  "",
+          "tempData.instSearchActive":   "",
+          "tempData.schoolSearchActive": "",
+          "tempData.supplierSearchState":"",
+          "tempData.scState":            ""
         }
       },
       { upsert: true }
@@ -1213,12 +1245,43 @@ You can upload a new one anytime from ⚙️ More Options.`
     return sendSchoolMoreOptionsMenu(from, school);
   }
 
-  // ── Parent typed their enquiry message ──────────────────────────────────
+  // ── Parent typed their enquiry message (biz AND non-biz) ─────────────────
   if (state === "school_parent_enquiry") {
     const message = (text || "").trim();
 
+    // Resolve schoolId + selected branch from biz first, then UserSession
+    // (non-biz parents keep their state in UserSession.tempData).
+    const _phone = from.replace(/\D+/g, "");
+    let schoolId = biz?.sessionData?.enquirySchoolId || null;
+    let branchId = biz?.sessionData?.enquiryBranchId || null;
+    let _us = null;
+    if (!schoolId || !branchId) {
+      try {
+        const { default: UserSession } = await import("../models/userSession.js");
+        _us = await UserSession.findOne({ phone: _phone }).lean();
+        schoolId = schoolId || _us?.tempData?.enquirySchoolId || null;
+        branchId = branchId || _us?.tempData?.enquiryBranchId || null;
+      } catch (_) {}
+    }
+
+    const _clearState = async () => {
+      if (biz) {
+        biz.sessionState = "ready";
+        biz.sessionData  = { ...(biz.sessionData || {}), enquirySchoolId: null, enquiryBranchId: null };
+        await saveBiz(biz);
+      }
+      try {
+        const { default: UserSession } = await import("../models/userSession.js");
+        await UserSession.findOneAndUpdate(
+          { phone: _phone },
+          { $unset: { "tempData.schoolEnquiryState": "", "tempData.enquirySchoolId": "", "tempData.enquiryBranchId": "" } },
+          { upsert: true }
+        );
+      } catch (_) {}
+    };
+
     if (message.toLowerCase() === "cancel") {
-      if (biz) { biz.sessionState = "ready"; await saveBiz(biz); }
+      await _clearState();
       return sendButtons(from, {
         text: "❌ Enquiry cancelled.",
         buttons: [{ id: "school_search_refine", title: "🔄 Back to Schools" }]
@@ -1230,42 +1293,46 @@ You can upload a new one anytime from ⚙️ More Options.`
       return true;
     }
 
-    const schoolId = biz?.sessionData?.enquirySchoolId;
     if (!schoolId) {
-      if (biz) { biz.sessionState = "ready"; await saveBiz(biz); }
-      return false;
+      await _clearState();
+      return sendButtons(from, {
+        text: "❌ Session expired. Please search for the school again.",
+        buttons: [{ id: "find_school", title: "🏫 Find a School" }]
+      });
     }
 
     const school = await SchoolProfile.findById(schoolId).lean();
     if (!school) {
-      if (biz) { biz.sessionState = "ready"; await saveBiz(biz); }
-      return false;
+      await _clearState();
+      return sendButtons(from, {
+        text: "❌ School not found. Please search again.",
+        buttons: [{ id: "find_school", title: "🏫 Find a School" }]
+      });
     }
 
     // Increment enquiry counter
     await SchoolProfile.findByIdAndUpdate(schoolId, { $inc: { inquiries: 1 } });
 
-    // Notify school with the actual parent message via template
-    notifyAllSchoolEnquiry(school, from, message).catch(() => {});
+    // Branch-aware notify: if a branch was chosen, prefix the branch name to the
+    // message and alert that branch's contacts in addition to the school primary.
+    const _branch = branchId ? (school.branches || []).find(b => String(b.id) === String(branchId)) : null;
+    const _outMsg = _branch ? `[Branch: ${_branch.name}] ${message}` : message;
+    notifyBranchOrSchoolEnquiry(school, from, _outMsg, _branch).catch(() => {});
 
-    // Reset session
-    if (biz) {
-      biz.sessionState = "ready";
-      biz.sessionData  = { ...(biz.sessionData || {}), enquirySchoolId: null };
-      await saveBiz(biz);
-    }
+    await _clearState();
 
-    // Confirm to parent
+    const _confName = _branch ? `${school.schoolName} (${_branch.name})` : school.schoolName;
+    const _confPhone = (_branch && _branch.contactPhone) || school.contactPhone || school.phone;
     return sendButtons(from, {
       text:
-`✅ *Enquiry Sent to ${school.schoolName}!*
+`✅ *Enquiry Sent to ${_confName}!*
 
 Your message:
 _${message}_
 
 The school has been notified and will contact you on this WhatsApp number.
 
-📞 ${school.contactPhone || school.phone}`,
+📞 ${_confPhone}`,
       buttons: [
         { id: `school_apply_${schoolId}`, title: "📝 Apply Online" },
         { id: "school_search_refine",         title: "🔄 More Schools" }
@@ -1274,6 +1341,39 @@ The school has been notified and will contact you on this WhatsApp number.
   }
 
   return false;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Branch-aware enquiry notify. Sends the school primary + notification contacts
+// (via the existing fan-out) AND, when a branch is selected, that branch's own
+// notificationContacts / contactPhone. Falls back cleanly to the school-wide
+// notify so single-branch schools are unaffected.
+// ─────────────────────────────────────────────────────────────────────────────
+async function notifyBranchOrSchoolEnquiry(school, fromPhone, message, branch) {
+  try {
+    // School-wide fan-out (primary + school.notificationContacts) - unchanged path
+    notifyAllSchoolEnquiry(school, fromPhone, message).catch(() => {});
+
+    if (!branch) return;
+
+    // Extra: alert the branch's own numbers (deduped against the school-wide set)
+    const schoolSet = new Set([
+      String(school.phone || "").replace(/\D+/g, ""),
+      ...((school.notificationContacts || []).map(p => String(p).replace(/\D+/g, "")))
+    ].filter(Boolean));
+
+    const branchNums = [
+      branch.contactPhone,
+      ...((branch.notificationContacts || []))
+    ].map(p => String(p || "").replace(/\D+/g, ""))
+     .filter(p => p && !schoolSet.has(p));
+
+    if (!branchNums.length) return;
+
+    for (const num of [...new Set(branchNums)]) {
+      notifySchoolEnquiry(num, `${school.schoolName} (${branch.name})`, fromPhone, message).catch(() => {});
+    }
+  } catch (_) {}
 }
 // ─────────────────────────────────────────────────────────────────────────────
 // PRIVATE: run the MongoDB query and format results

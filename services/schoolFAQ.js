@@ -14,7 +14,8 @@ import {
   notifySchoolApplicationInterest,
   notifySchoolVisitRequest,
   notifySchoolPlaceEnquiry,
-  notifySchoolNewLead
+  notifySchoolNewLead,
+  notifyAllSchoolEnquiry
 } from "./schoolNotifications.js";
 import { SCHOOL_FACILITIES, SCHOOL_EXTRAMURALACTIVITIES } from "./schoolPlans.js";
 
@@ -185,6 +186,7 @@ async function _sess(biz, saveBiz, state, data = {}, from = null) {
       const { default: UserSession } = await import("../models/userSession.js");
       const setFields = { "tempData.sfaqState": state };
       if (data.faqSchoolId)   setFields["tempData.sfaqSchoolId"]   = data.faqSchoolId;
+      if (data.faqBranchId !== undefined) setFields["tempData.sfaqBranchId"] = data.faqBranchId;
       if (data.faqCategoryId) setFields["tempData.sfaqCategoryId"] = data.faqCategoryId;
       if (data.faqParentName) setFields["tempData.sfaqParentName"] = data.faqParentName;
       if (data.faqSource)     setFields["tempData.sfaqSource"]     = data.faqSource;
@@ -209,16 +211,77 @@ function _saveLead(from, school, action, source, extra = {}) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// BRANCH HELPERS (multi-campus schools)
+// A school with branches[] shows a branch picker first. Selecting a branch opens
+// the normal profile, with that branch's contact / admissions / fees layered on
+// top. Single-branch schools (branches empty) are completely unaffected.
+// ─────────────────────────────────────────────────────────────────────────────
+function _activeBranches(school) {
+  return (school.branches || []).filter(b => b && b.name && b.active !== false);
+}
+function _findBranch(school, branchId) {
+  if (!branchId) return null;
+  return _activeBranches(school).find(b => String(b.id) === String(branchId)) || null;
+}
+async function _sendBranchPicker(from, school, parentName = "") {
+  const sid = String(school._id);
+  const branches = _activeBranches(school).slice(0, 8); // ≤10 rows incl. extras
+  const rows = branches.map(b => ({
+    id:    `sfaq_br_${sid}_${b.id}`,
+    title: _btn("🏫 " + b.name).slice(0, 24),
+    description: [b.suburb, b.city || school.city].filter(Boolean).join(", ").slice(0, 72) || undefined
+  }));
+  rows.push({ id: `sfaq_brmain_${sid}`, title: "🏢 Main / Head Office" });
+  rows.push({ id: "main_menu_back",     title: "🏠 Main Menu" });
+  const greet = parentName ? `Hi ${parentName.split(" ")[0]}! 👋\n\n` : "";
+  return sendList(
+    from,
+    `${greet}🏫 *${school.schoolName}*${school.verified ? " ✅" : ""}\n\n` +
+    `This school has *${branches.length} ${branches.length === 1 ? "branch" : "branches"}*. ` +
+    `Which one would you like info on? You can also pick the Head Office, or go back to the Main Menu.`,
+    rows
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // MAIN ENTRY - called when parent opens ZQ:SCHOOL:<id> link
 // Sends everything immediately. Zero navigation required.
 // ─────────────────────────────────────────────────────────────────────────────
-export async function showSchoolFAQMenu(from, schoolId, biz, saveBiz, { source = "direct", parentName = "" } = {}) {
+export async function showSchoolFAQMenu(from, schoolId, biz, saveBiz, { source = "direct", parentName = "", branchId = null } = {}) {
   const school = await SchoolProfile.findById(schoolId).lean();
   if (!school) return sendText(from, "❌ School not found. Please try the link again.");
 
   SchoolProfile.findByIdAndUpdate(schoolId, { $inc: { monthlyViews: 1, zqLinkConversions: 1 } }).catch(() => {});
   _saveLead(from, school, "view", source, { parentName });
-  await _sess(biz, saveBiz, "sfaq_menu", { faqSchoolId: String(schoolId), faqParentName: parentName, faqSource: source }, from);
+
+  // ── BRANCH GATE ────────────────────────────────────────────────────────────
+  // If the school has branches and the parent hasn't chosen one yet, show the
+  // branch picker and stop. (branchId="__main__" means they chose Head Office.)
+  const _branches = _activeBranches(school);
+  if (_branches.length && !branchId) {
+    await _sess(biz, saveBiz, "sfaq_branch_pick", { faqSchoolId: String(schoolId), faqParentName: parentName, faqSource: source, faqBranchId: "" }, from);
+    return _sendBranchPicker(from, school, parentName);
+  }
+  const _branch = (branchId && branchId !== "__main__") ? _findBranch(school, branchId) : null;
+  const _branchSessId = _branch ? String(_branch.id) : "";
+
+  await _sess(biz, saveBiz, "sfaq_menu", { faqSchoolId: String(schoolId), faqParentName: parentName, faqSource: source, faqBranchId: _branchSessId }, from);
+
+  // Branch banner (only when a specific branch is selected)
+  if (_branch) {
+    const _bLoc  = [_branch.suburb, _branch.city || school.city].filter(Boolean).join(", ");
+    const _bPh   = _branch.contactPhone || school.contactPhone || school.phone || "";
+    const _bAdm  = _branch.admissionsOpen ? "🟢 Admissions OPEN" : "🔴 Admissions closed";
+    await sendText(from,
+      `🏫 *${school.schoolName} - ${_branch.name}*\n` +
+      (_bLoc ? `📍 ${_bLoc}\n` : "") +
+      `${_bAdm}\n` +
+      (_bPh ? `📞 ${_bPh.startsWith("263") ? "0" + _bPh.slice(3) : _bPh}\n` : "") +
+      (_branch.email ? `📧 ${_branch.email}\n` : "") +
+      (_branch.feeNote ? `\n💵 ${_branch.feeNote}\n` : "") +
+      `\n_Full school info below. You can switch branch at the end._`
+    );
+  }
 
   const sid   = String(school._id);
   const phone = school.contactPhone || school.phone;
@@ -369,7 +432,7 @@ export async function showSchoolFAQMenu(from, schoolId, biz, saveBiz, { source =
     ? `${school.schoolName} is *accepting applications* for ${school.applicationForm?.intakeYear || "the next intake"}.\n\nTap *Apply Now* to start your application, book a tour to visit us, or send us a message.`
     : `*${school.schoolName}* admissions are currently closed.\n\nTap *Register Interest* to be notified when we open, book a tour, or ask us a question.`;
 
-  return sendButtons(from, {
+  await sendButtons(from, {
     text: actionText,
     buttons: [
       applyBtn,
@@ -377,6 +440,20 @@ export async function showSchoolFAQMenu(from, schoolId, biz, saveBiz, { source =
       { id: `sfaq_act_message_${sid}`, title: _btn("✉️ Ask a Question") }
     ]
   });
+
+  // For multi-branch schools, offer a quick way to switch branch or go home.
+  if (_branches.length) {
+    return sendButtons(from, {
+      text: _branch
+        ? `You're viewing the *${_branch.name}* branch of ${school.schoolName}.`
+        : `${school.schoolName} has other branches too.`,
+      buttons: [
+        { id: `sfaq_brmenu_${sid}`, title: _btn("🔀 Other Branch") },
+        { id: "main_menu_back",     title: _btn("🏠 Main Menu") }
+      ]
+    });
+  }
+  return true;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -397,6 +474,26 @@ export async function handleSchoolFAQAction({ from, action, biz, saveBiz }) {
   const enquiryMatch = a.match(/^sfaq_enquiry_([a-f0-9]{24})$/i);
   if (enquiryMatch) {
     return _handleAction(from, enquiryMatch[1], "message", biz, saveBiz);
+  }
+
+  // ── BRANCH actions (multi-campus schools) ───────────────────────────────────
+  // sfaq_brmenu_<sid>  → re-open the branch picker
+  const brMenuMatch = a.match(/^sfaq_brmenu_([a-f0-9]{24})$/i);
+  if (brMenuMatch) {
+    const _sc = await SchoolProfile.findById(brMenuMatch[1]).lean();
+    if (!_sc) return sendText(from, "❌ School not found.");
+    await _sess(biz, saveBiz, "sfaq_branch_pick", { faqSchoolId: brMenuMatch[1], faqBranchId: "" }, from);
+    return _sendBranchPicker(from, _sc);
+  }
+  // sfaq_brmain_<sid>  → Head Office / Main
+  const brMainMatch = a.match(/^sfaq_brmain_([a-f0-9]{24})$/i);
+  if (brMainMatch) {
+    return showSchoolFAQMenu(from, brMainMatch[1], biz, saveBiz, { branchId: "__main__" });
+  }
+  // sfaq_br_<sid>_<branchId>  → open a specific branch
+  const brPickMatch = a.match(/^sfaq_br_([a-f0-9]{24})_(.+)$/i);
+  if (brPickMatch) {
+    return showSchoolFAQMenu(from, brPickMatch[1], biz, saveBiz, { branchId: brPickMatch[2] });
   }
 
   // Action buttons: sfaq_act_<act>_<schoolId>
@@ -521,12 +618,14 @@ export async function handleSchoolFAQState({ state, from, text, biz, saveBiz }) 
   if (!state?.startsWith("sfaq_")) return false;
 
   let schoolId = biz?.sessionData?.faqSchoolId;
-  if (!schoolId) {
+  let branchId = biz?.sessionData?.faqBranchId || "";
+  if (!schoolId || !branchId) {
     try {
       const phone = String(from).replace(/\D+/g,"");
       const { default: UserSession } = await import("../models/userSession.js");
       const sess = await UserSession.findOne({ phone }).lean();
-      schoolId = sess?.tempData?.sfaqSchoolId;
+      schoolId = schoolId || sess?.tempData?.sfaqSchoolId;
+      branchId = branchId || sess?.tempData?.sfaqBranchId || "";
     } catch (_) {}
   }
   if (!schoolId) return false;
@@ -544,12 +643,26 @@ export async function handleSchoolFAQState({ state, from, text, biz, saveBiz }) 
       const school = await SchoolProfile.findById(schoolId).lean();
       if (!school) return false;
       const sid = String(school._id);
-      notifySchoolEnquiry(school.phone, school.schoolName, from, raw).catch(() => {});
+      const _brMsg = _findBranch(school, branchId);
+      const _outMsg = _brMsg ? `[Branch: ${_brMsg.name}] ${raw}` : raw;
+      // School-wide fan-out (unchanged) + the branch's own numbers when a branch is chosen
+      notifyAllSchoolEnquiry(school, from, _outMsg).catch(() => {});
+      if (_brMsg) {
+        const _seen = new Set([
+          String(school.phone || "").replace(/\D+/g, ""),
+          ...((school.notificationContacts || []).map(p => String(p).replace(/\D+/g, "")))
+        ].filter(Boolean));
+        const _bn = [ _brMsg.contactPhone, ...(_brMsg.notificationContacts || []) ]
+          .map(p => String(p || "").replace(/\D+/g, "")).filter(p => p && !_seen.has(p));
+        for (const num of [...new Set(_bn)]) {
+          notifySchoolEnquiry(num, `${school.schoolName} (${_brMsg.name})`, from, _outMsg).catch(() => {});
+        }
+      }
       _saveLead(from, school, "enquiry", "whatsapp_link");
       SchoolProfile.findByIdAndUpdate(schoolId, { $inc: { inquiries: 1 } }).catch(() => {});
       await _sess(biz, saveBiz, "sfaq_menu", {}, from);
       return sendButtons(from, {
-        text: `✅ *Message sent to ${school.schoolName}*\n\n_"${raw}"_\n\nThey will reply on WhatsApp.\n📞 ${school.contactPhone || school.phone}`,
+        text: `✅ *Message sent to ${_brMsg ? school.schoolName + " (" + _brMsg.name + ")" : school.schoolName}*\n\n_"${raw}"_\n\nThey will reply on WhatsApp.\n📞 ${(_brMsg && _brMsg.contactPhone) || school.contactPhone || school.phone}`,
         buttons: [
           { id: `sfaq_act_tour_${sid}`,    title: _btn("📅 Book a Tour") },
           { id: `sfaq_act_apply_${sid}`,   title: _btn("📋 Apply Now") },

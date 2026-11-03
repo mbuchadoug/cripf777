@@ -4983,6 +4983,30 @@ try {
     if (handled !== false) return handled;
   }
 
+  // ── SCHOOL ENQUIRY free-text (parent typing their message to a school) ──────
+  // TOP PRIORITY: runs BEFORE every free-text search block below. A parent who
+  // tapped "✉️ Send Enquiry" has an explicit, high-intent state; it must never be
+  // hijacked by a stale tutor/college/school search marker (that was the bug that
+  // answered a preschool enquiry with a private-tutor list). Covers biz
+  // (sessionState) and non-biz (tempData.schoolEnquiryState). The handler itself
+  // (handleSchoolAdminStates) is now biz- AND non-biz-aware.
+  if (!isMetaAction && text.trim().length > 0) {
+    let _inSchoolEnq = !!biz && biz.sessionState === "school_parent_enquiry";
+    if (!_inSchoolEnq && !biz) {
+      try {
+        const _se = await UserSession.findOne({ phone }).lean();
+        _inSchoolEnq = _se?.tempData?.schoolEnquiryState === "school_parent_enquiry";
+      } catch (_) {}
+    }
+    if (_inSchoolEnq) {
+      const handled = await handleSchoolAdminStates({
+        state: "school_parent_enquiry",
+        from, text, biz, saveBiz: biz ? saveBizSafe : async () => {}
+      });
+      if (handled !== false) return handled;
+    }
+  }
+
   // ── School search FREE-TEXT (typed school name / city inside the funnel) ─────
   // If the user is in the parent school-search funnel and types free text instead
   // of tapping a city button, route it to SCHOOL search - not the Request Sellers

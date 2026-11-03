@@ -4587,6 +4587,7 @@ const isPresets     = t === "Presets" || t.startsWith("Preset:");
     { href: "/zq-admin/broadcast",       label: "📡 Broadcast Hub",     active: isBroadcastHub },
     { href: "/zq-admin/manual-request",  label: "🙋 Manual Request",    active: t === "Manual Request" },
     { href: "/zq-admin/profile-activity",label: "👁 Profile Activity",   active: t === "Profile Activity" },
+    { href: "/zq-admin/school-activity", label: "🏫 School Activity",     active: t === "School Activity" },
     { href: "/zq-admin/reports-hub",      label: "📊 Reports Hub",       active: t === "Reports Hub" },
     { href: "/zq-admin/presets",         label: "🗂️ Presets",             active: isPresets },
     { href: "/zq-admin/vip-sellers",      label: "🔒 VIP Sellers",         active: t === "VIP Sellers" },
@@ -5977,9 +5978,107 @@ ${(()=>{
   </script>
 </div>
 
+<!-- ── BRANCHES / CAMPUSES ─────────────────────────────────────────────────── -->
+<div style="background:var(--white);border-radius:12px;padding:22px;box-shadow:0 1px 3px rgba(0,0,0,.08);margin-top:18px">
+  <h2 style="font-size:15px;font-weight:800;margin-bottom:4px">🏫 Branches / Campuses</h2>
+  <p style="color:var(--muted);font-size:12.5px;margin-bottom:16px;max-width:760px">
+    Register a school <strong>once</strong> and add its other campuses here. When a parent opens this school's smart link or search
+    result, they first pick a branch, then see that branch's contact, admissions status and fee note. Enquiries are routed to that
+    branch's own numbers (plus the school primary). Leave this empty for a single-location school - nothing changes.
+  </p>
+
+  ${(school.branches||[]).length ? `
+  <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:18px">
+    ${(school.branches||[]).map(b=>`
+      <div style="border:1px solid var(--border);border-radius:9px;padding:12px 14px;display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+        <div style="font-size:13px;line-height:1.7">
+          <strong>${esc(b.name)}</strong> ${b.active===false?'<span style="color:#b91c1c;font-size:11px">(hidden)</span>':''}
+          ${(b.admissionsOpen? '<span style="color:#15803d;font-size:11px">· 🟢 Open</span>':'<span style="color:#b91c1c;font-size:11px">· 🔴 Closed</span>')}
+          <br><span style="color:var(--muted)">📍 ${esc([b.suburb,b.city||school.city].filter(Boolean).join(', ')||'-')}</span>
+          ${b.contactPhone?`<br><span style="color:var(--muted)">📞 ${esc(b.contactPhone)}</span>`:''}
+          ${b.ecocashNumber?`<br><span style="color:var(--muted)">📲 EcoCash ${esc(b.ecocashNumber)}</span>`:''}
+          ${(b.notificationContacts&&b.notificationContacts.length)?`<br><span style="color:var(--muted)">🔔 ${esc(b.notificationContacts.join(', '))}</span>`:''}
+          ${b.feeNote?`<br><span style="color:var(--muted)">💵 ${esc(b.feeNote)}</span>`:''}
+        </div>
+        <form method="POST" action="/zq-admin/schools/${esc(String(school._id))}/branches/${esc(String(b.id))}/delete" style="margin:0"
+              onsubmit="return confirm('Remove the ${esc(b.name).replace(/'/g,"\\'")} branch?');">
+          <button type="submit" class="btn btn-sm btn-red" style="padding:6px 10px">🗑 Remove</button>
+        </form>
+      </div>`).join("")}
+  </div>` : `<p style="font-size:12.5px;color:var(--muted);margin-bottom:16px">No extra branches yet. The main profile above is the Head Office.</p>`}
+
+  <form method="POST" action="/zq-admin/schools/${esc(String(school._id))}/branches" style="border-top:1px dashed var(--border);padding-top:16px">
+    <h3 style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px">➕ Add a branch</h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Branch name <span style="color:#dc2626">*</span></label>
+        <input name="name" required placeholder="e.g. Borrowdale Campus" style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:7px;font-size:13px"></div>
+      <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Suburb</label>
+        <input name="suburb" placeholder="e.g. Borrowdale" style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:7px;font-size:13px"></div>
+      <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">City</label>
+        <input name="city" placeholder="defaults to ${esc(school.city||'')}" style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:7px;font-size:13px"></div>
+      <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Contact phone</label>
+        <input name="contactPhone" placeholder="e.g. 0712345678" style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:7px;font-size:13px"></div>
+      <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">EcoCash number</label>
+        <input name="ecocashNumber" placeholder="e.g. 0712345678" style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:7px;font-size:13px"></div>
+      <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Email</label>
+        <input name="email" placeholder="branch@school.co.zw" style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:7px;font-size:13px"></div>
+      <div style="grid-column:1 / -1"><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Address</label>
+        <input name="address" placeholder="Street address of this branch" style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:7px;font-size:13px"></div>
+      <div style="grid-column:1 / -1"><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Fee note <span style="color:var(--muted);font-weight:400">(optional, shown to parents)</span></label>
+        <input name="feeNote" placeholder="e.g. Primary $450/term, ECD $300/term" style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:7px;font-size:13px"></div>
+      <div style="grid-column:1 / -1"><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Branch notification numbers <span style="color:var(--muted);font-weight:400">(comma or new-line separated, international format)</span></label>
+        <textarea name="notificationContacts" rows="2" placeholder="2637XXXXXXXX, 2637XXXXXXXX" style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;font-family:monospace;resize:vertical"></textarea></div>
+    </div>
+    <label style="font-size:13px;display:flex;align-items:center;gap:8px;margin:12px 0">
+      <input type="checkbox" name="admissionsOpen" value="true" checked> Admissions open at this branch</label>
+    <button type="submit" class="btn btn-blue" style="padding:9px 20px">➕ Add branch</button>
+  </form>
+</div>
+
 <a href="/zq-admin/schools" class="back-link">← All Schools</a>
     `));
   } catch(err){ res.send(layout("Error",`<div class="alert red">${esc(err.message)}</div>`)); }
+});
+
+// ── POST /schools/:id/branches  → add a branch/campus ────────────────────────
+router.post("/schools/:id/branches", requireSupplierAdmin, async (req, res) => {
+  try {
+    const SP = (await import("../models/schoolProfile.js")).default;
+    const b  = req.body || {};
+    const name = String(b.name || "").trim();
+    if (!name) return res.redirect(`/zq-admin/schools/${req.params.id}?error=${encodeURIComponent("Branch name is required.")}`);
+    const notif = String(b.notificationContacts || "")
+      .split(/[\n,;\s]+/).map(s => s.replace(/\D+/g, "")).filter(s => s.length >= 9);
+    const branch = {
+      id:            Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
+      name:          name.slice(0, 80),
+      suburb:        String(b.suburb || "").trim(),
+      city:          String(b.city || "").trim(),
+      address:       String(b.address || "").trim(),
+      contactPhone:  String(b.contactPhone || "").trim(),
+      ecocashNumber: String(b.ecocashNumber || "").trim(),
+      email:         String(b.email || "").trim(),
+      admissionsOpen: b.admissionsOpen === "true" || b.admissionsOpen === "on" || b.admissionsOpen === true,
+      notificationContacts: [...new Set(notif)],
+      feeNote:       String(b.feeNote || "").trim(),
+      active:        true
+    };
+    await SP.findByIdAndUpdate(req.params.id, { $push: { branches: branch } });
+    res.redirect(`/zq-admin/schools/${req.params.id}?success=${encodeURIComponent(`Branch "${branch.name}" added.`)}`);
+  } catch (err) {
+    res.redirect(`/zq-admin/schools/${req.params.id}?error=${encodeURIComponent(err.message)}`);
+  }
+});
+
+// ── POST /schools/:id/branches/:bid/delete  → remove a branch ────────────────
+router.post("/schools/:id/branches/:bid/delete", requireSupplierAdmin, async (req, res) => {
+  try {
+    const SP = (await import("../models/schoolProfile.js")).default;
+    await SP.findByIdAndUpdate(req.params.id, { $pull: { branches: { id: req.params.bid } } });
+    res.redirect(`/zq-admin/schools/${req.params.id}?success=${encodeURIComponent("Branch removed.")}`);
+  } catch (err) {
+    res.redirect(`/zq-admin/schools/${req.params.id}?error=${encodeURIComponent(err.message)}`);
+  }
 });
 
 // POST /schools/:id/toggle-active
@@ -16949,6 +17048,213 @@ router.get("/profile-activity/history", requireSupplierAdmin, async (req, res) =
       kind: x.kind || "view", visitor: x.visitorPhone || "", note: x.note || "",
       contactShown: !!x.contactShown, paid: !!x.sellerPaid, views: x.viewsAdded || 0, alert: !!x.alertSent
     })) });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ── SCHOOL ACTIVITY  → profile-view alerts & manual enquiries FOR SCHOOLS ──────
+// The schools equivalent of Manual Request + Profile Activity. Pick one or more
+// schools, choose "👁 Profile view" or "📩 Enquiry", optionally attach the
+// parent's number and a note, and send. Uses the approved school_profile_view /
+// school_new_enquiry templates (via services/schoolNotifications.js), so alerts
+// land even outside the 24-hour window and reach ALL of a school's notification
+// contacts. Fully additive - reuses existing school templates, no supplier code
+// touched.
+// ══════════════════════════════════════════════════════════════════════════════
+
+// GET /zq-admin/school-activity/schools  → school list (JSON) for the picker
+router.get("/school-activity/schools", requireSupplierAdmin, async (req, res) => {
+  try {
+    const SP = (await import("../models/schoolProfile.js")).default;
+    const q  = String(req.query.q || "").trim();
+    const query = {};
+    if (q) {
+      const rx = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+      query.$or = [{ schoolName: rx }, { phone: rx }, { city: rx }, { suburb: rx }];
+    }
+    const docs = await SP.find(query)
+      .select("schoolName phone city suburb active verified notificationContacts")
+      .sort({ active: -1, schoolName: 1 }).limit(q ? 80 : 2000).lean();
+    res.json({ ok: true, count: docs.length, schools: docs.map(s => ({
+      id: String(s._id), name: s.schoolName || "", phone: s.phone || "",
+      city: s.city || "", suburb: s.suburb || "", active: !!s.active, verified: !!s.verified,
+      contacts: (s.notificationContacts || []).length
+    })) });
+  } catch (err) { res.status(400).json({ ok: false, error: err.message }); }
+});
+
+// GET /zq-admin/school-activity  → composer page
+router.get("/school-activity", requireSupplierAdmin, async (req, res) => {
+  const content = `
+  <h1 style="font-size:22px;font-weight:800;margin-bottom:4px">🏫 School Activity &amp; Enquiries</h1>
+  <p style="color:var(--muted);font-size:13px;margin-bottom:20px;max-width:780px">
+    Send a school a "a parent viewed your profile" alert, or relay a real parent enquiry, to the exact schools you choose.
+    Alerts use the approved school templates so they land even outside the 24-hour window and reach every notification number
+    the school has registered. Great for warming up dormant schools or passing on a walk-in / phone enquiry.
+  </p>
+
+  <div id="saAlert" style="display:none;margin-bottom:16px;padding:12px 16px;border-radius:8px;font-size:13px"></div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start">
+
+    <!-- LEFT: the activity -->
+    <div style="background:var(--white);border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.08)">
+      <h2 style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:14px">1 · The activity</h2>
+
+      <div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:12px">
+        <label style="font-size:13px;display:flex;align-items:center;gap:6px"><input type="radio" name="saKind" value="view" checked onchange="saKindChange()"/> 👁 Profile view</label>
+        <label style="font-size:13px;display:flex;align-items:center;gap:6px"><input type="radio" name="saKind" value="enquiry" onchange="saKindChange()"/> 📩 Enquiry</label>
+      </div>
+
+      <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Parent / visitor WhatsApp number <span style="color:var(--muted);font-weight:400">(optional)</span></label>
+      <input id="saVisitor" placeholder="0771234567 or 263771234567" style="width:100%;padding:9px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:monospace" />
+      <p style="font-size:11px;color:var(--muted);margin-top:4px">Included in the alert so the school can call the parent back.</p>
+
+      <label id="saNoteLbl" style="font-size:12px;font-weight:600;display:block;margin:14px 0 4px">Enquiry / note <span style="color:var(--muted);font-weight:400">(required for an enquiry)</span></label>
+      <textarea id="saNote" rows="4" placeholder="e.g. Looking for a place in Grade 1 for 2027, is there space and what are the fees?"
+        style="width:100%;padding:9px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;resize:vertical"></textarea>
+
+      <div id="saViewsWrap" style="margin-top:14px">
+        <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Add to view counter</label>
+        <input id="saViews" type="number" min="0" max="500" value="1" style="width:120px;padding:9px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px" />
+      </div>
+    </div>
+
+    <!-- RIGHT: recipients -->
+    <div style="background:var(--white);border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.08)">
+      <h2 style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px">2 · Which schools</h2>
+
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+        <button type="button" onclick="saSelectAllVisible(true)" class="btn btn-gray btn-sm" style="padding:7px 14px">✓ Select all shown</button>
+        <button type="button" onclick="saSelectAllVisible(false)" class="btn btn-gray btn-sm" style="padding:7px 14px">✕ Clear shown</button>
+      </div>
+      <input id="saFilter" placeholder="🔍 Filter schools by name, city…" oninput="saRenderAll()"
+        style="width:100%;padding:9px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;margin-bottom:6px" />
+      <div id="saAllMeta" style="font-size:11px;color:var(--muted);margin-bottom:6px">Loading schools…</div>
+      <div id="saAllList" style="max-height:320px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:6px"></div>
+
+      <div style="display:flex;align-items:center;justify-content:space-between;margin:14px 0 6px">
+        <span style="font-size:12px;font-weight:700;color:var(--text)">Selected (<span id="saCount">0</span>)</span>
+        <button type="button" onclick="saClear()" style="font-size:11px;background:none;border:none;color:var(--red);cursor:pointer">Clear all</button>
+      </div>
+      <div id="saPace" style="margin-top:4px;font-size:12px;color:var(--muted)"></div>
+      <button type="button" onclick="saSend()" id="saSendBtn"
+        style="width:100%;margin-top:14px;background:var(--green);color:white;border:none;padding:12px;border-radius:9px;font-size:14px;font-weight:800;cursor:pointer">
+        📨 Send to selected schools
+      </button>
+      <p style="font-size:11px;color:var(--muted);margin-top:8px;text-align:center">Tip: select just 1 school to send yourself a safe test first.</p>
+    </div>
+  </div>
+
+  <script>
+  var SA_sel = {};
+  function saAlert(msg, ok){ var el=document.getElementById('saAlert'); el.style.display=''; el.textContent=msg;
+    el.style.background = ok?'#dcfce7':'#fee2e2'; el.style.color = ok?'#15803d':'#b91c1c'; window.scrollTo({top:0,behavior:'smooth'}); }
+  function saEsc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function saKindChange(){ var k=document.querySelector('input[name=saKind]:checked').value;
+    document.getElementById('saViewsWrap').style.display=(k==='view')?'':'none';
+    document.getElementById('saNoteLbl').innerHTML = (k==='enquiry')
+      ? 'Enquiry / note <span style="color:#dc2626">*</span>' : 'Note <span style="color:var(--muted);font-weight:400">(optional)</span>'; }
+  function saCountRender(){ var n=Object.keys(SA_sel).length; document.getElementById('saCount').textContent=n;
+    var secs=Math.round(n*1.3); document.getElementById('saPace').textContent = n?('≈ '+secs+'s to send ('+n+' school'+(n===1?'':'s')+').'):''; }
+  function saAdd(s){ SA_sel[s.id]={id:s.id,name:s.name}; saCountRender(); }
+  function saRemove(id){ delete SA_sel[id]; saCountRender(); }
+  function saClear(){ SA_sel={}; saRenderAll(); saCountRender(); }
+
+  var SA_all=[];
+  function saLoadAll(){ var list=document.getElementById('saAllList');
+    list.innerHTML='<div style="padding:10px;color:var(--muted);font-size:12px">Loading…</div>';
+    fetch('/zq-admin/school-activity/schools').then(function(r){return r.json();}).then(function(d){
+      if(!d.ok) throw new Error(d.error||'Load failed'); SA_all=d.schools||[]; saRenderAll();
+    }).catch(function(e){ list.innerHTML='<div style="padding:10px;color:#b91c1c;font-size:12px">'+saEsc(e.message)+'</div>'; });
+  }
+  function saFiltered(){ var q=(document.getElementById('saFilter').value||'').trim().toLowerCase();
+    if(!q) return SA_all; return SA_all.filter(function(s){ return ((s.name||'')+' '+(s.city||'')+' '+(s.suburb||'')+' '+(s.phone||'')).toLowerCase().indexOf(q)>=0; }); }
+  function saRenderAll(){ var list=document.getElementById('saAllList'); var rows=saFiltered(); var cap=500;
+    document.getElementById('saAllMeta').textContent = rows.length+' of '+SA_all.length+' schools'+(rows.length>cap?(' (first '+cap+')'):'');
+    if(!SA_all.length){ list.innerHTML='<div style="padding:10px;color:var(--muted);font-size:12px">No schools found.</div>'; return; }
+    if(!rows.length){ list.innerHTML='<div style="padding:10px;color:var(--muted);font-size:12px">No match.</div>'; return; }
+    list.innerHTML=rows.slice(0,cap).map(function(s){
+      var meta=[s.suburb,s.city].filter(Boolean).join(', ');
+      var badge=s.active?'':' <span style="color:#b91c1c;font-size:10px">inactive</span>';
+      return '<label style="display:flex;align-items:flex-start;gap:8px;padding:6px 4px;border-bottom:1px solid #f1f5f9;cursor:pointer;font-size:12px">'
+        +'<input type="checkbox" '+(SA_sel[s.id]?'checked':'')+' onchange="saToggle(this)" data-id="'+saEsc(s.id)+'" data-name="'+saEsc(s.name)+'" style="margin-top:2px"/>'
+        +'<span style="flex:1"><strong>'+saEsc(s.name)+'</strong>'+(s.verified?' ✅':'')+badge+'<br>'
+        +'<span style="color:var(--muted)">'+saEsc(meta)+' · '+saEsc(s.contacts)+' alert #s</span></span>'
+        +'<span style="font-family:monospace;color:#0369a1">'+saEsc(s.phone)+'</span></label>';
+    }).join('');
+  }
+  function saToggle(cb){ if(cb.checked) saAdd({id:cb.getAttribute('data-id'),name:cb.getAttribute('data-name')}); else saRemove(cb.getAttribute('data-id')); }
+  function saSelectAllVisible(on){ saFiltered().slice(0,500).forEach(function(s){ if(on) saAdd(s); else saRemove(s.id); }); saRenderAll(); }
+
+  function saSend(){
+    var ids=Object.keys(SA_sel);
+    var kind=document.querySelector('input[name=saKind]:checked').value;
+    var note=document.getElementById('saNote').value.trim();
+    if(!ids.length){ saAlert('Select at least one school.',false); return; }
+    if(kind==='enquiry' && note.length<3){ saAlert('Type the enquiry / note to send.',false); return; }
+    if(!confirm('Send this '+(kind==='enquiry'?'enquiry':'profile-view alert')+' to '+ids.length+' school'+(ids.length===1?'':'s')+'?')) return;
+    var btn=document.getElementById('saSendBtn'); btn.disabled=true; var old=btn.textContent; btn.textContent='Sending…';
+    var p=new URLSearchParams();
+    p.set('kind',kind); p.set('note',note);
+    p.set('visitorPhone',document.getElementById('saVisitor').value);
+    p.set('viewsToAdd',document.getElementById('saViews').value||'0');
+    p.set('schoolIds',JSON.stringify(ids));
+    fetch('/zq-admin/school-activity/send',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:p.toString()})
+      .then(function(r){return r.json();}).then(function(d){ btn.disabled=false; btn.textContent=old;
+        if(!d.ok) throw new Error(d.error||'Send failed');
+        saAlert('✅ Sent '+d.sent+' of '+d.total+(d.failed?(' · '+d.failed+' failed'):'')+'.', true); saClear();
+      }).catch(function(e){ btn.disabled=false; btn.textContent=old; saAlert('❌ '+e.message,false); });
+  }
+  saKindChange(); saCountRender(); saLoadAll();
+  </script>`;
+  res.send(layout("School Activity", content));
+});
+
+// POST /zq-admin/school-activity/send  → fire school profile-view / enquiry alerts
+router.post("/school-activity/send", requireSupplierAdmin, async (req, res) => {
+  try {
+    const SP = (await import("../models/schoolProfile.js")).default;
+    const SN = await import("../services/schoolNotifications.js");
+    const b  = req.body || {};
+    const kind = b.kind === "enquiry" ? "enquiry" : "view";
+    const note = String(b.note || "").trim().slice(0, 600);
+    const viewsToAdd = Math.max(0, Math.min(500, parseInt(b.viewsToAdd || "0", 10) || 0));
+    const visitorRaw = String(b.visitorPhone || "").replace(/\D+/g, "");
+    const visitor = visitorRaw
+      ? (visitorRaw.startsWith("0") && visitorRaw.length === 10 ? "263" + visitorRaw.slice(1) : visitorRaw)
+      : "";
+    if (kind === "enquiry" && note.length < 3) throw new Error("Type the enquiry / note to send.");
+
+    let ids = [];
+    try { ids = JSON.parse(b.schoolIds || "[]"); } catch (_) { ids = []; }
+    ids = [...new Set(ids.filter(Boolean))].slice(0, 300);
+    if (!ids.length) throw new Error("Select at least one school.");
+
+    let sent = 0, failed = 0;
+    const parentLabel = visitor || "A parent";
+    for (const id of ids) {
+      try {
+        const school = await SP.findById(id).lean();
+        if (!school) { failed++; continue; }
+        if (kind === "enquiry") {
+          await SN.notifyAllSchoolEnquiry(school, parentLabel, note || "(enquiry via ZimQuote)");
+          SP.findByIdAndUpdate(id, { $inc: { inquiries: 1 } }).catch(() => {});
+        } else {
+          await SN.notifyAllSchoolProfileView(school, parentLabel);
+          if (viewsToAdd > 0) SP.findByIdAndUpdate(id, { $inc: { monthlyViews: viewsToAdd } }).catch(() => {});
+        }
+        sent++;
+        await new Promise(r2 => setTimeout(r2, 1200)); // gentle pace for Meta
+      } catch (err) {
+        failed++;
+        console.error("[SCHOOL ACTIVITY] send failed for", id, "-", err.message);
+      }
+    }
+    console.log(`[SCHOOL ACTIVITY] kind=${kind} → sent ${sent}/${ids.length}`);
+    res.json({ ok: true, total: ids.length, sent, failed });
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });
   }

@@ -279,6 +279,40 @@ const schoolProfileSchema = new mongoose.Schema({
     addedAt:  { type: Date, default: Date.now }
   }],
 
+  // ── Branches / campuses ────────────────────────────────────────────────────
+  // A school registers ONCE and can list extra campuses/branches here. The main
+  // SchoolProfile record is the "Head Office / Main" branch; each entry below is
+  // an additional branch. When branches[] is empty the school behaves exactly as
+  // before (single-location) - this field is fully additive and never read for a
+  // single-branch school. When it has entries, the parent-facing profile shows a
+  // branch picker first (see services/schoolFAQ.js).
+  //   name          - "Borrowdale Campus", "Avondale Branch"
+  //   suburb/city   - where this branch is (city falls back to the school's city)
+  //   contactPhone  - public number for this branch (falls back to school phone)
+  //   ecocashNumber - branch EcoCash (falls back to school ecocashNumber)
+  //   admissionsOpen- per-branch admissions flag
+  //   notificationContacts - WhatsApp numbers alerted when a parent enquires to
+  //                   THIS branch (in addition to the school primary). Never shown
+  //                   to parents - internal delivery only.
+  //   feeNote       - optional free-text fee summary specific to this branch
+  branches: {
+    type: [{
+      id:            { type: String, default: () => Date.now().toString(36) + Math.random().toString(36).slice(2,5) },
+      name:          { type: String, required: true },
+      suburb:        { type: String, default: "" },
+      city:          { type: String, default: "" },
+      address:       { type: String, default: "" },
+      contactPhone:  { type: String, default: "" },
+      ecocashNumber: { type: String, default: "" },
+      email:         { type: String, default: "" },
+      admissionsOpen:{ type: Boolean, default: true },
+      notificationContacts: { type: [String], default: [] },
+      feeNote:       { type: String, default: "" },
+      active:        { type: Boolean, default: true }
+    }],
+    default: []
+  },
+
   // ── ZimQuote tracking ─────────────────────────────────────────────────────
   zqSlug:            { type: String, unique: true, sparse: true },
   zqLinkViews:       { type: Number, default: 0 },
