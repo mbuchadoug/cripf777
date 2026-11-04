@@ -29,6 +29,9 @@ import { _sendTemplate } from "./buyerRequestNotifications.js";
 import { SUPPLIER_CITIES } from "./supplierPlans.js";
 import SupplierProfile from "../models/supplierProfile.js";
 import BikerJob from "../models/bikerJob.js";
+import UserSession from "../models/userSession.js";
+import Business from "../models/business.js";
+import UserRole from "../models/userRole.js";
 
 // ── Meta template plumbing (same env the rest of the app uses) ───────────────
 const GRAPH_API_VERSION = "v24.0";
@@ -90,7 +93,97 @@ function parseWhatWhere(raw = "") {
   return { task: s.slice(0, 200), pickup, dropoff };
 }
 function isEscape(text) {
-  return /^(0|00|menu|main menu|back|cancel|exit|home|stop)$/i.test(String(text || "").trim());
+  return /^(0|00|menu|main menu|back|cancel|exit|home|stop|hi|hie|hey|hello)$/i.test(String(text || "").trim());
+}
+
+// ── Non-biz users: keep biker state in UserSession (same key the engine uses) ─
+function _sessKey(from) { return String(from || "").replace(/\D+/g, ""); }
+
+async function _loadVirtualBiz(from) {
+  const s = await UserSession.findOne({ phone: _sessKey(from) }).lean().catch(() => null);
+  const td = s?.tempData || {};
+  return {
+    _virtual:     true,
+    sessionState: td.bikerState || "",
+    sessionData:  { ...(td.bikerData || {}) }
+  };
+}
+
+async function _saveVirtualBiz(from, vb) {
+  const key = _sessKey(from);
+  const st  = String(vb?.sessionState || "");
+  if (!st.startsWith("biker_")) {
+    await UserSession.findOneAndUpdate(
+      { phone: key },
+      { $unset: { "tempData.bikerState": "", "tempData.bikerData": "" } },
+      { upsert: true }
+    );
+    return;
+  }
+  await UserSession.findOneAndUpdate(
+    { phone: key },
+    { $set: { "tempData.bikerState": st, "tempData.bikerData": vb.sessionData || {} } },
+    { upsert: true }
+  );
+}
+
+// Starting a biker flow abandons any other half-finished search, so stale
+// markers (e.g. tutorSearchActive) can never grab the next typed message.
+async function _clearCompetingFlows(from) {
+  await UserSession.findOneAndUpdate(
+    { phone: _sessKey(from) },
+    { $unset: {
+        "tempData.tutorSearchActive":   "",
+        "tempData.schoolSearchActive":  "",
+        "tempData.instSearchActive":    "",
+        "tempData.tutorEnquiryState":   "",
+        "tempData.schoolEnquiryState":  "",
+        "tempData.supplierSearchMode":  "",
+        "tempData.buyerRequestState":   "",
+        "tempData.pendingBuyerRequest": "",
+        "tempData.buyerRequestMode":    "",
+        "tempData.grpListIds":          "",
+        "tempData.grpListType":         ""
+    } },
+    { upsert: true }
+  ).catch(() => {});
+}
+
+// Rider REGISTRATION needs a real Business (the existing EcoCash plan/payment
+// path requires one). Create a pending one for non-biz users, exactly like the
+// other reg_type_* handlers do.
+async function _ensureRealBiz(from, biz) {
+  if (biz && !biz._virtual) return biz;
+  const phone = _sessKey(from);
+  let real = await Business.findOne({ ownerPhone: phone, name: "pending_supplier_" + phone });
+  if (!real) {
+    real = await Business.create({
+      name: "pending_supplier_" + phone,
+      currency: "USD",
+      package: "trial",
+      subscriptionStatus: "inactive",
+      isSupplier: false,
+      sessionState: "ready",
+      sessionData: {},
+      ownerPhone: phone
+    });
+  }
+  await UserRole.findOneAndUpdate(
+    { phone, businessId: real._id },
+    { $setOnInsert: { phone, businessId: real._id, role: "owner", pending: false } },
+    { upsert: true }
+  );
+  await UserSession.findOneAndUpdate(
+    { phone },
+    { $set: { activeBusinessId: real._id }, $unset: { "tempData.bikerState": "", "tempData.bikerData": "" } },
+    { upsert: true }
+  );
+  return real;
+}
+
+async function _saveRealBiz(b) {
+  if (typeof b?.markModified === "function") b.markModified("sessionData");
+  if (typeof b?.save === "function") return b.save();
 }
 async function _save(biz, saveBiz) {
   if (typeof saveBiz === "function") return saveBiz(biz);
@@ -103,7 +196,7 @@ async function _save(biz, saveBiz) {
 // Standalone keyword that STARTS a "request a rider" (short, exact-ish messages only,
 // so we never hijack a normal product/service search).
 const RIDER_REQUEST_RE =
-  /^(request\s+(a\s+)?rider|find\s+(a\s+)?rider|need\s+(a\s+)?rider|i\s+want\s+(a\s+)?rider|get\s+(a\s+)?rider|rider|biker|boda|courier\s+rider)$/i;
+  /^(request\s+(a\s+)?(rider|biker)|find\s+(a\s+)?(rider|biker)|need\s+(a\s+)?(rider|biker)|i\s+want\s+(a\s+)?(rider|biker)|get\s+(a\s+)?(rider|biker)|rider|biker|boda|courier\s+rider)$/i;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PUBLIC ENTRY - called once, early, by chatbotEngine.
@@ -112,13 +205,22 @@ const RIDER_REQUEST_RE =
 // ─────────────────────────────────────────────────────────────────────────────
 export async function handleBikerMessage({ from, text = "", action = "", biz = null, saveBiz = null }) {
   try {
-    const a   = String(action || "").trim();
+    const a   = String(action || "").trim();   // "" for typed text, button/list id for taps
     const txt = String(text || "").trim();
+
+    // Non-biz users (or users who don't own the resolved biz): use a virtual
+    // biz backed by UserSession so the flow survives between messages.
+    if (!biz) {
+      biz = await _loadVirtualBiz(from);
+      saveBiz = (vb) => _saveVirtualBiz(from, vb);
+    }
     const state = biz?.sessionState || "";
 
     // 1) Continue an in-progress biker flow (state owns the message).
     if (state.startsWith("biker_")) {
-      if (isEscape(txt)) {                 // let the user bail out cleanly
+      // Tapping any NON-biker button (e.g. Main Menu, another menu row) leaves the flow.
+      const leavingByTap = !!a && !a.startsWith("biker_");
+      if (isEscape(txt) || leavingByTap) {  // let the user bail out cleanly
         biz.sessionState = "ready";
         if (biz.sessionData) { delete biz.sessionData.bikerReg; delete biz.sessionData.bikerJob; }
         await _save(biz, saveBiz);
@@ -186,11 +288,14 @@ export async function startBikerRegistration({ from, biz, saveBiz }) {
     return bikerAccount({ from, biz, saveBiz, existing });
   }
 
-  if (biz) {
-    biz.sessionState = "biker_reg_name";
-    biz.sessionData = { ...(biz.sessionData || {}), bikerReg: {} };
-    await _save(biz, saveBiz);
+  if (!biz || biz._virtual) {
+    biz = await _ensureRealBiz(from, biz);
+    saveBiz = _saveRealBiz;
   }
+  await _clearCompetingFlows(from);
+  biz.sessionState = "biker_reg_name";
+  biz.sessionData = { ...(biz.sessionData || {}), bikerReg: {} };
+  await _save(biz, saveBiz);
   await sendText(from,
     "🏍️ *Become a ZimQuote Rider*\n\n" +
     "Get delivery jobs on WhatsApp. Keep 100% of every fare. Just $5/month.\n\n" +
@@ -266,6 +371,10 @@ export async function _regPhoto({ from, biz, saveBiz, imageUrl = null }) {
 }
 
 async function _finishBikerRegistration({ from, biz, saveBiz, reg }) {
+  if (!biz || biz._virtual) {
+    biz = await _ensureRealBiz(from, biz);
+    saveBiz = _saveRealBiz;
+  }
   const phone = normPhone(from);
   const name  = reg.name || "Rider";
   const city  = titleCity(reg.city || "Harare");
@@ -366,14 +475,17 @@ export async function bikerAccount({ from, biz, saveBiz, toggle = false, existin
 // REQUEST A RIDER  (customer side, 5 taps → match → notify)
 // ═════════════════════════════════════════════════════════════════════════════
 export async function startRiderRequest({ from, biz, saveBiz }) {
-  if (biz) {
-    biz.sessionState = "biker_req_what";
-    biz.sessionData = { ...(biz.sessionData || {}), bikerJob: {} };
-    await _save(biz, saveBiz);
+  if (!biz) {
+    biz = await _loadVirtualBiz(from);
+    saveBiz = (vb) => _saveVirtualBiz(from, vb);
   }
+  await _clearCompetingFlows(from);
+  biz.sessionState = "biker_req_what";
+  biz.sessionData = { ...(biz.sessionData || {}), bikerJob: {} };
+  await _save(biz, saveBiz);
   // ONE message captures what + where. Default time is "Now" (no extra step).
   await sendText(from,
-    "🏍️ *Request a Rider*\n\n" +
+    "🏍️ *Request a Biker*\n\n" +
     "In *one message*, tell us *what* you need and *where* (from → to):\n\n" +
     "📝 _Collect documents, CBD to Avondale_\n" +
     "📝 _Buy & deliver 2 loaves, Mbare to Highfield_\n" +
@@ -723,7 +835,7 @@ async function _bikerGroupLink({ from, slug }) {
   if (!inCity.length) {
     await sendList(from,
       `🏍️ *ZimQuote Riders - ${city}*\n\nNo riders listed here yet. Be the first - or request one and we'll alert riders as they join.`,
-      [{ id: "biker_request_rider", title: "📦 Request a Rider" }, ctaRow]
+      [{ id: "biker_request_rider", title: "📦 Request a Biker" }, ctaRow]
     );
     return true;
   }
@@ -734,7 +846,7 @@ async function _bikerGroupLink({ from, slug }) {
   }));
   await sendList(from,
     `🏍️ *ZimQuote Riders - ${city}*\n\nRequest a rider for any errand, or become one yourself.`,
-    [{ id: "biker_request_rider", title: "📦 Request a Rider" }, ...rows.slice(0, 8), ctaRow].slice(0, 10)
+    [{ id: "biker_request_rider", title: "📦 Request a Biker" }, ...rows.slice(0, 8), ctaRow].slice(0, 10)
   );
   return true;
 }

@@ -237,7 +237,7 @@ export async function sendMainMenu(to) {
     // Trial supplier (no invoicing tools yet) → keep marketplace-first menu.
     return sendList(to, MENU_MSG, [
       { id: "sup_request_sellers", title: "⚡ Request Sellers" },
-      { id: "biker_request_rider", title: "🏍️ Request a Rider" },
+      { id: "biker_request_rider", title: "🏍️ Request a Biker" },
       { id: "find_supplier",       title: "🔍 Browse & Shop" },
       { id: "my_orders",           title: "📋 My Orders" },
       { id: "find_school",         title: "🎓 Schools & Tutors" },
@@ -250,7 +250,7 @@ export async function sendMainMenu(to) {
     return sendList(to, MENU_MSG + "\n\n⚠️ Your listing is currently inactive - activate it to appear in search and receive customer enquiries.", [
       ...(hasStaffRole && isRealBiz ? [{ id: "biz_tools_menu", title: "📊 Business Tools" }] : []),
       { id: "sup_request_sellers", title: "⚡ Request Sellers" },
-      { id: "biker_request_rider", title: "🏍️ Request a Rider" },
+      { id: "biker_request_rider", title: "🏍️ Request a Biker" },
       { id: "find_supplier",       title: "🔍 Browse & Shop" },
       { id: "my_orders",           title: "📋 My Orders" },
       { id: "find_school",         title: "🎓 Schools & Tutors" },
@@ -270,7 +270,7 @@ export async function sendMainMenu(to) {
   // ── Case 5: Brand new user - no biz, no supplier, no role ─────────────────
   return sendList(to, MENU_MSG, [
     { id: "register_supplier",   title: "🏪 List My Business" },
-    { id: "biker_request_rider", title: "🏍️ Request a Rider" },
+    { id: "biker_request_rider", title: "🏍️ Request a Biker" },
     { id: "sup_request_sellers", title: "⚡ Request Sellers" },
     { id: "find_supplier",       title: "🔍 Browse & Shop" },
     { id: "my_orders",           title: "📋 My Orders" },
@@ -360,11 +360,11 @@ export async function sendBusinessHomeMenu(to, biz, { isOwner = false } = {}) {
 
   let filtered = await filterMenuByRole({ from: to, biz, items });
 
-  // ── Always show "Request a Rider" just above Marketplace (both user types) ──
+  // ── Always show "Request a Biker" just above Marketplace (both user types) ──
   // Injected AFTER role filtering so it is never dropped, regardless of role.
   if (!filtered.some(i => i.id === "biker_request_rider")) {
     const _mpIdx = filtered.findIndex(i => i.id === "marketplace_menu");
-    const _riderRow = { id: "biker_request_rider", title: "🏍️ Request a Rider" };
+    const _riderRow = { id: "biker_request_rider", title: "🏍️ Request a Biker" };
     if (_mpIdx >= 0) filtered.splice(_mpIdx, 0, _riderRow);
     else filtered.push(_riderRow);
   }
@@ -379,7 +379,7 @@ export async function sendBusinessHomeMenu(to, biz, { isOwner = false } = {}) {
       filtered.splice(bIdx, 0, { id: "branches_users_menu", title: "🏬 Branches & Users" });
     }
   }
-  // Hard safety: never send more than 10 rows, but always keep Request a Rider + Marketplace.
+  // Hard safety: never send more than 10 rows, but always keep Request a Biker + Marketplace.
   if (filtered.length > 10) {
     const mp = filtered.find(i => i.id === "marketplace_menu");
     const rr = filtered.find(i => i.id === "biker_request_rider");
@@ -398,7 +398,7 @@ export async function sendBusinessHomeMenu(to, biz, { isOwner = false } = {}) {
 export async function sendMarketplaceMenu(to, biz, { isOwner = false } = {}) {
   const items = [
     { id: "sup_request_sellers", title: "⚡ Request Sellers" },
-    { id: "biker_request_rider", title: "🏍️ Request a Rider" },
+    { id: "biker_request_rider", title: "🏍️ Request a Biker" },
     { id: "find_supplier",       title: "🔍 Browse & Shop" },
     { id: "my_orders",           title: "📋 My Orders" },
     { id: "find_school",         title: "🎓 Schools & Tutors" },

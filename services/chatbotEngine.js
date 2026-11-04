@@ -4246,6 +4246,27 @@ if (!isMetaAction && /^ZQ:S:[a-z0-9_-]{1,60}$/i.test(text.trim())) {
   return;
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// 🏍️  BIKERS / RIDERS - TOP-LEVEL intercept
+// ───────────────────────────────────────────────────────────────────────────
+// Runs BEFORE every free-text grabber (seller pick, school / tutor / college
+// search, buyer requests, product search). An in-progress biker flow owns the
+// next message, for biz AND non-biz users (non-biz state lives in
+// UserSession.tempData.bikerState). Typed text is passed with action="" so the
+// module can tell a button tap from typing.
+try {
+  const _bikerHandled = await handleBikerMessage({
+    from,
+    text,
+    action:  isMetaAction ? a : "",
+    biz:     (biz && _bizIsOwnedByUser) ? biz : null,
+    saveBiz: saveBizSafe
+  });
+  if (_bikerHandled) return;
+} catch (_bErr) {
+  console.error("[BIKER HOOK]", _bErr.message);
+}
+
 // ── Numbered seller pick (TOP LEVEL) ─────────────────────────────────────────
 // After a Browse & Shop search, results are sent as a numbered seller list.
 // A buyer replying with "2" (or "more") opens that seller's smart-link store
@@ -5248,22 +5269,7 @@ try {
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // 🏍️  BIKERS / RIDERS - early intercept (before ALL search + request blocks)
-  // ───────────────────────────────────────────────────────────────────────────
-  // Owns every "biker_" session state and action, so biker input (including a
-  // typed city) can NEVER fall through to the generic "Which city?" search.
-  // Registration finishes by handing off to the existing
-  // sup_plan_basic_monthly → supplier_reg_enter_ecocash → PAY-GUARD payment path.
-  // Returns true → fully handled (we return); false → not a biker message.
-  try {
-    const _bikerHandled = await handleBikerMessage({
-      from, text, action: a, biz, saveBiz: saveBizSafe
-    });
-    if (_bikerHandled) return;
-  } catch (_bErr) {
-    console.error("[BIKER HOOK]", _bErr.message);
-  }
+  // (Biker hook moved earlier - see "BIKERS / RIDERS - TOP-LEVEL intercept".)
 
   // =========================
   // 📨 BUYER REQUEST / SELLER RESPONSE TEXT STATES
