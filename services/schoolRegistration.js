@@ -1265,6 +1265,10 @@ Otherwise type *menu* and try again from your school account.`
       }
     }, 10000);
 
+    // Payment prompt sent + poller armed - mark handled so the engine does NOT
+    // fall through to the marketplace "Request Sellers" default.
+    return true;
+
 } catch (err) {
   console.error("[School Payment] Error:", err);
   biz.sessionState = "school_reg_enter_ecocash";
