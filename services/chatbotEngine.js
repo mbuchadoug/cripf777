@@ -5043,7 +5043,13 @@ try {
                     _td.tutorEnquiryState || _td.schoolEnquiryState ||
                     _td.schoolSearchActive || _td.tutorSearchActive || _td.instSearchActive ||
                     String(_td.sfaqState || "").startsWith("sfaq_awaiting");
-      const _bizBusy = !!biz && biz.sessionState && !["ready", ""].includes(biz.sessionState);
+      // A biz owner who opened a group link, then opened a branch school FROM it,
+      // carries an sfaq_* browse state while still wanting to pick another number
+      // from the group list - so sfaq_* must NOT block the group number. Any other
+      // non-ready state (active school-search, registration, a live transaction)
+      // keeps priority. (Arming a group also resets a stale sfaq_/school_search.)
+      const _bizSt = String((biz && biz.sessionState) || "");
+      const _bizBusy = !!_bizSt && _bizSt !== "ready" && !_bizSt.startsWith("sfaq_");
       if (Array.isArray(_ids) && _ids.length && _gtype && !_busy && !_bizBusy) {
         const { openGroupEntryByNumber } = await import("./groupSmartLink.js");
         const handled = await openGroupEntryByNumber({
@@ -15252,6 +15258,14 @@ if (a === "school_applications") {
 
 // ── Enquiries (parent questions / leads) ──────────────────────────────────────
 if (a === "school_enquiries") {
+  // Inactive schools can SEE that parents are interested but must activate to
+  // read numbers / reply. Route them to the account menu (Activate on top).
+  const _schEnq = await SchoolProfile.findOne({ phone }).lean();
+  if (_schEnq && !_schEnq.active) {
+    await sendText(from, "📬 *Parents are enquiring about your school!*\n\nActivate your listing to see their numbers and reply. It's just *$50/year* - one tap below. 👇");
+    const { sendSchoolAccountMenu } = await import("./metaMenus.js");
+    return sendSchoolAccountMenu(from, _schEnq);
+  }
   return _renderSchoolContactList(from, phone, {
     filter: "enquiries",
     title: "📬 *Enquiries*",
@@ -15261,6 +15275,12 @@ if (a === "school_enquiries") {
 
 // ── Who viewed my profile (visitor contacts) ─────────────────────────────────
 if (a === "school_contacts") {
+  const _schCon = await SchoolProfile.findOne({ phone }).lean();
+  if (_schCon && !_schCon.active) {
+    await sendText(from, "👀 *Parents are viewing your school!*\n\nActivate your listing to see who viewed you and get their contacts. It's just *$50/year* - one tap below. 👇");
+    const { sendSchoolAccountMenu } = await import("./metaMenus.js");
+    return sendSchoolAccountMenu(from, _schCon);
+  }
   return _renderSchoolContactList(from, phone, {
     filter: "all",
     title: "👀 *Who Viewed My Profile*",
@@ -15365,15 +15385,24 @@ if (a === "school_pay_plan") {
   const schoolPhone = from.replace(/\D+/g, "");
   const school = await SchoolProfile.findOne({ phone: schoolPhone });
   if (!school) return startSchoolRegistration(from, biz);
-  return sendList(from,
-    "💳 *Choose Your Plan*\n\nAll plans include:\n✅ Listed in parent search\n✅ Downloadable school profile PDF\n✅ Online application link\n✅ Parent inquiry alerts on WhatsApp",
-    [
-      { id: "school_plan_basic_monthly",    title: "✅ Basic - $15/month",    description: "Listed in search + profile PDF + application link" },
-      { id: "school_plan_basic_annual",     title: "✅ Basic - $150/year",    description: "Save $30 vs monthly" },
-      { id: "school_plan_featured_monthly", title: "🔥 Featured $35/mo", description: "Top of results + verified badge + analytics" },
-      { id: "school_plan_featured_annual",  title: "🔥 Featured $350/yr", description: "Save $70 vs monthly" }
+  // ONE simple package - $50/year. Single clear choice (no confusing tiers), so
+  // tapping "Activate Listing" leads straight to a one-tap activation.
+  return sendButtons(from, {
+    text:
+`💳 *Activate ${school.schoolName}*
+
+One simple plan - *$50 / year*:
+✅ Listed in parent search
+✅ Branch picker for all your campuses
+✅ Downloadable school profile PDF
+✅ Online application link
+✅ Parent enquiry alerts + their number on WhatsApp
+
+Tap below to activate and start receiving parents.`,
+    buttons: [
+      { id: "school_plan_basic_annual", title: "✅ Activate - $50/year" }
     ]
-  );
+  });
 }
  
 // ── School registration button taps (multi-select steps, confirm, plan pick) ──

@@ -56,15 +56,43 @@ const GROUP_LIST_MAX = 30;
 // list; the visitor replies with a number to open that seller/school/tutor. We
 // store the ordered ids + the list type in UserSession so the chatbot engine can
 // route the next numeric reply to openGroupEntryByNumber().
-async function _armGroupList(from, type, ids) {
+async function _armGroupList(from, type, ids, biz = null, saveBiz = null) {
   try {
     const { default: UserSession } = await import("../models/userSession.js");
     await UserSession.findOneAndUpdate(
       { phone: String(from).replace(/\D+/g, "") },
-      { $set: { "tempData.grpListType": type, "tempData.grpListIds": ids.map(String) } },
+      {
+        $set:   { "tempData.grpListType": type, "tempData.grpListIds": ids.map(String) },
+        // Clear any stale BROWSE state so the next numeric reply opens a group entry
+        // instead of being swallowed by a leftover branch-picker / search state.
+        $unset: {
+          "tempData.sfaqState": "", "tempData.sfaqBranchId": "",
+          "tempData.schoolSearchActive": "", "tempData.schoolResultIds": "",
+          "tempData.tutorSearchActive": "", "tempData.instSearchActive": "",
+          "tempData.schoolEnquiryState": "", "tempData.enquirySchoolId": ""
+        }
+      },
       { upsert: true }
     );
   } catch (_) {}
+  // Reset a business owner's stale browse session state (e.g. sfaq_branch_pick,
+  // sfaq_menu, school_search_results) so the engine's group-number handler fires
+  // on their next reply. Only resets harmless browse states - never a live
+  // registration/transaction flow.
+  if (biz && saveBiz) {
+    try {
+      const st = String(biz.sessionState || "");
+      if (!st || st === "ready" || st.startsWith("sfaq_") || st.startsWith("school_search")) {
+        biz.sessionState = "ready";
+        if (biz.sessionData) {
+          delete biz.sessionData.faqSchoolId;
+          delete biz.sessionData.faqBranchId;
+          delete biz.sessionData.schoolSearch;
+        }
+        await saveBiz(biz);
+      }
+    } catch (_) {}
+  }
 }
 
 /**
@@ -307,7 +335,7 @@ export async function handleGroupSmartLink({ from, slug, biz, saveBiz }) {
 
     // ── No sellers yet - still show the CTA so they can register ─────────────
     if (!sellerIds.length) {
-      await _armGroupList(from, "supplier", []);
+      await _armGroupList(from, "supplier", [], biz, saveBiz);
       await sendButtons(from, {
         text: `🏪 *${group.name}*\n\nNo businesses listed yet - be the first!`,
         buttons: _ctaBtns
@@ -329,7 +357,7 @@ export async function handleGroupSmartLink({ from, slug, biz, saveBiz }) {
       .slice(0, GROUP_LIST_MAX);
 
     if (!orderedSellers.length) {
-      await _armGroupList(from, "supplier", []);
+      await _armGroupList(from, "supplier", [], biz, saveBiz);
       await sendButtons(from, {
         text: `😕 No active sellers in *${group.name}* right now.\n\nBe the first to get listed!`,
         buttons: _ctaBtns
@@ -343,7 +371,7 @@ export async function handleGroupSmartLink({ from, slug, biz, saveBiz }) {
       return `*${i + 1}.* 🏪 ${s.businessName || "Seller"}${loc ? `\n     ${loc}` : ""}`;
     }).join("\n\n");
 
-    await _armGroupList(from, "supplier", orderedSellers.map(s => s._id));
+    await _armGroupList(from, "supplier", orderedSellers.map(s => s._id), biz, saveBiz);
 
     const tagline = group.tagline || "Reply with a number to view a business - their profile, catalogue and get a quote.";
     await sendText(from,
@@ -711,7 +739,7 @@ export async function handleSchoolGroupSmartLink({ from, slug, biz, saveBiz }) {
 
     // ── No schools yet ────────────────────────────────────────────────────────
     if (!schoolIds.length) {
-      await _armGroupList(from, "school", []);
+      await _armGroupList(from, "school", [], biz, saveBiz);
       await sendButtons(from, { text: `🏫 *${group.name}*\n\nNo schools listed yet - be the first!`, buttons: _ctaBtns });
       return true;
     }
@@ -729,7 +757,7 @@ export async function handleSchoolGroupSmartLink({ from, slug, biz, saveBiz }) {
       .slice(0, GROUP_LIST_MAX);
 
     if (!orderedSchools.length) {
-      await _armGroupList(from, "school", []);
+      await _armGroupList(from, "school", [], biz, saveBiz);
       await sendButtons(from, { text: `😕 No active schools in *${group.name}* right now.`, buttons: _ctaBtns });
       return true;
     }
@@ -741,7 +769,7 @@ export async function handleSchoolGroupSmartLink({ from, slug, biz, saveBiz }) {
       return `*${i + 1}.* 🏫 ${s.schoolName || "School"}${loc ? `\n     ${loc}${branchTag}` : ""}`;
     }).join("\n\n");
 
-    await _armGroupList(from, "school", orderedSchools.map(s => s._id));
+    await _armGroupList(from, "school", orderedSchools.map(s => s._id), biz, saveBiz);
 
     const tagline = group.tagline || "Reply with a number to view a school - fees, facilities and enquire about admissions.";
     await sendText(from,
@@ -1135,7 +1163,7 @@ export async function handleTutorGroupSmartLink({ from, slug, biz, saveBiz, offs
 
     // ── No tutors yet ─────────────────────────────────────────────────────────
     if (!tutorIds.length) {
-      await _armGroupList(from, "tutor", []);
+      await _armGroupList(from, "tutor", [], biz, saveBiz);
       await sendButtons(from, { text: `🧑‍🏫 *${group.name}*\n\nNo tutors listed yet - be the first!`, buttons: _ctaBtns });
       return true;
     }
@@ -1153,7 +1181,7 @@ export async function handleTutorGroupSmartLink({ from, slug, biz, saveBiz, offs
       .slice(0, GROUP_LIST_MAX);
 
     if (!orderedTutors.length) {
-      await _armGroupList(from, "tutor", []);
+      await _armGroupList(from, "tutor", [], biz, saveBiz);
       await sendButtons(from, { text: `😕 No active tutors in *${group.name}* right now.`, buttons: _ctaBtns });
       return true;
     }
@@ -1171,7 +1199,7 @@ export async function handleTutorGroupSmartLink({ from, slug, biz, saveBiz, offs
       return `*${i + 1}.* 🧑‍🏫 ${t.businessName || "Tutor"}${desc ? `\n     ${desc}` : ""}`;
     }).join("\n\n");
 
-    await _armGroupList(from, "tutor", orderedTutors.map(t => t._id));
+    await _armGroupList(from, "tutor", orderedTutors.map(t => t._id), biz, saveBiz);
 
     const tagline = group.tagline || "Reply with a number to view a tutor - subjects, rates & message them directly.";
     await sendText(from,

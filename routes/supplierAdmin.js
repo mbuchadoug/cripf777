@@ -17264,13 +17264,15 @@ router.post("/school-activity/send", requireSupplierAdmin, async (req, res) => {
         if (visitor && !showFull) masked++;
 
         // The activate nudge: shown to schools that can't yet see/reply (inactive
-        // or masked). Reply-based so a tap/reply opens the 24h window → the bot
-        // takes them to Choose Your Plan ($50/year).
+        // or masked). NO price here - the alert only shows a masked number and a
+        // warm nudge; the $50 appears only when the school replies *menu* and the
+        // bot takes them to the one-tap Activate step. This keeps the message
+        // encouraging ("a real parent is interested") rather than a paywall.
         const lockedForReply = !isActive;
         const nudge = lockedForReply
           ? (kind === "enquiry"
-              ? " - Reply *menu* and activate your listing ($50/year) to see their full number and reply to this parent."
-              : " - Reply *menu* and activate your listing ($50/year) to see who viewed you and get found by parents.")
+              ? " - A parent wants to hear from you. Reply *menu* to see their number and reply."
+              : " - Reply *menu* to see who viewed you and start getting enquiries.")
           : "";
 
         // Build the message body (folds in the contact + nudge). We always route

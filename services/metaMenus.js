@@ -1173,7 +1173,7 @@ export async function sendSchoolAccountMenu(to, schoolDoc) {
 
   const statusIcon    = school.active   ? "🟢" : "🔴";
   const verifiedBadge = school.verified ? " ✅" : "";
-  const tierLabel     = { basic: "Basic $15/mo", featured: "Featured $35/mo" }[school.tier] || "No Plan";
+  const tierLabel     = { basic: "$50/year", featured: "Featured" }[school.tier] || "$50/year";
   const renewDate     = school.subscriptionEndsAt
     ? new Date(school.subscriptionEndsAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
     : "Not active";

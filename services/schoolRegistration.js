@@ -1098,10 +1098,24 @@ async function _saveSchoolAndOfferPlans(from, biz, saveBiz, phone, reg) {
 Now choose a plan to go live and start receiving parent inquiries.`
   );
 
-  return sendList(from, "💳 *Choose Your Plan*\n\nSchool listings are billed *annually*.\n\nAll plans include:\n✅ Listed in parent search\n✅ Downloadable school profile PDF\n✅ Online application link\n✅ Parent enquiry alerts on WhatsApp", [
-    { id: "school_plan_basic_annual",    title: "✅ List my school - $50/year", description: "Everything you need to get found by parents" },
-    { id: "school_plan_featured_annual", title: "🔥 Featured - $120/year", description: "Top of results + verified badge + analytics" }
-  ]);
+  // ONE simple package: $50/year. No confusing tiers - a single clear choice
+  // converts best and matches how the activate nudge is worded everywhere.
+  return sendButtons(from, {
+    text:
+`💳 *Activate ${reg.schoolName}*
+
+One simple plan - *$50 / year*:
+✅ Listed in parent search
+✅ Branch picker for all your campuses
+✅ Downloadable school profile PDF
+✅ Online application link
+✅ Parent enquiry alerts + their number on WhatsApp
+
+Tap below to activate and start receiving parents.`,
+    buttons: [
+      { id: "school_plan_basic_annual", title: "✅ Activate - $50/year" }
+    ]
+  });
 }
 
 async function _initiateSchoolPayment(from, biz, saveBiz, phone, ecocash, planData) {
