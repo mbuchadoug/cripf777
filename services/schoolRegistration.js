@@ -1185,7 +1185,7 @@ Your listing will activate automatically once payment is confirmed. ✅`
     );
 
     // Poll for payment confirmation
-    const Business = (await import("./models/business.js")).default;
+    const Business = (await import("../models/business.js")).default;
     const MAX_ATTEMPTS = 18;
     let attempts = 0;
 
