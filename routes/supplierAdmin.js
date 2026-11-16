@@ -53,6 +53,7 @@ import {
   buildTutorGroupQrImageUrl,
 } from "../services/groupSmartLink.js";
 import { assignSlugToSupplier } from "../services/supplierSmartLink.js";
+import { registerBikerAdminRoutes } from "./bikerAdmin.js";
 import {
   TUTOR_SUBJECTS, TUTOR_LEVELS, TUTOR_MODES, SCHOOL_CITIES
 } from "../services/schoolPlans.js";
@@ -533,6 +534,7 @@ router.get("/suppliers", requireSupplierAdmin, async (req, res) => {
               <td><span class="type-pill">${
                 s.profileType === "hospitality" ? "🏨 " + (s.tourismSubtype?.[0] || "hospitality") :
                 s.profileType === "tutor" ? "🧑‍🏫 tutor" :
+                s.profileType === "biker" ? "🏍️ rider" :
                 s.profileType === "service" ? "🔧 service" : "📦 product"
               }</span></td>
               <td>${badge(s.tier || "basic", tierColor(s.tier))}</td>
@@ -4561,6 +4563,8 @@ const isPresets     = t === "Presets" || t.startsWith("Preset:");
   const isSchoolGroups  = t === "School Group Smart Links" || t.startsWith("School Group:");
   const isTutorGroups   = t === "Tutor Group Smart Links" || t.startsWith("Tutor Group:");
   const isAssignSlugs   = t === "Assign Slugs";
+  const isBikers        = t === "Bikers" || t.startsWith("Biker:");
+  const isDeliveries    = t === "Deliveries" || t.startsWith("Delivery:");
 
   const nav = [
     { href: "/zq-admin",                 label: "📊 Dashboard",          active: isDashboard },
@@ -4576,6 +4580,12 @@ const isPresets     = t === "Presets" || t.startsWith("Preset:");
     { divider: "SCHOOLS" },
     { href: "/zq-admin/schools",         label: "🏫 Schools",             active: isSchools && t !== "Register School" },
     { href: "/zq-admin/schools/new",     label: "➕ Register School",     active: t === "Register School" },
+    // ── Bikers / deliveries ───────────────────────────────────────────────────
+    { divider: "BIKERS" },
+    { href: "/zq-admin/bikers",          label: "🏍️ Riders",              active: isBikers },
+    { href: "/zq-admin/bikers/new",      label: "➕ Register Rider",      active: t === "Register Biker" },
+    { href: "/zq-admin/biker-jobs",      label: "📦 Deliveries",          active: isDeliveries },
+    { href: "/zq-admin/biker-jobs/new",  label: "➕ New Delivery",        active: t === "New Delivery" },
     // ── Platform ──────────────────────────────────────────────────────────────
     { divider: "PLATFORM" },
     { href: "/zq-admin/orders",          label: "📦 Orders",              active: isOrders },
@@ -17310,5 +17320,8 @@ router.post("/school-activity/send", requireSupplierAdmin, async (req, res) => {
     res.status(400).json({ ok: false, error: err.message });
   }
 });
+
+// ── Bikers & deliveries admin (routes/bikerAdmin.js) ─────────────────────────
+registerBikerAdminRoutes(router, { requireSupplierAdmin, layout, esc, badge, stat });
 
 export default router;

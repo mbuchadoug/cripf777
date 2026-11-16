@@ -226,6 +226,19 @@ export async function sendMainMenu(to) {
     return _sm(to, school);
   }
 
+  // ── Case 0b: Biker / rider → their own Rider Menu ────────────────────────
+  // (The Rider Menu has a "More (ZimQuote)" row for shopping / business tools.)
+  const _biker = supplier?.profileType === "biker"
+    ? supplier
+    : await SupplierProfile.findOne({ phone, profileType: "biker" }).lean().catch(() => null);
+  if (_biker) {
+    const { sendRiderMenu } = await import("./bikerDispatch.js");
+    const _shown = await sendRiderMenu(to, typeof _biker.toObject === "function" ? _biker.toObject() : _biker, biz).catch(e => {
+      console.error("[sendMainMenu] rider menu failed:", e.message); return false;
+    });
+    if (_shown) return;
+  }
+
   // ── Case 1: Active paid supplier ─────────────────────────────────────────
   if (supplier?.active) {
     // Registered business with tools (not on trial) → business HOME menu, so

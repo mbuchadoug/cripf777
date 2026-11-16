@@ -1,171 +1,617 @@
 // services/bikerDispatch.js
 // ═════════════════════════════════════════════════════════════════════════════
-// ZimQuote BIKERS (riders / couriers) - self-contained dispatch engine
+// ZimQuote BIKERS - delivery / errand dispatch over WhatsApp
 // ─────────────────────────────────────────────────────────────────────────────
-// A biker is a SupplierProfile with profileType "biker" (rides on the SAME rails
-// as tutors: EcoCash activation, smart links, ratings). A "job" is a customer
-// request for a rider, stored in the isolated BikerJob model.
+// CUSTOMER:  "Request a Biker" → ONE message ("Collect order, CBD to Belgravia")
+//            → city auto-detected → riders alerted → prices arrive → tap Choose
+//            → rider's number shared → rider updates Picked up / Delivered
+//            → customer confirms + rates (+ optional note). Cancel any time with a reason.
 //
-// This module is ADDITIVE and ISOLATED. The chatbot calls ONE function early in
-// its pipeline:
+// RIDER:     Own Rider Menu (Online/Offline, Open Jobs, My Jobs, Points & Earnings,
+//            Areas, Rider Link, Verify, Help). Tap a job → tap a price → tap ETA.
+//            Picked up → Delivered (+ quick note). Points + levels for good service.
 //
-//     const handled = await handleBikerMessage({ from, text, action, biz, saveBiz });
-//     if (handled) return;                     // biker flow took the message
+// ENGINE:    chatbotEngine calls ONE function early:
+//              const handled = await handleBikerMessage({ from, text, action, biz, saveBiz, imageUrl });
+//              if (handled) return;
 //
-// Because it runs BEFORE the product/city search blocks and OWNS every "biker_"
-// session state and action, typed input (incl. a city name) inside a biker flow
-// can NEVER fall through to the generic "Which city?" selector. That is the fix
-// for the select-city error, by construction.
-//
-// Registration FINISHES by handing off to the existing, already-fixed
-// "sup_plan_basic_monthly" → supplier_reg_enter_ecocash → PAY-GUARD payment path.
-// No new payment code, no new payment hook.
+// RELIABILITY (many messages at once):
+//  • All biker conversation state lives in UserSession.tempData (atomic $set) -
+//    never on Business, so no VersionError / lost saves.
+//  • A per-phone lock serialises a user's own messages (double taps, bursts).
+//  • Every job transition is ONE atomic findOneAndUpdate guarded by status, so
+//    two customers / two taps / two server instances can never double-book.
+//  • Button taps always win over a typed-text state (a rider typing a fare can
+//    still tap a different job). States expire (30-60 min) so a forgotten flow
+//    never swallows tomorrow's unrelated message.
+//  • A background sweep re-pings riders, expires dead requests, auto-completes
+//    delivered jobs and reminds riders of stale jobs.
 // ═════════════════════════════════════════════════════════════════════════════
 
 import axios from "axios";
-import crypto from "crypto";
 import { sendText, sendButtons, sendList } from "./metaSender.js";
 import { _sendTemplate } from "./buyerRequestNotifications.js";
 import { SUPPLIER_CITIES } from "./supplierPlans.js";
+import { detectCity, metroGroup, parseWhatWhere, splitRoute, findPlaces } from "./bikerPlaces.js";
 import SupplierProfile from "../models/supplierProfile.js";
 import BikerJob from "../models/bikerJob.js";
 import UserSession from "../models/userSession.js";
 import Business from "../models/business.js";
 import UserRole from "../models/userRole.js";
 
-// ── Meta template plumbing (same env the rest of the app uses) ───────────────
+// ── Config ────────────────────────────────────────────────────────────────────
 const GRAPH_API_VERSION = "v24.0";
-const PHONE_NUMBER_ID =
-  process.env.WHATSAPP_PHONE_NUMBER_ID ||
-  process.env.META_PHONE_NUMBER_ID ||
-  process.env.PHONE_NUMBER_ID;
-const ACCESS_TOKEN =
-  process.env.META_ACCESS_TOKEN ||
-  process.env.WHATSAPP_ACCESS_TOKEN;
+const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.META_PHONE_NUMBER_ID || process.env.PHONE_NUMBER_ID;
+const ACCESS_TOKEN    = process.env.META_ACCESS_TOKEN || process.env.WHATSAPP_ACCESS_TOKEN;
+const BOT_NUMBER      = String(process.env.ZQ_BOT_NUMBER || "263771143904").replace(/\D+/g, "");
+const ADMIN_PHONE     = String(process.env.ZQ_ADMIN_PHONE || process.env.ADMIN_WHATSAPP_PHONE || "").replace(/\D+/g, "");
 
-// How many riders to ping per job, and how many cities to show as tappable rows.
-const MAX_RIDERS_PER_JOB = 8;
-const CITY_ROWS = SUPPLIER_CITIES.slice(0, 9);
+export const BIKER_CONFIG = {
+  MAX_RIDERS_PER_JOB:   10,  // riders alerted per job (first wave)
+  MAX_ACTIVE_JOBS:       3,  // a rider can carry at most this many jobs at once
+  MAX_OPEN_PER_CUSTOMER: 5,  // spam guard
+  OPEN_JOB_WINDOW_MIN:  45,  // "Open Jobs" shows jobs younger than this
+  REPING_AFTER_MIN:      8,  // no price yet → alert more riders
+  PREFERRED_EXPAND_MIN:  5,  // rider-link booking: if that rider is silent, alert others
+  EXPIRE_NO_OFFER_MIN:  30,  // nobody responded → close + tell customer
+  EXPIRE_NOT_CHOSEN_MIN:60,  // prices came but customer never chose → close
+  AUTO_COMPLETE_HOURS:  12,  // rider marked delivered, customer silent → auto-confirm
+  STALE_REMIND_HOURS:    4,  // assigned job with no "delivered" → remind rider once
+  MISSED_PINGS_OFFLINE: 15,  // rider ignored this many alerts in a row → auto-offline
+  FAST_RESPONSE_MIN:     5,  // price sent within N min of the request = fast bonus
+  OFFER_BURST_SEC:      25,  // several prices at once → one combined list, not 8 messages
+  STATE_TTL_MIN:        45   // typed-flow states expire after this
+};
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-function normPhone(raw = "") {
+export const RIDER_POINTS = {
+  complete: 10, fast: 3, autoComplete: 8,
+  rate5: 5, rate4: 2, rateLow: -5,
+  cancel: -10, cancelCustomerFault: -2
+};
+
+export const RIDER_LEVELS = [
+  { min: 700, name: "Platinum", emoji: "💎" },
+  { min: 300, name: "Gold",     emoji: "🥇" },
+  { min: 100, name: "Silver",   emoji: "🥈" },
+  { min: 0,   name: "Bronze",   emoji: "🥉" }
+];
+
+const ACTIVE_STATUSES = ["assigned", "picked_up"];
+const LIVE_STATUSES   = ["open", "assigned", "picked_up", "delivered"];
+
+const CUSTOMER_CANCEL_REASONS = [
+  { code: "found",  title: "Found another way",      desc: "Got someone else / going myself" },
+  { code: "late",   title: "Rider too slow / late",  desc: "Took too long to arrive" },
+  { code: "price",  title: "Price too high",         desc: "Fare was more than I expected" },
+  { code: "mind",   title: "Changed my mind",        desc: "Don't need it anymore" },
+  { code: "wrong",  title: "Wrong details",          desc: "Will send a new request" },
+  { code: "other",  title: "✍️ Other reason",        desc: "Type your own reason" }
+];
+const RIDER_CANCEL_REASONS = [
+  { code: "bike",    title: "Bike breakdown",          desc: "Puncture / mechanical problem" },
+  { code: "fuel",    title: "No fuel",                 desc: "Ran out of fuel" },
+  { code: "unreach", title: "Customer not answering",  desc: "Called/messaged, no reply" },
+  { code: "custask", title: "Customer asked to cancel",desc: "Customer told me to cancel" },
+  { code: "far",     title: "Too far / wrong address", desc: "Location different from request" },
+  { code: "emerg",   title: "Emergency",               desc: "Personal emergency" },
+  { code: "other",   title: "✍️ Other reason",         desc: "Type your own reason" }
+];
+const CUSTOMER_FAULT_CODES = new Set(["unreach", "custask"]);
+
+const FARE_CHOICES = [2, 3, 4, 5, 6, 8, 10, 15, 20];
+const CITY_ROWS    = (SUPPLIER_CITIES || ["Harare", "Bulawayo"]).slice(0, 10);
+
+// ═════════════════════════════════════════════════════════════════════════════
+// SMALL HELPERS
+// ═════════════════════════════════════════════════════════════════════════════
+export function normPhone(raw = "") {
   let p = String(raw).replace(/\D+/g, "");
   if (p.startsWith("0") && p.length === 10) p = "263" + p.slice(1);
+  if (p.length === 9 && /^7/.test(p)) p = "263" + p;
   return p;
+}
+function phoneVariants(raw = "") {
+  const p = normPhone(raw);
+  const v = new Set([p, "+" + p]);
+  if (p.startsWith("263")) v.add("0" + p.slice(3));
+  return [...v];
 }
 function displayPhone(raw = "") {
   const d = normPhone(raw);
   if (d.startsWith("263") && d.length >= 12) return `+263 ${d.slice(3, 5)} ${d.slice(5, 8)} ${d.slice(8)}`;
-  return `+${d}`;
+  return d ? `+${d}` : "-";
 }
 function titleCity(s = "") {
-  const t = String(s).trim();
-  const hit = SUPPLIER_CITIES.find(c => c.toLowerCase() === t.toLowerCase());
-  return hit || (t ? t.charAt(0).toUpperCase() + t.slice(1) : "");
+  const t = String(s || "").trim();
+  if (!t) return "";
+  const hit = (SUPPLIER_CITIES || []).find(c => c.toLowerCase() === t.toLowerCase());
+  return hit || t.replace(/\b\w/g, ch => ch.toUpperCase());
 }
-function cityEq(a = "", b = "") {
-  return String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
+function escRe(s = "") { return String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
+function cut(s = "", n = 24) {
+  const t = String(s || "").replace(/\s+/g, " ").trim();
+  return t.length > n ? t.slice(0, Math.max(1, n - 1)) + "…" : t;
 }
-function jobRef(id) {
-  return `RIDE-${String(id).slice(-4).toUpperCase()}`;
+function firstName(s = "") { return String(s || "Rider").replace(/\s*\(Rider\)$/i, "").trim().split(/\s+/)[0] || "Rider"; }
+function riderName(r) { return String(r?.businessName || "Rider").replace(/\s*\(Rider\)$/i, "").trim() || "Rider"; }
+export function jobRef(jobOrId) {
+  const id = jobOrId?._id || jobOrId;
+  return jobOrId?.reference && /^RIDE-[A-Z0-9]{4,6}$/.test(jobOrId.reference)
+    ? jobOrId.reference
+    : `RIDE-${String(id).slice(-5).toUpperCase()}`;
 }
-// Split "CBD to Avondale" / "CBD → Avondale" / "from CBD to Avondale" / "CBD - Avondale"
-// into { pickup, dropoff }. Returns empty strings if it can't find two places.
-function splitRoute(raw = "") {
-  let s = String(raw || "").trim().replace(/^from\s+/i, "");
-  let parts = s.split(/\s*(?:→|->|=>|-|–)\s*|\s+to\s+/i).map(x => x.trim()).filter(Boolean);
-  if (parts.length >= 2) return { pickup: parts[0].slice(0, 120), dropoff: parts.slice(1).join(" to ").slice(0, 120) };
-  parts = s.split(/\s+-\s+/).map(x => x.trim()).filter(Boolean);
-  if (parts.length >= 2) return { pickup: parts[0].slice(0, 120), dropoff: parts[1].slice(0, 120) };
-  return { pickup: "", dropoff: "" };
+function ago(d) {
+  const m = Math.max(0, Math.round((Date.now() - new Date(d).getTime()) / 60000));
+  if (m < 1) return "just now";
+  if (m < 60) return `${m} min ago`;
+  const h = Math.round(m / 60);
+  return h < 24 ? `${h}h ago` : `${Math.round(h / 24)}d ago`;
 }
-// Parse one combined message: "<what>, <from> to <to>"  OR  "<what> from X to Y".
-function parseWhatWhere(raw = "") {
-  const s = String(raw || "").trim();
-  if (s.includes(",")) {
-    const i = s.indexOf(",");
-    const task = s.slice(0, i).trim();
-    const { pickup, dropoff } = splitRoute(s.slice(i + 1));
-    return { task: task.slice(0, 200), pickup, dropoff };
+export function riderLevel(points = 0) {
+  const p = Number(points) || 0;
+  const lvl = RIDER_LEVELS.find(l => p >= l.min) || RIDER_LEVELS[RIDER_LEVELS.length - 1];
+  const idx = RIDER_LEVELS.indexOf(lvl);
+  const next = idx > 0 ? RIDER_LEVELS[idx - 1] : null;
+  return { ...lvl, next, toNext: next ? next.min - p : 0 };
+}
+function stars(n = 0) { return "⭐".repeat(Math.max(0, Math.min(5, Math.round(n)))); }
+// "CBd" → "CBD", "belgravia" → "Belgravia", "mt pleasant" → "Mt Pleasant" (only fixes all-lower / odd casing)
+function tidyPlace(s = "") {
+  const t = String(s || "").replace(/\s+/g, " ").trim();
+  if (!t) return t;
+  if (/[A-Z]/.test(t) && !/^[a-z]/.test(t) && !/[A-Z][a-z]*[A-Z]/.test(t.replace(/\s/g, " "))) return t;
+  return t.split(" ").map(w => (w.length <= 3 && /^[a-z]+$/i.test(w) && !/^(to|of|by|at|in|on|and|the|mt|st|dr)$/i.test(w))
+    ? w.toUpperCase()
+    : w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(" ");
+}
+function plural(n, w) { return `${n} ${w}${Number(n) === 1 ? "" : "s"}`; }
+function isObjId(s) { return /^[a-f0-9]{24}$/i.test(String(s || "")); }
+
+// Parse a fare like "3", "$3.50", "usd 5", "ZiG 100", "3, 15 min"
+function parseFare(input = "") {
+  const s = String(input || "").trim();
+  const etaM = s.match(/(\d+(?:\s*[-–]\s*\d+)?)\s*(min|mins|minutes|minute|m\b|hr|hrs|hour|hours|h\b)/i);
+  let eta = "";
+  if (etaM) eta = `${etaM[1].replace(/\s+/g, "")} ${/^h/i.test(etaM[2]) ? "hr" : "min"}`;
+  const withoutEta = etaM ? s.replace(etaM[0], " ") : s;
+  const numM = withoutEta.match(/(\d+(?:[.,]\d{1,2})?)/);
+  if (!numM) return { ok: false };
+  const amount = Number(numM[1].replace(",", "."));
+  if (!(amount > 0)) return { ok: false };
+  const isZig = /\b(zig|zwg|zwl|zw\$|bond)\b/i.test(s);
+  const fare = isZig ? `ZiG ${amount}` : `$${amount % 1 ? amount.toFixed(2) : amount}`;
+  return { ok: true, fare, amount, eta, isZig };
+}
+
+// ── Safe senders (never throw into the engine; respect WhatsApp limits) ───────
+function _btns(buttons = []) {
+  return buttons.filter(Boolean).slice(0, 3).map(b => ({ id: String(b.id).slice(0, 256), title: cut(b.title, 20) }));
+}
+function _rows(rows = []) {
+  return rows.filter(Boolean).slice(0, 10).map(r => ({
+    id: String(r.id).slice(0, 200),
+    title: cut(r.title, 24),
+    ...(r.description ? { description: cut(r.description, 72) } : {})
+  }));
+}
+async function say(to, text) {
+  try { await sendText(to, String(text).slice(0, 4000)); return true; }
+  catch (e) { console.warn(`[BIKER] sendText → ${to} failed: ${e.message}`); return false; }
+}
+async function ask(to, text, buttons) {
+  try { await sendButtons(to, { text: String(text).slice(0, 1020), buttons: _btns(buttons) }); return true; }
+  catch (e) {
+    console.warn(`[BIKER] sendButtons → ${to} failed: ${e.message}`);
+    return say(to, text);
   }
-  // no comma: try to find a route inside the whole sentence
-  const { pickup, dropoff } = splitRoute(s);
-  return { task: s.slice(0, 200), pickup, dropoff };
 }
-function isEscape(text) {
-  return /^(0|00|menu|main menu|back|cancel|exit|home|stop|hi|hie|hey|hello)$/i.test(String(text || "").trim());
+async function pick(to, text, rows) {
+  try { await sendList(to, String(text).slice(0, 1020), _rows(rows)); return true; }
+  catch (e) { console.warn(`[BIKER] sendList → ${to} failed: ${e.message}`); return false; }
+}
+// Message to the OTHER party. Interactive first (they are usually inside the
+// 24h window because they just used the bot); if Meta rejects it, fall back to
+// the generic utility template zq_ride_update ({{1}} ref, {{2}} update line).
+async function notifyParty(to, { text, buttons = null, ref = "", line = "" }) {
+  const ok = buttons?.length ? await ask(to, text, buttons) : await say(to, text);
+  if (ok) return true;
+  try {
+    await _sendTemplate(to, "zq_ride_update", [ref || "ZimQuote delivery", cut(line || text.replace(/\n+/g, " "), 900)]);
+    return true;
+  } catch (e) {
+    console.warn(`[BIKER] zq_ride_update template → ${to} failed: ${e.message}`);
+    return false;
+  }
+}
+async function notifyAdmin(text) {
+  if (!ADMIN_PHONE || ADMIN_PHONE.length < 10) return;
+  await say(ADMIN_PHONE, `🏍️ *Bikers - admin alert*\n\n${text}`);
 }
 
-// ── Non-biz users: keep biker state in UserSession (same key the engine uses) ─
-function _sessKey(from) { return String(from || "").replace(/\D+/g, ""); }
+// ── Per-phone lock: one user's messages are processed one at a time ──────────
+const _locks = new Map();
+function withLock(key, fn) {
+  const prev = _locks.get(key) || Promise.resolve();
+  let release;
+  const mine = new Promise(r => (release = r));
+  const chain = prev.then(() => mine);
+  _locks.set(key, chain);
+  const waitPrev = Promise.race([prev, new Promise(r => setTimeout(r, 20000))]);   // never deadlock
+  return waitPrev.then(async () => {
+    try { return await fn(); }
+    finally { release(); if (_locks.get(key) === chain) _locks.delete(key); }
+  });
+}
 
-async function _loadVirtualBiz(from) {
-  const s = await UserSession.findOne({ phone: _sessKey(from) }).lean().catch(() => null);
+// ═════════════════════════════════════════════════════════════════════════════
+// SESSION STATE  (UserSession.tempData.bikerState / bikerData / bikerStateAt)
+// ═════════════════════════════════════════════════════════════════════════════
+async function getSess(phone) {
+  const s = await UserSession.findOne({ phone }).lean().catch(() => null);
   const td = s?.tempData || {};
-  return {
-    _virtual:     true,
-    sessionState: td.bikerState || "",
-    sessionData:  { ...(td.bikerData || {}) }
-  };
-}
-
-async function _saveVirtualBiz(from, vb) {
-  const key = _sessKey(from);
-  const st  = String(vb?.sessionState || "");
-  if (!st.startsWith("biker_")) {
-    await UserSession.findOneAndUpdate(
-      { phone: key },
-      { $unset: { "tempData.bikerState": "", "tempData.bikerData": "" } },
-      { upsert: true }
-    );
-    return;
+  let state = td.bikerState || "";
+  const at = td.bikerStateAt ? new Date(td.bikerStateAt).getTime() : 0;
+  const ttl = (state.startsWith("biker_reg_") ? 90 : BIKER_CONFIG.STATE_TTL_MIN) * 60000;
+  if (state && at && Date.now() - at > ttl) {          // expired: forget silently
+    state = "";
+    await clearState(phone);
   }
+  return { state, data: { ...(td.bikerData || {}) }, lastCity: td.bikerLastCity || "", activeBusinessId: s?.activeBusinessId || null };
+}
+async function setState(phone, state, data = {}) {
   await UserSession.findOneAndUpdate(
-    { phone: key },
-    { $set: { "tempData.bikerState": st, "tempData.bikerData": vb.sessionData || {} } },
+    { phone },
+    { $set: { "tempData.bikerState": state, "tempData.bikerData": data, "tempData.bikerStateAt": new Date() } },
     { upsert: true }
   );
 }
-
-// Starting a biker flow abandons any other half-finished search, so stale
-// markers (e.g. tutorSearchActive) can never grab the next typed message.
-async function _clearCompetingFlows(from) {
+async function clearState(phone) {
   await UserSession.findOneAndUpdate(
-    { phone: _sessKey(from) },
+    { phone },
+    { $unset: { "tempData.bikerState": "", "tempData.bikerData": "", "tempData.bikerStateAt": "" } },
+    { upsert: true }
+  ).catch(() => {});
+}
+async function setLastCity(phone, city) {
+  if (!city) return;
+  await UserSession.findOneAndUpdate({ phone }, { $set: { "tempData.bikerLastCity": city } }, { upsert: true }).catch(() => {});
+}
+// Starting a biker flow abandons other half-finished searches, so a stale
+// marker (e.g. tutorSearchActive) can never grab the next typed message.
+async function clearCompetingFlows(phone) {
+  await UserSession.findOneAndUpdate(
+    { phone },
     { $unset: {
-        "tempData.tutorSearchActive":   "",
-        "tempData.schoolSearchActive":  "",
-        "tempData.instSearchActive":    "",
-        "tempData.tutorEnquiryState":   "",
-        "tempData.schoolEnquiryState":  "",
-        "tempData.supplierSearchMode":  "",
-        "tempData.buyerRequestState":   "",
-        "tempData.pendingBuyerRequest": "",
-        "tempData.buyerRequestMode":    "",
-        "tempData.grpListIds":          "",
-        "tempData.grpListType":         ""
+        "tempData.tutorSearchActive": "", "tempData.schoolSearchActive": "", "tempData.instSearchActive": "",
+        "tempData.tutorEnquiryState": "", "tempData.schoolEnquiryState": "", "tempData.supplierSearchMode": "",
+        "tempData.buyerRequestState": "", "tempData.pendingBuyerRequest": "", "tempData.buyerRequestMode": "",
+        "tempData.grpListIds": "", "tempData.grpListType": "",
+        "tempData.sellerRequestReplyState": "", "tempData.scSellerQuoteState": "", "tempData.pendingQuoteReply": ""
     } },
     { upsert: true }
   ).catch(() => {});
 }
 
-// Rider REGISTRATION needs a real Business (the existing EcoCash plan/payment
-// path requires one). Create a pending one for non-biz users, exactly like the
-// other reg_type_* handlers do.
-async function _ensureRealBiz(from, biz) {
-  if (biz && !biz._virtual) return biz;
-  const phone = _sessKey(from);
+// ═════════════════════════════════════════════════════════════════════════════
+// RIDER PROFILE ACCESS
+// ═════════════════════════════════════════════════════════════════════════════
+const _riderCache = new Map();   // phone → { id|null, t }
+export function invalidateRiderCache(phone) { _riderCache.delete(normPhone(phone)); }
+
+export async function getRider(phoneRaw) {
+  const phone = normPhone(phoneRaw);
+  const r = await SupplierProfile.findOne({ phone: { $in: phoneVariants(phone) }, profileType: "biker" }).lean().catch(() => null);
+  _riderCache.set(phone, { id: r?._id || null, t: Date.now() });
+  return r;
+}
+async function isRider(phone) {
+  const c = _riderCache.get(phone);
+  if (c && Date.now() - c.t < 5 * 60000) return !!c.id;
+  return !!(await getRider(phone));
+}
+// Writes biker-only fields even if the SupplierProfile schema doesn't declare them.
+async function updateRider(filter, update, opts = {}) {
+  return SupplierProfile.findOneAndUpdate(filter, update, { new: true, strict: false, ...opts }).lean().catch(e => {
+    console.warn("[BIKER] updateRider failed:", e.message); return null;
+  });
+}
+export async function addRiderPoints(phoneOrId, delta, extraInc = {}) {
+  const filter = isObjId(phoneOrId) ? { _id: phoneOrId } : { phone: { $in: phoneVariants(phoneOrId) }, profileType: "biker" };
+  const inc = { riderPoints: Number(delta) || 0, ...extraInc };
+  const r = await updateRider(filter, { $inc: inc });
+  if (r && (r.riderPoints || 0) < 0) {
+    await updateRider({ _id: r._id }, { $set: { riderPoints: 0 } });
+    r.riderPoints = 0;
+  }
+  return r;
+}
+async function activeJobCount(riderPhone) {
+  return BikerJob.countDocuments({ assignedRiderPhone: normPhone(riderPhone), status: { $in: ACTIVE_STATUSES } }).catch(() => 0);
+}
+function riderBadgeLine(r) {
+  const lvl = riderLevel(r?.riderPoints);
+  const rating = Number(r?.rating) || 0;
+  return `${lvl.emoji} ${lvl.name}${rating ? ` · ⭐ ${rating.toFixed(1)}` : ""} · ${plural(r?.completedTrips || 0, "trip")}${r?.bike?.verifiedAt ? " · ✅ Verified" : ""}`;
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// PUBLIC ENTRY
+// Returns true  → handled (engine must return)
+// Returns false → not a biker message (engine continues)
+// ═════════════════════════════════════════════════════════════════════════════
+const ESCAPE_RE    = /^(0|00|000|menu|main menu|back|cancel|exit|home|stop|hi|hie|hey|hello|helo|howzit)$/i;
+const MENU_WORD_RE = /^(0|menu|main menu|hi|hie|hey|hello|helo|howzit|start|home|rider|rider menu|biker|biker menu|jobs|my jobs)$/i;
+const REQUEST_RE   = /^(request\s+(a\s+)?(rider|biker)|find\s+(a\s+)?(rider|biker)|need\s+(a\s+)?(rider|biker)|i\s+want\s+(a\s+)?(rider|biker)|get\s+(a\s+)?(rider|biker)|book\s+(a\s+)?(rider|biker)|rider|biker|boda|delivery|courier|courier\s+rider|send\s+a\s+parcel)$/i;
+const REGISTER_RE  = /^(become\s+a\s+(rider|biker)|register\s+as\s+(a\s+)?(rider|biker)|list\s+as\s+(a\s+)?(rider|biker)|(rider|biker)\s+signup|i\s*a?m\s+a\s+(rider|biker)|join\s+as\s+(a\s+)?(rider|biker))$/i;
+const RIDER_WORD_RE = /^((go\s+)?online|(go\s+)?offline|open jobs|new jobs|jobs near me|points|my points|earnings|stats)$/i;
+const MYDEL_RE     = /^(my deliveries|deliveries|my rides|track|track delivery|my delivery|my bikers?)$/i;
+
+export async function handleBikerMessage({ from, text = "", action = "", biz = null, saveBiz = null, imageUrl = null }) {
+  const phone = normPhone(from);
+  if (!phone) return false;
+  return withLock(phone, async () => {
+    try {
+      const a   = String(action || "").trim().toLowerCase();
+      const txt = String(text || "").trim();
+      const ctx = { from, phone, biz, saveBiz };
+
+      // Legacy: an older version kept biker state on Business - clear it once.
+      if (biz && String(biz.sessionState || "").startsWith("biker_") && typeof saveBiz === "function") {
+        biz.sessionState = "ready";
+        if (biz.sessionData) { delete biz.sessionData.bikerReg; delete biz.sessionData.bikerJob; }
+        try { await saveBiz(biz); } catch (_) {}
+      }
+
+      const sess = await getSess(phone);
+      ctx.sess = sess;
+
+      // A) Photo for verification
+      if (imageUrl && sess.state === "biker_photo_wait") return savePhoto(ctx, imageUrl);
+
+      // B) Biker button / list taps always win (even mid-flow)
+      if (a && (a === "reg_type_biker" || a.startsWith("biker_"))) return handleAction(ctx, a);
+
+      // C) Deep links (typed text from wa.me links)
+      const riderLink = txt.match(/ZQ:RIDER:([a-f0-9]{24})/i);
+      if (riderLink) return bookSpecificRider(ctx, riderLink[1]);
+      if (/^ZQ:BGROUP:/i.test(txt)) return bikerGroupLink(ctx, txt.replace(/^ZQ:BGROUP:/i, "").trim());
+
+      // D) An in-progress biker flow owns typed text
+      if (sess.state) {
+        if (a) { await clearState(phone); return false; }      // tapped something non-biker → leave flow
+        if (ESCAPE_RE.test(txt)) {
+          await clearState(phone);
+          if (await isRider(phone)) return sendRiderMenu(from, null, biz);
+          return false;                                         // engine shows the normal menu
+        }
+        return routeState(ctx, txt);
+      }
+      if (a) return false;
+
+      // E) Typed shortcuts (rider lookup only when the text could be a rider shortcut)
+      const riderish = MENU_WORD_RE.test(txt) || RIDER_WORD_RE.test(txt);
+      const rider = riderish ? await isRider(phone) : false;
+      if (rider && MENU_WORD_RE.test(txt)) {
+        await clearCompetingFlows(phone);
+        if (biz && biz.sessionState && biz.sessionState !== "ready" && typeof saveBiz === "function") {
+          biz.sessionState = "ready"; biz.sessionData = {}; try { await saveBiz(biz); } catch (_) {}
+        }
+        return sendRiderMenu(from, null, biz);
+      }
+      if (rider && /^(go\s+)?online$/i.test(txt))  return toggleOnline(ctx, true);
+      if (rider && /^(go\s+)?offline$/i.test(txt)) return toggleOnline(ctx, false);
+      if (rider && /^(open jobs|new jobs|jobs near me)$/i.test(txt)) return sendOpenJobs(ctx);
+      if (rider && /^(points|my points|earnings|stats)$/i.test(txt)) return sendRiderStats(ctx);
+      if (MYDEL_RE.test(txt)) return sendMyDeliveries(ctx);
+      if (REGISTER_RE.test(txt)) return startBikerRegistration(ctx);
+      if (REQUEST_RE.test(txt)) return startRiderRequest(ctx);
+      return false;
+    } catch (err) {
+      console.error("[BIKER] handleBikerMessage error:", err.message, err.stack);
+      await say(from, "⚠️ Something went wrong on our side. Please try again, or type *menu*.");
+      return true;
+    }
+  });
+}
+
+// ── Action router ─────────────────────────────────────────────────────────────
+async function handleAction(ctx, a) {
+  const { phone } = ctx;
+  if (a === "reg_type_biker") return startBikerRegistration(ctx);
+  const m = a.match(/^biker_([a-z]+)(?:_(.*))?$/);
+  if (!m) return false;
+  const verb = m[1], arg = m[2] || "";
+
+  // Actions that don't continue the current typed state drop it.
+  const keepsState = ["regcity", "reqcity", "areas"].includes(verb);
+  if (!keepsState && ctx.sess.state) { await clearState(phone); ctx.sess.state = ""; }
+
+  switch (verb) {
+    // customer
+    case "request":   return startRiderRequest(ctx);                  // biker_request_rider
+    case "reqcity":   return reqCityPicked(ctx, arg);
+    case "mydel":     return sendMyDeliveries(ctx);
+    case "job":       return sendJobCard(ctx, arg);
+    case "offers":    return sendOffers(ctx, arg);
+    case "choose":    return customerChoose(ctx, arg);
+    case "rcv":       return customerReceived(ctx, arg);
+    case "prob":      return startProblem(ctx, arg);
+    case "rate":      { const [id, n] = arg.split("_"); return customerRate(ctx, id, Number(n)); }
+    case "cnskip":    await clearState(phone); return ask(ctx.from, "🙏 Thanks for using ZimQuote Bikers!", [
+                        { id: "biker_rebook_" + arg, title: "🔁 Same trip again" }, { id: "main_menu_back", title: "🏠 Menu" }]);
+    case "rebook":    return rebook(ctx, arg);
+    case "viewrider": return viewRider(ctx, arg);
+    case "bookrider": return bookSpecificRider(ctx, arg);
+    // both
+    case "cx":        return startCancel(ctx, arg);
+    case "cxr":       { const i = arg.lastIndexOf("_"); return cancelWithCode(ctx, arg.slice(0, i), arg.slice(i + 1)); }
+    // rider
+    case "menu": case "my": return sendRiderMenu(ctx.from, null, ctx.biz); // biker_menu / biker_my_account
+    case "toggle":    return toggleOnline(ctx);
+    case "openjobs":  return sendOpenJobs(ctx);
+    case "active":    return sendActiveJobs(ctx);
+    case "stats":     return sendRiderStats(ctx);
+    case "areas":     return arg === "whole" ? areasWhole(ctx) : startAreasEdit(ctx);
+    case "photo":     return startPhoto(ctx);
+    case "skipphoto": await clearState(phone); return sendRiderMenu(ctx.from, null, ctx.biz);
+    case "mylink":    return sendRiderLink(ctx);
+    case "help":      return sendRiderHelp(ctx);
+    case "activate":  return sendActivate(ctx);
+    case "zqmenu":    return sendZqMenu(ctx);
+    case "regcity":   return regCityPicked(ctx, arg);
+    case "accept":    return riderAccept(ctx, arg);
+    case "busy":      return riderBusy(ctx, arg);
+    case "fare":      { const i = arg.lastIndexOf("_"); return riderFareTap(ctx, arg.slice(0, i), arg.slice(i + 1)); }
+    case "eta":       { const [id, amt, min] = arg.split("_"); return riderEtaTap(ctx, id, amt, min); }
+    case "pick":      return riderPickedUp(ctx, arg);
+    case "done":      return riderDelivered(ctx, arg);
+    case "dn":        { const i = arg.lastIndexOf("_"); return riderQuickNote(ctx, arg.slice(0, i), arg.slice(i + 1)); }
+    case "when":      return startRiderRequest(ctx);                  // legacy id
+  }
+  return false;
+}
+
+// ── Typed-text router (state owns the message) ───────────────────────────────
+async function routeState(ctx, txt) {
+  const st = ctx.sess.state;
+  if (st === "biker_reg_name")   return regName(ctx, txt);
+  if (st === "biker_reg_city")   return regCityPicked(ctx, txt);
+  if (st === "biker_reg_areas")  return regAreas(ctx, txt);
+  if (st === "biker_reg_plate")  return regPlate(ctx, txt);
+  if (st === "biker_req_what")   return reqWhat(ctx, txt);
+  if (st === "biker_req_route")  return reqRoute(ctx, txt);
+  if (st === "biker_req_city")   return reqCityPicked(ctx, txt);
+  if (st === "biker_areas_set")  return saveAreas(ctx, txt);
+  if (st === "biker_photo_wait") {
+    return ask(ctx.from, "📸 Please send a *photo* (not text) of you with your bike, plate visible.\n\nOr tap below to skip for now.",
+      [{ id: "biker_skipphoto", title: "⏭ Skip for now" }]);
+  }
+  const m = st.match(/^biker_(fare|dnote|cnote|prob|cxnote)_([a-f0-9]{24})$/);
+  if (m) {
+    const [, kind, jobId] = m;
+    if (kind === "fare")   return riderFareTyped(ctx, jobId, txt);
+    if (kind === "dnote")  return saveRiderNote(ctx, jobId, txt);
+    if (kind === "cnote")  return saveCustomerNote(ctx, jobId, txt);
+    if (kind === "prob")   return saveProblem(ctx, jobId, txt);
+    if (kind === "cxnote") return cancelWithCode(ctx, jobId, "other", txt);
+  }
+  await clearState(ctx.phone);
+  return false;
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// RIDER REGISTRATION  (4 quick steps → existing EcoCash activation)
+// ═════════════════════════════════════════════════════════════════════════════
+export async function startBikerRegistration(ctx) {
+  ctx = await _ctx(ctx);
+  const rider = await getRider(ctx.phone);
+  if (rider && rider.active) return sendRiderMenu(ctx.from, rider, ctx.biz);
+  if (rider && !rider.active) {
+    await say(ctx.from, `👋 Welcome back ${firstName(rider.businessName)}! Your rider profile is saved - just activate it to start getting jobs.`);
+    return sendActivate(ctx, rider);
+  }
+  await clearCompetingFlows(ctx.phone);
+  await setState(ctx.phone, "biker_reg_name", { reg: {} });
+  await say(ctx.from,
+    "🏍️ *Become a ZimQuote Rider*\n\n" +
+    "✅ Get delivery jobs on WhatsApp\n✅ You set your own price\n✅ Keep 100% of every fare\n💳 Just $5/month\n\n" +
+    "4 quick steps.\n\n*1/4 - Your name?*\n_e.g. Tapiwa Moyo_"
+  );
+  return true;
+}
+async function regName(ctx, name) {
+  const n = String(name || "").replace(/\s+/g, " ").trim();
+  if (n.length < 2 || /^\d+$/.test(n)) { await say(ctx.from, "Please type your name, e.g. *Tapiwa Moyo*."); return true; }
+  await setState(ctx.phone, "biker_reg_city", { reg: { ...(ctx.sess.data.reg || {}), name: n.slice(0, 60) } });
+  await pick(ctx.from,
+    `👍 Thanks ${firstName(n)}!\n\n*2/4 - Which city do you ride in?*\nTap one, or type it.`,
+    CITY_ROWS.map(c => ({ id: `biker_regcity_${c.toLowerCase()}`, title: c })));
+  return true;
+}
+async function regCityPicked(ctx, raw) {
+  if (ctx.sess.state !== "biker_reg_city") return startBikerRegistration(ctx);
+  const det = detectCity(raw);
+  const c = titleCity(det.city || raw);
+  if (!c || c.length < 3) { await say(ctx.from, "Please tap or type your city, e.g. *Harare*."); return true; }
+  const reg = { ...(ctx.sess.data.reg || {}), city: c };
+  // Typed a suburb ("Glen View")? Keep it as their first area.
+  const hits = findPlaces(raw).filter(h => h.name !== c.toLowerCase());
+  if (hits.length && det.city) reg.areaHint = raw.trim();
+  await setState(ctx.phone, "biker_reg_areas", { reg });
+  await ask(ctx.from,
+    `📍 *${c}*\n\n*3/4 - Which areas do you cover?*\nType them with commas:\n_e.g. CBD, Avondale, Mt Pleasant_\n\nOr tap *Whole city* to get jobs from anywhere in ${c}.`,
+    [{ id: "biker_areas_whole", title: "🌍 Whole city" }]);
+  return true;
+}
+async function regAreas(ctx, raw) {
+  const list = raw === "__whole__" ? [] : String(raw || "").split(/[,\n;]+/).map(s => s.trim()).filter(Boolean).slice(0, 12);
+  if (raw !== "__whole__" && !list.length) {
+    await ask(ctx.from, "Type the areas you cover (e.g. *CBD, Avondale*), or tap *Whole city*.", [{ id: "biker_areas_whole", title: "🌍 Whole city" }]);
+    return true;
+  }
+  await setState(ctx.phone, "biker_reg_plate", { reg: { ...(ctx.sess.data.reg || {}), areas: list } });
+  await say(ctx.from, "✅ Got it.\n\n*4/4 - Your bike number plate?*\n_e.g. AEX 1234_");
+  return true;
+}
+async function regPlate(ctx, plate) {
+  const p = String(plate || "").trim().toUpperCase().replace(/\s+/g, " ").slice(0, 16);
+  if (p.length < 3) { await say(ctx.from, "Please type your number plate, e.g. *AEX 1234*."); return true; }
+  return finishBikerRegistration(ctx, { ...(ctx.sess.data.reg || {}), plate: p });
+}
+async function finishBikerRegistration(ctx, reg) {
+  const name  = reg.name || "Rider";
+  const city  = titleCity(reg.city || "Harare");
+  const areas = Array.isArray(reg.areas) ? reg.areas : [];
+  const realBiz = await ensureRealBiz(ctx);
+
+  // Upsert - never create a second rider profile for the same phone.
+  let supplier = await getRider(ctx.phone);
+  try {
+    if (!supplier) {
+      supplier = await SupplierProfile.create({
+        phone: ctx.phone,
+        businessName: `${name} (Rider)`,
+        businessId: realBiz?._id || null,
+        profileType: "biker",
+        location: { city, area: areas[0] || city },
+        categories: ["transport"],
+        revealVisitorPhone: true,
+        canViewContacts: true,
+        tier: "basic", tierRank: 1,
+        subscriptionStatus: "pending",
+        active: false
+      });
+    }
+    supplier = await updateRider({ _id: supplier._id }, { $set: {
+      businessName: `${name} (Rider)`,
+      "location.city": city, "location.area": areas[0] || city,
+      riderAreas: areas, riderActive: true,
+      "bike.plate": reg.plate || "",
+      ...(supplier.businessId ? {} : { businessId: realBiz?._id || null })
+    } }) || supplier;
+  } catch (err) {
+    console.error("[BIKER REG] save failed:", err.message);
+    await clearState(ctx.phone);
+    await say(ctx.from, "❌ We couldn't save your rider profile (this number may already be listed as a seller). Please contact ZimQuote support, or type *menu*.");
+    return true;
+  }
+  invalidateRiderCache(ctx.phone);
+  await clearState(ctx.phone);
+  await setLastCity(ctx.phone, city);
+  await notifyAdmin(`New rider signed up (not yet paid):\n👤 ${name}\n📞 ${displayPhone(ctx.phone)}\n📍 ${city}${areas.length ? " · " + areas.join(", ") : ""}\n🏍️ ${reg.plate || "-"}`);
+  return sendActivate({ ...ctx, biz: realBiz }, supplier, true);
+}
+
+// Rider REGISTRATION / ACTIVATION needs a real Business (the existing EcoCash
+// plan → payment path requires one). Reuse the user's own, or create a pending one.
+async function ensureRealBiz(ctx) {
+  if (ctx.biz && ctx.biz._id && typeof ctx.biz.save === "function") return ctx.biz;
+  const phone = ctx.phone;
   let real = await Business.findOne({ ownerPhone: phone, name: "pending_supplier_" + phone });
   if (!real) {
     real = await Business.create({
-      name: "pending_supplier_" + phone,
-      currency: "USD",
-      package: "trial",
-      subscriptionStatus: "inactive",
-      isSupplier: false,
-      sessionState: "ready",
-      sessionData: {},
-      ownerPhone: phone
+      name: "pending_supplier_" + phone, currency: "USD", package: "trial",
+      subscriptionStatus: "inactive", isSupplier: false, sessionState: "ready", sessionData: {}, ownerPhone: phone
     });
   }
   await UserRole.findOneAndUpdate(
@@ -173,688 +619,1386 @@ async function _ensureRealBiz(from, biz) {
     { $setOnInsert: { phone, businessId: real._id, role: "owner", pending: false } },
     { upsert: true }
   );
-  await UserSession.findOneAndUpdate(
-    { phone },
-    { $set: { activeBusinessId: real._id }, $unset: { "tempData.bikerState": "", "tempData.bikerData": "" } },
-    { upsert: true }
-  );
+  await UserSession.findOneAndUpdate({ phone }, { $set: { activeBusinessId: real._id } }, { upsert: true });
   return real;
 }
-
-async function _saveRealBiz(b) {
+async function saveBizAny(ctx, b) {
+  if (b === ctx.biz && typeof ctx.saveBiz === "function") return ctx.saveBiz(b);
   if (typeof b?.markModified === "function") b.markModified("sessionData");
   if (typeof b?.save === "function") return b.save();
 }
-async function _save(biz, saveBiz) {
-  if (typeof saveBiz === "function") return saveBiz(biz);
-  try {
-    const Business = (await import("../models/business.js")).default;
-    if (biz?._id) return Business.findByIdAndUpdate(biz._id, biz);
-  } catch (_) {}
+
+async function sendActivate(ctx, rider = null, justRegistered = false) {
+  rider = rider || await getRider(ctx.phone);
+  if (!rider) return startBikerRegistration(ctx);
+  if (rider.active) { await say(ctx.from, "✅ Your rider account is already active."); return sendRiderMenu(ctx.from, rider, ctx.biz); }
+  const biz = await ensureRealBiz(ctx);
+  biz.sessionData = { ...(biz.sessionData || {}), pendingSupplierId: String(rider._id) };
+  if (!biz.supplierProfileId) biz.supplierProfileId = rider._id;
+  biz.isSupplier = true;
+  if (!biz.name || String(biz.name).startsWith("pending_")) biz.name = riderName(rider) + " (Rider)";
+  biz.sessionState = "supplier_reg_choose_plan";
+  await saveBizAny(ctx, biz);
+  if (!rider.businessId) await updateRider({ _id: rider._id }, { $set: { businessId: biz._id } });
+
+  const areas = rider.riderAreas || [];
+  await pick(ctx.from,
+    (justRegistered ? `✅ *Almost done, ${firstName(rider.businessName)}!*\n\n` : `💳 *Activate your Rider account*\n\n`) +
+    `• 📍 ${rider.location?.city || "-"} · ${areas.length ? areas.join(", ") : "Whole city"}\n` +
+    `• 🏍️ Plate: ${rider.bike?.plate || "-"}\n\n` +
+    `Activate to start getting jobs. Pay by EcoCash on the next step.`,
+    [
+      { id: "sup_plan_basic_monthly", title: "✅ Activate - $5/month", description: "Get delivery jobs on WhatsApp" },
+      { id: "sup_plan_basic_annual",  title: "⭐ Save - $50/year",     description: "2 months free" }
+    ]);
+  return true;
 }
 
-// Standalone keyword that STARTS a "request a rider" (short, exact-ish messages only,
-// so we never hijack a normal product/service search).
-const RIDER_REQUEST_RE =
-  /^(request\s+(a\s+)?(rider|biker)|find\s+(a\s+)?(rider|biker)|need\s+(a\s+)?(rider|biker)|i\s+want\s+(a\s+)?(rider|biker)|get\s+(a\s+)?(rider|biker)|rider|biker|boda|courier\s+rider)$/i;
+// ═════════════════════════════════════════════════════════════════════════════
+// RIDER MENU + RIDER SCREENS
+// ═════════════════════════════════════════════════════════════════════════════
+export async function sendRiderMenu(to, rider = null, biz = null) {
+  const phone = normPhone(to);
+  rider = rider || await getRider(phone);
+  if (!rider) return false;
+  const online   = rider.riderActive !== false;
+  const lvl      = riderLevel(rider.riderPoints);
+  const [mine, open] = await Promise.all([activeJobCount(phone), rider.active ? countOpenNear(rider) : 0]);
+  const areas    = rider.riderAreas || [];
 
-// ─────────────────────────────────────────────────────────────────────────────
-// PUBLIC ENTRY - called once, early, by chatbotEngine.
-// Returns true  → this module handled the message (engine must `return`).
-// Returns false → not a biker message (engine continues normally).
-// ─────────────────────────────────────────────────────────────────────────────
-export async function handleBikerMessage({ from, text = "", action = "", biz = null, saveBiz = null }) {
-  try {
-    const a   = String(action || "").trim();   // "" for typed text, button/list id for taps
-    const txt = String(text || "").trim();
+  const rows = [
+    ...(!rider.active ? [{ id: "biker_activate", title: "💳 Activate - $5/mo", description: "Start getting delivery jobs" }] : []),
+    { id: "biker_toggle_online", title: online ? "⏸ Go Offline" : "🟢 Go Online", description: online ? "Stop job alerts (on a break)" : "Start getting job alerts" },
+    { id: "biker_openjobs", title: `🔔 Open Jobs (${open})`, description: "Jobs near you waiting for a rider" },
+    { id: "biker_active",   title: `📋 My Jobs (${mine})`,   description: "Update picked up / delivered" },
+    { id: "biker_stats",    title: "🏆 Points & Earnings",   description: `${lvl.emoji} ${lvl.name} · ${rider.riderPoints || 0} pts` },
+    { id: "biker_areas",    title: "📍 My Areas",            description: areas.length ? areas.join(", ") : "Whole city" },
+    { id: "biker_mylink",   title: "🔗 My Rider Link",       description: "Share it - customers book YOU" },
+    ...(!rider.bike?.verifiedAt ? [{ id: "biker_photo", title: "📸 Get Verified ✅", description: "Verified riders get more jobs" }] : []),
+    { id: "biker_help",     title: "❓ How It Works",        description: "Prices, points, tips" },
+    { id: "biker_zqmenu",   title: "🛍️ More (ZimQuote)",     description: "Shop, request sellers, business" }
+  ].slice(0, 10);
 
-    // Non-biz users (or users who don't own the resolved biz): use a virtual
-    // biz backed by UserSession so the flow survives between messages.
-    if (!biz) {
-      biz = await _loadVirtualBiz(from);
-      saveBiz = (vb) => _saveVirtualBiz(from, vb);
-    }
-    const state = biz?.sessionState || "";
+  await pick(to,
+    `🏍️ *Rider Menu* - ${firstName(rider.businessName)}\n\n` +
+    `${online ? "🟢 *ONLINE* - you'll get job alerts" : "⚪ *OFFLINE* - no job alerts"}\n` +
+    `${riderBadgeLine(rider)}\n` +
+    `💰 ${rider.riderPoints || 0} points${lvl.next ? ` · ${lvl.toNext} to ${lvl.next.emoji} ${lvl.next.name}` : ""}` +
+    (!rider.active ? `\n\n⚠️ *Not activated* - tap *Activate* to start getting jobs.` : "") +
+    (rider.suspended ? `\n\n⛔ Your account is suspended. Contact ZimQuote support.` : ""),
+    rows);
+  return true;
+}
 
-    // 1) Continue an in-progress biker flow (state owns the message).
-    if (state.startsWith("biker_")) {
-      // Tapping any NON-biker button (e.g. Main Menu, another menu row) leaves the flow.
-      const leavingByTap = !!a && !a.startsWith("biker_");
-      if (isEscape(txt) || leavingByTap) {  // let the user bail out cleanly
-        biz.sessionState = "ready";
-        if (biz.sessionData) { delete biz.sessionData.bikerReg; delete biz.sessionData.bikerJob; }
-        await _save(biz, saveBiz);
-        return false;                      // hand back to engine (shows menu)
-      }
-      return _routeState({ from, txt, a, biz, saveBiz, state });
-    }
+async function countOpenNear(rider) {
+  const group = metroGroup(rider.location?.city || "");
+  if (!group.length) return 0;
+  const phone = normPhone(rider.phone);
+  return BikerJob.countDocuments({
+    status: "open",
+    openSince: { $gte: new Date(Date.now() - BIKER_CONFIG.OPEN_JOB_WINDOW_MIN * 60000) },
+    city: { $in: group.map(c => new RegExp(`^${escRe(c)}$`, "i")) },
+    cancelledRiderPhones: { $ne: phone },
+    customerPhone: { $ne: phone },
+    "responses.riderPhone": { $ne: phone }
+  }).catch(() => 0);
+}
 
-    // 2) Action taps that belong to bikers.
-    if (a === "reg_type_biker")        return startBikerRegistration({ from, biz, saveBiz });
-    if (a === "biker_request_rider")   return startRiderRequest({ from, biz, saveBiz });
-    if (a === "biker_my_account" || a === "biker_toggle_online")
-                                       return bikerAccount({ from, biz, saveBiz, toggle: a === "biker_toggle_online" });
-    if (a.startsWith("biker_regcity_"))  return _regCityPicked({ from, biz, saveBiz, city: a.replace("biker_regcity_", "") });
-    if (a.startsWith("biker_reqcity_"))  return _reqCityPicked({ from, biz, saveBiz, city: a.replace("biker_reqcity_", "") });
-    if (a.startsWith("biker_when_"))     return _reqWhenPicked({ from, biz, saveBiz, when: a.replace("biker_when_", "") });
-    if (a.startsWith("biker_accept_"))   return _riderAccept({ from, biz, saveBiz, jobId: a.replace("biker_accept_", "") });
-    if (a.startsWith("biker_busy_"))     return _riderBusy({ from, jobId: a.replace("biker_busy_", "") });
-    if (a.startsWith("biker_choose_"))   return _customerChoose({ from, saveBiz, payload: a.replace("biker_choose_", "") });
-    if (a.startsWith("biker_skipphoto")) return _regPhoto({ from, biz, saveBiz, imageUrl: null });
-    if (a === "biker_areas_whole")       return _regAreas({ from, biz, saveBiz, areas: "__whole__" });
-
-    // 3) Group link  ZQ:BGROUP:<city>
-    if (/^ZQ:BGROUP:/i.test(txt)) return _bikerGroupLink({ from, slug: txt.replace(/^ZQ:BGROUP:/i, "").trim() });
-
-    // 4) Keyword entry (only when it is NOT a button tap).
-    if (!a && RIDER_REQUEST_RE.test(txt)) return startRiderRequest({ from, biz, saveBiz });
-    if (!a && /^(become a rider|register as rider|list as rider|rider signup|i am a rider|im a rider)$/i.test(txt))
-      return startBikerRegistration({ from, biz, saveBiz });
-
-    return false;
-  } catch (err) {
-    console.error("[BIKER] handleBikerMessage error:", err.message, err.stack);
-    try { await sendText(from, "❌ Something went wrong with the rider service. Please type *menu* to continue."); } catch (_) {}
-    return true; // we already messaged the user; don't let the engine double-handle
+async function toggleOnline(ctx, force = null) {
+  const rider = await getRider(ctx.phone);
+  if (!rider) return startBikerRegistration(ctx);
+  const now = force === null ? rider.riderActive === false : !!force;
+  const r = await updateRider({ _id: rider._id }, { $set: { riderActive: now, riderMissedPings: 0, riderLastSeenAt: new Date() } }) || { ...rider, riderActive: now };
+  if (!now) {
+    await ask(ctx.from, "⏸ *You're OFFLINE.* No job alerts until you go online again.\n\n_Tip: go offline when you're on a break - ignoring alerts lowers your ranking._",
+      [{ id: "biker_toggle_online", title: "🟢 Go Online" }, { id: "biker_menu", title: "🏍️ Rider Menu" }]);
+    return true;
   }
+  if (!r.active) { await say(ctx.from, "🟢 You're ONLINE - but your account isn't activated yet, so you won't get jobs."); return sendActivate(ctx, r); }
+  const open = await countOpenNear(r);
+  if (open) { await say(ctx.from, `🟢 *You're ONLINE!* ${open} job${open === 1 ? "" : "s"} waiting near you 👇`); return sendOpenJobs(ctx, r); }
+  await ask(ctx.from, "🟢 *You're ONLINE!* We'll alert you the moment a job comes in near you.",
+    [{ id: "biker_menu", title: "🏍️ Rider Menu" }]);
+  return true;
 }
 
-// Route an in-progress state to its step handler.
-async function _routeState({ from, txt, a, biz, saveBiz, state }) {
-  // Registration states
-  if (state === "biker_reg_name")   return _regName({ from, biz, saveBiz, name: txt });
-  if (state === "biker_reg_city")   return _regCityPicked({ from, biz, saveBiz, city: a.startsWith("biker_regcity_") ? a.replace("biker_regcity_", "") : txt });
-  if (state === "biker_reg_areas")  return _regAreas({ from, biz, saveBiz, areas: a === "biker_areas_whole" ? "__whole__" : txt });
-  if (state === "biker_reg_plate")  return _regPlate({ from, biz, saveBiz, plate: txt });
-  if (state === "biker_reg_photo")  return _regPhoto({ from, biz, saveBiz, imageUrl: null }); // photo arrives via engine image handler; typed = skip
-  // Request states (fast flow: what+where → city → go)
-  if (state === "biker_req_what")   return _reqWhat({ from, biz, saveBiz, raw: txt });
-  if (state === "biker_req_route")  return _reqRoute({ from, biz, saveBiz, raw: txt });
-  if (state === "biker_req_city")   return _reqCityPicked({ from, biz, saveBiz, city: a.startsWith("biker_reqcity_") ? a.replace("biker_reqcity_", "") : txt });
-  // Rider entering a fare for a job
-  if (state.startsWith("biker_fare_")) return _riderFare({ from, biz, saveBiz, jobId: state.replace("biker_fare_", ""), input: txt });
+async function guardRider(ctx, { needActive = true } = {}) {
+  const rider = await getRider(ctx.phone);
+  if (!rider) {
+    await ask(ctx.from, "🏍️ Only registered ZimQuote riders can take jobs.\n\nWant to earn with your bike?",
+      [{ id: "reg_type_biker", title: "🏍️ Become a Rider" }, { id: "main_menu_back", title: "🏠 Menu" }]);
+    return null;
+  }
+  if (rider.suspended) { await say(ctx.from, "⛔ Your rider account is suspended. Please contact ZimQuote support."); return null; }
+  if (needActive && !rider.active) { await say(ctx.from, "⚠️ Activate your rider account to take jobs."); await sendActivate(ctx, rider); return null; }
+  return rider;
+}
+
+async function sendOpenJobs(ctx, rider = null) {
+  rider = rider || await guardRider(ctx);
+  if (!rider) return true;
+  const group = metroGroup(rider.location?.city || "");
+  const jobs = await BikerJob.find({
+    status: "open",
+    openSince: { $gte: new Date(Date.now() - BIKER_CONFIG.OPEN_JOB_WINDOW_MIN * 60000) },
+    city: { $in: group.map(c => new RegExp(`^${escRe(c)}$`, "i")) },
+    cancelledRiderPhones: { $ne: ctx.phone },
+    customerPhone: { $ne: ctx.phone },
+    "responses.riderPhone": { $ne: ctx.phone }
+  }).sort({ openSince: -1 }).limit(10).lean().catch(() => []);
+
+  if (!jobs.length) {
+    await ask(ctx.from, `🔔 *No open jobs right now* in ${rider.location?.city || "your city"}.\n\n${rider.riderActive !== false ? "You're ONLINE - we'll alert you when one comes in." : "⚪ You're OFFLINE - go online to get alerts."}`,
+      [rider.riderActive !== false ? { id: "biker_menu", title: "🏍️ Rider Menu" } : { id: "biker_toggle_online", title: "🟢 Go Online" }]);
+    return true;
+  }
+  await pick(ctx.from,
+    `🔔 *Open jobs near you* (${jobs.length})\nNewest first. Tap one to send your price 👇`,
+    jobs.map(j => ({
+      id: `biker_accept_${j._id}`,
+      title: `${cut(j.pickup, 10)}→${cut(j.dropoff, 10)}`,
+      description: `${cut(j.task || "Delivery", 34)} · ${ago(j.openSince)} · ${(j.responses || []).length} price(s)`
+    })));
+  return true;
+}
+
+async function sendActiveJobs(ctx) {
+  const jobs = await BikerJob.find({ assignedRiderPhone: ctx.phone, status: { $in: ["assigned", "picked_up", "delivered"] } })
+    .sort({ assignedAt: -1 }).limit(10).lean().catch(() => []);
+  if (!jobs.length) {
+    await ask(ctx.from, "📋 *No active jobs.*\n\nTap *Open Jobs* to find one.", [{ id: "biker_openjobs", title: "🔔 Open Jobs" }, { id: "biker_menu", title: "🏍️ Rider Menu" }]);
+    return true;
+  }
+  if (jobs.length === 1) return sendJobCard(ctx, String(jobs[0]._id), jobs[0]);
+  await pick(ctx.from, `📋 *Your jobs* (${jobs.length})\nTap one to update it 👇`,
+    jobs.map(j => ({
+      id: `biker_job_${j._id}`,
+      title: `${statusEmoji(j.status)} ${cut(j.dropoff, 20)}`,
+      description: `${cut(j.pickup, 18)}→${cut(j.dropoff, 18)} · ${j.agreedFare || "-"} · ${jobRef(j)}`
+    })));
+  return true;
+}
+
+async function sendRiderStats(ctx) {
+  const rider = await getRider(ctx.phone);
+  if (!rider) return startBikerRegistration(ctx);
+  const lvl = riderLevel(rider.riderPoints);
+  const now = new Date();
+  const weekStart = new Date(now); weekStart.setHours(0, 0, 0, 0);
+  weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7)); // Monday
+  const dayStart = new Date(now); dayStart.setHours(0, 0, 0, 0);
+
+  const done = await BikerJob.find({ assignedRiderPhone: ctx.phone, status: "completed" }, { agreedFareAmount: 1, agreedFare: 1, completedAt: 1 }).lean().catch(() => []);
+  const usd = j => (/zig/i.test(j.agreedFare || "") ? 0 : Number(j.agreedFareAmount) || 0);
+  const sum = arr => arr.reduce((s, j) => s + usd(j), 0);
+  const today = done.filter(j => j.completedAt && new Date(j.completedAt) >= dayStart);
+  const week  = done.filter(j => j.completedAt && new Date(j.completedAt) >= weekStart);
+
+  const group = metroGroup(rider.location?.city || "");
+  const better = await SupplierProfile.countDocuments({
+    profileType: "biker", active: true,
+    "location.city": { $in: group.map(c => new RegExp(`^${escRe(c)}$`, "i")) },
+    riderPoints: { $gt: Number(rider.riderPoints) || 0 }
+  }).setOptions({ strictQuery: false }).catch(() => 0);
+
+  await ask(ctx.from,
+    `🏆 *Points & Earnings*\n\n` +
+    `${lvl.emoji} *${lvl.name}* · ${rider.riderPoints || 0} points\n` +
+    (lvl.next ? `➡️ ${lvl.toNext} more to ${lvl.next.emoji} ${lvl.next.name}\n` : `👑 Top level!\n`) +
+    `📊 Rank #${better + 1} in ${rider.location?.city || "your city"}\n` +
+    `⭐ ${(Number(rider.rating) || 0).toFixed(1)} rating (${rider.reviewCount || 0}) · ${plural(rider.completedTrips || 0, "trip")} · ${plural(rider.riderCancels || 0, "cancel")}\n\n` +
+    `💵 *Earnings (USD jobs)*\nToday: $${sum(today).toFixed(2)} (${today.length})\nThis week: $${sum(week).toFixed(2)} (${week.length})\nAll time: $${sum(done).toFixed(2)} (${done.length})\n\n` +
+    `*How to earn points*\n✅ Delivery confirmed +${RIDER_POINTS.complete}\n⚡ Price sent within ${BIKER_CONFIG.FAST_RESPONSE_MIN} min +${RIDER_POINTS.fast}\n⭐⭐⭐⭐⭐ rating +${RIDER_POINTS.rate5} · ⭐⭐⭐⭐ +${RIDER_POINTS.rate4}\n❌ You cancel a job ${RIDER_POINTS.cancel}\n\n_More points = shown first to customers._`,
+    [{ id: "biker_openjobs", title: "🔔 Open Jobs" }, { id: "biker_menu", title: "🏍️ Rider Menu" }]);
+  return true;
+}
+
+async function startAreasEdit(ctx) {
+  const rider = await getRider(ctx.phone);
+  if (!rider) return startBikerRegistration(ctx);
+  await setState(ctx.phone, "biker_areas_set", {});
+  await ask(ctx.from,
+    `📍 *Your areas:* ${(rider.riderAreas || []).length ? rider.riderAreas.join(", ") : "Whole city"}\n\nType your new areas with commas:\n_e.g. CBD, Avondale, Mbare_\n\nJobs from your areas reach you first. Or tap *Whole city*.`,
+    [{ id: "biker_areas_whole", title: "🌍 Whole city" }, { id: "biker_menu", title: "🏍️ Rider Menu" }]);
+  return true;
+}
+async function areasWhole(ctx) {
+  if (ctx.sess.state === "biker_reg_areas") return regAreas(ctx, "__whole__");
+  return saveAreas(ctx, "__whole__");
+}
+async function saveAreas(ctx, raw) {
+  const rider = await getRider(ctx.phone);
+  if (!rider) { await clearState(ctx.phone); return startBikerRegistration(ctx); }
+  const list = raw === "__whole__" ? [] : String(raw || "").split(/[,\n;]+/).map(s => s.trim()).filter(Boolean).slice(0, 12);
+  await updateRider({ _id: rider._id }, { $set: { riderAreas: list, "location.area": list[0] || rider.location?.city || "" } });
+  await clearState(ctx.phone);
+  await ask(ctx.from, `✅ Areas saved: *${list.length ? list.join(", ") : "Whole city"}*`, [{ id: "biker_menu", title: "🏍️ Rider Menu" }]);
+  return true;
+}
+
+async function startPhoto(ctx) {
+  const rider = await getRider(ctx.phone);
+  if (!rider) return startBikerRegistration(ctx);
+  await setState(ctx.phone, "biker_photo_wait", {});
+  await ask(ctx.from,
+    "📸 *Get Verified ✅*\n\nSend ONE clear photo of *you with your bike* - number plate visible.\n\nOur team checks it and adds the ✅ Verified badge. Verified riders are shown first to customers.\n\n_Tip: our team may also ask to see your licence & ID._",
+    [{ id: "biker_skipphoto", title: "⏭ Later" }]);
+  return true;
+}
+async function savePhoto(ctx, imageUrl) {
+  const rider = await getRider(ctx.phone);
+  await clearState(ctx.phone);
+  if (!rider) return false;
+  await updateRider({ _id: rider._id }, { $set: { "bike.photoUrl": imageUrl, "bike.photoSubmittedAt": new Date() } });
+  await notifyAdmin(`📸 Verification photo from rider *${riderName(rider)}* (${displayPhone(rider.phone)}).\n${imageUrl}\nVerify in admin → Bikers.`);
+  await ask(ctx.from, "✅ Photo received! Our team will check it and add your ✅ Verified badge.", [{ id: "biker_menu", title: "🏍️ Rider Menu" }]);
+  return true;
+}
+// Back-compat export (older engine image handler may call this).
+export async function _regPhoto({ from, imageUrl = null }) {
+  if (!imageUrl) return false;
+  return savePhoto({ from, phone: normPhone(from) }, imageUrl);
+}
+
+export function riderLink(riderId) {
+  return `https://wa.me/${BOT_NUMBER}?text=${encodeURIComponent("ZQ:RIDER:" + riderId)}`;
+}
+async function sendRiderLink(ctx) {
+  const rider = await getRider(ctx.phone);
+  if (!rider) return startBikerRegistration(ctx);
+  await say(ctx.from,
+    `🔗 *Your Rider Link*\n\nShare this on your WhatsApp Status, groups and with regular customers. When they tap it, the job comes *straight to you first*:\n\n${riderLink(rider._id)}`);
+  await say(ctx.from,
+    `🏍️ Need something delivered? Book me on WhatsApp - fast, safe, fair price.\n${riderName(rider)} · ${rider.bike?.plate || ""}\n👉 ${riderLink(rider._id)}`);
+  await ask(ctx.from, "☝️ Forward the message above to your contacts or post it on your Status.", [{ id: "biker_menu", title: "🏍️ Rider Menu" }]);
+  return true;
+}
+async function sendRiderHelp(ctx) {
+  await ask(ctx.from,
+    `❓ *How ZimQuote Bikers works*\n\n` +
+    `1️⃣ Stay *ONLINE* → job alerts come to you\n` +
+    `2️⃣ Tap *I'll do it* → tap your price → tap ETA (3 taps)\n` +
+    `3️⃣ Customer picks you → you get their number. *Call them* to confirm the address\n` +
+    `4️⃣ Tap *Picked up* → then *Delivered*\n` +
+    `5️⃣ Customer confirms → you earn points ⭐\n\n` +
+    `💵 *Pricing tips (USD):* $2-$4 nearby · $5-$8 across town · $10+ far/heavy. Customers pay you directly - cash or EcoCash on delivery.\n\n` +
+    `🛡 *Safety:* never pay for goods with your own money unless agreed. Take a photo of the parcel at pickup. Don't carry illegal items.\n\n` +
+    `⌨️ *Shortcuts:* type *online*, *offline*, *jobs*, *points* or *menu* any time.`,
+    [{ id: "biker_openjobs", title: "🔔 Open Jobs" }, { id: "biker_menu", title: "🏍️ Rider Menu" }]);
+  return true;
+}
+async function sendZqMenu(ctx) {
+  try {
+    const mm = await import("./metaMenus.js");
+    const realBiz = ctx.biz && ctx.biz.name && !String(ctx.biz.name).startsWith("pending_") && !String(ctx.biz.name).endsWith("(Rider)");
+    if (realBiz && typeof mm.sendBusinessHomeMenu === "function") return mm.sendBusinessHomeMenu(ctx.from, ctx.biz, { isOwner: true }), true;
+    if (typeof mm.sendMarketplaceMenu === "function") { await mm.sendMarketplaceMenu(ctx.from, ctx.biz, { isOwner: false }); return true; }
+  } catch (e) { console.warn("[BIKER] zq menu failed:", e.message); }
   return false;
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// REGISTRATION  (5 steps → existing EcoCash activation)
+// CUSTOMER: REQUEST A BIKER
 // ═════════════════════════════════════════════════════════════════════════════
-export async function startBikerRegistration({ from, biz, saveBiz }) {
-  const phone = normPhone(from);
-
-  // Already a registered biker? Show the account menu instead of re-registering.
-  const existing = await SupplierProfile.findOne({ phone, profileType: "biker" }).lean().catch(() => null);
-  if (existing && existing.active) {
-    return bikerAccount({ from, biz, saveBiz, existing });
-  }
-
-  if (!biz || biz._virtual) {
-    biz = await _ensureRealBiz(from, biz);
-    saveBiz = _saveRealBiz;
-  }
-  await _clearCompetingFlows(from);
-  biz.sessionState = "biker_reg_name";
-  biz.sessionData = { ...(biz.sessionData || {}), bikerReg: {} };
-  await _save(biz, saveBiz);
-  await sendText(from,
-    "🏍️ *Become a ZimQuote Rider*\n\n" +
-    "Get delivery jobs on WhatsApp. Keep 100% of every fare. Just $5/month.\n\n" +
-    "Quick setup - 4 short steps.\n\n" +
-    "*1. Your name?*\n_e.g. Tapiwa Moyo_"
-  );
-  return true;
-}
-
-async function _regName({ from, biz, saveBiz, name }) {
-  if (!name || name.length < 2) { await sendText(from, "Please type your name."); return true; }
-  biz.sessionData.bikerReg = { ...(biz.sessionData.bikerReg || {}), name: name.slice(0, 60) };
-  biz.sessionState = "biker_reg_city";
-  await _save(biz, saveBiz);
-  await sendList(from,
-    `👍 Thanks ${name.split(/\s+/)[0]}!\n\n*2. Which city do you ride in?*\n(Tap one, or just type your city.)`,
-    CITY_ROWS.map(c => ({ id: `biker_regcity_${c}`, title: c }))
-  );
-  return true;
-}
-
-async function _regCityPicked({ from, biz, saveBiz, city }) {
-  const c = titleCity(city);
-  if (!c) { await sendText(from, "Please tap or type your city."); return true; }
-  biz.sessionData.bikerReg = { ...(biz.sessionData.bikerReg || {}), city: c };
-  biz.sessionState = "biker_reg_areas";
-  await _save(biz, saveBiz);
-  await sendButtons(from, {
-    text:
-      `📍 *${c}*.\n\n*3. Which areas do you cover?*\n` +
-      `Type them with commas - _e.g. CBD, Avondale, Mount Pleasant_\n\n` +
-      `Or tap *Whole city* to get jobs from anywhere in ${c}.`,
-    buttons: [{ id: "biker_areas_whole", title: `🌍 Whole city` }]
-  });
-  return true;
-}
-
-async function _regAreas({ from, biz, saveBiz, areas }) {
-  let list;
-  if (areas === "__whole__") {
-    list = [];  // empty = covers the whole city
-  } else {
-    list = String(areas || "").split(",").map(s => s.trim()).filter(Boolean).slice(0, 12);
-    if (!list.length) { await sendText(from, "Type the areas you cover (e.g. CBD, Avondale), or tap *Whole city*."); return true; }
-  }
-  biz.sessionData.bikerReg = { ...(biz.sessionData.bikerReg || {}), areas: list };
-  biz.sessionState = "biker_reg_plate";
-  await _save(biz, saveBiz);
-  await sendText(from,
-    `✅ Got it.\n\n*4. Your bike number plate?*\n_e.g. AEX 1234_`
-  );
-  return true;
-}
-
-async function _regPlate({ from, biz, saveBiz, plate }) {
-  const p = String(plate || "").trim().toUpperCase().slice(0, 16);
-  if (!p || p.length < 3) { await sendText(from, "Please type your bike number plate, e.g. AEX 1234."); return true; }
-  const reg = { ...(biz.sessionData.bikerReg || {}), plate: p };
-  biz.sessionData.bikerReg = reg;
-  await _save(biz, saveBiz);
-  // Straight to activation - no photo step. Riders can add a photo later from
-  // "My Rider Account" to earn the ✅ Verified badge.
-  await _finishBikerRegistration({ from, biz, saveBiz, reg });
-  return true;
-}
-
-// Called by the engine's image handler (pass imageUrl) OR when the user skips.
-export async function _regPhoto({ from, biz, saveBiz, imageUrl = null }) {
-  const reg = biz?.sessionData?.bikerReg || {};
-  reg.photoUrl = imageUrl || "";
-  await _finishBikerRegistration({ from, biz, saveBiz, reg });
-  return true;
-}
-
-async function _finishBikerRegistration({ from, biz, saveBiz, reg }) {
-  if (!biz || biz._virtual) {
-    biz = await _ensureRealBiz(from, biz);
-    saveBiz = _saveRealBiz;
-  }
-  const phone = normPhone(from);
-  const name  = reg.name || "Rider";
-  const city  = titleCity(reg.city || "Harare");
-  const areas = Array.isArray(reg.areas) ? reg.areas : [];
-
-  // Create the rider as an INACTIVE SupplierProfile - identical lifecycle to a
-  // tutor: pending until the EcoCash payment activates it.
-  let supplier;
-  try {
-    supplier = await SupplierProfile.create({
-      phone,
-      businessName: `${name} (Rider)`,
-      businessId:   biz?._id || null,
-      profileType:  "biker",
-      location:     { city, area: areas[0] || city },
-      riderAreas:   areas,
-      riderActive:  true,
-      bike: {
-        plate:         reg.plate || "",
-        licenceOnFile: false,
-        idOnFile:      false,
-        insurance:     false,
-        photoUrl:      reg.photoUrl || ""
-      },
-      categories:         ["transport"],
-      revealVisitorPhone: true,
-      canViewContacts:    true,
-      tier: "basic", tierRank: 1,
-      subscriptionStatus: "pending",
-      active: false
-    });
-  } catch (err) {
-    console.error("[BIKER REG] create failed:", err.message);
-    await sendText(from, "❌ Could not save your rider profile. Please type *menu* and try again.");
-    biz.sessionState = "ready";
-    await _save(biz, saveBiz);
-    return;
-  }
-
-  // Hand off to the EXISTING plan/payment flow (same as tutors & other sellers).
-  // Tapping the plan row routes into chatbotEngine's sup_plan_ handler →
-  // supplier_reg_enter_ecocash → PAY-GUARD → handleSupplierRegistrationStates.
-  biz.supplierProfileId = supplier._id;
-  biz.isSupplier = true;
-  if (!biz.name || String(biz.name).startsWith("pending_")) biz.name = `${name} (Rider)`;
-  biz.sessionData = { ...(biz.sessionData || {}), pendingSupplierId: supplier._id.toString() };
-  delete biz.sessionData.bikerReg;
-  biz.sessionState = "supplier_reg_choose_plan";
-  await _save(biz, saveBiz);
-
-  await sendList(from,
-    `✅ *Almost done, ${name.split(/\s+/)[0]}!*\n\n` +
-    `Your rider profile is ready. Activate to start getting job requests:\n\n` +
-    `• 📍 ${city} · ${areas.length ? areas.join(", ") : "Whole city"}\n` +
-    `• 🏍️ Plate: ${reg.plate || "-"}\n\n` +
-    `_Pay by EcoCash on the next step. Tip: add a photo later in My Rider Account to get a ✅ Verified badge._`,
-    [
-      { id: "sup_plan_basic_monthly", title: "✅ Activate - $5/month", description: "Get delivery jobs on WhatsApp" },
-      { id: "sup_plan_basic_annual",  title: "⭐ Save - $50/year",     description: "2 months free" }
-    ]
-  );
-  return;
-}
-
-// ═════════════════════════════════════════════════════════════════════════════
-// RIDER ACCOUNT  (online/offline toggle + status)
-// ═════════════════════════════════════════════════════════════════════════════
-export async function bikerAccount({ from, biz, saveBiz, toggle = false, existing = null }) {
-  const phone = normPhone(from);
-  const rider = existing || await SupplierProfile.findOne({ phone, profileType: "biker" }).lean().catch(() => null);
-  if (!rider) { return startBikerRegistration({ from, biz, saveBiz }); }
-
-  if (toggle) {
-    const now = !rider.riderActive;
-    await SupplierProfile.updateOne({ _id: rider._id }, { $set: { riderActive: now } }).catch(() => {});
-    rider.riderActive = now;
-  }
-  const online = rider.riderActive !== false;
-  const verified = !!rider.bike?.verifiedAt;
-  await sendButtons(from, {
-    text:
-      `🏍️ *Your Rider Account*\n\n` +
-      `${online ? "🟢 You're ONLINE - you'll get job alerts." : "⚪ You're OFFLINE - no alerts."}\n` +
-      `${verified ? "✅ Verified" : "⏳ Verification pending"}\n` +
-      `📍 ${rider.location?.city || ""}${(rider.riderAreas || []).length ? " · " + rider.riderAreas.join(", ") : ""}\n` +
-      `⭐ ${Number(rider.rating || 0).toFixed(1)} · ${rider.completedTrips || 0} trips\n\n` +
-      (rider.active ? "" : "⚠️ Your subscription is not active. Reply *menu* → become a rider to activate.\n\n") +
-      `_Toggle below to go on/off duty._`,
-    buttons: [
-      { id: "biker_toggle_online", title: online ? "⏸ Go OFFLINE" : "▶️ Go ONLINE" },
-      { id: "main_menu_back",      title: "🏠 Main Menu" }
-    ]
-  });
-  return true;
-}
-
-// ═════════════════════════════════════════════════════════════════════════════
-// REQUEST A RIDER  (customer side, 5 taps → match → notify)
-// ═════════════════════════════════════════════════════════════════════════════
-export async function startRiderRequest({ from, biz, saveBiz }) {
-  if (!biz) {
-    biz = await _loadVirtualBiz(from);
-    saveBiz = (vb) => _saveVirtualBiz(from, vb);
-  }
-  await _clearCompetingFlows(from);
-  biz.sessionState = "biker_req_what";
-  biz.sessionData = { ...(biz.sessionData || {}), bikerJob: {} };
-  await _save(biz, saveBiz);
-  // ONE message captures what + where. Default time is "Now" (no extra step).
-  await sendText(from,
-    "🏍️ *Request a Biker*\n\n" +
-    "In *one message*, tell us *what* you need and *where* (from → to):\n\n" +
-    "📝 _Collect documents, CBD to Avondale_\n" +
-    "📝 _Buy & deliver 2 loaves, Mbare to Highfield_\n" +
-    "📝 _Pick parcel from Joina City to Borrowdale_"
-  );
-  return true;
-}
-
-// Step 1: combined what + where. If the route is clear, go straight to city.
-async function _reqWhat({ from, biz, saveBiz, raw }) {
-  if (!raw || raw.length < 3) {
-    await sendText(from, "Please tell us what you need and where.\n_e.g. Collect documents, CBD to Avondale_");
+export async function startRiderRequest(ctx, { preferredRider = null, prefill = null } = {}) {
+  ctx = await _ctx(ctx);
+  const live = await BikerJob.find({ customerPhone: ctx.phone, status: { $in: LIVE_STATUSES } }, { status: 1 }).lean().catch(() => []);
+  const openCount = live.filter(j => j.status === "open").length;
+  if (openCount >= BIKER_CONFIG.MAX_OPEN_PER_CUSTOMER) {
+    await ask(ctx.from, `⚠️ You already have *${openCount}* open requests. Please wait for riders or cancel one first.`,
+      [{ id: "biker_mydel", title: `📦 My Deliveries` }, { id: "main_menu_back", title: "🏠 Menu" }]);
     return true;
   }
-  const { task, pickup, dropoff } = parseWhatWhere(raw);
-  biz.sessionData.bikerJob = { ...(biz.sessionData.bikerJob || {}), task, pickup, dropoff };
-  if (pickup && dropoff) {
-    biz.sessionState = "biker_req_city";
-    await _save(biz, saveBiz);
-    return _askReqCity(from, biz, saveBiz, { pickup, dropoff });
-  }
-  // Route unclear → one quick follow-up, keep the task.
-  biz.sessionState = "biker_req_route";
-  await _save(biz, saveBiz);
-  await sendText(from,
-    "📍 *From → To?* (one line)\n" +
-    "_e.g. CBD to Avondale_"
-  );
+  await clearCompetingFlows(ctx.phone);
+  await setState(ctx.phone, "biker_req_what", { req: { preferredRiderId: preferredRider ? String(preferredRider._id) : null, ...(prefill || {}) } });
+
+  const head = preferredRider
+    ? `🏍️ *Book ${riderName(preferredRider)}*\n${riderBadgeLine(preferredRider)}\n\n`
+    : `🏍️ *Request a Biker*\n\n`;
+  const body = head +
+    `Send *what* + *from → to* in ONE message:\n\n` +
+    `📝 _Collect documents, CBD to Avondale_\n` +
+    `📝 _Buy 2 loaves, Mbare to Highfield_\n` +
+    `📝 _Parcel from Joina City to Borrowdale_\n\n` +
+    `💡 Include the suburb. ${preferredRider ? "The rider will send you a price." : "Riders send you prices - you choose."}`;
+  if (live.length) await ask(ctx.from, body, [{ id: "biker_mydel", title: `📦 My Deliveries (${live.length})` }]);
+  else await say(ctx.from, body);
   return true;
 }
 
-// Step 1b (only if route wasn't clear): capture "from → to".
-async function _reqRoute({ from, biz, saveBiz, raw }) {
-  const { pickup, dropoff } = splitRoute(raw);
+async function reqWhat(ctx, raw) {
+  const s = String(raw || "").trim();
+  if (s.length < 3) {
+    await say(ctx.from, "Please tell us *what* and *from → to* in one message.\n_e.g. Collect documents, CBD to Avondale_");
+    return true;
+  }
+  const { task, pickup, dropoff } = parseWhatWhere(s);
+  const req = { ...(ctx.sess.data.req || {}), task: task || "Delivery", pickup, dropoff, raw: s.slice(0, 300) };
+  if (pickup && dropoff) return resolveCityAndCreate(ctx, req);
+  await setState(ctx.phone, "biker_req_route", { req });
+  await say(ctx.from, `📦 *${cut(req.task, 60)}*\n\n📍 From where → to where? (one line)\n_e.g. CBD to Avondale_`);
+  return true;
+}
+async function reqRoute(ctx, raw) {
+  let { pickup, dropoff } = splitRoute(raw);
+  if (!pickup || !dropoff) { const p = parseWhatWhere(raw); pickup = p.pickup; dropoff = p.dropoff; }
   if (!pickup || !dropoff) {
-    await sendText(from, "Please send it as *from → to*.\n_e.g. CBD to Avondale_");
+    await say(ctx.from, "Please send it as *from → to*.\n_e.g. Mbare to Highfield_");
     return true;
   }
-  biz.sessionData.bikerJob = { ...(biz.sessionData.bikerJob || {}), pickup, dropoff };
-  biz.sessionState = "biker_req_city";
-  await _save(biz, saveBiz);
-  return _askReqCity(from, biz, saveBiz, { pickup, dropoff });
+  return resolveCityAndCreate(ctx, { ...(ctx.sess.data.req || {}), pickup, dropoff });
 }
+async function resolveCityAndCreate(ctx, req) {
+  const det = detectCity(`${req.pickup} | ${req.dropoff} | ${req.task} | ${req.raw || ""}`, ctx.sess.lastCity);
+  let city = det.city ? titleCity(det.city) : "";
+  if (!city && req.preferredRiderId) {
+    const pr = await SupplierProfile.findById(req.preferredRiderId).lean().catch(() => null);
+    city = pr?.location?.city || "";
+  }
+  if (city) return createAndDispatchJob(ctx, { ...req, city });
 
-async function _askReqCity(from, biz, saveBiz, { pickup, dropoff }) {
-  await sendList(from,
-    `📍 *${pickup} → ${dropoff}*\n\nLast thing - *which city?* (tap one, or type it)`,
-    CITY_ROWS.map(c => ({ id: `biker_reqcity_${c}`, title: c }))
-  );
+  // Couldn't tell - ask once. Likely towns first, then the rest.
+  await setState(ctx.phone, "biker_req_city", { req });
+  const order = [...new Set([...(det.options || []), ctx.sess.lastCity, ...CITY_ROWS].filter(Boolean).map(titleCity))].slice(0, 10);
+  await pick(ctx.from,
+    `📍 *${cut(req.pickup, 40)} → ${cut(req.dropoff, 40)}*\n\nWhich city? (tap, or type it)`,
+    order.map(c => ({ id: `biker_reqcity_${c.toLowerCase()}`, title: c })));
   return true;
 }
-
-// Step 2: city → dispatch immediately (time defaults to "Now").
-async function _reqCityPicked({ from, biz, saveBiz, city }) {
-  const c = titleCity(city);
-  if (!c) { await sendText(from, "Please tap or type the city."); return true; }
-  biz.sessionData.bikerJob = { ...(biz.sessionData.bikerJob || {}), city: c, when: "Now" };
-  await _save(biz, saveBiz);
-  return _createAndDispatchJob({ from, biz, saveBiz });
+async function reqCityPicked(ctx, raw) {
+  if (ctx.sess.state !== "biker_req_city" || !ctx.sess.data.req?.pickup) {
+    await say(ctx.from, "⌛ That request timed out - let's start again.");
+    return startRiderRequest(ctx);
+  }
+  const det = detectCity(raw);
+  const c = titleCity(det.city || raw);
+  if (!c || c.length < 3) { await say(ctx.from, "Please tap or type the city, e.g. *Harare*."); return true; }
+  return createAndDispatchJob(ctx, { ...ctx.sess.data.req, city: c });
 }
 
-async function _createAndDispatchJob({ from, biz, saveBiz }) {
-  const req = biz?.sessionData?.bikerJob || {};
-  const phone = normPhone(from);
-  const city  = titleCity(req.city || "Harare");
-
+async function createAndDispatchJob(ctx, req, { source = "whatsapp", adminName = "", silent = false, noDispatch = false } = {}) {
+  const phone = ctx.phone;
+  const city = titleCity(req.city || "Harare");
   let job;
   try {
-    const reference = `RIDE-${crypto.randomUUID()}`;
-    job = await BikerJob.create({
-      reference,
-      customerPhone: phone,
-      task:    req.task || "",
-      city,
-      pickup:  req.pickup || "",
-      dropoff: req.dropoff || "",
-      when:    req.when || "Now",
-      status:  "open",
-      lastNotifiedAt: new Date()
+    job = new BikerJob({
+      source, createdByAdmin: adminName,
+      customerPhone: phone, customerName: req.customerName || "",
+      task: (req.task || "Delivery").slice(0, 200),
+      city, pickup: tidyPlace(req.pickup).slice(0, 120), dropoff: tidyPlace(req.dropoff).slice(0, 120),
+      when: req.when || "Now", status: "open", openSince: new Date(),
+      preferredRiderId: isObjId(req.preferredRiderId) ? req.preferredRiderId : null,
+      history: [{ by: source === "admin" ? "admin" : "customer", phone, event: "created", note: adminName ? `by ${adminName}` : "" }]
     });
+    job.reference = jobRef(job);
+    await job.save();
   } catch (err) {
     console.error("[BIKER JOB] create failed:", err.message);
-    await sendText(from, "❌ Could not create your request. Please type *menu* and try again.");
-    biz.sessionState = "ready";
-    await _save(biz, saveBiz);
+    if (!silent) await say(ctx.from, "❌ Could not create your request. Please try again, or type *menu*.");
+    await clearState(phone);
+    return silent ? null : true;
+  }
+  await clearState(phone);
+  await setLastCity(phone, city);
+
+  const notified = noDispatch ? 0 : await dispatchJob(job);
+  const ref = jobRef(job);
+  if (silent) return job;
+
+  if (!notified) {
+    await ask(ctx.from,
+      `🔎 *Request saved* (${ref})\n📦 ${job.task}\n📍 ${job.pickup} → ${job.dropoff}\n🏙 ${city}\n\n` +
+      `No riders are online in ${city} right now. Your request stays open for ${BIKER_CONFIG.EXPIRE_NO_OFFER_MIN} min - riders coming online will see it, and prices will arrive here.`,
+      [{ id: `biker_cx_${job._id}`, title: "❌ Cancel request" }, { id: "main_menu_back", title: "🏠 Menu" }]);
     return true;
   }
-
-  // Clear the customer's capture state.
-  biz.sessionState = "ready";
-  if (biz.sessionData) delete biz.sessionData.bikerJob;
-  await _save(biz, saveBiz);
-
-  // Find & notify riders.
-  const riders = await _matchRiders(city, req.pickup || "");
-  const ref = jobRef(job._id);
-
-  if (!riders.length) {
-    await sendButtons(from, {
-      text:
-        `🔎 *No riders are online in ${city} right now* (${ref}).\n\n` +
-        `Your request is saved - we'll alert riders as they come online and connect you here on WhatsApp.`,
-      buttons: [{ id: "biker_request_rider", title: "🔁 Try Again" }, { id: "main_menu_back", title: "🏠 Menu" }]
-    });
-    return true;
-  }
-
-  await Promise.allSettled(riders.map(r => _notifyRiderNewJob(r, job, ref)));
-  await BikerJob.updateOne(
-    { _id: job._id },
-    { $set: { notifiedRiderPhones: riders.map(r => normPhone(r.phone)), lastNotifiedAt: new Date() } }
-  ).catch(() => {});
-
-  await sendText(from,
-    `✅ *Request sent!* (${ref})\n\n` +
-    `📦 ${job.task}\n📍 ${job.pickup} → ${job.dropoff}\n🕒 ${job.when}\n\n` +
-    `We've alerted *${riders.length}* rider${riders.length === 1 ? "" : "s"} near ${city}. ` +
-    `You'll get their fare and ETA here as they respond. Pick the one you like and we'll connect you.`
-  );
+  await ask(ctx.from,
+    `✅ *Request sent!* (${ref})\n📦 ${job.task}\n📍 ${job.pickup} → ${job.dropoff}\n🏙 ${city}\n\n` +
+    (job.preferredRiderId
+      ? `We've sent it to your rider. If they don't respond in ${BIKER_CONFIG.PREFERRED_EXPAND_MIN} min we'll alert other riders.`
+      : `We alerted *${notified}* rider${notified === 1 ? "" : "s"} nearby. Their prices will arrive here - tap *Choose* on the one you like.`) +
+    `\n\n💡 Typical fares: $2-$4 nearby, $5-$8 across town.`,
+    [{ id: `biker_cx_${job._id}`, title: "❌ Cancel request" }, { id: "biker_mydel", title: "📦 My Deliveries" }]);
   return true;
 }
 
-// Rank: online first, then verified, then rating, then trips. Area match boosts.
-async function _matchRiders(city, pickup) {
+// ═════════════════════════════════════════════════════════════════════════════
+// MATCHING + RIDER ALERTS
+// ═════════════════════════════════════════════════════════════════════════════
+async function findRiders({ city, pickup = "", exclude = [], limit = BIKER_CONFIG.MAX_RIDERS_PER_JOB }) {
+  const group = metroGroup(city);
+  if (!group.length) return [];
   const all = await SupplierProfile.find({
-    profileType: "biker",
-    active: true,
-    suspended: { $ne: true }
-  }).lean().catch(() => []);
+    profileType: "biker", active: true, suspended: { $ne: true }, riderActive: { $ne: false },
+    "location.city": { $in: group.map(c => new RegExp(`^${escRe(c)}$`, "i")) }
+  }).setOptions({ strictQuery: false }).limit(500).lean().catch(() => []);
+  const ex = new Set(exclude.map(normPhone));
+  const pool = all.filter(r => r.phone && !ex.has(normPhone(r.phone)));
+  if (!pool.length) return [];
 
-  const pick = String(pickup || "").toLowerCase();
-  const inCity = all.filter(r => cityEq(r.location?.city, city));
-  const scored = inCity.map(r => {
-    const areas = (r.riderAreas || []).map(x => String(x).toLowerCase());
-    const areaMatch = pick && areas.some(ar => pick.includes(ar) || ar.includes(pick)) ? 1 : 0;
-    return {
-      r,
-      score:
-        (r.riderActive !== false ? 1000 : 0) +
-        areaMatch * 500 +
+  // Riders already carrying MAX_ACTIVE_JOBS are skipped.
+  const busy = await BikerJob.aggregate([
+    { $match: { status: { $in: ACTIVE_STATUSES }, assignedRiderPhone: { $in: pool.map(r => normPhone(r.phone)) } } },
+    { $group: { _id: "$assignedRiderPhone", n: { $sum: 1 } } }
+  ]).catch(() => []);
+  const busyMap = new Map(busy.map(b => [b._id, b.n]));
+
+  const pickL = String(pickup || "").toLowerCase();
+  return pool
+    .filter(r => (busyMap.get(normPhone(r.phone)) || 0) < BIKER_CONFIG.MAX_ACTIVE_JOBS)
+    .map(r => {
+      const areas = (r.riderAreas || []).map(x => String(x).toLowerCase()).filter(Boolean);
+      const areaMatch = pickL && areas.some(ar => pickL.includes(ar) || ar.includes(pickL));
+      const score =
+        (areaMatch ? 500 : areas.length ? 0 : 150) +          // "whole city" riders sit between
         (r.bike?.verifiedAt ? 100 : 0) +
-        (Number(r.rating) || 0) * 10 +
-        (Number(r.completedTrips) || 0)
-    };
-  });
-  scored.sort((a, b) => b.score - a.score);
-  return scored.slice(0, MAX_RIDERS_PER_JOB).map(s => s.r);
+        Math.min(Number(r.riderPoints) || 0, 1000) * 0.2 +
+        (Number(r.rating) || 0) * 20 -
+        (Number(r.riderMissedPings) || 0) * 10 +
+        Math.random() * 120;                                    // fair rotation between similar riders
+      return { r, score };
+    })
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map(s => s.r);
 }
 
-// ── Rider job notification (template with buttons, fallback to sendButtons) ──
-async function _notifyRiderNewJob(rider, job, ref) {
+// Alert riders about a job. Returns how many were alerted.
+async function dispatchJob(job, { expand = false } = {}) {
+  const exclude = [job.customerPhone, ...(job.notifiedRiderPhones || []), ...(job.cancelledRiderPhones || []), ...(job.busyRiderPhones || [])];
+  let riders = [];
+  if (job.preferredRiderId && !expand) {
+    const pr = await SupplierProfile.findById(job.preferredRiderId).lean().catch(() => null);
+    if (pr && pr.active && !pr.suspended && !exclude.map(normPhone).includes(normPhone(pr.phone)) &&
+        (await activeJobCount(pr.phone)) < BIKER_CONFIG.MAX_ACTIVE_JOBS) riders = [pr];
+  }
+  if (!riders.length) riders = await findRiders({ city: job.city, pickup: job.pickup, exclude });
+  if (!riders.length) return 0;
+
+  const phones = riders.map(r => normPhone(r.phone));
+  await BikerJob.updateOne({ _id: job._id }, { $addToSet: { notifiedRiderPhones: { $each: phones } }, $set: { lastNotifiedAt: new Date() } }).catch(() => {});
+  await Promise.allSettled(riders.map(r => notifyRiderNewJob(r, job)));
+
+  // Missed-ping counter: riders who keep ignoring alerts are paused automatically.
+  await SupplierProfile.updateMany({ _id: { $in: riders.map(r => r._id) } }, { $inc: { riderMissedPings: 1 } }, { strict: false }).catch(() => {});
+  const toPause = riders.filter(r => (Number(r.riderMissedPings) || 0) + 1 >= BIKER_CONFIG.MISSED_PINGS_OFFLINE);
+  for (const r of toPause) {
+    await updateRider({ _id: r._id }, { $set: { riderActive: false, riderMissedPings: 0 } });
+    await ask(r.phone, `⏸ *We paused your job alerts* - you missed ${BIKER_CONFIG.MISSED_PINGS_OFFLINE} jobs in a row.\n\nTap *Go Online* when you're ready to ride again.`,
+      [{ id: "biker_toggle_online", title: "🟢 Go Online" }]);
+  }
+  return riders.length;
+}
+
+async function notifyRiderNewJob(rider, job) {
   const phone = normPhone(rider.phone);
-  const jobId = String(job._id);
+  const id = String(job._id);
+  const ref = jobRef(job);
+  const preferred = job.preferredRiderId && String(job.preferredRiderId) === String(rider._id);
+  // Template first: riders are often outside the 24h window when a job appears.
   try {
-    await _sendJobTemplate(phone, [
-      job.task || "Errand", `${job.pickup} → ${job.dropoff}`, job.when || "Now", ref
-    ], jobId);
-    console.log(`[BIKER] zq_rider_new_job → ${phone} (${ref})`);
+    await sendJobTemplate(phone, [job.task || "Delivery", `${job.pickup} → ${job.dropoff}`, job.when || "Now", ref], id);
     return;
   } catch (err) {
-    console.warn(`[BIKER] job template failed for ${phone}: ${err.message}. Falling back to buttons.`);
+    console.warn(`[BIKER] zq_rider_new_job → ${phone} failed: ${err?.response?.data?.error?.message || err.message}. Using buttons.`);
   }
-  try {
-    await sendButtons(phone, {
-      text:
-        `🏍️ *New job near you!* (${ref})\n\n` +
-        `📦 ${job.task}\n📍 ${job.pickup} → ${job.dropoff}\n🕒 ${job.when}\n\n` +
-        `Tap *I'll do it* and send your fare + ETA to take this job.`,
-      buttons: [
-        { id: `biker_accept_${jobId}`, title: "✅ I'll do it" },
-        { id: `biker_busy_${jobId}`,   title: "❌ Busy" }
-      ]
-    });
-  } catch (e) {
-    console.warn(`[BIKER] job fallback failed for ${phone}: ${e.message}`);
-  }
+  await ask(phone,
+    `🏍️ *${preferred ? "A customer booked YOU!" : "New job near you!"}* (${ref})\n\n📦 ${job.task}\n📍 ${job.pickup} → ${job.dropoff}\n🏙 ${job.city}\n🕒 ${job.when || "Now"}\n\nTap *I'll do it* to send your price.`,
+    [{ id: `biker_accept_${id}`, title: "✅ I'll do it" }, { id: `biker_busy_${id}`, title: "❌ Busy" }]);
 }
 
-// Meta template with 2 quick-reply buttons (dynamic payloads). Mirrors the
-// buyer-request v2 sender. Template name: zq_rider_new_job.
-async function _sendJobTemplate(to, variables, jobId) {
-  const phone = normPhone(to);
+// Template zq_rider_new_job: {{1}} task {{2}} route {{3}} when {{4}} ref, 2 quick replies.
+async function sendJobTemplate(to, variables, jobId) {
   const components = [
-    { type: "body", parameters: variables.map(v => ({ type: "text", text: String(v).slice(0, 1024) })) },
+    { type: "body", parameters: variables.map(v => ({ type: "text", text: String(v || "-").replace(/[\n\t]+/g, " ").slice(0, 900) })) },
     { type: "button", sub_type: "quick_reply", index: "0", parameters: [{ type: "payload", payload: `biker_accept_${jobId}` }] },
     { type: "button", sub_type: "quick_reply", index: "1", parameters: [{ type: "payload", payload: `biker_busy_${jobId}` }] }
   ];
   const res = await axios.post(
     `https://graph.facebook.com/${GRAPH_API_VERSION}/${PHONE_NUMBER_ID}/messages`,
-    { messaging_product: "whatsapp", to: phone, type: "template",
-      template: { name: "zq_rider_new_job", language: { code: "en" }, components } },
-    { headers: { Authorization: `Bearer ${ACCESS_TOKEN}`, "Content-Type": "application/json" } }
+    { messaging_product: "whatsapp", to: normPhone(to), type: "template", template: { name: "zq_rider_new_job", language: { code: "en" }, components } },
+    { headers: { Authorization: `Bearer ${ACCESS_TOKEN}`, "Content-Type": "application/json" }, timeout: 15000 }
   );
   return res.data;
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// RIDER RESPONDS
+// RIDER: ACCEPT → PRICE → ETA
 // ═════════════════════════════════════════════════════════════════════════════
-async function _riderAccept({ from, biz, saveBiz, jobId }) {
-  const job = await _getJob(jobId);
+async function getJob(id) {
+  if (!isObjId(id)) return null;
+  return BikerJob.findById(id).lean().catch(() => null);
+}
+
+async function riderAccept(ctx, jobId) {
+  const rider = await guardRider(ctx);
+  if (!rider) return true;
+  await updateRider({ _id: rider._id }, { $set: { riderMissedPings: 0, riderLastSeenAt: new Date() } });
+  const job = await getJob(jobId);
   if (!job || job.status !== "open") {
-    await sendText(from, "⌛ That job is no longer available. We'll alert you when the next one comes in.");
+    await ask(ctx.from, `⌛ ${job ? jobRef(job) + " was already taken or closed." : "That job is no longer available."}`,
+      [{ id: "biker_openjobs", title: "🔔 Other open jobs" }, { id: "biker_menu", title: "🏍️ Rider Menu" }]);
     return true;
   }
-  if (biz) {
-    biz.sessionState = `biker_fare_${jobId}`;
-    await _save(biz, saveBiz);
+  if (normPhone(job.customerPhone) === ctx.phone) { await say(ctx.from, "ℹ️ That's your own request."); return true; }
+  if ((job.cancelledRiderPhones || []).includes(ctx.phone)) { await say(ctx.from, "ℹ️ You dropped this job earlier, so it went to other riders."); return true; }
+  if ((await activeJobCount(ctx.phone)) >= BIKER_CONFIG.MAX_ACTIVE_JOBS) {
+    await ask(ctx.from, `🚦 You already have ${BIKER_CONFIG.MAX_ACTIVE_JOBS} active jobs. Finish one first, then take more.`,
+      [{ id: "biker_active", title: "📋 My Jobs" }]);
+    return true;
   }
-  await sendText(from,
-    `👍 Great! For *${jobRef(job._id)}* (${job.pickup} → ${job.dropoff})\n\n` +
-    `Reply with your *fare and ETA* in one message.\n` +
-    `_e.g. $3, 15 min_`
-  );
+  const mine = (job.responses || []).find(r => normPhone(r.riderPhone) === ctx.phone);
+  await setState(ctx.phone, `biker_fare_${job._id}`, {});
+  await pick(ctx.from,
+    `💵 *Your price for ${jobRef(job)}?*\n📦 ${job.task}\n📍 ${job.pickup} → ${job.dropoff}\n` +
+    `${mine ? `\n_You offered ${mine.fare} - pick again to change it._\n` : ""}` +
+    `\nTap a price 👇 or *type* it with your ETA, e.g. _4, 15 min_ or _ZiG 100_`,
+    [...FARE_CHOICES.map(n => ({ id: `biker_fare_${job._id}_${n}`, title: `$${n}`, description: n <= 4 ? "Short trip" : n <= 8 ? "Across town" : "Far / heavy" })),
+     { id: `biker_fare_${job._id}_x`, title: "✍️ Other amount", description: "Type your own price (USD or ZiG)" }]);
   return true;
 }
 
-async function _riderBusy({ from, jobId }) {
-  await sendText(from, "👌 No problem - marked as busy. We'll send you the next job.");
+async function riderBusy(ctx, jobId) {
+  if (isObjId(jobId)) await BikerJob.updateOne({ _id: jobId }, { $addToSet: { busyRiderPhones: ctx.phone } }).catch(() => {});
+  await updateRider({ phone: { $in: phoneVariants(ctx.phone) }, profileType: "biker" }, { $set: { riderMissedPings: 0, riderLastSeenAt: new Date() } });
+  await ask(ctx.from, "👌 No problem - we'll send you the next one.\n\n_On a break? Go offline so customers get faster replies._",
+    [{ id: "biker_toggle_online", title: "⏸ Go Offline" }, { id: "biker_openjobs", title: "🔔 Other jobs" }]);
   return true;
 }
 
-async function _riderFare({ from, biz, saveBiz, jobId, input }) {
-  const job = await _getJob(jobId);
-  if (!job || job.status !== "open") {
-    await sendText(from, "⌛ That job is no longer open.");
-    if (biz) { biz.sessionState = "ready"; await _save(biz, saveBiz); }
+async function riderFareTap(ctx, jobId, amt) {
+  if (!isObjId(jobId)) return false;
+  if (amt === "x") {
+    await setState(ctx.phone, `biker_fare_${jobId}`, {});
+    await say(ctx.from, "✍️ Type your price (and ETA if you like):\n_e.g. 4, 15 min_  ·  _ZiG 100, 30 min_");
     return true;
   }
-  const phone = normPhone(from);
-  const rider = await SupplierProfile.findOne({ phone, profileType: "biker" }).lean().catch(() => null);
+  const n = Number(amt);
+  if (!(n > 0)) return false;
+  return askEta(ctx, jobId, String(n), `$${n}`);
+}
+async function askEta(ctx, jobId, amtToken, fareLabel) {
+  const job = await getJob(jobId);
+  if (!job || job.status !== "open") { await say(ctx.from, "⌛ That job is no longer open."); return true; }
+  await ask(ctx.from, `⏱ *How soon can you pick it up?*\n${jobRef(job)} · ${fareLabel}`, [
+    { id: `biker_eta_${jobId}_${amtToken}_10`, title: "⚡ 10 min" },
+    { id: `biker_eta_${jobId}_${amtToken}_20`, title: "🕐 20 min" },
+    { id: `biker_eta_${jobId}_${amtToken}_40`, title: "🕑 30-45 min" }
+  ]);
+  return true;
+}
+async function riderEtaTap(ctx, jobId, amtToken, min) {
+  if (!isObjId(jobId)) return false;
+  let fare, amount;
+  if (amtToken === "d") {                 // typed fare stored as draft (loaded before the tap cleared state)
+    const d = ctx.sess.data?.fareDraft;
+    if (!d || d.jobId !== jobId) {
+      await say(ctx.from, "⌛ Please send your price again.");
+      return riderAccept(ctx, jobId);
+    }
+    fare = d.fare; amount = d.amount;
+  } else {
+    amount = Number(amtToken); fare = `$${amount}`;
+  }
+  const eta = min === "40" ? "30-45 min" : `${Number(min) || 20} min`;
+  return submitOffer(ctx, jobId, fare, amount, eta);
+}
+async function riderFareTyped(ctx, jobId, input) {
+  const f = parseFare(input);
+  if (!f.ok) { await say(ctx.from, "Please type a price, e.g. *3* or *$5, 15 min* or *ZiG 100*."); return true; }
+  if (f.eta) { await clearState(ctx.phone); return submitOffer(ctx, jobId, f.fare, f.amount, f.eta); }
+  await setState(ctx.phone, `biker_fare_${jobId}`, { fareDraft: { jobId, fare: f.fare, amount: f.amount } });
+  return askEta(ctx, jobId, "d", f.fare);
+}
 
-  // Parse "fare, eta" (comma or " - " separated); be lenient.
-  const parts = String(input || "").split(/[,|·\-–]| and /i).map(s => s.trim()).filter(Boolean);
-  const fare = parts[0] || String(input || "").trim();
-  const eta  = parts[1] || "";
+async function submitOffer(ctx, jobId, fare, amount, eta) {
+  const rider = await guardRider(ctx);
+  if (!rider) return true;
+  const job = await getJob(jobId);
+  if (!job || job.status !== "open") {
+    await ask(ctx.from, "⌛ Too late - that job was taken or closed.", [{ id: "biker_openjobs", title: "🔔 Other open jobs" }]);
+    return true;
+  }
+  const resp = {
+    riderId: rider._id, riderPhone: ctx.phone, riderName: riderName(rider), plate: rider.bike?.plate || "",
+    fare, fareAmount: Number(amount) || null, eta,
+    verified: !!rider.bike?.verifiedAt, rating: Number(rider.rating) || 0,
+    points: Number(rider.riderPoints) || 0, trips: Number(rider.completedTrips) || 0,
+    respondedAt: new Date()
+  };
+  // Update an existing offer, or push a new one - only while the job is open.
+  let r = await BikerJob.updateOne({ _id: job._id, status: "open", "responses.riderPhone": ctx.phone }, { $set: { "responses.$": resp } });
+  let updatedExisting = r.modifiedCount > 0 || r.nModified > 0;
+  if (!updatedExisting) {
+    r = await BikerJob.updateOne(
+      { _id: job._id, status: "open", "responses.riderPhone": { $ne: ctx.phone }, cancelledRiderPhones: { $ne: ctx.phone } },
+      { $push: { responses: resp, history: { by: "rider", phone: ctx.phone, event: "offer", note: `${fare} · ${eta}` } } });
+    if (!(r.modifiedCount > 0 || r.nModified > 0)) {
+      await ask(ctx.from, "⌛ Too late - that job was taken or closed.", [{ id: "biker_openjobs", title: "🔔 Other open jobs" }]);
+      return true;
+    }
+  }
+  await clearState(ctx.phone);
+  await ask(ctx.from,
+    `✅ *Price sent!* ${jobRef(job)} · ${fare} · ⏱ ${eta}\n\nIf the customer picks you, we'll send their number here right away.`,
+    [{ id: "biker_openjobs", title: "🔔 More jobs" }, { id: "biker_menu", title: "🏍️ Rider Menu" }]);
 
-  await BikerJob.updateOne(
+  const fresh = await getJob(jobId);
+  await notifyCustomerOffer(fresh || job, resp, updatedExisting);
+  return true;
+}
+
+// ── Customer side of offers (burst-safe) ─────────────────────────────────────
+const _offerBurst = new Map(); // jobId → { last, timer }
+async function notifyCustomerOffer(job, resp, isUpdate) {
+  const id = String(job._id);
+  const n = (job.responses || []).length;
+  const st = _offerBurst.get(id) || { last: 0, timer: null };
+  const since = Date.now() - st.last;
+  if (since < BIKER_CONFIG.OFFER_BURST_SEC * 1000) {
+    // Many riders answering at once: send ONE combined list shortly, not N messages.
+    if (!st.timer) {
+      st.timer = setTimeout(async () => {
+        st.timer = null; st.last = Date.now();
+        try {
+          const j = await getJob(id);
+          if (j && j.status === "open") await sendOffers({ from: j.customerPhone, phone: normPhone(j.customerPhone), sess: { state: "" } }, id, j, true);
+        } catch (e) { console.warn("[BIKER] burst offers failed:", e.message); }
+      }, BIKER_CONFIG.OFFER_BURST_SEC * 1000 - since);
+      if (st.timer.unref) st.timer.unref();
+    }
+    _offerBurst.set(id, st);
+    return;
+  }
+  st.last = Date.now();
+  _offerBurst.set(id, st);
+  if (_offerBurst.size > 5000) _offerBurst.clear();
+
+  const lvl = riderLevel(resp.points);
+  const buttons = [
+    { id: `biker_choose_${id}__${resp.riderPhone}`, title: `✅ Choose ${firstName(resp.riderName)}` },
+    n > 1 ? { id: `biker_offers_${id}`, title: `📋 All prices (${n})` } : null,
+    { id: `biker_cx_${id}`, title: "❌ Cancel" }
+  ];
+  await notifyParty(job.customerPhone, {
+    ref: jobRef(job), line: `${resp.riderName} offered ${resp.fare}, ETA ${resp.eta}. Reply to this message to choose.`,
+    text:
+      `🏍️ *${isUpdate ? "Updated price" : "New price"} for your delivery* (${jobRef(job)})\n\n` +
+      `👤 *${resp.riderName}*${resp.verified ? " ✅" : ""} · ${lvl.emoji} ${lvl.name}\n` +
+      `⭐ ${resp.rating ? resp.rating.toFixed(1) : "New"} · ${plural(resp.trips || 0, "trip")} · 🏍️ ${resp.plate || "-"}\n` +
+      `💵 *${resp.fare}* · ⏱ ${resp.eta}\n\n` +
+      (n > 1 ? `You have *${n}* prices - tap *All prices* to compare.` : `More prices may come - choose now or wait a bit.`),
+    buttons: buttons.filter(Boolean)
+  });
+}
+
+async function sendOffers(ctx, jobId, job = null, fromBurst = false) {
+  job = job || await getJob(jobId);
+  if (!job || normPhone(job.customerPhone) !== ctx.phone) { await say(ctx.from, "That request was not found."); return true; }
+  if (job.status !== "open") return sendJobCard(ctx, String(job._id), job);
+  const offers = [...(job.responses || [])].sort((a, b) =>
+    (a.fareAmount ?? 9999) - (b.fareAmount ?? 9999) || (b.rating || 0) - (a.rating || 0));
+  if (!offers.length) {
+    await ask(ctx.from, `⏳ No prices yet for ${jobRef(job)}. Riders have been alerted - prices will arrive here.`,
+      [{ id: `biker_cx_${job._id}`, title: "❌ Cancel request" }]);
+    return true;
+  }
+  await pick(ctx.from,
+    `📋 *${fromBurst ? "Prices are coming in" : "Prices"} for ${jobRef(job)}* (${offers.length})\n📍 ${job.pickup} → ${job.dropoff}\n\nCheapest first. Tap a rider to choose 👇`,
+    offers.slice(0, 10).map(o => ({
+      id: `biker_choose_${job._id}__${normPhone(o.riderPhone)}`,
+      title: `${o.fare} · ${firstName(o.riderName)}`,
+      description: `⏱ ${o.eta || "-"} · ⭐${o.rating ? o.rating.toFixed(1) : "new"} · ${o.trips || 0} trips · ${riderLevel(o.points).emoji}${o.verified ? " · ✅" : ""}`
+    })));
+  return true;
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// CUSTOMER CHOOSES A RIDER  (atomic - no double booking)
+// ═════════════════════════════════════════════════════════════════════════════
+async function customerChoose(ctx, payload) {
+  const [jobId, riderPhoneRaw] = String(payload || "").split("__");
+  const rPhone = normPhone(riderPhoneRaw);
+  const job = await getJob(jobId);
+  if (!job || normPhone(job.customerPhone) !== ctx.phone) { await say(ctx.from, "That request was not found."); return true; }
+  if (job.status !== "open") {
+    if (normPhone(job.assignedRiderPhone) === rPhone) return sendJobCard(ctx, jobId, job);
+    await say(ctx.from, job.status === "cancelled" || job.status === "expired"
+      ? `ℹ️ ${jobRef(job)} is ${job.status}.` : `ℹ️ You already chose a rider for ${jobRef(job)}.`);
+    return sendJobCard(ctx, jobId, job);
+  }
+  const resp = (job.responses || []).find(r => normPhone(r.riderPhone) === rPhone);
+  if (!resp) { await say(ctx.from, "⚠️ That rider withdrew their price."); return sendOffers(ctx, jobId, job); }
+  if ((await activeJobCount(rPhone)) >= BIKER_CONFIG.MAX_ACTIVE_JOBS) {
+    await say(ctx.from, `⚠️ ${resp.riderName} just became fully booked. Please choose another rider.`);
+    return sendOffers(ctx, jobId, job);
+  }
+  return assignRider(job, resp, { by: "customer", customerCtx: ctx });
+}
+
+// Shared by customer choice + admin assignment.
+async function assignRider(job, resp, { by = "customer", customerCtx = null, adminName = "" } = {}) {
+  const rPhone = normPhone(resp.riderPhone);
+  const rider = await getRider(rPhone);
+  const updated = await BikerJob.findOneAndUpdate(
     { _id: job._id, status: "open" },
-    { $push: { responses: {
-        riderId:   rider?._id || null,
-        riderPhone: phone,
-        riderName: rider?.businessName?.replace(/\s*\(Rider\)$/i, "") || "Rider",
-        plate:     rider?.bike?.plate || "",
-        fare, eta,
-        verified:  !!rider?.bike?.verifiedAt,
-        rating:    Number(rider?.rating) || 0,
-        respondedAt: new Date()
-    } } }
-  ).catch(() => {});
+    { $set: {
+        status: "assigned", assignedRiderId: rider?._id || resp.riderId || null, assignedRiderPhone: rPhone,
+        assignedRiderName: resp.riderName || riderName(rider), agreedFare: resp.fare || "", agreedFareAmount: resp.fareAmount ?? null,
+        agreedEta: resp.eta || "", assignedAt: new Date()
+      },
+      $push: { history: { by, phone: by === "customer" ? normPhone(job.customerPhone) : "", event: "assigned", note: `${resp.riderName} ${resp.fare || ""}${adminName ? " · " + adminName : ""}` } } },
+    { new: true }
+  ).lean();
+  if (!updated) {
+    if (customerCtx) await say(customerCtx.from, "ℹ️ This request was just updated - here's the latest.");
+    if (customerCtx) return sendJobCard(customerCtx, String(job._id));
+    return null;
+  }
+  const ref = jobRef(updated);
+  const id = String(updated._id);
 
-  if (biz) { biz.sessionState = "ready"; await _save(biz, saveBiz); }
-  await sendText(from, `✅ Sent to the customer! If they pick you, we'll share their number here. (${jobRef(job._id)})`);
+  // Customer
+  await notifyParty(updated.customerPhone, {
+    ref, line: `Rider ${updated.assignedRiderName} booked, ${updated.agreedFare}. Call ${displayPhone(rPhone)}.`,
+    text:
+      `✅ *Rider booked!* (${ref})\n\n` +
+      `👤 *${updated.assignedRiderName}*${resp.verified ? " ✅" : ""}\n🏍️ ${resp.plate || rider?.bike?.plate || "-"}\n` +
+      `💵 ${updated.agreedFare || "Agree on pickup"}${updated.agreedEta ? ` · ⏱ ${updated.agreedEta}` : ""}\n` +
+      `📞 *${displayPhone(rPhone)}*\n\n` +
+      `👉 Call or WhatsApp the rider now to share the exact address.\n` +
+      `🛡 Pay on delivery (cash / EcoCash). Check the plate matches.`,
+    buttons: [
+      { id: `biker_rcv_${id}`, title: "✅ I received it" },
+      { id: `biker_cx_${id}`,  title: "❌ Cancel" },
+      { id: "biker_mydel",     title: "📦 My Deliveries" }
+    ]
+  });
 
-  // Notify the customer that a rider responded.
-  await _notifyCustomerResponder(job, {
-    riderPhone: phone,
-    riderName:  rider?.businessName?.replace(/\s*\(Rider\)$/i, "") || "Rider",
-    plate:      rider?.bike?.plate || "",
-    fare, eta,
-    verified:   !!rider?.bike?.verifiedAt,
-    rating:     Number(rider?.rating) || 0
+  // Rider (interactive first - they just responded; template fallback)
+  const riderText =
+    `🎉 *You got the job!* (${ref})\n\n📦 ${updated.task}\n📍 ${updated.pickup} → ${updated.dropoff}\n🏙 ${updated.city}\n` +
+    `💵 ${updated.agreedFare || "Agree with customer"}\n📞 Customer: *${displayPhone(updated.customerPhone)}*` +
+    (updated.customerName ? ` (${updated.customerName})` : "") +
+    `\n\n👉 Call the customer now to confirm the exact address. Tap *Picked up* when you collect.`;
+  const okRider = await ask(rPhone, riderText, [
+    { id: `biker_pick_${id}`, title: "📦 Picked up" },
+    { id: `biker_done_${id}`, title: "✅ Delivered" },
+    { id: `biker_cx_${id}`,   title: "❌ Cancel job" }
+  ]);
+  if (!okRider) {
+    await _sendTemplate(rPhone, "zq_rider_matched", [
+      updated.assignedRiderName || "Rider", resp.plate || "-", updated.agreedFare || "-", updated.agreedEta || "-", displayPhone(updated.customerPhone)
+    ]).catch(e => console.warn(`[BIKER] zq_rider_matched → ${rPhone} failed: ${e.message}`));
+  }
+  await updateRider({ phone: { $in: phoneVariants(rPhone) }, profileType: "biker" }, { $set: { riderMissedPings: 0 } });
+
+  // Other riders who sent prices: let them know (courtesy, keeps them engaged)
+  const others = (updated.responses || []).map(r => normPhone(r.riderPhone)).filter(p => p && p !== rPhone);
+  await Promise.allSettled(others.map(p => say(p, `🙏 ${ref} went to another rider. Stay online - more jobs are coming.`)));
+  return updated;
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// JOB CARD + MY DELIVERIES
+// ═════════════════════════════════════════════════════════════════════════════
+function statusEmoji(s) {
+  return { open: "🟡", assigned: "🏍️", picked_up: "📦", delivered: "📬", completed: "✅", cancelled: "❌", expired: "⌛" }[s] || "•";
+}
+function statusLabel(s) {
+  return { open: "Waiting for riders", assigned: "Rider on the way", picked_up: "Picked up - on the way", delivered: "Delivered - please confirm",
+           completed: "Completed", cancelled: "Cancelled", expired: "Expired" }[s] || s;
+}
+
+async function sendMyDeliveries(ctx) {
+  await clearState(ctx.phone);
+  const jobs = await BikerJob.find({ customerPhone: ctx.phone }).sort({ createdAt: -1 }).limit(10).lean().catch(() => []);
+  if (!jobs.length) {
+    await ask(ctx.from, "📦 You have no deliveries yet.", [{ id: "biker_request_rider", title: "🏍️ Request a Biker" }, { id: "main_menu_back", title: "🏠 Menu" }]);
+    return true;
+  }
+  const live = jobs.filter(j => LIVE_STATUSES.includes(j.status));
+  if (live.length === 1 && jobs.length === 1) return sendJobCard(ctx, String(live[0]._id), live[0]);
+  await pick(ctx.from, `📦 *My Deliveries*\n${live.length} active · newest first. Tap one 👇`,
+    jobs.map(j => ({
+      id: `biker_job_${j._id}`,
+      title: `${statusEmoji(j.status)} ${cut(j.dropoff, 20)}`,
+      description: `${cut(j.pickup, 16)}→${cut(j.dropoff, 16)} · ${statusLabel(j.status)} · ${jobRef(j)}`
+    })));
+  return true;
+}
+
+async function sendJobCard(ctx, jobId, job = null) {
+  job = job || await getJob(jobId);
+  if (!job) { await say(ctx.from, "That job was not found."); return true; }
+  const id = String(job._id);
+  const ref = jobRef(job);
+  const isCustomer = normPhone(job.customerPhone) === ctx.phone;
+  const isRiderOfJob = normPhone(job.assignedRiderPhone) === ctx.phone;
+  const head = `${statusEmoji(job.status)} *${ref}* - ${statusLabel(job.status)}\n📦 ${job.task}\n📍 ${job.pickup} → ${job.dropoff}\n🏙 ${job.city}`;
+
+  if (isRiderOfJob) {
+    const body = `${head}\n💵 ${job.agreedFare || "-"}\n📞 Customer: ${displayPhone(job.customerPhone)}`;
+    if (job.status === "assigned")  return ask(ctx.from, body, [{ id: `biker_pick_${id}`, title: "📦 Picked up" }, { id: `biker_done_${id}`, title: "✅ Delivered" }, { id: `biker_cx_${id}`, title: "❌ Cancel job" }]);
+    if (job.status === "picked_up") return ask(ctx.from, body, [{ id: `biker_done_${id}`, title: "✅ Delivered" }, { id: `biker_cx_${id}`, title: "❌ Cancel job" }, { id: "biker_menu", title: "🏍️ Rider Menu" }]);
+    return ask(ctx.from, body + (job.status === "delivered" ? "\n\n⏳ Waiting for the customer to confirm." : ""), [{ id: "biker_active", title: "📋 My Jobs" }, { id: "biker_menu", title: "🏍️ Rider Menu" }]);
+  }
+  if (isCustomer) {
+    const riderLine = job.assignedRiderPhone
+      ? `\n\n👤 ${job.assignedRiderName || "Rider"} · 📞 ${displayPhone(job.assignedRiderPhone)}\n💵 ${job.agreedFare || "-"}${job.agreedEta ? ` · ⏱ ${job.agreedEta}` : ""}` : "";
+    if (job.status === "open") {
+      const n = (job.responses || []).length;
+      return ask(ctx.from, `${head}\n\n${n ? `💬 ${n} price(s) received.` : "⏳ No prices yet - riders have been alerted."}`, [
+        n ? { id: `biker_offers_${id}`, title: `📋 See prices (${n})` } : null,
+        { id: `biker_cx_${id}`, title: "❌ Cancel request" },
+        { id: "biker_mydel", title: "📦 My Deliveries" }
+      ].filter(Boolean));
+    }
+    if (ACTIVE_STATUSES.includes(job.status)) return ask(ctx.from, head + riderLine, [
+      { id: `biker_rcv_${id}`, title: "✅ I received it" }, { id: `biker_cx_${id}`, title: "❌ Cancel" }, { id: "biker_mydel", title: "📦 My Deliveries" }]);
+    if (job.status === "delivered") return ask(ctx.from, head + riderLine + (job.riderNote ? `\n📝 Rider: ${job.riderNote}` : "") + "\n\nDid you receive it?", [
+      { id: `biker_rcv_${id}`, title: "✅ Yes, received" }, { id: `biker_prob_${id}`, title: "⚠️ Problem" }]);
+    return ask(ctx.from, head + riderLine +
+      (job.cancelReason ? `\n❌ Reason: ${job.cancelReason}` : "") +
+      (job.customerRating ? `\n⭐ You rated ${job.customerRating}/5` : ""), [
+      { id: `biker_rebook_${id}`, title: "🔁 Same trip again" }, { id: "biker_mydel", title: "📦 My Deliveries" }]);
+  }
+  // A rider looking at an open job (from an alert)
+  if (job.status === "open") return ask(ctx.from, head, [{ id: `biker_accept_${id}`, title: "✅ I'll do it" }, { id: `biker_busy_${id}`, title: "❌ Busy" }]);
+  await say(ctx.from, `ℹ️ ${ref} is no longer available.`);
+  return true;
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// RIDER: PICKED UP → DELIVERED (+ note)
+// ═════════════════════════════════════════════════════════════════════════════
+async function riderPickedUp(ctx, jobId) {
+  const updated = await BikerJob.findOneAndUpdate(
+    { _id: isObjId(jobId) ? jobId : null, assignedRiderPhone: ctx.phone, status: "assigned" },
+    { $set: { status: "picked_up", pickedUpAt: new Date() }, $push: { history: { by: "rider", phone: ctx.phone, event: "picked_up" } } },
+    { new: true }).lean().catch(() => null);
+  if (!updated) return sendJobCard(ctx, jobId);
+  const ref = jobRef(updated), id = String(updated._id);
+  await ask(ctx.from, `📦 *Picked up* (${ref}). Ride safe! Tap *Delivered* when you hand it over.`,
+    [{ id: `biker_done_${id}`, title: "✅ Delivered" }, { id: `biker_cx_${id}`, title: "❌ Cancel job" }]);
+  await notifyParty(updated.customerPhone, {
+    ref, line: `Your rider collected it and is on the way to ${updated.dropoff}.`,
+    text: `📦 *Your rider has collected it!* (${ref})\n🏍️ ${updated.assignedRiderName} is on the way to *${updated.dropoff}*.\n📞 ${displayPhone(updated.assignedRiderPhone)}`,
+    buttons: [{ id: `biker_rcv_${id}`, title: "✅ I received it" }, { id: "biker_mydel", title: "📦 My Deliveries" }]
   });
   return true;
 }
 
-async function _notifyCustomerResponder(job, resp) {
-  const ref = jobRef(job._id);
-  try {
-    await sendButtons(job.customerPhone, {
-      text:
-        `🏍️ *A rider responded!* (${ref})\n\n` +
-        `👤 ${resp.riderName}${resp.verified ? " ✅" : ""}${resp.rating ? ` · ⭐ ${resp.rating.toFixed(1)}` : ""}\n` +
-        `🏍️ Plate: ${resp.plate || "-"}\n` +
-        `💵 Fare: ${resp.fare || "-"}${resp.eta ? ` · ⏱ ${resp.eta}` : ""}\n\n` +
-        `Tap *Choose* to connect with this rider.`,
-      buttons: [
-        { id: `biker_choose_${String(job._id)}__${normPhone(resp.riderPhone)}`, title: "✅ Choose this rider" },
-        { id: "biker_request_rider", title: "🔁 New request" }
-      ]
-    });
-  } catch (e) {
-    console.warn(`[BIKER] customer notify failed: ${e.message}`);
+async function riderDelivered(ctx, jobId) {
+  const updated = await BikerJob.findOneAndUpdate(
+    { _id: isObjId(jobId) ? jobId : null, assignedRiderPhone: ctx.phone, status: { $in: ACTIVE_STATUSES } },
+    { $set: { status: "delivered", deliveredAt: new Date() }, $push: { history: { by: "rider", phone: ctx.phone, event: "delivered" } } },
+    { new: true }).lean().catch(() => null);
+  if (!updated) return sendJobCard(ctx, jobId);
+  const ref = jobRef(updated), id = String(updated._id);
+  await setState(ctx.phone, `biker_dnote_${id}`, {});
+  await ask(ctx.from, `✅ *Marked delivered* (${ref})\n\nQuick note for the record? Tap one, or type your own (e.g. _Given to Mrs Moyo_).`, [
+    { id: `biker_dn_${id}_hand`,  title: "👤 Handed over" },
+    { id: `biker_dn_${id}_guard`, title: "🛡 Left with guard" },
+    { id: `biker_dn_${id}_skip`,  title: "⏭ Skip" }
+  ]);
+  await notifyParty(updated.customerPhone, {
+    ref, line: `Rider says it was delivered to ${updated.dropoff}. Reply to confirm.`,
+    text: `📬 *Your rider says it's delivered!* (${ref})\n📍 ${updated.pickup} → ${updated.dropoff}\n\nDid you receive it?`,
+    buttons: [{ id: `biker_rcv_${id}`, title: "✅ Yes, received" }, { id: `biker_prob_${id}`, title: "⚠️ Problem" }]
+  });
+  return true;
+}
+async function riderQuickNote(ctx, jobId, code) {
+  const note = code === "hand" ? "Handed over to the customer" : code === "guard" ? "Left with security / guard" : "";
+  return saveRiderNote(ctx, jobId, note, true);
+}
+async function saveRiderNote(ctx, jobId, note, quick = false) {
+  await clearState(ctx.phone);
+  const clean = String(note || "").trim().slice(0, 300);
+  const job = await getJob(jobId);
+  if (job && clean && normPhone(job.assignedRiderPhone) === ctx.phone) {
+    await BikerJob.updateOne({ _id: job._id }, { $set: { riderNote: clean }, $push: { history: { by: "rider", phone: ctx.phone, event: "note", note: clean } } });
+    if (job.status === "delivered" || job.status === "completed") {
+      await say(job.customerPhone, `📝 *Rider note* (${jobRef(job)}): ${clean}`);
+    }
   }
+  await ask(ctx.from, `👍 ${clean ? "Note saved. " : ""}Points are added when the customer confirms (or automatically after ${BIKER_CONFIG.AUTO_COMPLETE_HOURS}h).`,
+    [{ id: "biker_openjobs", title: "🔔 More jobs" }, { id: "biker_menu", title: "🏍️ Rider Menu" }]);
+  return true;
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// CUSTOMER PICKS A RIDER → exchange contacts
+// CUSTOMER: RECEIVED → RATE → NOTE   |   PROBLEM
 // ═════════════════════════════════════════════════════════════════════════════
-async function _customerChoose({ from, saveBiz, payload }) {
-  const [jobId, riderPhone] = String(payload || "").split("__");
-  const job = await _getJob(jobId);
-  if (!job) { await sendText(from, "That request was not found."); return true; }
-  if (job.status === "assigned" && normPhone(job.assignedRiderPhone) !== normPhone(riderPhone)) {
-    await sendText(from, "You've already chosen a rider for this request.");
+async function completeJob(jobId, { by = "customer", note = "" } = {}) {
+  const updated = await BikerJob.findOneAndUpdate(
+    { _id: jobId, status: { $in: ["assigned", "picked_up", "delivered"] }, disputed: { $ne: true } },
+    { $set: { status: "completed", completedAt: new Date(), completedBy: by },
+      $push: { history: { by, event: "completed", note } } },
+    { new: true }).lean().catch(() => null);
+  if (!updated) return null;
+  // Points: base (or auto), + fast-response bonus
+  const resp = (updated.responses || []).find(r => normPhone(r.riderPhone) === normPhone(updated.assignedRiderPhone));
+  const fast = resp && updated.openSince && (new Date(resp.respondedAt) - new Date(updated.openSince)) <= BIKER_CONFIG.FAST_RESPONSE_MIN * 60000;
+  const pts = (by === "auto" ? RIDER_POINTS.autoComplete : RIDER_POINTS.complete) + (fast ? RIDER_POINTS.fast : 0);
+  const r = await addRiderPoints(updated.assignedRiderPhone, pts, { completedTrips: 1 });
+  await BikerJob.updateOne({ _id: updated._id }, { $inc: { pointsAwarded: pts } }).catch(() => {});
+  if (r) {
+    const lvl = riderLevel(r.riderPoints);
+    await notifyParty(updated.assignedRiderPhone, {
+      ref: jobRef(updated), line: `Delivery confirmed. +${pts} points.`,
+      text: `🎉 *Delivery confirmed* (${jobRef(updated)})${by === "auto" ? " - auto-confirmed" : ""}\n+${pts} points${fast ? " (incl. ⚡ fast bonus)" : ""} · Total *${r.riderPoints}* ${lvl.emoji} ${lvl.name}`,
+      buttons: [{ id: "biker_openjobs", title: "🔔 More jobs" }, { id: "biker_menu", title: "🏍️ Rider Menu" }]
+    });
+  }
+  return updated;
+}
+
+async function customerReceived(ctx, jobId) {
+  const job = await getJob(jobId);
+  if (!job || normPhone(job.customerPhone) !== ctx.phone) { await say(ctx.from, "That request was not found."); return true; }
+  if (job.status === "open") { await say(ctx.from, "ℹ️ No rider has been chosen yet for this request."); return sendJobCard(ctx, jobId, job); }
+  if (job.status === "completed") return askRating(ctx, job);
+  const done = await completeJob(job._id, { by: "customer" });
+  if (!done) return sendJobCard(ctx, jobId);
+  return askRating(ctx, done);
+}
+async function askRating(ctx, job) {
+  if (job.customerRating) {
+    await ask(ctx.from, `✅ ${jobRef(job)} is complete. Thanks!`, [{ id: `biker_rebook_${job._id}`, title: "🔁 Same trip again" }, { id: "main_menu_back", title: "🏠 Menu" }]);
+    return true;
+  }
+  const id = String(job._id);
+  await pick(ctx.from, `✅ *Delivery complete!* (${jobRef(job)})\n\n⭐ How was *${job.assignedRiderName || "your rider"}*?`, [
+    { id: `biker_rate_${id}_5`, title: "⭐⭐⭐⭐⭐ Excellent" },
+    { id: `biker_rate_${id}_4`, title: "⭐⭐⭐⭐ Good" },
+    { id: `biker_rate_${id}_3`, title: "⭐⭐⭐ Okay" },
+    { id: `biker_rate_${id}_2`, title: "⭐⭐ Poor" },
+    { id: `biker_rate_${id}_1`, title: "⭐ Very bad" }
+  ]);
+  return true;
+}
+async function customerRate(ctx, jobId, n) {
+  if (!isObjId(jobId) || !(n >= 1 && n <= 5)) return false;
+  const job = await BikerJob.findOneAndUpdate(
+    { _id: jobId, customerPhone: ctx.phone, status: "completed", customerRating: null },
+    { $set: { customerRating: n }, $push: { history: { by: "customer", phone: ctx.phone, event: "rated", note: `${n}/5` } } },
+    { new: true }).lean().catch(() => null);
+  if (!job) {
+    // Double tap / already rated: keep the optional note step alive.
+    const j = await getJob(jobId);
+    if (j && normPhone(j.customerPhone) === ctx.phone && j.customerRating && !j.customerNote) {
+      await setState(ctx.phone, `biker_cnote_${j._id}`, {});
+      await ask(ctx.from, `✅ Rated ${stars(j.customerRating)} already. Anything to add? Type a short note, or tap Skip.`,
+        [{ id: `biker_cnskip_${j._id}`, title: "⏭ Skip" }, { id: `biker_rebook_${j._id}`, title: "🔁 Same trip again" }]);
+      return true;
+    }
+    await say(ctx.from, "ℹ️ You already rated this delivery. Thanks!");
     return true;
   }
 
-  const rPhone = normPhone(riderPhone);
-  const resp = (job.responses || []).find(r => normPhone(r.riderPhone) === rPhone) || {};
-  const rider = await SupplierProfile.findOne({ phone: rPhone, profileType: "biker" }).lean().catch(() => null);
+  const rider = await getRider(job.assignedRiderPhone);
+  if (rider) {
+    const cnt = Number(rider.reviewCount) || 0;
+    const avg = ((Number(rider.rating) || 0) * cnt + n) / (cnt + 1);
+    const bonus = n === 5 ? RIDER_POINTS.rate5 : n === 4 ? RIDER_POINTS.rate4 : n <= 2 ? RIDER_POINTS.rateLow : 0;
+    await updateRider({ _id: rider._id }, { $set: { rating: Math.round(avg * 10) / 10 }, $inc: { reviewCount: 1, riderPoints: bonus } });
+    if (bonus) await BikerJob.updateOne({ _id: job._id }, { $inc: { pointsAwarded: bonus } }).catch(() => {});
+    if (n >= 4) await say(rider.phone, `⭐ Customer rated you *${n}/5* for ${jobRef(job)}${bonus ? ` (+${bonus} pts)` : ""}. Keep it up!`);
+    if (n <= 2) await notifyAdmin(`Low rating ${n}/5 on ${jobRef(job)}\nRider: ${riderName(rider)} ${displayPhone(rider.phone)}\nCustomer: ${displayPhone(job.customerPhone)}`);
+  }
+  await setState(ctx.phone, `biker_cnote_${job._id}`, {});
+  await ask(ctx.from, `🙏 Thanks for rating ${stars(n)}\n\nAnything to add about the rider? Type a short note, or tap Skip.`,
+    [{ id: `biker_cnskip_${job._id}`, title: "⏭ Skip" }, { id: `biker_rebook_${job._id}`, title: "🔁 Same trip again" }]);
+  return true;
+}
+async function saveCustomerNote(ctx, jobId, note) {
+  await clearState(ctx.phone);
+  const clean = String(note || "").trim().slice(0, 300);
+  const job = await getJob(jobId);
+  if (job && clean && normPhone(job.customerPhone) === ctx.phone) {
+    await BikerJob.updateOne({ _id: job._id }, { $set: { customerNote: clean }, $push: { history: { by: "customer", phone: ctx.phone, event: "note", note: clean } } });
+    if ((job.customerRating || 0) >= 4 && job.assignedRiderPhone) await say(job.assignedRiderPhone, `💬 *Customer note* (${jobRef(job)}): ${clean}`);
+    if ((job.customerRating || 5) <= 2) await notifyAdmin(`Customer note on low-rated ${jobRef(job)}: ${clean}`);
+  }
+  await ask(ctx.from, "🙏 Thank you! Your feedback keeps riders reliable.", [{ id: `biker_rebook_${jobId}`, title: "🔁 Same trip again" }, { id: "main_menu_back", title: "🏠 Menu" }]);
+  return true;
+}
 
-  await BikerJob.updateOne(
-    { _id: job._id },
-    { $set: { status: "assigned", assignedRiderId: rider?._id || null, assignedRiderPhone: rPhone, assignedAt: new Date() } }
-  ).catch(() => {});
+async function startProblem(ctx, jobId) {
+  const job = await getJob(jobId);
+  if (!job || normPhone(job.customerPhone) !== ctx.phone) { await say(ctx.from, "That request was not found."); return true; }
+  await setState(ctx.phone, `biker_prob_${job._id}`, {});
+  await say(ctx.from, `⚠️ *What went wrong?* (${jobRef(job)})\nType it in one message, e.g. _not delivered_, _item damaged_, _rider asked for more money_.`);
+  return true;
+}
+async function saveProblem(ctx, jobId, text) {
+  await clearState(ctx.phone);
+  const clean = String(text || "").trim().slice(0, 500);
+  const job = await BikerJob.findOneAndUpdate(
+    { _id: jobId, customerPhone: ctx.phone },
+    { $set: { disputed: true, problemReport: clean }, $push: { history: { by: "customer", phone: ctx.phone, event: "problem", note: clean } } },
+    { new: true }).lean().catch(() => null);
+  if (!job) { await say(ctx.from, "That request was not found."); return true; }
+  await notifyAdmin(`⚠️ PROBLEM on ${jobRef(job)}\n${clean}\n\nCustomer: ${displayPhone(job.customerPhone)}\nRider: ${job.assignedRiderName || "-"} ${displayPhone(job.assignedRiderPhone)}\n📍 ${job.pickup} → ${job.dropoff}`);
+  if (job.assignedRiderPhone) await say(job.assignedRiderPhone, `⚠️ The customer reported a problem on ${jobRef(job)}: "${clean}"\nZimQuote will contact you. Points for this job are on hold.`);
+  await ask(ctx.from,
+    `✅ We've logged it (${jobRef(job)}). Our team will contact you shortly.${job.assignedRiderPhone ? `\n\nYou can also call the rider: ${displayPhone(job.assignedRiderPhone)}` : ""}`,
+    [{ id: "biker_mydel", title: "📦 My Deliveries" }, { id: "main_menu_back", title: "🏠 Menu" }]);
+  return true;
+}
 
-  const ref = jobRef(job._id);
-  // Tell the customer the rider's details.
-  await sendText(from,
-    `✅ *You're connected!* (${ref})\n\n` +
-    `👤 ${resp.riderName || "Your rider"}${resp.verified ? " ✅" : ""}\n` +
-    `🏍️ Plate: ${resp.plate || "-"}\n` +
-    `💵 Fare: ${resp.fare || "agree on arrival"}${resp.eta ? ` · ⏱ ${resp.eta}` : ""}\n` +
-    `📞 Call/chat: ${displayPhone(rPhone)}\n\n` +
-    `🛡 *Stay safe:* agree the fare before pickup, share your live location, and pay on delivery (cash or EcoCash).`
-  );
-  // Tell the rider they got the job + the customer's number.
-  try {
-    await _sendTemplate(rPhone, "zq_rider_matched", [
-      resp.riderName || "You", resp.plate || "-", resp.fare || "-", resp.eta || "-", displayPhone(job.customerPhone)
-    ]).catch(async () => {
-      await sendText(rPhone,
-        `🎉 *You got the job!* (${ref})\n\n` +
-        `📦 ${job.task}\n📍 ${job.pickup} → ${job.dropoff}\n🕒 ${job.when}\n` +
-        `📞 Customer: ${displayPhone(job.customerPhone)}\n\n` +
-        `Call them to confirm. Ride safe 🪖`
-      );
+// ═════════════════════════════════════════════════════════════════════════════
+// CANCEL  (customer or rider, with a reason)
+// ═════════════════════════════════════════════════════════════════════════════
+async function startCancel(ctx, jobId) {
+  const job = await getJob(jobId);
+  if (!job) { await say(ctx.from, "That job was not found."); return true; }
+  const id = String(job._id);
+  const isCustomer = normPhone(job.customerPhone) === ctx.phone;
+  const isAssigned = normPhone(job.assignedRiderPhone) === ctx.phone && ACTIVE_STATUSES.includes(job.status);
+  const hasOffer   = job.status === "open" && (job.responses || []).some(r => normPhone(r.riderPhone) === ctx.phone);
+
+  if (isCustomer) {
+    if (!["open", ...ACTIVE_STATUSES].includes(job.status)) return sendJobCard(ctx, id, job);
+    await pick(ctx.from, `❌ *Cancel ${jobRef(job)}?*\n📍 ${job.pickup} → ${job.dropoff}\n\nWhy are you cancelling? 👇${job.status === "picked_up" ? "\n\n⚠️ The rider has already collected your item." : ""}`,
+      CUSTOMER_CANCEL_REASONS.map(r => ({ id: `biker_cxr_${id}_${r.code}`, title: r.title, description: r.desc })));
+    return true;
+  }
+  if (isAssigned) {
+    await pick(ctx.from, `❌ *Drop job ${jobRef(job)}?*\n\nThe customer is told and the job goes to other riders.\n⚠️ Cancelling costs ${Math.abs(RIDER_POINTS.cancel)} points (${Math.abs(RIDER_POINTS.cancelCustomerFault)} if it's the customer's fault).\n\nWhy? 👇`,
+      RIDER_CANCEL_REASONS.map(r => ({ id: `biker_cxr_${id}_${r.code}`, title: r.title, description: r.desc })));
+    return true;
+  }
+  if (hasOffer) {
+    await BikerJob.updateOne({ _id: job._id, status: "open" }, { $pull: { responses: { riderPhone: ctx.phone } }, $push: { history: { by: "rider", phone: ctx.phone, event: "offer_withdrawn" } } });
+    await ask(ctx.from, `↩️ Your price for ${jobRef(job)} was withdrawn.`, [{ id: "biker_openjobs", title: "🔔 Open Jobs" }]);
+    return true;
+  }
+  return sendJobCard(ctx, id, job);
+}
+
+async function cancelWithCode(ctx, jobId, code, typed = "") {
+  const job = await getJob(jobId);
+  if (!job) { await clearState(ctx.phone); await say(ctx.from, "That job was not found."); return true; }
+  const isCustomer = normPhone(job.customerPhone) === ctx.phone;
+  const list = isCustomer ? CUSTOMER_CANCEL_REASONS : RIDER_CANCEL_REASONS;
+  if (code === "other" && !typed) {
+    await setState(ctx.phone, `biker_cxnote_${job._id}`, {});
+    await say(ctx.from, "✍️ Type the reason in a few words:");
+    return true;
+  }
+  await clearState(ctx.phone);
+  const reason = code === "other" ? String(typed).trim().slice(0, 200) : (list.find(r => r.code === code)?.title || "No reason given");
+  if (isCustomer) return customerCancel(ctx, job, code, reason);
+  return riderCancel(ctx, job, code, reason);
+}
+
+async function customerCancel(ctx, job, code, reason, { by = "customer" } = {}) {
+  const prev = await BikerJob.findOneAndUpdate(
+    { _id: job._id, status: { $in: ["open", ...ACTIVE_STATUSES] } },
+    { $set: { status: "cancelled", cancelledAt: new Date(), cancelledBy: by, cancelReason: reason, cancelCode: code },
+      $push: { history: { by, phone: by === "customer" ? ctx?.phone || "" : "", event: "cancelled", note: reason } } },
+    { new: false }).lean().catch(() => null);
+  if (!prev) { if (ctx) return sendJobCard(ctx, String(job._id)); return null; }
+  const ref = jobRef(prev);
+  const who = by === "admin" ? "ZimQuote" : "the customer";
+
+  if (prev.assignedRiderPhone) {
+    await notifyParty(prev.assignedRiderPhone, {
+      ref, line: `Cancelled by ${who}. Reason: ${reason}`,
+      text: `❌ *Job cancelled by ${who}* (${ref})\nReason: ${reason}` +
+        (prev.status === "picked_up" ? `\n\n⚠️ You already collected the item - call the customer on ${displayPhone(prev.customerPhone)} to arrange the return and your fare.` : "") +
+        `\n\nNo points lost.`,
+      buttons: [{ id: "biker_openjobs", title: "🔔 Open Jobs" }, { id: "biker_menu", title: "🏍️ Rider Menu" }]
     });
-  } catch (e) {
-    console.warn(`[BIKER] rider matched notify failed: ${e.message}`);
+  } else {
+    const responders = (prev.responses || []).map(r => normPhone(r.riderPhone));
+    await Promise.allSettled(responders.map(p => say(p, `ℹ️ ${ref} was cancelled by ${who}. No action needed.`)));
+  }
+  if (ctx) {
+    await ask(ctx.from,
+      `✅ *Cancelled* (${ref})` +
+      (prev.status === "picked_up" ? `\n\n⚠️ The rider already collected your item - call them on ${displayPhone(prev.assignedRiderPhone)} to arrange the return.` : ""),
+      [{ id: `biker_rebook_${prev._id}`, title: "🔁 Request again" }, { id: "main_menu_back", title: "🏠 Menu" }]);
+  } else if (by === "admin") {
+    await say(prev.customerPhone, `❌ Your delivery ${ref} was cancelled by ZimQuote.\nReason: ${reason}`);
+  }
+  return prev;
+}
+
+async function riderCancel(ctx, job, code, reason) {
+  const wasPickedUp = job.status === "picked_up";
+  const updated = await BikerJob.findOneAndUpdate(
+    { _id: job._id, assignedRiderPhone: ctx.phone, status: { $in: ACTIVE_STATUSES } },
+    { $set: { status: "open", openSince: new Date(), assignedRiderId: null, assignedRiderPhone: "", assignedRiderName: "",
+              agreedFare: "", agreedFareAmount: null, agreedEta: "", assignedAt: null, pickedUpAt: null,
+              repingCount: 0, staleReminderSent: false },
+      $addToSet: { cancelledRiderPhones: ctx.phone },
+      $pull: { responses: { riderPhone: ctx.phone } },
+      $push: { history: { by: "rider", phone: ctx.phone, event: "cancelled", note: reason } } },
+    { new: true }).lean().catch(() => null);
+  if (!updated) return sendJobCard(ctx, String(job._id));
+
+  const penalty = CUSTOMER_FAULT_CODES.has(code) ? RIDER_POINTS.cancelCustomerFault : RIDER_POINTS.cancel;
+  const r = await addRiderPoints(ctx.phone, penalty, { riderCancels: 1 });
+  const ref = jobRef(updated), id = String(updated._id);
+  await ask(ctx.from,
+    `↩️ *Job dropped* (${ref}). ${penalty} points${r ? ` · Total ${r.riderPoints}` : ""}.\n\n_Tip: only accept jobs you can finish - cancels lower your ranking._`,
+    [{ id: "biker_openjobs", title: "🔔 Open Jobs" }, { id: "biker_menu", title: "🏍️ Rider Menu" }]);
+
+  // Re-dispatch to fresh riders; tell the customer
+  const notified = await dispatchJob(updated);
+  const others = (updated.responses || []).length;
+  await notifyParty(updated.customerPhone, {
+    ref, line: `Your rider cancelled (${reason}). We're finding another rider.`,
+    text:
+      `⚠️ *Your rider cancelled* (${ref})\nReason: ${reason}` +
+      (wasPickedUp ? `\n\n❗ They had already collected your item - please call them on ${displayPhone(job.assignedRiderPhone)}.` : "") +
+      `\n\n🔎 ${notified ? `We alerted ${notified} more rider${notified === 1 ? "" : "s"}.` : "We're looking for another rider."}` +
+      (others ? ` You also have ${others} other price(s).` : ""),
+    buttons: [others ? { id: `biker_offers_${id}`, title: `📋 Other prices (${others})` } : null, { id: `biker_cx_${id}`, title: "❌ Cancel request" }].filter(Boolean)
+  });
+  if (!CUSTOMER_FAULT_CODES.has(code)) {
+    const rc = (r?.riderCancels || 0);
+    if (rc && rc % 5 === 0) await notifyAdmin(`Rider ${r ? riderName(r) : ctx.phone} (${displayPhone(ctx.phone)}) has now cancelled ${rc} jobs.`);
   }
   return true;
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// GROUP LINK  ZQ:BGROUP:<city>  - list online riders + "Become a Rider" CTA
+// REBOOK / RIDER LINK / GROUP LINK
 // ═════════════════════════════════════════════════════════════════════════════
-async function _bikerGroupLink({ from, slug }) {
+async function rebook(ctx, jobId) {
+  const job = await getJob(jobId);
+  if (!job || normPhone(job.customerPhone) !== ctx.phone) return startRiderRequest(ctx);
+  // Happy with the last rider? Send it to them first.
+  const preferred = job.status === "completed" && (job.customerRating || 5) >= 4 && job.assignedRiderId ? String(job.assignedRiderId) : null;
+  ctx.sess = await getSess(ctx.phone);
+  const res = await createAndDispatchJob(ctx, {
+    task: job.task, pickup: job.pickup, dropoff: job.dropoff, city: job.city, preferredRiderId: preferred
+  });
+  return res;
+}
+
+async function viewRider(ctx, riderId) {
+  const r = isObjId(riderId) ? await SupplierProfile.findById(riderId).lean().catch(() => null) : null;
+  if (!r || r.profileType !== "biker") { await say(ctx.from, "Rider not found."); return true; }
+  await ask(ctx.from,
+    `🏍️ *${riderName(r)}*\n${riderBadgeLine(r)}\n📍 ${r.location?.city || ""}${(r.riderAreas || []).length ? " · " + r.riderAreas.join(", ") : ""}\n🏍️ ${r.bike?.plate || "-"}`,
+    [{ id: `biker_bookrider_${r._id}`, title: "📦 Book this rider" }, { id: "biker_request_rider", title: "🏍️ Any rider" }]);
+  return true;
+}
+async function bookSpecificRider(ctx, riderId) {
+  const r = isObjId(riderId) ? await SupplierProfile.findById(riderId).lean().catch(() => null) : null;
+  if (!r || r.profileType !== "biker" || !r.active || r.suspended) {
+    await say(ctx.from, "ℹ️ That rider isn't available right now - we'll send your request to riders near you.");
+    return startRiderRequest(ctx);
+  }
+  if (normPhone(r.phone) === ctx.phone) { await say(ctx.from, "🔗 That's your own rider link - share it with customers!"); return sendRiderMenu(ctx.from, r, ctx.biz); }
+  return startRiderRequest(ctx, { preferredRider: r });
+}
+
+async function bikerGroupLink(ctx, slug) {
   const city = titleCity(slug || "Harare");
+  const group = metroGroup(city);
   const riders = await SupplierProfile.find({
-    profileType: "biker", active: true, suspended: { $ne: true }
-  }).lean().catch(() => []);
-  const inCity = riders.filter(r => cityEq(r.location?.city, city)).slice(0, 8);
-
-  const ctaRow = { id: "reg_type_biker", title: "🏍️ Become a Rider", description: "List yourself & get delivery jobs" };
-  if (!inCity.length) {
-    await sendList(from,
-      `🏍️ *ZimQuote Riders - ${city}*\n\nNo riders listed here yet. Be the first - or request one and we'll alert riders as they join.`,
-      [{ id: "biker_request_rider", title: "📦 Request a Biker" }, ctaRow]
-    );
+    profileType: "biker", active: true, suspended: { $ne: true },
+    "location.city": { $in: group.map(c => new RegExp(`^${escRe(c)}$`, "i")) }
+  }).sort({ riderPoints: -1 }).limit(8).lean().catch(() => []);
+  const ctaRow = { id: "reg_type_biker", title: "🏍️ Become a Rider", description: "Earn with your bike - get jobs on WhatsApp" };
+  const reqRow = { id: "biker_request_rider", title: "📦 Request a Biker", description: "Riders send prices - you choose" };
+  if (!riders.length) {
+    await pick(ctx.from, `🏍️ *ZimQuote Riders - ${city}*\n\nRequest a rider for any errand, or become one yourself.`, [reqRow, ctaRow]);
     return true;
   }
-  const rows = inCity.map(r => ({
-    id: `biker_viewrider_${r._id}`,
-    title: (r.businessName || "Rider").replace(/\s*\(Rider\)$/i, "").slice(0, 24),
-    description: [(r.riderAreas || []).slice(0, 2).join(", "), r.bike?.verifiedAt ? "✅ Verified" : null].filter(Boolean).join(" · ") || undefined
-  }));
-  await sendList(from,
-    `🏍️ *ZimQuote Riders - ${city}*\n\nRequest a rider for any errand, or become one yourself.`,
-    [{ id: "biker_request_rider", title: "📦 Request a Biker" }, ...rows.slice(0, 8), ctaRow].slice(0, 10)
-  );
+  await pick(ctx.from, `🏍️ *ZimQuote Riders - ${city}*\n\nRequest any rider, pick a top rider, or join as a rider.`,
+    [reqRow, ...riders.map(r => ({
+      id: `biker_viewrider_${r._id}`,
+      title: `${riderLevel(r.riderPoints).emoji} ${cut(riderName(r), 20)}`,
+      description: [`⭐ ${(Number(r.rating) || 0).toFixed(1)}`, `${r.completedTrips || 0} trips`, (r.riderAreas || []).slice(0, 2).join(", "), r.bike?.verifiedAt ? "✅" : ""].filter(Boolean).join(" · ")
+    })), ctaRow].slice(0, 10));
   return true;
 }
 
-// ── internal ────────────────────────────────────────────────────────────────
-async function _getJob(jobId) {
-  if (!jobId || !/^[a-f0-9]{24}$/i.test(String(jobId))) return null;
-  return BikerJob.findById(jobId).catch(() => null);
+// Accept older call shape ({from, biz, saveBiz}) used by previous versions.
+async function _ctx(ctx) {
+  if (ctx.phone && ctx.sess) return ctx;
+  const phone = normPhone(ctx.from);
+  return { ...ctx, phone, sess: await getSess(phone) };
 }
 
-export default { handleBikerMessage, startBikerRegistration, startRiderRequest, bikerAccount };
+// ═════════════════════════════════════════════════════════════════════════════
+// BACKGROUND SWEEP  (every 2 minutes; safe with several server instances)
+// ═════════════════════════════════════════════════════════════════════════════
+export async function sweepBikerJobs() {
+  const now = Date.now();
+  const minAgo = m => new Date(now - m * 60000);
+
+  // 1) Re-ping: rider-link jobs with a silent rider, and normal jobs with no price yet
+  const reping = await BikerJob.find({
+    status: "open", repingCount: 0, "responses.0": { $exists: false },
+    $or: [
+      { preferredRiderId: { $ne: null }, openSince: { $lte: minAgo(BIKER_CONFIG.PREFERRED_EXPAND_MIN) } },
+      { openSince: { $lte: minAgo(BIKER_CONFIG.REPING_AFTER_MIN) } }
+    ]
+  }).limit(50).lean().catch(() => []);
+  for (const j of reping) {
+    const claimed = await BikerJob.findOneAndUpdate({ _id: j._id, repingCount: 0, status: "open" }, { $inc: { repingCount: 1 } }, { new: true }).lean().catch(() => null);
+    if (claimed) await dispatchJob(claimed, { expand: true }).catch(e => console.warn("[BIKER SWEEP] reping:", e.message));
+  }
+
+  // 2) Expire: no price after N min
+  const dead = await BikerJob.find({ status: "open", "responses.0": { $exists: false }, openSince: { $lte: minAgo(BIKER_CONFIG.EXPIRE_NO_OFFER_MIN) } }).limit(50).lean().catch(() => []);
+  for (const j of dead) {
+    const x = await BikerJob.findOneAndUpdate({ _id: j._id, status: "open", "responses.0": { $exists: false } },
+      { $set: { status: "expired" }, $push: { history: { by: "system", event: "expired", note: "no prices" } } }, { new: true }).lean().catch(() => null);
+    if (x) await notifyParty(x.customerPhone, {
+      ref: jobRef(x), line: "No rider was available. Reply to try again.",
+      text: `⌛ *No rider was available* for ${jobRef(x)} (${x.pickup} → ${x.dropoff}).\n\nRiders may be busy - please try again in a few minutes.`,
+      buttons: [{ id: `biker_rebook_${x._id}`, title: "🔁 Try again" }, { id: "main_menu_back", title: "🏠 Menu" }]
+    });
+  }
+
+  // 3) Expire: prices came but customer never chose
+  const unchosen = await BikerJob.find({ status: "open", "responses.0": { $exists: true }, openSince: { $lte: minAgo(BIKER_CONFIG.EXPIRE_NOT_CHOSEN_MIN) } }).limit(50).lean().catch(() => []);
+  for (const j of unchosen) {
+    const x = await BikerJob.findOneAndUpdate({ _id: j._id, status: "open" },
+      { $set: { status: "expired" }, $push: { history: { by: "system", event: "expired", note: "customer did not choose" } } }, { new: true }).lean().catch(() => null);
+    if (x) await notifyParty(x.customerPhone, {
+      ref: jobRef(x), line: "Request closed because no rider was chosen.",
+      text: `⌛ ${jobRef(x)} closed - no rider was chosen within ${BIKER_CONFIG.EXPIRE_NOT_CHOSEN_MIN} min.`,
+      buttons: [{ id: `biker_rebook_${x._id}`, title: "🔁 Request again" }, { id: "main_menu_back", title: "🏠 Menu" }]
+    });
+  }
+
+  // 4) Auto-complete: rider marked delivered, customer silent
+  const delivered = await BikerJob.find({ status: "delivered", disputed: { $ne: true }, deliveredAt: { $lte: minAgo(BIKER_CONFIG.AUTO_COMPLETE_HOURS * 60) } }).limit(50).lean().catch(() => []);
+  for (const j of delivered) await completeJob(j._id, { by: "auto", note: "customer did not respond" }).catch(() => {});
+
+  // 5) Stale reminder to rider
+  const stale = await BikerJob.find({ status: { $in: ACTIVE_STATUSES }, staleReminderSent: { $ne: true }, assignedAt: { $lte: minAgo(BIKER_CONFIG.STALE_REMIND_HOURS * 60) } }).limit(50).lean().catch(() => []);
+  for (const j of stale) {
+    const x = await BikerJob.findOneAndUpdate({ _id: j._id, staleReminderSent: { $ne: true } }, { $set: { staleReminderSent: true } }, { new: true }).lean().catch(() => null);
+    if (x) await notifyParty(x.assignedRiderPhone, {
+      ref: jobRef(x), line: "Is this delivery done? Reply to update.",
+      text: `⏰ *Is ${jobRef(x)} delivered?*\n📍 ${x.pickup} → ${x.dropoff}\n\nPlease update it so you get your points.`,
+      buttons: [{ id: `biker_done_${x._id}`, title: "✅ Delivered" }, { id: `biker_cx_${x._id}`, title: "❌ Cancel job" }]
+    });
+  }
+}
+
+if (!globalThis.__zqBikerSweep && process.env.BIKER_SWEEP !== "off" && process.env.NODE_ENV !== "test") {
+  globalThis.__zqBikerSweep = setInterval(() => {
+    sweepBikerJobs().catch(e => console.warn("[BIKER SWEEP]", e.message));
+  }, 2 * 60 * 1000);
+  if (globalThis.__zqBikerSweep.unref) globalThis.__zqBikerSweep.unref();
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// ADMIN API  (used by routes/bikerAdmin.js)
+// ═════════════════════════════════════════════════════════════════════════════
+export async function adminCreateJob({ customerPhone, customerName = "", task, pickup, dropoff, city = "", when = "Now",
+                                       assignRiderId = null, fare = "", notifyCustomer = true, adminName = "admin" }) {
+  const phone = normPhone(customerPhone);
+  if (!phone || phone.length < 11) throw new Error("A valid customer phone is required.");
+  if (!pickup || !dropoff) throw new Error("Pickup and drop-off are required.");
+  const det = detectCity(`${pickup} | ${dropoff} | ${task || ""}`);
+  const finalCity = titleCity(city || det.city || "Harare");
+  const ctx = { from: phone, phone, sess: { state: "", data: {}, lastCity: finalCity } };
+
+  // Direct assignment: create without alerting other riders, then assign.
+  const job = await createAndDispatchJob(ctx, {
+    task: task || "Delivery", pickup, dropoff, city: finalCity, when, customerName,
+    preferredRiderId: null
+  }, { source: "admin", adminName, silent: true, noDispatch: !!(assignRiderId && isObjId(assignRiderId)) });
+  if (!job) throw new Error("Could not create the job.");
+
+  if (assignRiderId && isObjId(assignRiderId)) {
+    await adminAssignJob(job._id, assignRiderId, fare, adminName);
+  } else if (notifyCustomer) {
+    await notifyParty(phone, {
+      ref: jobRef(job), line: `Your delivery ${pickup} to ${dropoff} was logged. Rider prices will arrive here.`,
+      text: `🏍️ *ZimQuote logged your delivery* (${jobRef(job)})\n📦 ${job.task}\n📍 ${pickup} → ${dropoff}\n🏙 ${finalCity}\n\nRiders have been alerted - their prices will arrive here. Tap *Choose* on the one you like.`,
+      buttons: [{ id: `biker_cx_${job._id}`, title: "❌ Cancel request" }, { id: "biker_mydel", title: "📦 My Deliveries" }]
+    });
+  }
+  return BikerJob.findById(job._id).lean();
+}
+
+export async function adminAssignJob(jobId, riderId, fare = "", adminName = "admin") {
+  const job = await BikerJob.findById(jobId).lean();
+  if (!job) throw new Error("Job not found.");
+  if (job.status !== "open") throw new Error(`Job is ${job.status} - only open jobs can be assigned.`);
+  const rider = await SupplierProfile.findById(riderId).lean();
+  if (!rider || rider.profileType !== "biker") throw new Error("Rider not found.");
+  const existing = (job.responses || []).find(r => normPhone(r.riderPhone) === normPhone(rider.phone));
+  const f = fare ? parseFare(fare) : { ok: false };
+  const resp = existing && !fare ? existing : {
+    riderId: rider._id, riderPhone: normPhone(rider.phone), riderName: riderName(rider), plate: rider.bike?.plate || "",
+    fare: f.ok ? f.fare : (fare || ""), fareAmount: f.ok ? f.amount : null, eta: f.ok ? f.eta : "",
+    verified: !!rider.bike?.verifiedAt, rating: Number(rider.rating) || 0, points: Number(rider.riderPoints) || 0, trips: rider.completedTrips || 0,
+    respondedAt: new Date()
+  };
+  const res = await assignRider(job, resp, { by: "admin", adminName });
+  if (!res) throw new Error("Could not assign - the job changed. Refresh and try again.");
+  return res;
+}
+
+export async function adminCancelJob(jobId, reason = "Cancelled by admin") {
+  const job = await BikerJob.findById(jobId).lean();
+  if (!job) throw new Error("Job not found.");
+  const r = await customerCancel(null, job, "admin", reason, { by: "admin" });
+  if (!r) throw new Error(`Job is ${job.status} - cannot cancel.`);
+  return r;
+}
+
+export async function adminCompleteJob(jobId, { awardPoints = true } = {}) {
+  const job = await BikerJob.findById(jobId).lean();
+  if (!job) throw new Error("Job not found.");
+  if (job.disputed) await BikerJob.updateOne({ _id: job._id }, { $set: { disputed: false, disputeResolved: true } });
+  if (!awardPoints) {
+    const x = await BikerJob.findOneAndUpdate({ _id: job._id, status: { $in: ["assigned", "picked_up", "delivered"] } },
+      { $set: { status: "completed", completedAt: new Date(), completedBy: "admin" }, $push: { history: { by: "admin", event: "completed", note: "no points" } } }, { new: true }).lean();
+    if (!x) throw new Error(`Job is ${job.status} - cannot complete.`);
+    if (x.assignedRiderPhone) await addRiderPoints(x.assignedRiderPhone, 0, { completedTrips: 1 });
+    return x;
+  }
+  const x = await completeJob(job._id, { by: "admin" });
+  if (!x) throw new Error(`Job is ${job.status} - cannot complete.`);
+  return x;
+}
+
+export async function adminRedispatchJob(jobId) {
+  const job = await BikerJob.findById(jobId).lean();
+  if (!job) throw new Error("Job not found.");
+  if (job.status === "expired") {
+    await BikerJob.updateOne({ _id: job._id }, { $set: { status: "open", openSince: new Date(), repingCount: 0 }, $push: { history: { by: "admin", event: "reopened" } } });
+  } else if (job.status !== "open") throw new Error(`Job is ${job.status} - only open/expired jobs can be re-sent.`);
+  const fresh = await BikerJob.findById(jobId).lean();
+  return dispatchJob(fresh, { expand: true });
+}
+
+export async function adminResolveDispute(jobId, { outcome = "rider_ok", note = "" } = {}) {
+  const job = await BikerJob.findById(jobId).lean();
+  if (!job) throw new Error("Job not found.");
+  await BikerJob.updateOne({ _id: job._id }, { $set: { disputed: false, disputeResolved: true, adminNote: note },
+    $push: { history: { by: "admin", event: "admin", note: `dispute: ${outcome}${note ? " - " + note : ""}` } } });
+  if (outcome === "rider_ok" && job.status !== "completed") return completeJob(job._id, { by: "admin", note: "dispute resolved for rider" });
+  if (outcome === "rider_fault" && job.assignedRiderPhone) {
+    await addRiderPoints(job.assignedRiderPhone, -15, { riderDisputesLost: 1 });
+    if (job.status !== "completed") await BikerJob.updateOne({ _id: job._id }, { $set: { status: "completed", completedAt: new Date(), completedBy: "admin" } });
+  }
+  return BikerJob.findById(jobId).lean();
+}
+
+export async function adminMessage(phone, text) {
+  return say(normPhone(phone), text);
+}
+
+export default {
+  handleBikerMessage, startBikerRegistration, startRiderRequest, sendRiderMenu,
+  sweepBikerJobs, adminCreateJob, adminAssignJob, adminCancelJob, adminCompleteJob,
+  adminRedispatchJob, adminResolveDispute, addRiderPoints, riderLevel, riderLink, getRider
+};

@@ -4258,9 +4258,10 @@ try {
   const _bikerHandled = await handleBikerMessage({
     from,
     text,
-    action:  isMetaAction ? a : "",
-    biz:     (biz && _bizIsOwnedByUser) ? biz : null,
-    saveBiz: saveBizSafe
+    action:   isMetaAction ? a : "",
+    biz:      (biz && _bizIsOwnedByUser) ? biz : null,
+    saveBiz:  saveBizSafe,
+    imageUrl: hasImage ? imageUrl : null     // rider "Get Verified" photo
   });
   if (_bikerHandled) return;
 } catch (_bErr) {
@@ -14170,6 +14171,12 @@ if (a === "sup_search_more_categories") {
 if (a === "register_supplier" || a === "list_my_business") {
   if (!_bizIsOwnedByUser) biz = null;
     const existingSupplier = await SupplierProfile.findOne({ phone });
+
+  // Riders have their own menu (Online/Offline, jobs, points) - not the seller store menu.
+  if (existingSupplier?.profileType === "biker") {
+    const { sendRiderMenu } = await import("./bikerDispatch.js");
+    return sendRiderMenu(from, existingSupplier.toObject ? existingSupplier.toObject() : existingSupplier, biz);
+  }
 
   if (existingSupplier) {
     if (existingSupplier.active) {
