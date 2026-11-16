@@ -1113,7 +1113,7 @@ One simple plan - *$50 / year*:
 
 Tap below to activate and start receiving parents.`,
     buttons: [
-      { id: "school_plan_basic_annual", title: "✅ Activate - $50/year" }
+      { id: "school_plan_basic_annual", title: "✅ Activate $50/yr" }
     ]
   });
 }

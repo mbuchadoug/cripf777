@@ -1185,10 +1185,10 @@ if (!school.active) {
   // Inactive school - prompt activation
   return sendList(to,
     `🏫 *${school.schoolName}*${verifiedBadge}\n` +
-    `🔴 *Not yet live* - parents cannot find you yet.\n` +
+    `🟡 *Not activated yet* - activate to go live and start getting parents.\n` +
     `📍 ${school.suburb || ""}, ${school.city}\n` +
     `📚 ${curriculumText}\n\n` +
-    `_Choose a plan to activate your listing._`,
+    `_Activate your listing below - just $50/year._`,
     [
       { id: "school_pay_plan",    title: "💳 Activate Listing" },
       { id: "school_my_profile",  title: "👁 View My Profile" },

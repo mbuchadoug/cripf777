@@ -15400,7 +15400,7 @@ One simple plan - *$50 / year*:
 
 Tap below to activate and start receiving parents.`,
     buttons: [
-      { id: "school_plan_basic_annual", title: "✅ Activate - $50/year" }
+      { id: "school_plan_basic_annual", title: "✅ Activate $50/yr" }
     ]
   });
 }
@@ -16441,7 +16441,7 @@ if (a === "reg_type_school") {
     return sendSchoolAccountMenu(from, existingSchool);
   }
   if (existingSchool && !existingSchool.active) {
-    return sendList(from, `🏫 *${existingSchool.schoolName}* is saved but not yet live.`, [
+    return sendList(from, `🏫 *${existingSchool.schoolName}* is saved - activate it to go live and start getting parents.`, [
       { id: "school_pay_plan",  title: "💳 Activate Listing" },
       { id: "school_account",   title: "👁 View My Profile" },
       { id: "main_menu_back",   title: "⬅ Main Menu" }
