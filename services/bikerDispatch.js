@@ -32,7 +32,7 @@ import axios from "axios";
 import { sendText, sendButtons, sendList } from "./metaSender.js";
 import { _sendTemplate } from "./buyerRequestNotifications.js";
 import { SUPPLIER_CITIES } from "./supplierPlans.js";
-import { detectCity, metroGroup, parseWhatWhere, splitRoute, findPlaces } from "./bikerPlaces.js";
+import { detectCity, metroGroup, parseWhatWhere, splitRoute, findPlaces, KNOWN_CITIES } from "./bikerPlaces.js";
 import SupplierProfile from "../models/supplierProfile.js";
 import BikerJob from "../models/bikerJob.js";
 import UserSession from "../models/userSession.js";
@@ -376,6 +376,9 @@ export async function handleBikerMessage({ from, text = "", action = "", biz = n
       // (the wa.me prefill wraps it in a friendly sentence). Always wins, even mid-flow.
       const hub = txt.match(/ZQ:BIKERS?(?::([A-Za-z][A-Za-z -]{1,30}?))?(?=$|[\s).,!🏍])/i);
       if (hub) return bikerHub(ctx, (hub[1] || "").trim());
+      // Short, normal-looking link text: "Bikers" / "ZimQuote Bikers" / "Bikers Harare"
+      const plainHub = !a && matchPlainHub(txt);
+      if (plainHub) return bikerHub(ctx, plainHub.city);
       const riderLink = txt.match(/ZQ:RIDER:([a-f0-9]{24})/i);
       if (riderLink) return bookSpecificRider(ctx, riderLink[1]);
       if (/^ZQ:BGROUP:/i.test(txt)) return bikerGroupLink(ctx, txt.replace(/^ZQ:BGROUP:/i, "").trim());
@@ -1812,16 +1815,34 @@ async function bookSpecificRider(ctx, riderId) {
 //   https://wa.me/<BOT>?text=...ZQ:BIKERS          (any city)
 //   https://wa.me/<BOT>?text=...ZQ:BIKERS:HARARE   (city-specific - remembers city)
 // ═════════════════════════════════════════════════════════════════════════════
-export function bikerHubLink(city = "") {
-  const tag = city ? `ZQ:BIKERS:${String(city).trim().toUpperCase().replace(/\s+/g, "-")}` : "ZQ:BIKERS";
-  return `https://wa.me/${BOT_NUMBER}?text=${encodeURIComponent(`Hi ZimQuote Bikers 🏍️ ${tag}`)}`;
+// "Bikers", "zimquote bikers", "hi bikers", "Bikers Harare", "bikers in bulawayo" → hub.
+// A trailing word that is NOT a known town means it's something else ("bikers jacket"),
+// so we don't intercept it.
+function matchPlainHub(txt = "") {
+  const m = String(txt).trim().match(/^(?:hi\s+|hello\s+)?(?:zimquote\s+)?bikers(?:\s+(?:in\s+)?([a-z][a-z .-]{2,30}?))?[\s!.🏍️]*$/i);
+  if (!m) return null;
+  if (!m[1]) return { city: "" };
+  const c = m[1].trim().toLowerCase().replace(/-/g, " ");
+  const all = [...KNOWN_CITIES, ...(SUPPLIER_CITIES || [])].map(x => String(x).toLowerCase());
+  return all.includes(c) ? { city: c } : null;
 }
-export function bikerHubCaption(city = "") {
+
+// Direct WhatsApp links - the message box just says "Bikers" (or a clear action).
+export function bikerHubLink(city = "") {
+  const t = city ? `Bikers ${titleCity(String(city).replace(/-/g, " "))}` : "Bikers";
+  return `https://wa.me/${BOT_NUMBER}?text=${encodeURIComponent(t)}`;
+}
+export function bikerWaLink(kind = "hub", city = "") {
+  if (kind === "request")  return `https://wa.me/${BOT_NUMBER}?text=${encodeURIComponent("Request a biker")}`;
+  if (kind === "register") return `https://wa.me/${BOT_NUMBER}?text=${encodeURIComponent("Become a rider")}`;
+  return bikerHubLink(city);
+}
+export function bikerHubCaption(city = "", link = "") {
   const where = city ? ` in ${titleCity(city)}` : "";
   return `🏍️ *ZimQuote Bikers*${where}\n\n` +
     `📦 Need something delivered or an errand run? Riders send you prices on WhatsApp - you choose.\n` +
     `🏍️ Have a motorbike? Join as a rider, get jobs on WhatsApp and keep 100% of every fare.\n\n` +
-    `👉 Tap: ${bikerHubLink(city)}`;
+    `👉 Tap to chat on WhatsApp: ${link || bikerHubLink(city)}`;
 }
 
 async function bikerHub(ctx, rawCity = "") {
