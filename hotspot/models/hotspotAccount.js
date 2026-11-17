@@ -60,8 +60,13 @@ const HotspotAccountSchema = new mongoose.Schema({
   upKbps:    { type: Number, default: 0 },
 
   // ── Billing ──
-  price:    { type: Number, default: 0 },               // monthly / per-top-up price
+  price:    { type: Number, default: 0 },               // monthly / per-top-up / room price
   currency: { type: String, default: "USD" },
+
+  // ── Lodge room booking (only used for room accounts) ──
+  roomPackage: { type: String, default: "" },           // e.g. "rest" / "night"
+  checkInAt:   { type: Date,   default: null },          // current booking's check-in
+  guestCount:  { type: Number, default: 0 },             // people in the room (recorded at check-in)
 
   status: { type: String, enum: ["active", "suspended", "expired"], default: "active", index: true },
 

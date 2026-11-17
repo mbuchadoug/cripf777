@@ -852,6 +852,10 @@ function shapeAccount(a, full = false) {
     remainingMinutes: acctRemainingMin(a),
     deviceCount: a.devices?.length || 0,
     lastSeenAt: a.lastSeenAt,
+    firstUsedAt: a.firstUsedAt || null,
+    roomPackage: a.roomPackage || "",
+    checkInAt: a.checkInAt || null,
+    guestCount: a.guestCount || 0,
     syncedToRouter: a.syncedToRouter,
     createdByName: a.createdByName,
     createdAt: a.createdAt
@@ -859,5 +863,97 @@ function shapeAccount(a, full = false) {
   if (full) { base.devices = a.devices || []; base.topups = a.topups || []; }
   return base;
 }
+
+// ============================================================
+// 🏨 LODGE ROOMS  — monitoring, audit, check-in/out (room accounts: room1, room2…)
+// ============================================================
+const ROOM_ONLINE_MS = 6 * 60 * 1000;   // a device seen within 6 min counts as "online now"
+function roomNumber(username) { const m = /^room(\d+)$/.exec(String(username || "")); return m ? Number(m[1]) : null; }
+function roomView(a) {
+  const now = Date.now();
+  const devs = a.devices || [];
+  const online = devs.filter(d => d.lastSeen && (now - new Date(d.lastSeen).getTime()) < ROOM_ONLINE_MS);
+  return {
+    ...shapeAccount(a, true),
+    roomNumber: roomNumber(a.username),
+    onlineDevices: online.length,
+    onlineNow: online.length > 0
+  };
+}
+
+// List all rooms with live status + an accounting summary.
+router.get("/rooms", authRequired, adminRequired, async (req, res) => {
+  try {
+    const rows = await HotspotAccount.find({ username: /^room\d+$/ }).lean();
+    rows.sort((x, y) => (roomNumber(x.username) || 0) - (roomNumber(y.username) || 0));
+    const rooms = rows.map(roomView);
+    const startToday = new Date(); startToday.setHours(0, 0, 0, 0);
+    const booked = rows.filter(r => r.checkInAt && new Date(r.checkInAt) >= startToday);
+    const summary = {
+      totalRooms: rooms.length,
+      roomsOnline: rooms.filter(r => r.onlineNow).length,
+      devicesOnline: rooms.reduce((s, r) => s + r.onlineDevices, 0),
+      occupied: rooms.filter(r => r.status === "active" && r.checkInAt).length,
+      todayCheckins: booked.length,
+      todayRevenue: booked.reduce((s, r) => s + (r.price || 0), 0)
+    };
+    res.json({ rooms, summary });
+  } catch (err) {
+    console.error("[hotspot rooms]", err);
+    res.status(500).json({ error: "Could not load rooms" });
+  }
+});
+
+// One room's full detail (live audit).
+router.get("/rooms/:id", authRequired, adminRequired, async (req, res) => {
+  const a = await HotspotAccount.findById(req.params.id).lean();
+  if (!a) return res.status(404).json({ error: "Room not found" });
+  res.json({ room: roomView(a) });
+});
+
+// Check IN a guest: records booking, starts a fresh audit, turns the room on.
+router.post("/rooms/:id/checkin", authRequired, adminRequired, async (req, res) => {
+  try {
+    const a = await HotspotAccount.findById(req.params.id);
+    if (!a) return res.status(404).json({ error: "Room not found" });
+    const b = req.body || {};
+    if (b.guestName != null && String(b.guestName).trim()) a.displayName = String(b.guestName).trim();
+    if (b.phone != null) a.phone = String(b.phone);
+    if (b.guestCount != null) a.guestCount = Math.max(0, Number(b.guestCount));
+    if (b.package != null) a.roomPackage = String(b.package);
+    if (b.price != null) a.price = Math.max(0, Number(b.price));
+    if (b.deviceCap != null) a.deviceCap = Math.min(20, Math.max(1, Number(b.deviceCap)));
+    if (b.validUntil) a.validUntil = new Date(b.validUntil);
+    // fresh stay → clear the previous guest's audit + usage
+    a.devices = []; a.firstUsedAt = null; a.lastSeenAt = null; a.uptimeUsedSec = 0;
+    a.checkInAt = new Date();
+    a.status = "active";
+    await ensureAccountOnRouter(a);
+    if (mt.isConfigured()) { try { await mt.setUserDisabled(a.username, false); } catch { /* resynced */ } }
+    await a.save();
+    res.json({ room: roomView(a) });
+  } catch (err) {
+    console.error("[hotspot checkin]", err);
+    res.status(500).json({ error: "Could not check in" });
+  }
+});
+
+// Check OUT: turns the room off (poster/code stops working) and ends the booking.
+// The audit stays visible until the next check-in, for your records.
+router.post("/rooms/:id/checkout", authRequired, adminRequired, async (req, res) => {
+  try {
+    const a = await HotspotAccount.findById(req.params.id);
+    if (!a) return res.status(404).json({ error: "Room not found" });
+    a.status = "suspended";
+    a.checkInAt = null; a.roomPackage = ""; a.guestCount = 0;
+    a.displayName = a.unit || ("Room " + (roomNumber(a.username) || ""));
+    if (mt.isConfigured()) { try { await mt.setUserDisabled(a.username, true); await mt.kick(a.username); } catch { /* retried */ } }
+    await a.save();
+    res.json({ room: roomView(a) });
+  } catch (err) {
+    console.error("[hotspot checkout]", err);
+    res.status(500).json({ error: "Could not check out" });
+  }
+});
 
 export default router;

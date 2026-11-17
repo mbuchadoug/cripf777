@@ -240,6 +240,7 @@ const NAV = [
   {id:"generate",  label:"Generate",  ic:"＋"},
   {id:"vouchers",  label:"Vouchers",  ic:"▤"},
   {id:"accounts",  label:"Accounts",  ic:"☻", admin:true},
+  {id:"rooms",     label:"Rooms",     ic:"⌂", admin:true},
   {id:"live",      label:"Live",      ic:"◉", admin:true},
   {id:"devices",   label:"Devices",   ic:"▣", admin:true},
   {id:"reports",   label:"Reports",   ic:"◱", admin:true},
@@ -415,7 +416,7 @@ function go(v){
   document.querySelectorAll(".navitem,.tabitem").forEach(b=>b.classList.toggle("active",b.dataset.v===v));
   const n=NAV.find(x=>x.id===v);
   document.getElementById("page-title").textContent=n?n.label:v;
-  ({dashboard:viewDashboard,generate:viewGenerate,vouchers:viewVouchers,accounts:viewAccounts,live:viewLive,devices:viewDevices,reports:viewReports,sellers:viewSellers}[v]||viewDashboard)();
+  ({dashboard:viewDashboard,generate:viewGenerate,vouchers:viewVouchers,accounts:viewAccounts,rooms:viewRooms,live:viewLive,devices:viewDevices,reports:viewReports,sellers:viewSellers}[v]||viewDashboard)();
 }
 const mount=html=>document.getElementById("view").innerHTML=html;
 
@@ -737,6 +738,160 @@ async function delDevice(id){ if(!confirm("Remove this device from the allow lis
 // ---------- Accounts (tenants & members) ----------
 let acctFilter={type:"",status:"",q:""};
 function fmtMinsShort(mins){ if(mins<=0)return "0"; const d=Math.floor(mins/1440),h=Math.floor((mins%1440)/60); if(d>=1)return d+"d"+(h?" "+h+"h":""); const m=mins%60; return (h?h+"h ":"")+(m?m+"m":"")||"0m"; }
+// ---------- Rooms (lodge monitoring + check-in/out) ----------
+let roomsTimer=null;
+const rMbps=k=>k?((k/1000)%1?(k/1000).toFixed(1):(k/1000))+" Mbps":"∞";
+function roomStatusDot(r){
+  if(r.onlineNow) return '<span style="color:#1a9e4b">●</span>';
+  if(r.status==="active"&&r.checkInAt) return '<span style="color:#d9a400">●</span>';
+  return '<span style="color:#bbb">●</span>';
+}
+function roomStatusWord(r){
+  if(r.status!=="active"||!r.checkInAt) return "Vacant";
+  return r.onlineNow? (r.onlineDevices+" online") : "Checked in";
+}
+async function viewRooms(){
+  mount(`<div id="rooms-summary" class="grid" style="grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:14px"></div>
+    <div class="section-title"><h2 style="font-size:16px">Rooms</h2><button class="btn btn-ghost btn-sm" onclick="loadRooms()">Refresh</button></div>
+    <div id="rooms-list"><div class="card muted">Loading…</div></div>`);
+  loadRooms();
+  if(roomsTimer) clearInterval(roomsTimer);
+  roomsTimer=setInterval(()=>{ if(curView==="rooms") loadRooms(true); else { clearInterval(roomsTimer); roomsTimer=null; } }, 20000);
+}
+async function loadRooms(quiet){
+  try{
+    const {rooms,summary}=await api("/rooms");
+    const S=document.getElementById("rooms-summary"); if(S) S.innerHTML=`
+      ${roomCard("Rooms online", summary.roomsOnline+"/"+summary.totalRooms)}
+      ${roomCard("Devices online", summary.devicesOnline)}
+      ${roomCard("Occupied", summary.occupied)}
+      ${roomCard("Check-ins today", summary.todayCheckins)}
+      ${roomCard("Revenue today", "$"+(summary.todayRevenue||0))}`;
+    const el=document.getElementById("rooms-list"); if(!el) return;
+    el.innerHTML=`<div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px">
+      ${rooms.map(r=>`<div class="card" style="cursor:pointer;padding:12px" onclick="openRoom('${r.id}')">
+        <div class="row spread"><b style="font-size:15px">Room ${r.roomNumber??esc(r.username)}</b> <span style="font-size:15px">${roomStatusDot(r)}</span></div>
+        <div class="muted" style="font-size:12px;margin-top:3px">${roomStatusWord(r)}</div>
+        <div style="font-size:12.5px;margin-top:6px">${r.checkInAt?esc(r.displayName||""):'<span class="muted">—</span>'}</div>
+        <div class="muted" style="font-size:11.5px;margin-top:4px">${r.onlineDevices}/${r.deviceCap} devices · ${rMbps(r.downKbps)}</div>
+        ${r.roomPackage?`<div style="font-size:11.5px;margin-top:3px;color:var(--pine)">${esc(r.roomPackage)} · $${r.price}</div>`:''}
+        ${r.status==="suspended"?'<div style="margin-top:5px"><span class="tag t-disabled">off</span></div>':''}
+      </div>`).join("")}</div>`;
+  }catch(e){ if(!quiet){ const el=document.getElementById("rooms-list"); if(el) el.innerHTML=`<div class="card">${esc(e.message)}</div>`; } }
+}
+function roomCard(label,val){ return `<div class="card" style="padding:12px"><div class="muted" style="font-size:12px">${label}</div><div style="font-size:22px;font-weight:700;margin-top:2px">${val}</div></div>`; }
+const ROOM_PACKAGES=[["Rest","rest",15],["Night","night",25],["Night (big room)","night",30]];
+async function openRoom(id){
+  openDrawer(); document.getElementById("dr-title").textContent="Room";
+  document.getElementById("dr-body").innerHTML=`<div class="muted">Loading…</div>`;
+  try{
+    const {room:r}=await api("/rooms/"+id);
+    document.getElementById("dr-title").textContent="Room "+(r.roomNumber??r.username);
+    const occupied = r.status==="active" && r.checkInAt;
+    const devs=(r.devices||[]).slice().sort((a,b)=>new Date(b.lastSeen)-new Date(a.lastSeen));
+    const now=Date.now();
+    const audit = devs.length? `<div class="tablewrap"><table>
+        <thead><tr><th>Device</th><th>First</th><th>Last</th><th></th></tr></thead>
+        <tbody>${devs.map(d=>{const on=d.lastSeen&&(now-new Date(d.lastSeen).getTime())<6*60*1000;return `<tr>
+          <td data-label="Device">${esc(d.hostname||"device")}<br><span class="mono" style="font-size:11px">${esc(d.mac||"")}</span></td>
+          <td data-label="First">${fmtDate(d.firstSeen)}</td>
+          <td data-label="Last">${fmtDate(d.lastSeen)}</td>
+          <td data-label="">${on?'<span class="tag t-active">online</span>':'<span class="muted">off</span>'}</td>
+        </tr>`;}).join("")}</tbody></table></div>`
+      : `<div class="muted">No device has connected this stay yet.</div>`;
+
+    const statusLine = occupied
+      ? `<span class="tag t-active">${r.onlineDevices} online</span> · checked in ${fmtDate(r.checkInAt)}`
+      : (r.status==="suspended"?'<span class="tag t-disabled">off (vacant)</span>':'<span class="tag t-expired">on, no guest</span>');
+
+    document.getElementById("dr-body").innerHTML=`
+      <div class="card" style="text-align:center">
+        <div style="font-size:20px;font-weight:700">Room ${r.roomNumber??esc(r.username)}</div>
+        <div class="muted" style="font-size:13px">login <span class="mono">${esc(r.username)}</span> · code <span class="mono">${esc(r.password||"")}</span></div>
+        <div style="margin-top:8px">${statusLine}</div>
+        <div class="muted" style="font-size:12.5px;margin-top:6px">${r.onlineDevices}/${r.deviceCap} devices · ↓${rMbps(r.downKbps)} ↑${rMbps(r.upKbps)}${r.guestCount?` · ${r.guestCount} guest${r.guestCount>1?'s':''}`:''}</div>
+      </div>
+
+      ${occupied?`
+      <div class="card" style="margin-top:12px">
+        <div class="kv"><span class="k">Guest</span><span>${esc(r.displayName||"-")}</span></div>
+        ${r.phone?`<div class="kv"><span class="k">Phone</span><span>${esc(r.phone)}</span></div>`:''}
+        ${r.roomPackage?`<div class="kv"><span class="k">Package</span><span>${esc(r.roomPackage)} · $${r.price}</span></div>`:''}
+        <div class="kv"><span class="k">Checked in</span><span>${fmtDate(r.checkInAt)}</span></div>
+      </div>
+      <button class="btn btn-ghost btn-block noprint" style="margin-top:10px;color:var(--danger);border-color:#f0cfcd" onclick="checkoutRoom('${r.id}')">Check out (turn WiFi off)</button>
+      `:`
+      <div class="card noprint" style="margin-top:12px">
+        <h2 style="font-size:15px;margin-bottom:10px">Check in a guest</h2>
+        <div class="grid" style="grid-template-columns:1fr 1fr;gap:10px">
+          <div class="field" style="margin:0"><label>Guest name</label><input id="ci-name" placeholder="Mr Moyo"></div>
+          <div class="field" style="margin:0"><label>Phone</label><input id="ci-phone" placeholder="0771234567"></div>
+          <div class="field" style="margin:0"><label>No. of guests</label><input id="ci-guests" type="number" min="1" value="1"></div>
+          <div class="field" style="margin:0"><label>Devices allowed</label><input id="ci-dev" type="number" min="1" max="20" value="${r.deviceCap}"></div>
+        </div>
+        <label style="display:block;font-size:13px;color:var(--muted);margin:12px 0 7px;font-weight:600">Package</label>
+        <div class="row" style="gap:8px;flex-wrap:wrap" id="ci-pkgs">
+          ${ROOM_PACKAGES.map((p,i)=>`<button type="button" class="btn btn-ghost btn-sm" onclick="pickPkg(${i})" id="pkg${i}">${p[0]} · $${p[2]}</button>`).join("")}
+        </div>
+        <div class="grid" style="grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
+          <div class="field" style="margin:0"><label>Package name</label><input id="ci-pkg" placeholder="rest / night"></div>
+          <div class="field" style="margin:0"><label>Price $</label><input id="ci-price" type="number" min="0" value="0"></div>
+        </div>
+        <button class="btn btn-gold btn-block" style="margin-top:12px" onclick="checkinRoom('${r.id}')">Check in &amp; turn WiFi on</button>
+        <div class="err" id="ci-err"></div>
+      </div>`}
+
+      <div class="card noprint" style="margin-top:12px">
+        <h2 style="font-size:15px;margin-bottom:10px">Audit — who connected this stay</h2>
+        <div class="muted" style="font-size:12px;margin:-4px 0 10px">${devs.length} device${devs.length===1?'':'s'} seen${r.firstUsedAt?` · first ${fmtDate(r.firstUsedAt)}`:''}</div>
+        ${audit}
+      </div>
+
+      <div class="card noprint" style="margin-top:12px">
+        <h2 style="font-size:15px;margin-bottom:10px">Controls</h2>
+        <div class="grid" style="grid-template-columns:1fr 1fr;gap:10px">
+          <div class="field" style="margin:0"><label>Download (Mbps)</label><input id="rc-down" type="number" min="0" step="0.5" value="${(r.downKbps||0)/1000}"></div>
+          <div class="field" style="margin:0"><label>Upload (Mbps)</label><input id="rc-up" type="number" min="0" step="0.5" value="${(r.upKbps||0)/1000}"></div>
+          <div class="field" style="margin:0"><label>Devices allowed</label><input id="rc-dev" type="number" min="1" max="20" value="${r.deviceCap}"></div>
+          <div class="field" style="margin:0"><label>New code (optional)</label><input id="rc-pass" placeholder="leave blank to keep"></div>
+        </div>
+        <button class="btn btn-pine btn-block" style="margin-top:12px" onclick="saveRoom('${r.id}')">Save speed / devices</button>
+        <div class="row" style="gap:10px;margin-top:10px">
+          ${r.status==="suspended"
+            ? `<button class="btn btn-ghost" style="flex:1" onclick="resumeRoom('${r.id}')">Resume WiFi</button>`
+            : `<button class="btn btn-ghost" style="flex:1" onclick="pauseRoom('${r.id}')">Pause WiFi</button>`}
+          <button class="btn btn-ghost" style="flex:1" onclick="topupRoom('${r.id}')">Top up time</button>
+        </div>
+        <div class="err" id="rc-err"></div>
+      </div>`;
+  }catch(e){ document.getElementById("dr-body").innerHTML=`<div class="card">${esc(e.message)}</div>`; }
+}
+function pickPkg(i){ const p=ROOM_PACKAGES[i]; const pk=document.getElementById("ci-pkg"), pr=document.getElementById("ci-price"); if(pk)pk.value=p[1]; if(pr)pr.value=p[2]; ROOM_PACKAGES.forEach((_,j)=>{const b=document.getElementById("pkg"+j); if(b) b.style.background=j===i?"var(--pine)":""; if(b) b.style.color=j===i?"#fff":"";}); }
+async function checkinRoom(id){
+  const err=document.getElementById("ci-err"); if(err)err.textContent="";
+  const body={ guestName:document.getElementById("ci-name")?.value||"", phone:document.getElementById("ci-phone")?.value||"",
+    guestCount:Number(document.getElementById("ci-guests")?.value||1), deviceCap:Number(document.getElementById("ci-dev")?.value||3),
+    package:document.getElementById("ci-pkg")?.value||"", price:Number(document.getElementById("ci-price")?.value||0) };
+  try{ await api("/rooms/"+id+"/checkin",{method:"POST",body:JSON.stringify(body)}); openRoom(id); loadRooms(true); }
+  catch(e){ if(err)err.textContent=e.message; else alert(e.message); }
+}
+async function checkoutRoom(id){ if(!confirm("Check out this room? WiFi turns off until the next check-in."))return; try{ await api("/rooms/"+id+"/checkout",{method:"POST",body:"{}"}); openRoom(id); loadRooms(true); }catch(e){alert(e.message);} }
+async function saveRoom(id){
+  const err=document.getElementById("rc-err"); if(err)err.textContent="";
+  const mbps=x=>Math.round(Math.max(0,Number(document.getElementById(x)?.value||0))*1000);
+  const body={ downKbps:mbps("rc-down"), upKbps:mbps("rc-up"), deviceCap:Number(document.getElementById("rc-dev")?.value||3) };
+  const pw=document.getElementById("rc-pass")?.value; if(pw) body.password=pw;
+  try{ await api("/accounts/"+id,{method:"PATCH",body:JSON.stringify(body)}); flash("Saved"); openRoom(id); loadRooms(true); }
+  catch(e){ if(err)err.textContent=e.message; else alert(e.message); }
+}
+async function pauseRoom(id){ try{ await api("/accounts/"+id,{method:"PATCH",body:JSON.stringify({status:"suspended"})}); openRoom(id); loadRooms(true); }catch(e){alert(e.message);} }
+async function resumeRoom(id){ try{ await api("/accounts/"+id,{method:"PATCH",body:JSON.stringify({status:"active"})}); openRoom(id); loadRooms(true); }catch(e){alert(e.message);} }
+async function topupRoom(id){
+  const v=prompt("Add how much time? Enter number then unit is days.\nExamples: 1 = 1 day, 0.5 = 12 hours","1"); if(v===null)return;
+  const minutes=Math.max(1,Math.round(Number(v)*1440));
+  try{ await api("/accounts/"+id+"/topup",{method:"POST",body:JSON.stringify({minutes,method:"cash"})}); flash("Topped up"); openRoom(id); loadRooms(true); }catch(e){alert(e.message);}
+}
+
 async function viewAccounts(){
   mount(`<div id="acct-top"></div>
     <div class="card noprint" style="margin-bottom:14px">
