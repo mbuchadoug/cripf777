@@ -18,7 +18,17 @@ import HotspotPayment from "../models/hotspotPayment.js";  // dedicated hotspot 
 import HotspotPlan from "../models/hotspotPlan.js";
 import Voucher from "../models/voucher.js";
 import HotspotAccount from "../models/hotspotAccount.js";
+import HotspotSetting from "../models/hotspotSetting.js";
 import * as mt from "../services/mikrotik.js";
+
+// Auto-login URL for a paid code, so the buy page can offer a one-tap "Connect now".
+async function autoLoginFor(code) {
+  if (!code) return null;
+  const s = await HotspotSetting.get();
+  const base = String(s.loginBase || "http://192.168.88.1").replace(/\/+$/, "");
+  const c = encodeURIComponent(code);
+  return `${base}/login?username=${c}&password=${c}&dst=${encodeURIComponent("http://cripfcnt.com/hotspot/connected")}`;
+}
 
 const router = Router();
 
@@ -120,7 +130,7 @@ router.get("/poll/:reference", async (req, res) => {
 
     if (payment.status === "paid") {
       const v = await Voucher.findOne({ code: payment.voucherCode });
-      return res.json({ status: "paid", code: v?.code, wifiName: WIFI_NAME });
+      return res.json({ status: "paid", code: v?.code, wifiName: WIFI_NAME, autoLoginUrl: await autoLoginFor(v?.code) });
     }
     if (["failed", "cancelled"].includes(payment.status)) return res.json({ status: payment.status });
 
@@ -132,7 +142,7 @@ router.get("/poll/:reference", async (req, res) => {
         payment.status = "paid"; payment.paidAt = new Date(); await payment.save();
         const v = await Voucher.findOne({ code: payment.voucherCode });
         if (v) await activateVoucher(v);
-        return res.json({ status: "paid", code: v?.code, wifiName: WIFI_NAME });
+        return res.json({ status: "paid", code: v?.code, wifiName: WIFI_NAME, autoLoginUrl: await autoLoginFor(v?.code) });
       }
       if (["failed", "cancelled"].includes(statusStr)) {
         payment.status = statusStr; await payment.save();

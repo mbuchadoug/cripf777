@@ -260,10 +260,13 @@ router.post("/vouchers/generate", authRequired, async (req, res) => {
       made.push(v);
     }
 
+    const setting = await HotspotSetting.get();
     res.json({
       batchId,
       routerOnline,
       wifiName: WIFI_NAME,
+      loginBase: setting.loginBase,
+      joinSsid: setting.joinSsid,
       plan: { label: plan.label, durationMinutes, durationType: plan.durationType, deviceCap: devices },
       vouchers: made.map(shapeVoucher)
     });
@@ -510,18 +513,34 @@ router.delete("/bypass/:id", authRequired, adminRequired, async (req, res) => {
 // ============================================================
 
 // Global account cap (owner-tunable).
+// Build the auto-login URL for a code, from the owner-set login base.
+function autoLoginUrl(loginBase, code) {
+  const base = String(loginBase || "http://192.168.88.1").replace(/\/+$/, "");
+  const c = encodeURIComponent(code);
+  return `${base}/login?username=${c}&password=${c}&dst=${encodeURIComponent("http://cripfcnt.com/hotspot/connected")}`;
+}
+
+// Lightweight config any signed-in staff can read, so every print/QR screen
+// (including issuers) can build the join + auto-login QRs.
+router.get("/config", authRequired, async (req, res) => {
+  const s = await HotspotSetting.get();
+  res.json({ wifiName: WIFI_NAME, loginBase: s.loginBase, joinSsid: s.joinSsid });
+});
+
 router.get("/accounts/settings", authRequired, adminRequired, async (req, res) => {
   const s = await HotspotSetting.get();
   const accountCount = await HotspotAccount.countDocuments();
-  res.json({ maxAccounts: s.maxAccounts, accountCount });
+  res.json({ maxAccounts: s.maxAccounts, accountCount, loginBase: s.loginBase, joinSsid: s.joinSsid });
 });
 
 router.patch("/accounts/settings", authRequired, ownerRequired, async (req, res) => {
   const s = await HotspotSetting.get();
   if (req.body?.maxAccounts != null) s.maxAccounts = Math.max(0, Number(req.body.maxAccounts));
+  if (req.body?.loginBase != null) s.loginBase = String(req.body.loginBase).trim().replace(/\/+$/, "");
+  if (req.body?.joinSsid != null) s.joinSsid = String(req.body.joinSsid).trim();
   s.updatedAt = new Date();
   await s.save();
-  res.json({ maxAccounts: s.maxAccounts });
+  res.json({ maxAccounts: s.maxAccounts, loginBase: s.loginBase, joinSsid: s.joinSsid });
 });
 
 router.get("/accounts", authRequired, adminRequired, async (req, res) => {

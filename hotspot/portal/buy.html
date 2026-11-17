@@ -88,7 +88,8 @@
           document.getElementById("form").style.display="none";
           document.getElementById("plans").style.display="none";
           msg.className="msg ok";
-          msg.innerHTML="✅ Payment received!<div class='code'>"+d.code+"</div>Go back to the sign-in page and enter this code. Take a screenshot!";
+          var connect = d.autoLoginUrl ? "<a href='"+d.autoLoginUrl+"' style='display:block;margin:12px 0;padding:14px;background:#fff;color:#075C27;border-radius:11px;font-weight:700;text-decoration:none;font-size:16px'>Connect now &rarr;</a>" : "";
+          msg.innerHTML="✅ Payment received!<div class='code'>"+d.code+"</div>"+connect+"Tap <b>Connect now</b> to get online, or go to the sign-in page and enter this code. Take a screenshot!";
         } else if(d.status==="failed"||d.status==="cancelled"){
           clearInterval(poll);
           msg.className="msg err";msg.textContent="Payment "+d.status+". Please try again.";

@@ -268,7 +268,16 @@ function dur(mins,type){
 
 // ---------- Export (Excel / codes) + professional paper tickets ----------
 let WIFI_NAME="Central Cyber WiFi";   // updated from the generate response
+let LOGIN_BASE="http://192.168.88.1"; // MikroTik hotspot login base (owner-set)
+let JOIN_SSID="Central Cyber";        // open SSID the "scan to join" QR connects to
 let lastBatch=null;                   // the most recent generated batch (for its buttons)
+// Auto-login URL: scan while ON the wifi -> logged straight in, no typing.
+function autoLoginUrl(code){ const b=String(LOGIN_BASE||"http://192.168.88.1").replace(/\/+$/,""); const c=encodeURIComponent(code); return b+"/login?username="+c+"&password="+c+"&dst="+encodeURIComponent("http://cripfcnt.com/hotspot/connected"); }
+// WiFi-join payload: scan (even on mobile data) -> joins the open network -> sign-in page pops.
+function wifiJoinPayload(ssid){ return "WIFI:S:"+String(ssid||JOIN_SSID)+";T:nopass;;"; }
+// Render a QR to a PNG data URL (for embedding in a print iframe).
+function qrDataUrl(text,size){ try{ const d=document.createElement("div"); new QRCode(d,{text:String(text),width:size||120,height:size||120,correctLevel:QRCode.CorrectLevel.M}); const cv=d.querySelector("canvas"); if(cv) return cv.toDataURL("image/png"); const im=d.querySelector("img"); return im?im.src:""; }catch{ return ""; } }
+async function loadConfig(){ try{ const c=await api("/config"); if(c){ if(c.wifiName)WIFI_NAME=c.wifiName; if(c.loginBase)LOGIN_BASE=c.loginBase; if(c.joinSsid)JOIN_SSID=c.joinSsid; } }catch{} }
 let curVoucher=null;                  // the voucher open in the drawer (for single print)
 const stamp=()=>new Date().toISOString().slice(0,10);
 function downloadBlob(blob,filename){ const u=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=u; a.download=filename; document.body.appendChild(a); a.click(); setTimeout(()=>{try{URL.revokeObjectURL(u);a.remove();}catch{}} ,1000); }
@@ -295,31 +304,50 @@ const cardFromVoucher=v=>({ code:v.code, meta:dur(v.durationMinutes,v.durationTy
 function printCodeCards(cards, opts){
   opts=opts||{}; if(!cards||!cards.length){ flash("Nothing to print"); return; }
   const wifi=esc(opts.wifi||WIFI_NAME); const single=!!opts.single;
-  const card=c=>`<div class="tk">
+  const joinQR=qrDataUrl(wifiJoinPayload(JOIN_SSID),120);   // same for every ticket
+  const card=c=>{
+    const loginQR=qrDataUrl(autoLoginUrl(c.code),150);      // unique per code
+    return `<div class="tk">
       <div class="tk-top"><span class="tk-brand">CENTRAL CYBER</span><span class="tk-sub">WiFi</span></div>
-      <div class="tk-conn">Connect to &ldquo;${wifi}&rdquo;</div>
-      <div class="tk-code">${esc(c.code)}</div>
-      <div class="tk-meta">${esc(c.meta||"")}${c.price?` &middot; <b>${esc(c.price)}</b>`:""}</div>
-      <ol class="tk-steps"><li>Turn on WiFi, tap &ldquo;${wifi}&rdquo;.</li><li>The sign-in page opens by itself.</li><li>Type this code - you're online.</li></ol>
+      <div class="tk-body">
+        <div class="tk-left">
+          <div class="tk-code">${esc(c.code)}</div>
+          <div class="tk-meta">${esc(c.meta||"")}${c.price?` &middot; <b>${esc(c.price)}</b>`:""}</div>
+          <div class="tk-steps"><b>Already on our WiFi?</b> Scan the big code - you're online, no typing.<br><b>Not connected?</b> Join &ldquo;${wifi}&rdquo; (or scan the small code), then scan the big one or type the code above.</div>
+        </div>
+        <div class="tk-right">
+          ${loginQR?`<img class="qr-main" src="${loginQR}">`:""}
+          <div class="qr-lbl">Scan to log in</div>
+          ${joinQR?`<img class="qr-join" src="${joinQR}">`:""}
+          <div class="qr-lbl2">not connected? join</div>
+        </div>
+      </div>
       <div class="tk-foot">Powered by Central Cyber</div>
     </div>`;
+  };
   const html=`<!doctype html><html><head><meta charset="utf-8"><title>Codes</title><style>
     @page{size:A4;margin:9mm}
     *{box-sizing:border-box;font-family:-apple-system,"Segoe UI",Roboto,Arial,sans-serif}
     body{margin:0}
     .sheet{display:grid;grid-template-columns:repeat(${single?1:2},1fr);gap:6mm}
-    .tk{border:1.5px dashed #0B7A34;border-radius:7px;padding:11px 13px 8px;page-break-inside:avoid;${single?"max-width:96mm;margin:8mm auto;":""}}
+    .tk{border:1.5px dashed #0B7A34;border-radius:7px;padding:10px 12px 7px;page-break-inside:avoid;${single?"max-width:120mm;margin:8mm auto;":""}}
     .tk-top{display:flex;justify-content:space-between;align-items:baseline;border-bottom:2px solid #0B7A34;padding-bottom:5px}
     .tk-brand{font-weight:800;letter-spacing:.03em;color:#0B7A34;font-size:13pt}
     .tk-sub{color:#0B7A34;font-size:8.5pt;letter-spacing:.16em;text-transform:uppercase}
-    .tk-conn{font-size:9pt;color:#555;margin-top:7px;text-align:center}
-    .tk-code{font-family:"Courier New",monospace;font-weight:800;font-size:25pt;letter-spacing:.06em;color:#0B2E17;text-align:center;margin:3px 0 1px}
-    .tk-meta{text-align:center;font-size:10pt;color:#0B7A34}
+    .tk-body{display:flex;gap:9px;margin-top:7px;align-items:flex-start}
+    .tk-left{flex:1;min-width:0}
+    .tk-right{flex-shrink:0;text-align:center;width:28mm}
+    .tk-code{font-family:"Courier New",monospace;font-weight:800;font-size:23pt;letter-spacing:.05em;color:#0B2E17;line-height:1}
+    .tk-meta{font-size:9.5pt;color:#0B7A34;margin-top:3px}
     .tk-meta b{color:#0B2E17}
-    .tk-steps{margin:8px 0 7px 17px;padding:0;font-size:8.5pt;color:#333;line-height:1.55}
-    .tk-foot{text-align:center;font-size:7pt;letter-spacing:.14em;text-transform:uppercase;color:#9aa89f;border-top:1px solid #eee;padding-top:5px;margin-top:4px}
+    .tk-steps{margin-top:7px;font-size:8pt;color:#444;line-height:1.5}
+    .qr-main{width:25mm;height:25mm;display:block;margin:0 auto}
+    .qr-lbl{font-size:7pt;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#0B7A34;margin:1px 0 5px}
+    .qr-join{width:13mm;height:13mm;display:block;margin:0 auto;opacity:.85}
+    .qr-lbl2{font-size:6pt;letter-spacing:.06em;text-transform:uppercase;color:#9aa89f;margin-top:1px}
+    .tk-foot{text-align:center;font-size:7pt;letter-spacing:.14em;text-transform:uppercase;color:#9aa89f;border-top:1px solid #eee;padding-top:5px;margin-top:6px}
   </style></head><body><div class="sheet">${cards.map(card).join("")}</div>
-  <script>window.onload=function(){setTimeout(function(){window.focus();window.print();},150);}<\/script></body></html>`;
+  <script>window.onload=function(){setTimeout(function(){window.focus();window.print();},200);}<\/script></body></html>`;
   const f=document.createElement("iframe");
   f.style.cssText="position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden";
   document.body.appendChild(f);
@@ -359,6 +387,7 @@ async function enterApp(){
   document.getElementById("tabbar").classList.remove("hide");
   document.getElementById("me-name").textContent=ME.name;
   document.getElementById("me-role").textContent=ME.role==="owner"?"Owner":"Admin";
+  loadConfig();
   buildNav();
   go("dashboard");
   refreshRouterPill();
@@ -507,7 +536,7 @@ async function generate(){
 function renderSlips(d){
   const box=document.getElementById("g-result");
   if(!box || !d || !Array.isArray(d.vouchers)) return;
-  lastBatch=d; if(d.wifiName) WIFI_NAME=d.wifiName;
+  lastBatch=d; if(d.wifiName) WIFI_NAME=d.wifiName; if(d.loginBase) LOGIN_BASE=d.loginBase; if(d.joinSsid) JOIN_SSID=d.joinSsid;
   box.innerHTML=`<div class="section-title"><h2>${d.vouchers.length} voucher${d.vouchers.length>1?'s':''} ready</h2>
       <div class="row noprint">${d.routerOnline?'':'<span class="tag t-expired">saved - will sync to router</span>'}
         <button class="btn btn-ghost btn-sm" onclick="exportBatchExcel()">Excel</button>
@@ -523,9 +552,9 @@ function renderSlips(d){
       <div class="big">${esc(v.code)}</div>
       <div class="qr" id="qr${i}"></div>
       <div class="terms">${dur(plan.durationMinutes,plan.durationType)} · ${plan.deviceCap} device${plan.deviceCap>1?'s':''}</div>
-      <div class="steps">1. Connect phone to “${esc(wifi)}”.<br>2. A login page opens by itself.<br>3. Type this code. No data needed.</div>
+      <div class="steps">On “${esc(wifi)}”? <b>Scan to log in</b>.<br>Not connected? Join “${esc(wifi)}”, then type the code.</div>
     </div>`).join("");
-  d.vouchers.forEach((v,i)=>{ try{ const qel=document.getElementById("qr"+i); if(qel && typeof QRCode!=="undefined") new QRCode(qel,{text:v.code,width:104,height:104,colorDark:"#0e5140"});}catch{} });
+  d.vouchers.forEach((v,i)=>{ try{ const qel=document.getElementById("qr"+i); if(qel && typeof QRCode!=="undefined") new QRCode(qel,{text:autoLoginUrl(v.code),width:104,height:104,colorDark:"#0e5140"});}catch{} });
   try{ box.scrollIntoView({behavior:"smooth",block:"nearest"}); }catch{}
 }
 
@@ -746,10 +775,12 @@ async function loadAccounts(){
   try{
     const [s,{accounts}]=await Promise.all([api("/accounts/settings").catch(()=>({})), api("/accounts?"+new URLSearchParams(Object.fromEntries(Object.entries({type:acctFilter.type,q:acctFilter.q}).filter(([,v])=>v))).toString())]);
     document.querySelectorAll("#acct-chips .chip").forEach(c=>{const keys=["","tenant","client","staff"];c.classList.toggle("active",acctFilter.type===keys[["All","Tenants","Clients","Staff"].indexOf(c.textContent)]);});
+    if(s){ if(s.loginBase)LOGIN_BASE=s.loginBase; if(s.joinSsid)JOIN_SSID=s.joinSsid; }
     const top=document.getElementById("acct-top");
     if(top && s && s.maxAccounts!=null){
       const full=s.maxAccounts>0 && s.accountCount>=s.maxAccounts;
-      top.innerHTML=`<div class="card" style="margin-bottom:14px;border-color:${full?'#f0cfcd':'var(--line)'}"><b>${s.accountCount}</b> account${s.accountCount===1?'':'s'} ${s.maxAccounts>0?`of <b>${s.maxAccounts}</b> allowed`:'(no limit)'} ${full?'<span class="tag t-expired">limit reached</span>':''} ${ME.role==='owner'?`· <a href="#" onclick="setAccountCap(${s.maxAccounts});return false" style="color:var(--pine)">change limit</a>`:''}</div>`;
+      top.innerHTML=`<div class="card" style="margin-bottom:14px;border-color:${full?'#f0cfcd':'var(--line)'}"><b>${s.accountCount}</b> account${s.accountCount===1?'':'s'} ${s.maxAccounts>0?`of <b>${s.maxAccounts}</b> allowed`:'(no limit)'} ${full?'<span class="tag t-expired">limit reached</span>':''} ${ME.role==='owner'?`· <a href="#" onclick="setAccountCap(${s.maxAccounts});return false" style="color:var(--pine)">change limit</a>`:''}</div>`
+        + (ME.role==='owner'?`<div class="card" style="margin-bottom:14px"><b>QR / auto-login settings</b><div class="muted" style="font-size:12.5px;margin:4px 0 2px">Login page: <span class="mono">${esc(s.loginBase||'')}</span> · Join network: <b>${esc(s.joinSsid||'')}</b> <a href="#" onclick="setQrSettings();return false" style="color:var(--pine)">change</a></div><div class="muted" style="font-size:11.5px">Login page = your MikroTik hotspot address (gateway IP, or a hotspot dns-name to cover every SSID with one QR).</div></div>`:'');
     }
     const el=document.getElementById("acct-list");
     el.innerHTML=accounts.length?`<div class="tablewrap"><table>
@@ -785,6 +816,11 @@ async function createAccount(){
 async function setAccountCap(current){
   const v=prompt("Maximum number of accounts (0 = no limit):",current); if(v===null)return;
   try{ await api("/accounts/settings",{method:"PATCH",body:JSON.stringify({maxAccounts:Number(v)})}); loadAccounts(); }catch(e){alert(e.message);}
+}
+async function setQrSettings(){
+  const base=prompt("Hotspot login page address (the auto-login QR points here).\nUse the gateway IP, e.g. http://192.168.88.1 - or a hotspot dns-name like http://login.central to cover every SSID with one QR.", LOGIN_BASE); if(base===null)return;
+  const ssid=prompt("Open network name the \"scan to join\" QR connects phones to (e.g. Restaurant or Central Cyber):", JOIN_SSID); if(ssid===null)return;
+  try{ const r=await api("/accounts/settings",{method:"PATCH",body:JSON.stringify({loginBase:base.trim(),joinSsid:ssid.trim()})}); if(r.loginBase)LOGIN_BASE=r.loginBase; if(r.joinSsid)JOIN_SSID=r.joinSsid; flash("QR settings saved"); loadAccounts(); }catch(e){alert(e.message);}
 }
 async function openAccount(id){
   openDrawer(); document.getElementById("dr-title").textContent="Account";
