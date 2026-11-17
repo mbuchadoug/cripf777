@@ -54,6 +54,7 @@ import {
 } from "../services/groupSmartLink.js";
 import { assignSlugToSupplier } from "../services/supplierSmartLink.js";
 import { registerBikerAdminRoutes } from "./bikerAdmin.js";
+import { registerQuoteDeskAdminRoutes } from "./quoteDeskAdmin.js";
 import {
   TUTOR_SUBJECTS, TUTOR_LEVELS, TUTOR_MODES, SCHOOL_CITIES
 } from "../services/schoolPlans.js";
@@ -4564,10 +4565,12 @@ const isPresets     = t === "Presets" || t.startsWith("Preset:");
   const isTutorGroups   = t === "Tutor Group Smart Links" || t.startsWith("Tutor Group:");
   const isAssignSlugs   = t === "Assign Slugs";
   const isBikers        = t === "Bikers" || t.startsWith("Biker:");
+  const isQuoteDesk     = t === "Quote Desk" || t.startsWith("Quote:");
   const isDeliveries    = t === "Deliveries" || t.startsWith("Delivery:");
 
   const nav = [
     { href: "/zq-admin",                 label: "📊 Dashboard",          active: isDashboard },
+    { href: "/zq-admin/quote-desk",      label: "📝 Quote Desk",         active: isQuoteDesk },
     // ── Suppliers ─────────────────────────────────────────────────────────────
     { divider: "SUPPLIERS" },
     { href: "/zq-admin/suppliers",       label: "🏪 Suppliers",           active: isSuppliers },
@@ -17323,5 +17326,7 @@ router.post("/school-activity/send", requireSupplierAdmin, async (req, res) => {
 
 // ── Bikers & deliveries admin (routes/bikerAdmin.js) ─────────────────────────
 registerBikerAdminRoutes(router, { requireSupplierAdmin, layout, esc, badge, stat });
+// ── Quote desk admin (routes/quoteDeskAdmin.js) ──────────────────────────────
+registerQuoteDeskAdminRoutes(router, { requireSupplierAdmin, layout, esc, badge, stat });
 
 export default router;

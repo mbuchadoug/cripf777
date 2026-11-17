@@ -12,6 +12,8 @@ import { sendButtons } from "./metaSender.js";
 import { ACTIONS } from "./actions.js";
 import { sendList } from "./metaSender.js";
 import InvoicePayment from "../models/invoicePayment.js";
+import { nextDocNumber } from "./docNumbers.js";
+import { sendDocActions } from "./docActions.js";
 
 import { runDailyReportMetaEnhanced, runWeeklyReportMetaEnhanced, runMonthlyReportMetaEnhanced, runDetailedLedgerReport, runClerkStatementReport, runClerkSelfServeStatement, saveClosingBalance, parseCustomDateRange } from "./dailyReportEnhanced.js";
 import {
@@ -618,24 +620,8 @@ Paid: $${Number(doc.amountPaid || 0).toFixed(2)} | Balance: $${Number(doc.balanc
 💬 _Type a note to ${doc.note ? "edit" : "add"} it on this document._`;
 
         const isManager = caller && ["owner", "manager"].includes(caller.role);
-        if (isManager) {
-          return sendButtons(from, {
-            text: docText,
-            buttons: [
-              { id: ACTIONS.VIEW_DOC,   title: "📄 View PDF" },
-              { id: ACTIONS.DELETE_DOC, title: "🗑 Delete" },
-              { id: ACTIONS.SALES_MENU, title: "⬅ Back" }
-            ]
-          });
-        }
-        return sendButtons(from, {
-          text: docText,
-          buttons: [
-            { id: ACTIONS.VIEW_DOC,   title: "📄 View PDF" },
-            { id: ACTIONS.SALES_MENU, title: "⬅ Back" },
-            { id: ACTIONS.MAIN_MENU,  title: "🏠 Main Menu" }
-          ]
-        });
+        // Invoices/receipts: same 3 buttons as before. Quotes: + "Convert to invoice".
+        return sendDocActions(from, { text: docText, doc, isManager });
       }
     }
   }
@@ -657,7 +643,7 @@ if (state === "sales_doc_action") {
   const noteText = trimmed;
 
   // Ignore stray interactive ids that may arrive as text; only real notes count.
-  const looksLikeButtonId = /^(view_doc|delete_doc|sales_menu|menu|doc_)/i.test(noteText);
+  const looksLikeButtonId = /^(view_doc|delete_doc|sales_menu|menu|doc_|qt_to_inv)/i.test(noteText);
   if (!docId || !noteText || looksLikeButtonId) {
     await sendText(from, "💬 Type a note to add it to this document, or use the buttons above.");
     return true;
@@ -684,21 +670,10 @@ Total: $${Number(doc.total || 0).toFixed(2)} ${cur}
 🗒 Note: ${doc.note}`;
 
   const isManager = caller && ["owner", "manager"].includes(caller.role);
-  const buttons = isManager
-    ? [
-        { id: ACTIONS.VIEW_DOC,   title: "📄 View PDF" },
-        { id: ACTIONS.DELETE_DOC, title: "🗑 Delete" },
-        { id: ACTIONS.SALES_MENU, title: "⬅ Back" }
-      ]
-    : [
-        { id: ACTIONS.VIEW_DOC,   title: "📄 View PDF" },
-        { id: ACTIONS.SALES_MENU, title: "⬅ Back" },
-        { id: ACTIONS.MAIN_MENU,  title: "🏠 Main Menu" }
-      ];
 
   // Stay in sales_doc_action so the user can retype to correct the note.
   await saveBizSafe(biz);
-  await sendButtons(from, { text: docText, buttons });
+  await sendDocActions(from, { text: docText, doc, isManager });
   return true;
 }
 
@@ -1822,7 +1797,9 @@ if (state === "payment_method") {
   invoice.status     = invoice.balance <= 0 ? "paid" : "partial";
   await invoice.save();
 
-  const receiptNumber = `RCPT-${Date.now()}`;
+  // Real receipt number from the business counter (was RCPT-<timestamp>).
+  let receiptNumber;
+  try { receiptNumber = await nextDocNumber(biz._id, "receipt"); } catch (_rn) { receiptNumber = `RCPT-${Date.now()}`; }
   await InvoicePayment.create({
     businessId: biz._id, clientId: invoice.clientId,
     branchId: invoice.branchId || getEffectiveBranchId(caller, biz.sessionData) || null,
@@ -1888,7 +1865,9 @@ ${invoice.status === "paid" ? "Fully paid ✅" : `Balance: ${formatMoney(invoice
     else { invoice.status = "partial"; }
     await invoice.save();
 
-    const receiptNumber = `RCPT-${Date.now()}`;
+    // Real receipt number from the business counter (was RCPT-<timestamp>).
+    let receiptNumber;
+    try { receiptNumber = await nextDocNumber(biz._id, "receipt"); } catch (_rn) { receiptNumber = `RCPT-${Date.now()}`; }
 
     // ✅ Use invoice's own branchId for payment record (most accurate)
     await InvoicePayment.create({
@@ -2652,24 +2631,8 @@ if (state === "creating_invoice_enter_catalogue_prices") {
     const items = biz.sessionData.items || [];
     if (!items.length) { await sendText(from, "❌ No items found."); return true; }
 
-    const prefix = docType === "invoice" ? biz.invoicePrefix || "INV"
-      : docType === "quote" ? biz.quotePrefix || "QT"
-      : biz.receiptPrefix || "RCPT";
-
-    biz.counters = biz.counters || { invoice: 0, quote: 0, receipt: 0 };
-    const counterKey = docType === "invoice" ? "invoice" : docType === "quote" ? "quote" : "receipt";
-    biz.counters[counterKey] = (biz.counters[counterKey] || 0) + 1;
-    const number = `${prefix}-${String(biz.counters[counterKey]).padStart(6, "0")}`;
-
-    const subtotal = items.reduce((s, i) => s + i.qty * i.unit, 0);
-    const discountPercent = Number(biz.sessionData.discountPercent || 0);
-    const discountAmount = subtotal * (discountPercent / 100);
-    const vatPercent = Number(biz.sessionData.vatPercent || 0);
-    const applyVat = docType === "receipt" ? false : biz.sessionData.applyVat !== false;
-    const vatAmount = applyVat ? (subtotal - discountAmount) * (vatPercent / 100) : 0;
-    const total = subtotal - discountAmount + vatAmount;
-
-    // Trial limit
+    // Trial limit - checked BEFORE a number is reserved, so a refused document
+    // never burns a number.
     if (biz.package === "trial") {
       const { PACKAGES } = await import("./packages.js");
       const limit = PACKAGES.trial.monthlyDocs;
@@ -2680,6 +2643,19 @@ if (state === "creating_invoice_enter_catalogue_prices") {
         return true;
       }
     }
+
+    // Atomic number (two clerks finishing at the same moment can't get the same
+    // number). biz.counters is NOT touched in memory, so saveBizSafe(biz) below
+    // never writes an old counter back over the database value.
+    const number = await nextDocNumber(biz._id, docType);
+
+    const subtotal = items.reduce((s, i) => s + i.qty * i.unit, 0);
+    const discountPercent = Number(biz.sessionData.discountPercent || 0);
+    const discountAmount = subtotal * (discountPercent / 100);
+    const vatPercent = Number(biz.sessionData.vatPercent || 0);
+    const applyVat = docType === "receipt" ? false : biz.sessionData.applyVat !== false;
+    const vatAmount = applyVat ? (subtotal - discountAmount) * (vatPercent / 100) : 0;
+    const total = subtotal - discountAmount + vatAmount;
 
     const isReceipt = docType === "receipt";
 

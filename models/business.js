@@ -14,6 +14,9 @@ const BusinessSchema = new mongoose.Schema({
 
   invoicePrefix: { type: String, default: "INV" },
   quotePrefix: { type: String, default: "QT" },
+  // Settings → Receipt prefix already sets this; without the field the strict
+  // schema silently dropped it.
+  receiptPrefix: { type: String, default: "RCPT" },
 
   counters: {
     invoice: { type: Number, default: 0 },

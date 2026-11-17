@@ -90,7 +90,15 @@ type: {
   reversed:      { type: Boolean, default: false, index: true },
   originalTotal: { type: Number,  default: null },
   reversedAt:    { type: Date,    default: null },
-  reversedBy:    { type: String,  default: null }
+  reversedBy:    { type: String,  default: null },
+
+  // ── Quote → Invoice link (optional, empty on existing documents) ───────────
+  // A quotation converted to an invoice keeps a two-way link so it can't be
+  // invoiced twice and the invoice shows where it came from.
+  sourceQuoteId:        { type: mongoose.Schema.Types.ObjectId, default: null },  // on the invoice
+  convertedToInvoiceId: { type: mongoose.Schema.Types.ObjectId, default: null },  // on the quote
+  // External reference (e.g. ZimQuote Quote Desk request ref QR-7F3A2)
+  externalRef:          { type: String, default: "" }
 }, { timestamps: true });
 
 export default mongoose.model("Invoice", InvoiceSchema);

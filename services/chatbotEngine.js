@@ -95,6 +95,8 @@ import {
   handleSupplierRegistrationStates
 } from "./supplierRegistration.js";
 import { handleBikerMessage } from "./bikerDispatch.js";
+import { handleQuoteDesk } from "./quoteDesk.js";
+import { sendDocActions, QT_TO_INV } from "./docActions.js";
 import {
   startSupplierSearch,
   runSupplierSearch,
@@ -2667,7 +2669,7 @@ async function sendBuyerRequestResponseToBuyer({ request, supplier, response }) 
         `This provider is not available for your request right now.`,
       buttons: [
         { id: "find_supplier", title: "🔍 Browse & Shop" },
-        { id: "sup_request_sellers", title: "⚡ Request Again" }
+        { id: "sup_request_sellers", title: "📝 Request Again" }
       ]
     });
   }
@@ -3041,7 +3043,7 @@ async function finalizeBuyerRequestSubmission({
   if (!pendingRequest?.items?.length) {
     return sendButtons(from, {
       text: "❌ Request session expired. Please start again.",
-      buttons: [{ id: "sup_request_sellers", title: "⚡ Request Sellers" }]
+      buttons: [{ id: "sup_request_sellers", title: "📝 Request a Quote" }]
     });
   }
 
@@ -3107,7 +3109,7 @@ async function finalizeBuyerRequestSubmission({
         `This usually takes a few hours. You will receive a WhatsApp notification here once it is approved.`,
       buttons: [
         { id: "buyer_my_requests",   title: "📋 My Requests" },
-        { id: "sup_request_sellers", title: "⚡ New Request"  }
+        { id: "sup_request_sellers", title: "📝 Request a Quote"  }
       ]
     });
   }
@@ -3148,7 +3150,7 @@ async function finalizeBuyerRequestSubmission({
       `When sellers reply with prices, you’ll receive the quotation here.`,
     buttons: [
       { id: "buyer_my_requests", title: "📋 My Requests" },
-      { id: "sup_request_sellers", title: "⚡ New Request" }
+      { id: "sup_request_sellers", title: "📝 Request a Quote" }
     ]
   });
 }
@@ -3639,6 +3641,8 @@ a === "my_orders" ||
       a === "reg_type_service" ||
       a === "reg_type_biker" ||
       a.startsWith("biker_") ||
+      a.startsWith("qd_") ||
+      a.startsWith("qda_") ||
       a.startsWith("sup_hosp_type_") ||
       a === "sup_hosp_facilities_done" ||
       a === "sup_skip_rest_rates" ||
@@ -3857,6 +3861,7 @@ a.startsWith("sup_load_preset_") ||
       a.startsWith("payinv_") ||
       a.startsWith("prod_") ||
       a.startsWith("doc_") ||
+      a === "qt_to_inv" ||
       a.startsWith("docdate_") ||
       a.startsWith("subpay_") ||
       a.startsWith("stmt_client_") ||
@@ -4189,7 +4194,7 @@ if (!isMetaAction && /^ZQ:SGROUP:[a-z0-9_-]{1,60}$/i.test(text.trim())) {
 // ── ZQ:TGROUP:<slug> - private-tutor group smart link (TOP LEVEL) ────────────
 // Tutor group links arrive as plain text, exactly like ZQ:GROUP: / ZQ:SGROUP:.
 // MUST be at depth-1 top level so no session state can intercept them - without
-// this the link falls through to the buyer "⚡ Request Sellers" flow instead of
+// this the link falls through to the buyer "📝 Request a Quote" flow instead of
 // showing the tutors.
 if (!isMetaAction && /^ZQ:TGROUP:[a-z0-9_-]{1,60}$/i.test(text.trim())) {
   console.log(`[ZQ:TGROUP TOP LEVEL] from=${from} text=${text.trim()}`);
@@ -4266,6 +4271,26 @@ try {
   if (_bikerHandled) return;
 } catch (_bErr) {
   console.error("[BIKER HOOK]", _bErr.message);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 📝 REQUEST A QUOTE - admin-facilitated quote desk (services/quoteDesk.js)
+// ───────────────────────────────────────────────────────────────────────────
+// Owns: the "sup_request_sellers" tap (now "📝 Request a Quote"), all qd_/qda_
+// taps, and typed text while a quote flow is open (customer, seller or admin).
+// State lives in UserSession.tempData.qd*. Runs before every free-text grabber.
+try {
+  const _qdHandled = await handleQuoteDesk({
+    from,
+    text,
+    action:   isMetaAction ? a : (a === "__buyer_photo_uploaded__" ? a : ""),
+    biz:      (biz && _bizIsOwnedByUser) ? biz : null,
+    saveBiz:  saveBizSafe,
+    imageUrl: hasImage || imageUrl ? imageUrl : null
+  });
+  if (_qdHandled) return;
+} catch (_qdErr) {
+  console.error("[QUOTE DESK HOOK]", _qdErr.message);
 }
 
 // ── Numbered seller pick (TOP LEVEL) ─────────────────────────────────────────
@@ -6327,7 +6352,7 @@ if (_introRequest.status === "closed") {
               `Contact the seller directly to confirm your order.`,
             buttons: [
               { id: "find_supplier",       title: "🔍 Browse & Shop" },
-              { id: "sup_request_sellers", title: "⚡ Request Sellers" }
+              { id: "sup_request_sellers", title: "📝 Request a Quote" }
             ]
           });
           console.log(`[PENDING QUOTE] Forwarded quote from ${from} to buyer ${_pqFullBuyer}`);
@@ -6974,7 +6999,7 @@ await UserSession.findOneAndUpdate(
     return sendButtons(from, {
       text: "✅ Request cancelled.",
       buttons: [
-        { id: "sup_request_sellers", title: "⚡ Request Sellers" },
+        { id: "sup_request_sellers", title: "📝 Request a Quote" },
         { id: "find_supplier",       title: "🔍 Browse & Shop" }
       ]
     });
@@ -7341,7 +7366,7 @@ if (al === "my requests" || al === "buyer_my_requests") {
         return sendButtons(from, {
           text: "✅ Request cancelled.",
           buttons: [
-            { id: "sup_request_sellers", title: "⚡ Request Sellers" },
+            { id: "sup_request_sellers", title: "📝 Request a Quote" },
             { id: "find_supplier",       title: "🔍 Browse & Shop" }
           ]
         });
@@ -13821,25 +13846,40 @@ Paid: $${Number(doc.amountPaid || 0).toFixed(2)} | Balance: $${Number(doc.balanc
 
 💬 _Type a note to ${doc.note ? "edit" : "add"} it on this document._`;
 
-    // Max 3 buttons - priority: View PDF, Delete (managers only), Back
-    if (isManager) {
+    // Invoices/receipts: same 3 buttons as before (View PDF, Delete for
+    // managers, Back). Quotes: a short list that adds "🔄 Convert to invoice".
+    return sendDocActions(from, { text: docText, doc, isManager });
+  }
+
+  // ── Quote → Invoice (any business) ─────────────────────────────────────────
+  // Same items & prices, a new INV number, linked both ways so a quote can only
+  // ever become ONE invoice (a double tap just resends it). Trial limit applies.
+  if (a === QT_TO_INV) {
+    if (!biz) return sendMainMenu(from);
+    const quoteId = biz?.sessionData?.docId;
+    if (!quoteId) { await sendText(from, "❌ No document selected."); return sendSalesMenu(from); }
+    try {
+      const { convertQuoteToInvoice } = await import("./zqBooks.js");
+      const r = await convertQuoteToInvoice({ quoteId, biz, by: from });
+      if (r.url) await sendDocument(from, { link: r.url, filename: r.filename });
+      biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
+      const inv = r.invoice;
+      const cur = inv.currency || biz.currency || "USD";
       return sendButtons(from, {
-        text: docText,
+        text: r.already
+          ? `ℹ️ *${r.quote.number}* was already invoiced as *${inv.number}* - here it is again.\nBalance: *${formatMoney(inv.balance, cur)}*`
+          : `✅ *Invoice ${inv.number}* created from quote *${r.quote.number}*\nTotal: *${formatMoney(inv.total, cur)}*\n\nForward the PDF to your customer. When they pay, tap *Record payment*.`,
         buttons: [
-          { id: ACTIONS.VIEW_DOC,   title: "📄 View PDF" },
-          { id: ACTIONS.DELETE_DOC, title: "🗑 Delete" },
-          { id: ACTIONS.SALES_MENU, title: "⬅ Back" }
+          ...(Number(inv.balance) > 0 ? [{ id: `payinv_${inv._id}`, title: "💳 Record payment" }] : []),
+          { id: ACTIONS.SALES_MENU, title: "⬅ Sales" },
+          { id: ACTIONS.MAIN_MENU,  title: "🏠 Main Menu" }
         ]
       });
+    } catch (err) {
+      console.error("[QT→INV]", err.message);
+      await sendText(from, err.code === "TRIAL_LIMIT" ? `🚫 ${err.message}` : `⚠️ Couldn't convert: ${err.message}`);
+      return sendSalesMenu(from);
     }
-    return sendButtons(from, {
-      text: docText,
-      buttons: [
-        { id: ACTIONS.VIEW_DOC,   title: "📄 View PDF" },
-        { id: ACTIONS.SALES_MENU, title: "⬅ Back" },
-        { id: ACTIONS.MAIN_MENU,  title: "🏠 Main Menu" }
-      ]
-    });
   }
 
   if (a === ACTIONS.VIEW_DOC) {
@@ -14023,7 +14063,7 @@ Or pick a category 👇`,
   ).then(() => sendList(from, "📂 Choose how you want to buy:", [
     { id: "sup_search_type_product", title: "📦 Browse Products" },
     { id: "sup_search_type_service", title: "🧰 Browse Services" },
-    { id: "sup_request_sellers", title: "⚡ Request Sellers" }
+    { id: "sup_request_sellers", title: "📝 Request a Quote" }
   ]));
 
 }
@@ -20929,7 +20969,7 @@ if (a === "sup_request_delivery_yes" || a === "sup_request_delivery_no") {
 
     return sendButtons(from, {
       text: "❌ Request session expired. Please start again.",
-      buttons: [{ id: "sup_request_sellers", title: "⚡ Request Sellers" }]
+      buttons: [{ id: "sup_request_sellers", title: "📝 Request a Quote" }]
     });
   }
 
@@ -21340,7 +21380,7 @@ if (a.startsWith("buyer_view_all_quotes_")) {
     return sendButtons(from, {
       text: "❌ Request not found or has expired.",
       buttons: [
-        { id: "sup_request_sellers", title: "⚡ New Request" },
+        { id: "sup_request_sellers", title: "📝 Request a Quote" },
         { id: "find_supplier",       title: "🔍 Browse & Shop" }
       ]
     });
@@ -21358,7 +21398,7 @@ if (a.startsWith("buyer_view_all_quotes_")) {
         `${formatBuyerRequestItems(_bvqRequest.items || [], 10)}\n\n` +
         `${_bvqRequest.status === "open" ? "🟢 Sellers have been notified. Check back soon." : "🔴 This request is closed with no quotes."}`,
       buttons: [
-        { id: "sup_request_sellers", title: "⚡ New Request" },
+        { id: "sup_request_sellers", title: "📝 Request a Quote" },
         { id: "find_supplier",       title: "🔍 Browse & Shop" }
       ]
     });
@@ -21371,7 +21411,7 @@ if (a.startsWith("buyer_view_all_quotes_")) {
   return sendButtons(from, {
     text: "What would you like to do next?",
     buttons: [
-      { id: "sup_request_sellers", title: "⚡ New Request" },
+      { id: "sup_request_sellers", title: "📝 Request a Quote" },
       { id: "find_supplier",       title: "🔍 Browse & Shop" }
     ]
   });
@@ -21389,7 +21429,7 @@ if (a === "buyer_my_requests") {
         `You haven't submitted any requests yet.\n\n` +
         `Use Request Sellers to ask multiple sellers to quote your exact item.`,
       buttons: [
-        { id: "sup_request_sellers", title: "⚡ Request Sellers" },
+        { id: "sup_request_sellers", title: "📝 Request a Quote" },
         { id: "find_supplier",       title: "🔍 Browse & Shop" }
       ]
     });
@@ -21409,7 +21449,7 @@ if (a === "buyer_my_requests") {
     };
   });
  
-  _bmrRows.push({ id: "sup_request_sellers", title: "⚡ New Request" });
+  _bmrRows.push({ id: "sup_request_sellers", title: "📝 Request a Quote" });
   _bmrRows.push({ id: "find_supplier",       title: "🔍 Browse & Shop" });
  
   return sendList(

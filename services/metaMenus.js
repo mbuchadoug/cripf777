@@ -249,7 +249,7 @@ export async function sendMainMenu(to) {
     }
     // Trial supplier (no invoicing tools yet) → keep marketplace-first menu.
     return sendList(to, MENU_MSG, [
-      { id: "sup_request_sellers", title: "⚡ Request Sellers" },
+      { id: "sup_request_sellers", title: "📝 Request a Quote" },
       { id: "biker_request_rider", title: "🏍️ Request a Biker" },
       { id: "find_supplier",       title: "🔍 Browse & Shop" },
       { id: "my_orders",           title: "📋 My Orders" },
@@ -262,7 +262,7 @@ export async function sendMainMenu(to) {
   if (supplier && !supplier.active) {
     return sendList(to, MENU_MSG + "\n\n⚠️ Your listing is currently inactive - activate it to appear in search and receive customer enquiries.", [
       ...(hasStaffRole && isRealBiz ? [{ id: "biz_tools_menu", title: "📊 Business Tools" }] : []),
-      { id: "sup_request_sellers", title: "⚡ Request Sellers" },
+      { id: "sup_request_sellers", title: "📝 Request a Quote" },
       { id: "biker_request_rider", title: "🏍️ Request a Biker" },
       { id: "find_supplier",       title: "🔍 Browse & Shop" },
       { id: "my_orders",           title: "📋 My Orders" },
@@ -284,7 +284,7 @@ export async function sendMainMenu(to) {
   return sendList(to, MENU_MSG, [
     { id: "register_supplier",   title: "🏪 List My Business" },
     { id: "biker_request_rider", title: "🏍️ Request a Biker" },
-    { id: "sup_request_sellers", title: "⚡ Request Sellers" },
+    { id: "sup_request_sellers", title: "📝 Request a Quote" },
     { id: "find_supplier",       title: "🔍 Browse & Shop" },
     { id: "my_orders",           title: "📋 My Orders" },
     { id: "find_school",         title: "🎓 Schools & Tutors" }
@@ -410,7 +410,7 @@ export async function sendBusinessHomeMenu(to, biz, { isOwner = false } = {}) {
 ============================================================================= */
 export async function sendMarketplaceMenu(to, biz, { isOwner = false } = {}) {
   const items = [
-    { id: "sup_request_sellers", title: "⚡ Request Sellers" },
+    { id: "sup_request_sellers", title: "📝 Request a Quote" },
     { id: "biker_request_rider", title: "🏍️ Request a Biker" },
     { id: "find_supplier",       title: "🔍 Browse & Shop" },
     { id: "my_orders",           title: "📋 My Orders" },
@@ -1043,7 +1043,7 @@ const searchTip = "\n\n";
 if (supplier?.active) {
 return sendList(to, `🛒 *ZimQuote Marketplace*${searchTip}`, [
 
-  { id: "sup_request_sellers", title: "⚡ Request Sellers" },
+  { id: "sup_request_sellers", title: "📝 Request a Quote" },
     { id: "find_supplier",       title: "🔍 Browse & Shop" },
   { id: "buyer_my_requests",   title: "📋 My Quote Requests" },
   { id: "my_orders",           title: "🛒 My Orders" },
@@ -1075,7 +1075,7 @@ if (supplier && !supplier.active) {
 
 return sendList(to, `🛒 *ZimQuote Marketplace*${searchTip}`, [
   { id: "find_supplier",     title: "🔍 Browse & Shop" },
-  { id: "sup_request_sellers", title: "⚡ Request Sellers" },
+  { id: "sup_request_sellers", title: "📝 Request a Quote" },
   { id: "buyer_my_requests", title: "📋 My Quote Requests" },
   { id: "register_supplier", title: "🏪 List My Business" },
   { id: "my_orders",         title: "📋 My Orders" },
@@ -1205,7 +1205,7 @@ if (!school.active) {
     [
       { id: "school_pay_plan",    title: "💳 Activate Listing" },
       { id: "school_my_profile",  title: "👁 View My Profile" },
-      { id: "sup_request_sellers", title: "⚡ Request Sellers" },
+      { id: "sup_request_sellers", title: "📝 Request a Quote" },
       { id: "find_supplier",      title: "🔍 Browse & Shop" },
       { id: "find_school",        title: "🏫 Preview Schools" },
       { id: "main_menu_back",     title: "⬅ Main Menu" }
@@ -1241,7 +1241,7 @@ if (!school.active) {
 // them one tap to the marketplace to source uniforms, stationery, books, etc.
 export async function sendSchoolMarketplaceMenu(to) {
   return sendList(to, "🛍️ *Buy Supplies & More*\nSource uniforms, stationery, books, furniture and services from ZimQuote sellers.", [
-    { id: "sup_request_sellers", title: "⚡ Request Quotes" },
+    { id: "sup_request_sellers", title: "📝 Request a Quote" },
     { id: "find_supplier",       title: "🔍 Browse & Shop" },
     { id: "find_school",         title: "🎓 Schools & Tutors" },
     { id: "school_account",      title: "⬅ Back to School" }
