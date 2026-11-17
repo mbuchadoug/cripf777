@@ -865,7 +865,7 @@ function shapeAccount(a, full = false) {
 }
 
 // ============================================================
-// 🏨 LODGE ROOMS  — monitoring, audit, check-in/out (room accounts: room1, room2…)
+// 🏨 LODGE ROOMS  - monitoring, audit, check-in/out (room accounts: room1, room2…)
 // ============================================================
 const ROOM_ONLINE_MS = 6 * 60 * 1000;   // a device seen within 6 min counts as "online now"
 function roomNumber(username) { const m = /^room(\d+)$/.exec(String(username || "")); return m ? Number(m[1]) : null; }

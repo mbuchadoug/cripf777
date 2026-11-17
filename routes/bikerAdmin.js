@@ -22,7 +22,7 @@ import { metroGroup, detectCity } from "../services/bikerPlaces.js";
 import {
   adminCreateJob, adminAssignJob, adminCancelJob, adminCompleteJob, adminRedispatchJob,
   adminResolveDispute, addRiderPoints, riderLevel, riderLink, adminMessage,
-  invalidateRiderCache, normPhone, jobRef, RIDER_POINTS
+  invalidateRiderCache, normPhone, jobRef, RIDER_POINTS, bikerHubLink, bikerHubCaption
 } from "../services/bikerDispatch.js";
 
 const isId = id => mongoose.Types.ObjectId.isValid(String(id || "")) && /^[a-f0-9]{24}$/i.test(String(id));
@@ -47,6 +47,7 @@ export function registerBikerAdminRoutes(router, { requireSupplierAdmin, layout,
   <a class="btn btn-sm ${active === "newbiker" ? "btn-blue" : "btn-gray"}" href="/zq-admin/bikers/new">➕ Register Rider</a>
   <a class="btn btn-sm ${active === "jobs" ? "btn-blue" : "btn-gray"}" href="/zq-admin/biker-jobs">📦 Deliveries</a>
   <a class="btn btn-sm ${active === "newjob" ? "btn-green" : "btn-gray"}" href="/zq-admin/biker-jobs/new">➕ New Delivery Request</a>
+  <a class="btn btn-sm ${active === "share" ? "btn-blue" : "btn-gray"}" href="/zq-admin/bikers/share">📲 Share Link</a>
 </div>`;
   const statusBadge = s => badge(STATUS_LABEL[s] || s, STATUS_COLOR[s] || "gray");
   const riderStatus = r => [
@@ -130,6 +131,40 @@ ${subNav("bikers")}${flash(req)}
     } catch (err) {
       res.send(layout("Bikers", `<div class="alert red">Error: ${esc(err.message)}</div>`));
     }
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SHAREABLE LINK  (one link: Request a Biker + Become a Rider)
+  // ═══════════════════════════════════════════════════════════════════════════
+  router.get("/bikers/share", requireSupplierAdmin, (req, res) => {
+    const card = (title, city) => {
+      const link = bikerHubLink(city), cap = bikerHubCaption(city);
+      const id = "c" + Math.random().toString(36).slice(2, 8);
+      return `<div class="panel">
+  <h3>${esc(title)}</h3>
+  <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start">
+    <div style="text-align:center"><img src="${qrUrl(link, 200)}" width="200" height="200" alt="QR"><br>
+      <a class="btn btn-sm btn-gray" href="${qrUrl(link, 600)}" target="_blank" download>⬇ QR (600px)</a></div>
+    <div style="flex:1;min-width:260px">
+      <label class="muted" style="font-size:12px">Link</label>
+      <div style="display:flex;gap:8px;margin:4px 0 12px"><input id="${id}l" value="${esc(link)}" readonly style="flex:1;font-size:12px">
+        <button class="btn btn-sm btn-blue" onclick="cp('${id}l')">📋 Copy</button>
+        <a class="btn btn-sm btn-green" href="${esc(link)}" target="_blank">🔗 Test</a></div>
+      <label class="muted" style="font-size:12px">WhatsApp / Facebook caption</label>
+      <textarea id="${id}c" rows="7" readonly style="width:100%;font-size:12px;margin-top:4px">${esc(cap)}</textarea>
+      <button class="btn btn-sm btn-blue" onclick="cp('${id}c')">📋 Copy caption</button>
+    </div>
+  </div>
+</div>`;
+    };
+    res.send(layout("Bikers", `
+${subNav("share")}
+<div class="panel"><p style="line-height:1.7">One link for <strong>both</strong>: customers tap <em>📦 Request a Biker</em>, riders tap <em>🏍️ Become a Rider</em>.
+It opens WhatsApp with a message ready - they just press <strong>Send</strong>. Registered riders get their Rider Menu instead.
+City links also remember the city, so customers in that city skip the "Which city?" question.</p></div>
+${card("🇿🇼 Main link (all cities)", "")}
+${["Harare", "Bulawayo", "Mutare", "Gweru", "Chitungwiza"].map(c => card(`📍 ${c}`, c)).join("")}
+<script>function cp(id){const el=document.getElementById(id);el.select();navigator.clipboard?navigator.clipboard.writeText(el.value):document.execCommand("copy");}</script>`));
   });
 
   // ═══════════════════════════════════════════════════════════════════════════

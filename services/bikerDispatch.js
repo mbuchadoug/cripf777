@@ -43,7 +43,7 @@ import UserRole from "../models/userRole.js";
 const GRAPH_API_VERSION = "v24.0";
 const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.META_PHONE_NUMBER_ID || process.env.PHONE_NUMBER_ID;
 const ACCESS_TOKEN    = process.env.META_ACCESS_TOKEN || process.env.WHATSAPP_ACCESS_TOKEN;
-const BOT_NUMBER      = String(process.env.ZQ_BOT_NUMBER || "263771143904").replace(/\D+/g, "");
+const BOT_NUMBER      = String(process.env.ZQ_BOT_NUMBER || process.env.WHATSAPP_BOT_NUMBER || "263771143904").replace(/\D+/g, "");
 const ADMIN_PHONE     = String(process.env.ZQ_ADMIN_PHONE || process.env.ADMIN_WHATSAPP_PHONE || "").replace(/\D+/g, "");
 
 export const BIKER_CONFIG = {
@@ -372,6 +372,10 @@ export async function handleBikerMessage({ from, text = "", action = "", biz = n
       if (a && (a === "reg_type_biker" || a.startsWith("biker_"))) return handleAction(ctx, a);
 
       // C) Deep links (typed text from wa.me links)
+      // Shareable hub link: "ZQ:BIKERS" or "ZQ:BIKERS:HARARE" anywhere in the text
+      // (the wa.me prefill wraps it in a friendly sentence). Always wins, even mid-flow.
+      const hub = txt.match(/ZQ:BIKERS?(?::([A-Za-z][A-Za-z -]{1,30}?))?(?=$|[\s).,!🏍])/i);
+      if (hub) return bikerHub(ctx, (hub[1] || "").trim());
       const riderLink = txt.match(/ZQ:RIDER:([a-f0-9]{24})/i);
       if (riderLink) return bookSpecificRider(ctx, riderLink[1]);
       if (/^ZQ:BGROUP:/i.test(txt)) return bikerGroupLink(ctx, txt.replace(/^ZQ:BGROUP:/i, "").trim());
@@ -955,6 +959,9 @@ async function resolveCityAndCreate(ctx, req) {
     const pr = await SupplierProfile.findById(req.preferredRiderId).lean().catch(() => null);
     city = pr?.location?.city || "";
   }
+  // Nothing recognisable at all ("CBD to town")? Use the customer's last city
+  // (set by previous trips or a city share link). The confirmation shows the city.
+  if (!city && !(det.options || []).length && ctx.sess.lastCity) city = titleCity(ctx.sess.lastCity);
   if (city) return createAndDispatchJob(ctx, { ...req, city });
 
   // Couldn't tell - ask once. Likely towns first, then the rest.
@@ -1798,6 +1805,53 @@ async function bookSpecificRider(ctx, riderId) {
   }
   if (normPhone(r.phone) === ctx.phone) { await say(ctx.from, "🔗 That's your own rider link - share it with customers!"); return sendRiderMenu(ctx.from, r, ctx.biz); }
   return startRiderRequest(ctx, { preferredRider: r });
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// SHAREABLE HUB LINK  - one link for BOTH "Request a Biker" and "Become a Rider"
+//   https://wa.me/<BOT>?text=...ZQ:BIKERS          (any city)
+//   https://wa.me/<BOT>?text=...ZQ:BIKERS:HARARE   (city-specific - remembers city)
+// ═════════════════════════════════════════════════════════════════════════════
+export function bikerHubLink(city = "") {
+  const tag = city ? `ZQ:BIKERS:${String(city).trim().toUpperCase().replace(/\s+/g, "-")}` : "ZQ:BIKERS";
+  return `https://wa.me/${BOT_NUMBER}?text=${encodeURIComponent(`Hi ZimQuote Bikers 🏍️ ${tag}`)}`;
+}
+export function bikerHubCaption(city = "") {
+  const where = city ? ` in ${titleCity(city)}` : "";
+  return `🏍️ *ZimQuote Bikers*${where}\n\n` +
+    `📦 Need something delivered or an errand run? Riders send you prices on WhatsApp - you choose.\n` +
+    `🏍️ Have a motorbike? Join as a rider, get jobs on WhatsApp and keep 100% of every fare.\n\n` +
+    `👉 Tap: ${bikerHubLink(city)}`;
+}
+
+async function bikerHub(ctx, rawCity = "") {
+  const city = rawCity ? titleCity(rawCity.replace(/-/g, " ")) : "";
+  if (ctx.sess?.state) await clearState(ctx.phone);           // a link always starts clean
+  if (city) await setLastCity(ctx.phone, city);               // helps the request skip "Which city?"
+
+  const rider = await getRider(ctx.phone);
+  let online = 0;
+  try {
+    const q = { profileType: "biker", active: true, suspended: { $ne: true }, riderActive: { $ne: false } };
+    if (city) q["location.city"] = { $in: metroGroup(city).map(c => new RegExp(`^${escRe(c)}$`, "i")) };
+    online = await SupplierProfile.countDocuments(q).setOptions({ strictQuery: false });
+  } catch (_) {}
+  console.log(`[BIKER HUB] ${ctx.phone} opened bikers link${city ? " (" + city + ")" : ""} · rider=${!!rider}`);
+
+  if (rider) {
+    await ask(ctx.from,
+      `🏍️ *ZimQuote Bikers*${city ? ` - ${city}` : ""}\n\nYou're registered as a rider ✅\n\n` +
+      `• Tap *Rider Menu* to go online and see jobs\n• Tap *Request a Biker* if you need a delivery yourself`,
+      [{ id: "biker_menu", title: "🏍️ Rider Menu" }, { id: "biker_request_rider", title: "📦 Request a Biker" }]);
+    return true;
+  }
+  await ask(ctx.from,
+    `🏍️ *ZimQuote Bikers*${city ? ` - ${city}` : ""}\nFast deliveries & errands on WhatsApp.\n\n` +
+    `📦 *Need something delivered?*\nTap *Request a Biker* - nearby riders send you prices, you choose.\n_e.g. Collect documents, CBD to Avondale_\n\n` +
+    `🏍️ *Have a motorbike?*\nTap *Become a Rider* - get jobs on WhatsApp, set your own price, keep 100% of the fare.` +
+    (online ? `\n\n🟢 ${online} rider${online === 1 ? "" : "s"} online${city ? ` in ${city}` : ""} now` : ""),
+    [{ id: "biker_request_rider", title: "📦 Request a Biker" }, { id: "reg_type_biker", title: "🏍️ Become a Rider" }, { id: "main_menu_back", title: "🏠 Main Menu" }]);
+  return true;
 }
 
 async function bikerGroupLink(ctx, slug) {
