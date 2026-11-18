@@ -334,7 +334,9 @@ console.log("Full msg:", JSON.stringify(msg, null, 2));
             try { fs_sync.writeFileSync(path_sync.join(dir, fname), bytes); }
             catch (fsErr) { console.error("[RIDER KYC] disk save failed:", fsErr.message); }
             console.log("[RIDER KYC] ✅ Saved:", fname, `${Math.round(bytes.length / 1024)}KB`);
-            await handleBikerMessage({ from, text: "", action: "", imageUrl: `/zq-admin/bikers/kyc-file/${fname}` });
+            // Link WITHOUT the .jpg/.png ending - nginx would otherwise serve it as a
+            // static file and never reach the app (404).
+            await handleBikerMessage({ from, text: "", action: "", imageUrl: `/zq-admin/bikers/kyc-file/${fname.replace(/\.(jpg|png)$/, "")}` });
           } catch (err) {
             console.error("[RIDER KYC PHOTO ERROR]", err.message);
             await sendText(from, "❌ We couldn't save that photo. Please send it again (a clear photo, not a document).");
