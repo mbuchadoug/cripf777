@@ -300,6 +300,41 @@ console.log("Full msg:", JSON.stringify(msg, null, 2));
         return;
       }
 
+      // ── Case 3: Rider identity check (ID photo / photo with bike) ───────────
+      // Only when the rider is on that step. Saved in a PRIVATE folder (not under
+      // public/), so the ID can only be opened by a logged-in admin via
+      // /zq-admin/bikers/kyc-file/<name>. Never shown to customers.
+      try {
+        const { bikerAwaitingPhoto, handleBikerMessage } = await import("../services/bikerDispatch.js");
+        if (await bikerAwaitingPhoto(from)) {
+          try {
+            const token   = process.env.META_ACCESS_TOKEN || process.env.WHATSAPP_ACCESS_TOKEN;
+            const metaRes = await axios.get(`https://graph.facebook.com/v24.0/${mediaId}`, {
+              headers: { Authorization: `Bearer ${token}` }
+            });
+            const dlUrl = metaRes.data?.url;
+            if (!dlUrl) throw new Error("Could not get Meta media download URL");
+            const imgRes = await axios.get(dlUrl, {
+              headers:      { Authorization: `Bearer ${token}` },
+              responseType: "arraybuffer"
+            });
+            const ext   = mime.includes("png") ? "png" : "jpg";
+            const fname = `kyc_${String(from).replace(/\D+/g, "")}_${Date.now()}.${ext}`;
+            const dir   = path_sync.join(__projectRoot, "private", "rider-kyc");
+            if (!fs_sync.existsSync(dir)) fs_sync.mkdirSync(dir, { recursive: true });
+            fs_sync.writeFileSync(path_sync.join(dir, fname), Buffer.from(imgRes.data));
+            console.log("[RIDER KYC] ✅ Saved:", fname);
+            await handleBikerMessage({ from, text: "", action: "", imageUrl: `/zq-admin/bikers/kyc-file/${fname}` });
+          } catch (err) {
+            console.error("[RIDER KYC PHOTO ERROR]", err.message);
+            await sendText(from, "❌ We couldn't save that photo. Please send it again (a clear photo, not a document).");
+          }
+          return;
+        }
+      } catch (err) {
+        console.error("[RIDER KYC CHECK ERROR]", err.message);
+      }
+
       // ── Unknown image context - ignore silently ─────────────────────────────
       return;
     }

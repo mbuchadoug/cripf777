@@ -363,6 +363,20 @@ ${subNav("newbiker")}${flash(req)}
   // ═══════════════════════════════════════════════════════════════════════════
   // 🪪 IDENTITY CHECK (approve / reject / reset) + nudge paid-but-unverified
   // ═══════════════════════════════════════════════════════════════════════════
+  // ID / bike photos live in <project>/private/rider-kyc (NOT public). Only a
+  // logged-in admin can open them, through this route.
+  router.get("/bikers/kyc-file/:name", requireSupplierAdmin, async (req, res) => {
+    const name = String(req.params.name || "");
+    if (!/^kyc_\d{6,15}_\d{10,14}\.(jpg|png)$/.test(name)) return res.status(404).send("Not found");
+    const { fileURLToPath } = await import("url");
+    const path = (await import("path")).default;
+    const fs = (await import("fs")).default;
+    const file = path.join(path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."), "private", "rider-kyc", name);
+    if (!fs.existsSync(file)) return res.status(404).send("Not found");
+    res.set("Cache-Control", "private, no-store");
+    res.sendFile(file);
+  });
+
   router.post("/bikers/kyc-nudge", requireSupplierAdmin, async (req, res) => {
     try {
       const list = await SupplierProfile.find({ profileType: "biker", active: true, suspended: { $ne: true },

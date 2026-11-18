@@ -385,6 +385,16 @@ const REGISTER_RE  = /^(become\s+a\s+(rider|biker)|register\s+as\s+(a\s+)?(rider
 const RIDER_WORD_RE = /^((go\s+)?online|(go\s+)?offline|open jobs|new jobs|jobs near me|points|my points|earnings|stats)$/i;
 const MYDEL_RE     = /^(my deliveries|deliveries|my rides|track|track delivery|my delivery|my bikers?)$/i;
 
+// For the WhatsApp webhook: is this phone in a biker step that expects a PHOTO?
+// (ID photo / photo with bike). The webhook downloads the image and passes it on
+// only when this is true - same as it already does for buyer request photos.
+export async function bikerAwaitingPhoto(from) {
+  const s = await UserSession.findOne({ phone: normPhone(from) }, { "tempData.bikerState": 1, "tempData.bikerStateAt": 1 }).lean().catch(() => null);
+  const st = s?.tempData?.bikerState || "";
+  const at = s?.tempData?.bikerStateAt ? new Date(s.tempData.bikerStateAt).getTime() : 0;
+  return /^biker_(photo_wait|kyc_id|kyc_selfie)$/.test(st) && (!at || Date.now() - at < 90 * 60000);
+}
+
 export async function handleBikerMessage({ from, text = "", action = "", biz = null, saveBiz = null, imageUrl = null }) {
   const phone = normPhone(from);
   if (!phone) return false;
@@ -587,7 +597,8 @@ export async function startBikerRegistration(ctx) {
 async function regName(ctx, name) {
   const n = String(name || "").replace(/\s+/g, " ").trim();
   if (n.length < 3 || /^\d+$/.test(n) || !/\s/.test(n)) { await say(ctx.from, "Please type your *full name* as on your ID (first name and surname), e.g. *Tapiwa Moyo*."); return true; }
-  await setState(ctx.phone, "biker_reg_city", { reg: { ...(ctx.sess.data.reg || {}), name: n.slice(0, 60) } });
+  const proper = n.toLowerCase().replace(/(^|[\s'-])(\p{L})/gu, (m, a, b) => a + b.toUpperCase());   // "tapiwa moyo" → "Tapiwa Moyo"
+  await setState(ctx.phone, "biker_reg_city", { reg: { ...(ctx.sess.data.reg || {}), name: proper.slice(0, 60) } });
   await pick(ctx.from,
     `👍 Thanks ${firstName(n)}!\n\n*2/5 - Which city do you ride in?*\nTap one, or type it.`,
     CITY_ROWS.map(c => ({ id: `biker_regcity_${c.toLowerCase()}`, title: c })));
