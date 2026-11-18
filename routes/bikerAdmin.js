@@ -368,13 +368,30 @@ ${subNav("newbiker")}${flash(req)}
   router.get("/bikers/kyc-file/:name", requireSupplierAdmin, async (req, res) => {
     const name = String(req.params.name || "");
     if (!/^kyc_\d{6,15}_\d{10,14}\.(jpg|png)$/.test(name)) return res.status(404).send("Not found");
+    res.set("Cache-Control", "private, no-store");
+    // 1) MongoDB copy (saved by the WhatsApp webhook)
+    try {
+      const doc = await mongoose.connection.collection("rider_kyc_files").findOne({ _id: name });
+      if (doc?.data) {
+        const buf = Buffer.isBuffer(doc.data) ? doc.data : Buffer.from(doc.data.buffer || doc.data);
+        res.type(doc.mime || (name.endsWith(".png") ? "png" : "jpeg"));
+        return res.send(buf);
+      }
+    } catch (e) { console.warn("[RIDER KYC] DB read failed:", e.message); }
+    // 2) Disk copy - check every folder the app may be running from
     const { fileURLToPath } = await import("url");
     const path = (await import("path")).default;
     const fs = (await import("fs")).default;
-    const file = path.join(path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."), "private", "rider-kyc", name);
-    if (!fs.existsSync(file)) return res.status(404).send("Not found");
-    res.set("Cache-Control", "private, no-store");
-    res.sendFile(file);
+    const here = path.dirname(fileURLToPath(import.meta.url));
+    const tried = [...new Set([
+      path.join(here, "..", "private", "rider-kyc", name),
+      path.join(process.cwd(), "private", "rider-kyc", name),
+      path.join(here, "private", "rider-kyc", name)
+    ].map(p => path.resolve(p)))];
+    const file = tried.find(p => fs.existsSync(p));
+    if (file) return res.sendFile(file);
+    console.warn("[RIDER KYC] photo not found:", name, tried);
+    res.status(404).type("text").send(`Photo not found on the server.\nLooked in:\n${tried.join("\n")}\n\nAsk the rider to resend it (Rider Menu → Verify my ID).`);
   });
 
   router.post("/bikers/kyc-nudge", requireSupplierAdmin, async (req, res) => {
@@ -507,7 +524,7 @@ ${subNav("activity")}${flash(req)}
       const link = riderLink(r._id);
       const name = r.riderLegalName || String(r.businessName || "Rider").replace(/\s*\(Rider\)$/i, "");
       const k = r.riderKyc || {};
-      const img = (u, label) => u ? `<a href="${esc(u)}" target="_blank" style="text-align:center;font-size:12px"><img src="${esc(u)}" style="width:220px;height:150px;object-fit:cover;border-radius:10px;border:1px solid #e2e8f0;display:block;margin-bottom:4px">${label}</a>`
+      const img = (u, label) => u ? `<a href="${esc(u)}" target="_blank" style="text-align:center;font-size:12px"><img src="${esc(u)}" alt="${label}" onerror="this.outerHTML='<div style=&quot;width:220px;height:150px;border-radius:10px;background:#fef2f2;color:#b91c1c;display:flex;align-items:center;justify-content:center;text-align:center;font-size:12px;padding:8px&quot;>⚠️ Could not load - click to see why</div>'" style="width:220px;height:150px;object-fit:cover;border-radius:10px;border:1px solid #e2e8f0;display:block;margin-bottom:4px">${label}</a>`
         : `<div style="width:220px;height:150px;border-radius:10px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-size:12px;color:#64748b;text-align:center">${label}<br>not sent</div>`;
       const kycPanel = `<div class="panel" id="kyc" style="border:2px solid ${isRiderVerified(r) ? "#bfdbfe" : k.status === "pending" ? "#fdba74" : "#e2e8f0"}">
   <h3>🪪 Identity check ${kycBadge(r)}</h3>

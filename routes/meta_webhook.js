@@ -322,8 +322,18 @@ console.log("Full msg:", JSON.stringify(msg, null, 2));
             const fname = `kyc_${String(from).replace(/\D+/g, "")}_${Date.now()}.${ext}`;
             const dir   = path_sync.join(__projectRoot, "private", "rider-kyc");
             if (!fs_sync.existsSync(dir)) fs_sync.mkdirSync(dir, { recursive: true });
-            fs_sync.writeFileSync(path_sync.join(dir, fname), Buffer.from(imgRes.data));
-            console.log("[RIDER KYC] ✅ Saved:", fname);
+            const bytes = Buffer.from(imgRes.data);
+            // Primary store: MongoDB (works no matter which folder the app runs from).
+            try {
+              const { default: mongoose } = await import("mongoose");
+              await mongoose.connection.collection("rider_kyc_files").insertOne({
+                _id: fname, phone: String(from).replace(/\D+/g, ""), mime, size: bytes.length, data: bytes, createdAt: new Date()
+              });
+            } catch (dbErr) { console.error("[RIDER KYC] DB save failed:", dbErr.message); }
+            // Backup copy on disk (private, not under public/).
+            try { fs_sync.writeFileSync(path_sync.join(dir, fname), bytes); }
+            catch (fsErr) { console.error("[RIDER KYC] disk save failed:", fsErr.message); }
+            console.log("[RIDER KYC] ✅ Saved:", fname, `${Math.round(bytes.length / 1024)}KB`);
             await handleBikerMessage({ from, text: "", action: "", imageUrl: `/zq-admin/bikers/kyc-file/${fname}` });
           } catch (err) {
             console.error("[RIDER KYC PHOTO ERROR]", err.message);
