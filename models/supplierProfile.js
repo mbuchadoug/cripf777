@@ -140,6 +140,27 @@ const SupplierProfileSchema = new mongoose.Schema({
   baseFare:    { type: Number, default: 0 },        // optional indicative starting fare (USD)
   completedTrips: { type: Number, default: 0 },
 
+  // ── Rider identity (KYC) - private to ZimQuote admin, never shown to customers ──
+  // riderLegalName   = full name exactly as on the National ID (admin checks it)
+  // riderDisplayName = what customers see before booking ("Speedy T", "Tapi")
+  // After a customer books, they see the LEGAL FIRST NAME + plate only.
+  // Jobs are only sent to riders who are PAID (active) AND APPROVED here.
+  riderLegalName:   { type: String, default: "" },
+  riderDisplayName: { type: String, default: "" },
+  riderKyc: {
+    status:       { type: String, enum: ["none", "pending", "approved", "rejected"], default: "none" },
+    idPhotoUrl:   { type: String, default: "" },   // National ID photo (admin only)
+    selfieUrl:    { type: String, default: "" },   // rider with bike, plate visible
+    idLast4:      { type: String, default: "" },   // last 4 of the ID number, typed by admin
+    submittedAt:  { type: Date,   default: null },
+    reviewedAt:   { type: Date,   default: null },
+    reviewedBy:   { type: String, default: "" },
+    rejectReason: { type: String, default: "" },
+    nameMatch:    { type: Boolean, default: false },
+    faceMatch:    { type: Boolean, default: false },
+    plateMatch:   { type: Boolean, default: false }
+  },
+
   // ── Service-provider specific ──────────────────────────────────────────────
   rates: {
     type: [{

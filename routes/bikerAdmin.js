@@ -22,7 +22,8 @@ import { metroGroup, detectCity } from "../services/bikerPlaces.js";
 import {
   adminCreateJob, adminAssignJob, adminCancelJob, adminCompleteJob, adminRedispatchJob,
   adminResolveDispute, addRiderPoints, riderLevel, riderLink, adminMessage,
-  invalidateRiderCache, normPhone, jobRef, RIDER_POINTS, bikerHubLink, bikerHubCaption
+  invalidateRiderCache, normPhone, jobRef, RIDER_POINTS, bikerHubLink, bikerHubCaption,
+  isRiderVerified, canTakeJobs, publicName, maskPhone, sendRiderActivityAlert, adminReviewKyc, BikerActivity
 } from "../services/bikerDispatch.js";
 
 const isId = id => mongoose.Types.ObjectId.isValid(String(id || "")) && /^[a-f0-9]{24}$/i.test(String(id));
@@ -40,20 +41,29 @@ export function registerBikerAdminRoutes(router, { requireSupplierAdmin, layout,
     const er = req.query.error ? `<div class="alert red" style="margin-bottom:14px">❌ ${esc(req.query.error)}</div>` : "";
     return ok + er;
   };
-  const go = (res, url, kind, msg) => res.redirect(`${url}${url.includes("?") ? "&" : "?"}${kind}=${encodeURIComponent(msg)}`);
+  const go = (res, url, kind, msg) => {
+    const [path, hash] = String(url).split("#");
+    res.redirect(`${path}${path.includes("?") ? "&" : "?"}${kind}=${encodeURIComponent(msg)}${hash ? "#" + hash : ""}`);
+  };
   const subNav = active => `
 <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
   <a class="btn btn-sm ${active === "bikers" ? "btn-blue" : "btn-gray"}" href="/zq-admin/bikers">🏍️ Riders</a>
   <a class="btn btn-sm ${active === "newbiker" ? "btn-blue" : "btn-gray"}" href="/zq-admin/bikers/new">➕ Register Rider</a>
   <a class="btn btn-sm ${active === "jobs" ? "btn-blue" : "btn-gray"}" href="/zq-admin/biker-jobs">📦 Deliveries</a>
   <a class="btn btn-sm ${active === "newjob" ? "btn-green" : "btn-gray"}" href="/zq-admin/biker-jobs/new">➕ New Delivery Request</a>
+  <a class="btn btn-sm ${active === "kyc" ? "btn-blue" : "btn-gray"}" href="/zq-admin/bikers?status=kyc">🪪 ID checks</a>
+  <a class="btn btn-sm ${active === "activity" ? "btn-blue" : "btn-gray"}" href="/zq-admin/bikers/activity">👁 Rider Activity</a>
   <a class="btn btn-sm ${active === "share" ? "btn-blue" : "btn-gray"}" href="/zq-admin/bikers/share">📲 Share Link</a>
 </div>`;
   const statusBadge = s => badge(STATUS_LABEL[s] || s, STATUS_COLOR[s] || "gray");
+  const kycBadge = r => isRiderVerified(r) ? badge("🪪 ID approved", "blue")
+    : r.riderKyc?.status === "pending" ? badge("🪪 ID to check", "orange")
+    : r.riderKyc?.status === "rejected" ? badge("🪪 ID rejected", "red")
+    : badge("🪪 No ID", "gray");
   const riderStatus = r => [
-    r.suspended ? badge("Suspended", "red") : r.active ? badge("Active", "green") : badge("Not paid", "orange"),
-    r.active && !r.suspended ? (r.riderActive !== false ? badge("🟢 Online", "teal") : badge("Offline", "gray")) : "",
-    r.bike?.verifiedAt ? badge("✅ Verified", "blue") : ""
+    r.suspended ? badge("Suspended", "red") : r.active ? badge("Paid", "green") : badge("Not paid", "orange"),
+    kycBadge(r),
+    canTakeJobs(r) ? (r.riderActive !== false ? badge("🟢 Getting jobs", "teal") : badge("Offline", "gray")) : (r.active && !r.suspended ? badge("⛔ No jobs until ID approved", "red") : "")
   ].join(" ");
   const cityOptions = sel => cities().map(c => `<option ${String(sel || "").toLowerCase() === c.toLowerCase() ? "selected" : ""}>${esc(c)}</option>`).join("");
 
@@ -71,13 +81,19 @@ export function registerBikerAdminRoutes(router, { requireSupplierAdmin, layout,
       if (status === "unverified") filter["bike.verifiedAt"] = { $in: [null] };
       if (status === "photo") Object.assign(filter, { "bike.photoUrl": { $nin: [null, ""] }, "bike.verifiedAt": { $in: [null] } });
       if (status === "suspended") filter.suspended = true;
+      if (status === "kyc") Object.assign(filter, { "riderKyc.status": "pending", "bike.verifiedAt": { $in: [null] } });
+      if (status === "paidunverified") Object.assign(filter, { active: true, suspended: { $ne: true }, "riderKyc.status": { $ne: "approved" }, "bike.verifiedAt": { $in: [null] } });
       if (q.trim()) {
         const rx = new RegExp(q.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
         filter.$or = [{ businessName: rx }, { phone: rx }, { "bike.plate": rx }, { riderAreas: rx }];
       }
       const dayStart = new Date(); dayStart.setHours(0, 0, 0, 0);
+      const [kycWaiting, paidUnverified] = await Promise.all([
+        SupplierProfile.countDocuments({ profileType: "biker", "riderKyc.status": "pending", "bike.verifiedAt": { $in: [null] } }).setOptions({ strictQuery: false }),
+        SupplierProfile.countDocuments({ profileType: "biker", active: true, suspended: { $ne: true }, "riderKyc.status": { $ne: "approved" }, "bike.verifiedAt": { $in: [null] } }).setOptions({ strictQuery: false })
+      ]);
       const [riders, total, active, online, verified, photoWaiting, open, live, doneToday, disputed] = await Promise.all([
-        SupplierProfile.find(filter).setOptions({ strictQuery: false }).sort({ riderPoints: -1, createdAt: -1 }).limit(300).lean(),
+        SupplierProfile.find(filter).setOptions({ strictQuery: false }).sort(status === "kyc" ? { "riderKyc.submittedAt": 1 } : { riderPoints: -1, createdAt: -1 }).limit(300).lean(),
         SupplierProfile.countDocuments({ profileType: "biker" }),
         SupplierProfile.countDocuments({ profileType: "biker", active: true }),
         SupplierProfile.countDocuments({ profileType: "biker", active: true, suspended: { $ne: true }, riderActive: { $ne: false } }).setOptions({ strictQuery: false }),
@@ -91,7 +107,7 @@ export function registerBikerAdminRoutes(router, { requireSupplierAdmin, layout,
       const rows = riders.map(r => {
         const lvl = riderLevel(r.riderPoints);
         return `<tr>
-          <td><a class="btn-link" href="/zq-admin/bikers/${r._id}">${esc(String(r.businessName || "Rider").replace(/\s*\(Rider\)$/i, ""))}</a><br><small class="muted">🏍️ ${esc(r.bike?.plate || "-")}</small></td>
+          <td><a class="btn-link" href="/zq-admin/bikers/${r._id}${status === "kyc" ? "#kyc" : ""}">${esc(r.riderLegalName || String(r.businessName || "Rider").replace(/\s*\(Rider\)$/i, ""))}</a><br><small class="muted">"${esc(publicName(r))}" · 🏍️ ${esc(r.bike?.plate || "-")}</small></td>
           <td>${esc(r.phone)}</td>
           <td>${esc(r.location?.city || "-")}<br><small class="muted">${esc((r.riderAreas || []).join(", ") || "Whole city")}</small></td>
           <td>${riderStatus(r)}</td>
@@ -105,19 +121,26 @@ export function registerBikerAdminRoutes(router, { requireSupplierAdmin, layout,
 ${subNav("bikers")}${flash(req)}
 <div class="stats-grid">
   ${stat(total, "Riders", "blue")}${stat(active, "Active (paid)", "green")}${stat(online, "Online now", "teal")}
-  ${stat(verified, "Verified", "purple")}${stat(`<a href="/zq-admin/bikers?status=photo" style="color:inherit">${photoWaiting}</a>`, "Photos to verify", "orange")}
+  ${stat(verified, "ID approved", "purple")}${stat(`<a href="/zq-admin/bikers?status=kyc" style="color:inherit">${kycWaiting}</a>`, "🪪 IDs to check", "orange")}
+  ${stat(`<a href="/zq-admin/bikers?status=paidunverified" style="color:inherit">${paidUnverified}</a>`, "Paid, no jobs (ID)", "red")}
   ${stat(`<a href="/zq-admin/biker-jobs?status=open" style="color:inherit">${open}</a>`, "Open requests", "yellow")}
   ${stat(`<a href="/zq-admin/biker-jobs?status=live" style="color:inherit">${live}</a>`, "In progress", "blue")}
   ${stat(doneToday, "Completed today", "green")}
   ${stat(`<a href="/zq-admin/biker-jobs?status=disputed" style="color:inherit">${disputed}</a>`, "Disputes", "red")}
 </div>
+${paidUnverified ? `<div class="panel" style="border:1px solid #fecaca;background:#fff7f7">
+  <strong>⛔ ${paidUnverified} paid rider(s) get no jobs until their ID is approved.</strong>
+  <span class="muted">Riders only receive jobs when paid AND ID-approved.</span>
+  <form method="POST" action="/zq-admin/bikers/kyc-nudge" style="display:inline;margin-left:8px"><button class="btn btn-sm btn-blue">📲 Ask them to send their ID</button></form>
+  <a class="btn btn-sm btn-gray" href="/zq-admin/bikers?status=paidunverified">View</a>
+</div>` : ""}
 <div class="panel">
   <div class="panel-head"><h3>Riders <span class="count">${riders.length}</span></h3>
     <form class="filter-form" method="GET">
       <input name="q" value="${esc(q)}" placeholder="Name, phone, plate, area">
       <select name="city"><option value="">All cities</option>${cityOptions(city)}</select>
       <select name="status">
-        ${[["", "All"], ["online", "Online now"], ["active", "Active"], ["unpaid", "Not paid"], ["photo", "Photo to verify"], ["unverified", "Not verified"], ["suspended", "Suspended"]]
+        ${[["", "All"], ["kyc", "🪪 IDs to check"], ["paidunverified", "Paid, ID not approved"], ["online", "Online now"], ["active", "Paid"], ["unpaid", "Not paid"], ["unverified", "Not verified"], ["suspended", "Suspended"]]
           .map(([v, l]) => `<option value="${v}" ${status === v ? "selected" : ""}>${l}</option>`).join("")}
       </select>
       <button>Filter</button> <a class="btn-reset" href="/zq-admin/bikers">Reset</a>
@@ -227,20 +250,22 @@ ${subNav("newbiker")}${flash(req)}
   <p class="muted" style="margin-bottom:14px">For riders who sign up by phone or walk in. They can then use the Rider Menu on WhatsApp straight away (type <code>hi</code>).</p>
   <form method="POST" action="/zq-admin/bikers/new">
     <div class="form-grid">
-      <div class="fg"><label>Full name *</label><input name="name" required placeholder="Tapiwa Moyo"></div>
+      <div class="fg"><label>Full legal name (as on ID) *</label><input name="name" required placeholder="Tapiwa Moyo"></div>
+      <div class="fg"><label>Rider name customers see</label><input name="displayName" maxlength="20" placeholder="blank = first name, or e.g. Speedy T"></div>
       <div class="fg"><label>WhatsApp number *</label><input name="phone" required placeholder="0772 123 456"></div>
       <div class="fg"><label>City *</label><select name="city" required>${cityOptions("Harare")}</select></div>
       <div class="fg"><label>Areas covered</label><input name="areas" placeholder="CBD, Avondale, Mbare (blank = whole city)"></div>
       <div class="fg"><label>Number plate *</label><input name="plate" required placeholder="AEX 1234" style="text-transform:uppercase"></div>
       <div class="fg"><label>Bike (make / model)</label><input name="bikeModel" placeholder="Honda Ace 125"></div>
       <div class="fg"><label>Photo URL (rider with bike)</label><input name="photoUrl" placeholder="https://..."></div>
+      <div class="fg"><label>National ID photo URL</label><input name="idPhotoUrl" placeholder="https://... (admin only)"></div>
       <div class="fg"><label>National ID number (last 4 only)</label><input name="idLast4" maxlength="4" placeholder="e.g. 47K2"></div>
     </div>
     <div style="display:flex;gap:18px;flex-wrap:wrap;margin:6px 0 14px">
       <label><input type="checkbox" name="licenceOnFile" value="true"> Licence seen</label>
       <label><input type="checkbox" name="idOnFile" value="true"> ID seen</label>
       <label><input type="checkbox" name="insurance" value="true"> Insured</label>
-      <label><input type="checkbox" name="verified" value="true"> ✅ Mark verified</label>
+      <label><input type="checkbox" name="verified" value="true"> 🪪 ID checked in person (name, face &amp; plate match) - approve now</label>
     </div>
     <div class="form-grid">
       <div class="fg"><label>Activate now?</label>
@@ -289,7 +314,7 @@ ${subNav("newbiker")}${flash(req)}
       let rider;
       try {
         rider = await SupplierProfile.create({
-          phone, businessName: `${name} (Rider)`, businessId: biz._id, profileType: "biker",
+          phone, businessName: `${String(b.displayName || "").trim().slice(0, 20) || name.split(/\s+/)[0]} (Rider)`, businessId: biz._id, profileType: "biker",
           location: { city, area: areas[0] || city }, categories: ["transport"],
           revealVisitorPhone: true, canViewContacts: true, tier: "basic", tierRank: 1,
           subscriptionStatus: isActive ? "active" : "pending", subscriptionPlan: days >= 365 ? "annual" : "monthly",
@@ -303,6 +328,14 @@ ${subNav("newbiker")}${flash(req)}
       }
       await SupplierProfile.updateOne({ _id: rider._id }, { $set: {
         riderAreas: areas, riderActive: true, riderPoints: 0, riderMissedPings: 0,
+        riderLegalName: name, riderDisplayName: String(b.displayName || "").trim().slice(0, 20),
+        riderKyc: {
+          status: b.verified === "true" ? "approved" : (String(b.idPhotoUrl || "").trim() ? "pending" : "none"),
+          idPhotoUrl: String(b.idPhotoUrl || "").trim(), selfieUrl: String(b.photoUrl || "").trim(),
+          idLast4: String(b.idLast4 || "").trim().slice(0, 4), submittedAt: now,
+          reviewedAt: b.verified === "true" ? now : null, reviewedBy: b.verified === "true" ? "admin (in person)" : "",
+          nameMatch: b.verified === "true", faceMatch: b.verified === "true", plateMatch: b.verified === "true", rejectReason: ""
+        },
         bike: {
           plate: String(b.plate).trim().toUpperCase(), model: String(b.bikeModel || "").trim(),
           licenceOnFile: b.licenceOnFile === "true", idOnFile: b.idOnFile === "true", insurance: b.insurance === "true",
@@ -316,13 +349,125 @@ ${subNav("newbiker")}${flash(req)}
       if (b.sendWelcome === "true") {
         await adminMessage(phone,
           `🏍️ *Welcome to ZimQuote Riders, ${name.split(/\s+/)[0]}!*\n\n` +
-          (isActive ? `Your account is *active*. You'll get delivery jobs here on WhatsApp.\n\n` : `Your profile is ready - type *hi* and tap *Activate* to start getting jobs.\n\n`) +
+          (isActive && b.verified === "true" ? `Your account is *active* and your ID is approved. You'll get delivery jobs here on WhatsApp.\n\n`
+            : isActive ? `Your account is *active*. Type *hi* → *🪪 Verify my ID* - jobs start once your ID is approved.\n\n`
+            : `Your profile is ready - type *hi* and tap *Activate* to start getting jobs.\n\n`) +
           `Type *hi* any time to open your Rider Menu.`).catch(() => {});
       }
       go(res, `/zq-admin/bikers/${rider._id}`, "success", "Rider registered.");
     } catch (err) {
       go(res, "/zq-admin/bikers/new", "error", err.message);
     }
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 🪪 IDENTITY CHECK (approve / reject / reset) + nudge paid-but-unverified
+  // ═══════════════════════════════════════════════════════════════════════════
+  router.post("/bikers/kyc-nudge", requireSupplierAdmin, async (req, res) => {
+    try {
+      const list = await SupplierProfile.find({ profileType: "biker", active: true, suspended: { $ne: true },
+        "riderKyc.status": { $nin: ["approved", "pending"] }, "bike.verifiedAt": { $in: [null] } }).setOptions({ strictQuery: false }).limit(300).lean();
+      let sent = 0, failed = 0;
+      for (const r of list) {
+        const ok = await adminMessage(r.phone,
+          `🪪 *ZimQuote Riders - ID check*\n\nTo keep every delivery safe, all riders now need an approved ID before they get jobs.\n\nType *hi* → *🪪 Verify my ID* and send 2 photos (your ID + you with your bike). Takes 1 minute - we approve the same day.`).catch(() => false);
+        ok ? sent++ : failed++;
+        await new Promise(x => setTimeout(x, 400));
+      }
+      go(res, "/zq-admin/bikers?status=paidunverified", "success", `Asked ${sent} rider(s)${failed ? `, ${failed} outside the 24h window (message them by phone or SMS)` : ""}.`);
+    } catch (err) { go(res, "/zq-admin/bikers", "error", err.message); }
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 👁 RIDER ACTIVITY  - masked profile views & delivery leads (like sellers/schools)
+  // ═══════════════════════════════════════════════════════════════════════════
+  router.get("/bikers/activity", requireSupplierAdmin, async (req, res) => {
+    try {
+      const { city = "", who = "notready" } = req.query;
+      const filter = { profileType: "biker", suspended: { $ne: true } };
+      if (city) filter["location.city"] = cityRe(city);
+      if (who === "unpaid") filter.active = { $ne: true };
+      const all = await SupplierProfile.find(filter).setOptions({ strictQuery: false }).sort({ createdAt: -1 }).limit(500).lean();
+      const riders = who === "notready" ? all.filter(r => !canTakeJobs(r)) : who === "ready" ? all.filter(canTakeJobs) : all;
+      const hist = await BikerActivity.find({}).sort({ createdAt: -1 }).limit(60).lean().catch(() => []);
+      const rows = riders.map(r => `<label style="display:flex;gap:8px;align-items:flex-start;padding:6px 4px;border-bottom:1px solid #f1f5f9;font-size:13px;cursor:pointer">
+        <input type="checkbox" name="ids" value="${r._id}" style="margin-top:3px">
+        <span style="flex:1"><strong>${esc(r.riderLegalName || publicName(r))}</strong> <span class="muted">"${esc(publicName(r))}"</span><br>
+        <span class="muted">${esc(r.location?.city || "")} · ${esc(r.phone)}</span></span>
+        <span>${r.active ? badge("Paid", "green") : badge("Not paid", "orange")} ${kycBadge(r)}</span></label>`).join("");
+      const histRows = hist.map(h => `<tr><td>${fmtDate(h.createdAt)}</td><td>${esc(h.riderName || "")}<br><small class="muted">${esc(h.riderPhone || "")}</small></td>
+        <td>${h.kind === "job" ? "🔔 Lead" : "👀 View"}<br><small class="muted">${esc(h.source || "")}</small></td><td>${esc([h.route, h.note].filter(Boolean).join(" · "))}</td>
+        <td>${h.contactShown ? "shown" : h.visitorPhone ? "masked" : "-"}</td><td>${h.riderReady ? badge("ready", "green") : badge("locked", "orange")}</td><td>${h.alertSent ? "✅" : "❌"}</td></tr>`).join("");
+      res.send(layout("Bikers", `
+${subNav("activity")}${flash(req)}
+<div class="panel"><p style="line-height:1.7;max-width:820px">Send riders a <strong>👀 profile view</strong> or a <strong>🔔 delivery lead near you</strong> alert. Riders who are not paid or not ID-approved see a <strong>masked</strong> customer number (+263 77 2XX XXXX) and are told to activate / verify to unlock it - their next reply opens activation. Ready riders get the full alert. Real views are sent automatically when someone opens a rider's link.</p></div>
+<form method="POST" action="/zq-admin/bikers/activity" class="two-col">
+  <div class="panel edit-form">
+    <h3>1 · The activity</h3>
+    <div class="fg"><label>Type</label><select name="kind"><option value="view">👀 Profile view</option><option value="job">🔔 Delivery lead near you</option></select></div>
+    <div class="fg"><label>Customer WhatsApp (optional)</label><input name="visitorPhone" placeholder="0772 123 456"></div>
+    <div class="fg"><label>Customer number shown</label><select name="contactMode">
+      <option value="auto" selected>🧩 Auto - full to ready riders, masked to the rest</option>
+      <option value="mask">🕵️ Masked teaser for everyone</option><option value="hide">🔒 Hidden</option><option value="show">📞 Full number</option></select></div>
+    <div class="fg"><label>Route (for leads)</label><input name="route" placeholder="CBD → Avondale"></div>
+    <div class="fg"><label>Note</label><input name="note" maxlength="140" placeholder="e.g. documents, needs it within the hour"></div>
+    <div class="fg"><label>Came via (views)</label><select name="via"><option>WhatsApp Status</option><option>Facebook</option><option>riders list</option><option>rider link</option><option>QR code</option></select></div>
+    <div class="fg"><label>Skip riders alerted in the last</label><select name="skipDays"><option value="0">Off</option><option value="3">3 days</option><option value="7" selected>7 days</option><option value="14">14 days</option></select></div>
+    <div class="fg"><label>🧪 Test - send a preview to this number only</label><input name="testPhone" placeholder="your number (leave blank to send for real)"></div>
+    <button class="btn btn-green">Send activity</button>
+  </div>
+  <div class="panel">
+    <h3>2 · Which riders <span class="count">${riders.length}</span></h3>
+    <div class="filter-form" style="margin-bottom:8px">
+      <a class="btn btn-sm ${who === "notready" ? "btn-blue" : "btn-gray"}" href="?who=notready&city=${encodeURIComponent(city)}">🔒 Not ready (unpaid / no ID)</a>
+      <a class="btn btn-sm ${who === "unpaid" ? "btn-blue" : "btn-gray"}" href="?who=unpaid&city=${encodeURIComponent(city)}">💳 Unpaid</a>
+      <a class="btn btn-sm ${who === "ready" ? "btn-blue" : "btn-gray"}" href="?who=ready&city=${encodeURIComponent(city)}">✅ Ready</a>
+      <a class="btn btn-sm ${who === "all" ? "btn-blue" : "btn-gray"}" href="?who=all&city=${encodeURIComponent(city)}">All</a>
+    </div>
+    <label style="font-size:13px"><input type="checkbox" onclick="document.querySelectorAll('input[name=ids]').forEach(c=>c.checked=this.checked)"> Select all shown</label>
+    <div style="max-height:420px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:8px;padding:6px;margin-top:6px">${rows || `<div class="muted" style="padding:12px">No riders match.</div>`}</div>
+  </div>
+</form>
+<div class="panel"><h3>Recent rider activity <span class="count">${hist.length}</span></h3>
+  <div style="overflow-x:auto"><table><thead><tr><th>When</th><th>Rider</th><th>Type</th><th>Detail</th><th>Contact</th><th>Rider</th><th>Sent</th></tr></thead>
+  <tbody>${histRows || `<tr><td colspan="7" class="muted" style="text-align:center;padding:16px">Nothing yet.</td></tr>`}</tbody></table></div></div>`));
+    } catch (err) { res.send(layout("Bikers", `<div class="alert red">Error: ${esc(err.message)}</div>`)); }
+  });
+
+  router.post("/bikers/activity", requireSupplierAdmin, async (req, res) => {
+    const back = "/zq-admin/bikers/activity";
+    try {
+      const b = req.body || {};
+      const ids = [].concat(b.ids || []).filter(isId).slice(0, 300);
+      const kind = b.kind === "job" ? "job" : "view";
+      const contactMode = ["auto", "mask", "hide", "show"].includes(b.contactMode) ? b.contactMode : "auto";
+      const common = { kind, contactMode, via: String(b.via || ""), note: String(b.note || ""), route: String(b.route || ""),
+        visitorPhone: normPhone(b.visitorPhone || ""), createdBy: req.session?.adminUser || "admin", source: "admin" };
+      const testTo = normPhone(b.testPhone || "");
+      if (testTo) {
+        const r = ids.length ? await SupplierProfile.findById(ids[0]).lean()
+          : { _id: null, phone: testTo, businessName: "Test Rider (Rider)", riderDisplayName: "Test Rider", active: false };
+        const out = await sendRiderActivityAlert({ ...common, rider: r, dryRunTo: testTo });
+        return go(res, back, out.ok ? "success" : "error", out.ok ? `Test sent to ${testTo} (as ${publicName(r)} would see it).` : `Test failed: ${out.error}`);
+      }
+      if (!ids.length) throw new Error("Tick at least one rider (or enter a test number).");
+      let skip = new Set();
+      const days = Number(b.skipDays) || 0;
+      if (days > 0) {
+        const recent = await BikerActivity.find({ createdAt: { $gte: new Date(Date.now() - days * 86400000) }, alertSent: true, source: "admin" }, { riderPhone: 1 }).lean().catch(() => []);
+        skip = new Set(recent.map(x => x.riderPhone));
+      }
+      const riders = await SupplierProfile.find({ _id: { $in: ids }, profileType: "biker" }).lean();
+      let sent = 0, failed = 0, skipped = 0, masked = 0;
+      for (const r of riders) {
+        if (skip.has(normPhone(r.phone))) { skipped++; continue; }
+        const out = await sendRiderActivityAlert({ ...common, rider: r }).catch(e => ({ ok: false, error: e.message }));
+        out.ok ? sent++ : failed++;
+        if (out.masked) masked++;
+        await new Promise(x => setTimeout(x, 1000));
+      }
+      go(res, back, "success", `Sent ${sent}${masked ? ` (${masked} masked)` : ""}${skipped ? `, ${skipped} skipped (recent)` : ""}${failed ? `, ${failed} failed` : ""}.`);
+    } catch (err) { go(res, back, "error", err.message); }
   });
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -346,7 +491,38 @@ ${subNav("newbiker")}${flash(req)}
       const winRate = offers ? Math.round((mine.length / Math.max(offers, mine.length)) * 100) : 0;
       const lvl = riderLevel(r.riderPoints);
       const link = riderLink(r._id);
-      const name = String(r.businessName || "Rider").replace(/\s*\(Rider\)$/i, "");
+      const name = r.riderLegalName || String(r.businessName || "Rider").replace(/\s*\(Rider\)$/i, "");
+      const k = r.riderKyc || {};
+      const img = (u, label) => u ? `<a href="${esc(u)}" target="_blank" style="text-align:center;font-size:12px"><img src="${esc(u)}" style="width:220px;height:150px;object-fit:cover;border-radius:10px;border:1px solid #e2e8f0;display:block;margin-bottom:4px">${label}</a>`
+        : `<div style="width:220px;height:150px;border-radius:10px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-size:12px;color:#64748b;text-align:center">${label}<br>not sent</div>`;
+      const kycPanel = `<div class="panel" id="kyc" style="border:2px solid ${isRiderVerified(r) ? "#bfdbfe" : k.status === "pending" ? "#fdba74" : "#e2e8f0"}">
+  <h3>🪪 Identity check ${kycBadge(r)}</h3>
+  <p class="muted" style="margin-bottom:10px">Jobs are only sent to riders who are <strong>paid AND approved</strong> - paying never skips this check. The ID photo and legal name are never shown to customers; customers see <strong>"${esc(publicName(r))}"</strong> before booking, then the first name <strong>${esc(String(name).split(/\s+/)[0])}</strong> + plate <strong>${esc(r.bike?.plate || "-")}</strong> after booking.</p>
+  <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:12px">${img(k.idPhotoUrl, "🪪 National ID")}${img(k.selfieUrl || r.bike?.photoUrl, "📸 Rider + bike")}</div>
+  <div class="muted" style="margin-bottom:10px">Legal name typed by rider: <strong>${esc(r.riderLegalName || "-")}</strong> · Plate: <strong>${esc(r.bike?.plate || "-")}</strong>${k.submittedAt ? ` · sent ${fmtDate(k.submittedAt)}` : ""}${k.reviewedAt ? ` · reviewed ${fmtDate(k.reviewedAt)} by ${esc(k.reviewedBy || "admin")}` : ""}${k.idLast4 ? ` · ID ends …${esc(k.idLast4)}` : ""}${k.rejectReason ? `<br>Last rejection: ${esc(k.rejectReason)}` : ""}</div>
+  <div style="display:flex;gap:18px;flex-wrap:wrap">
+    <form method="POST" action="/zq-admin/bikers/${r._id}/kyc" style="flex:1;min-width:260px;background:#f0fdf4;padding:12px;border-radius:10px">
+      <input type="hidden" name="action" value="approve">
+      <label style="display:block"><input type="checkbox" name="name" value="1"> Name on ID = <strong>${esc(r.riderLegalName || name)}</strong></label>
+      <label style="display:block"><input type="checkbox" name="face" value="1"> Face on ID = face in bike photo</label>
+      <label style="display:block"><input type="checkbox" name="plate" value="1"> Plate <strong>${esc(r.bike?.plate || "-")}</strong> visible &amp; matches</label>
+      <input name="idLast4" maxlength="4" placeholder="ID last 4 (optional)" style="margin:8px 0;width:160px">
+      <button class="btn btn-sm btn-green">✅ Approve ID</button>
+    </form>
+    <form method="POST" action="/zq-admin/bikers/${r._id}/kyc" style="flex:1;min-width:260px;background:#fef2f2;padding:12px;border-radius:10px">
+      <input type="hidden" name="action" value="reject">
+      <select name="reason" style="width:100%;margin-bottom:8px">
+        <option>ID photo not clear - please retake in good light</option>
+        <option>Name on ID doesn't match the name you registered</option>
+        <option>Face not clear in the bike photo</option>
+        <option>Number plate not visible in the bike photo</option>
+        <option>ID looks edited or expired</option>
+      </select>
+      <button class="btn btn-sm btn-red">⚠️ Reject &amp; ask for new photos</button>
+    </form>
+  </div>
+  ${isRiderVerified(r) ? `<form method="POST" action="/zq-admin/bikers/${r._id}/kyc" style="margin-top:10px" onsubmit="return confirm('Remove approval? The rider stops getting jobs.')"><input type="hidden" name="action" value="reset"><button class="btn btn-sm btn-gray">Remove approval</button></form>` : ""}
+</div>`;
       const tog = (what, label, cls) => `<form method="POST" action="/zq-admin/bikers/${r._id}/toggle" style="display:inline"><input type="hidden" name="what" value="${what}"><button class="btn btn-sm ${cls}">${label}</button></form>`;
 
       const jobRows = jobs.map(j => {
@@ -368,7 +544,7 @@ ${subNav("bikers")}${flash(req)}
   <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start">
     ${r.bike?.photoUrl ? `<a href="${esc(r.bike.photoUrl)}" target="_blank"><img src="${esc(r.bike.photoUrl)}" style="width:110px;height:110px;object-fit:cover;border-radius:12px;border:1px solid #e2e8f0"></a>` : `<div style="width:110px;height:110px;border-radius:12px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-size:42px">🏍️</div>`}
     <div style="flex:1;min-width:220px">
-      <h2 style="margin:0 0 6px;font-size:20px">${esc(name)}</h2>
+      <h2 style="margin:0 0 6px;font-size:20px">${esc(name)} <small class="muted" style="font-weight:400">· shown as "${esc(publicName(r))}"</small></h2>
       <div style="margin-bottom:8px">${riderStatus(r)}</div>
       <div class="muted" style="line-height:1.7">📞 ${esc(r.phone)} &nbsp;·&nbsp; 📍 ${esc(r.location?.city || "-")} · ${esc((r.riderAreas || []).join(", ") || "Whole city")}<br>
       🏍️ <strong>${esc(r.bike?.plate || "-")}</strong> ${esc(r.bike?.model || "")} &nbsp;·&nbsp; Docs: ${r.bike?.licenceOnFile ? "Licence ✅" : "Licence ✗"} · ${r.bike?.idOnFile ? "ID ✅" : "ID ✗"} · ${r.bike?.insurance ? "Insured ✅" : "Insurance ✗"}<br>
@@ -379,12 +555,14 @@ ${subNav("bikers")}${flash(req)}
   <div class="action-row">
     ${tog("active", r.active ? "⏸ Deactivate" : "✅ Activate", r.active ? "btn-gray" : "btn-green")}
     ${tog("online", r.riderActive !== false ? "⚪ Set offline" : "🟢 Set online", "btn-gray")}
-    ${tog("verified", r.bike?.verifiedAt ? "Remove ✅ Verified" : "✅ Verify rider", r.bike?.verifiedAt ? "btn-gray" : "btn-blue")}
+    <a class="btn btn-sm ${isRiderVerified(r) ? "btn-gray" : "btn-blue"}" href="#kyc">🪪 ID check</a>
     ${tog("suspended", r.suspended ? "Unsuspend" : "⛔ Suspend", r.suspended ? "btn-green" : "btn-red")}
     <a class="btn btn-sm btn-gray" href="/zq-admin/biker-jobs?q=${encodeURIComponent(phone)}">📦 All jobs</a>
     <a class="btn btn-sm btn-gray" href="https://wa.me/${phone}" target="_blank">💬 WhatsApp</a>
   </div>
 </div>
+
+${kycPanel}
 
 <div class="stats-grid">
   ${stat(`${lvl.emoji} ${r.riderPoints || 0}`, `${lvl.name}${lvl.next ? ` · ${lvl.toNext} to ${lvl.next.name}` : ""}`, "purple")}
@@ -402,7 +580,8 @@ ${subNav("bikers")}${flash(req)}
     <h3>✏️ Edit rider</h3>
     <form method="POST" action="/zq-admin/bikers/${r._id}/edit" class="edit-form">
       <div class="form-grid">
-        <div class="fg"><label>Name</label><input name="name" value="${esc(name)}"></div>
+        <div class="fg"><label>Legal name (as on ID)</label><input name="name" value="${esc(name)}"></div>
+        <div class="fg"><label>Rider name (customers see)</label><input name="displayName" value="${esc(r.riderDisplayName || "")}" maxlength="20" placeholder="${esc(String(name).split(/\s+/)[0])}"></div>
         <div class="fg"><label>City</label><select name="city">${cityOptions(r.location?.city)}</select></div>
         <div class="fg"><label>Areas</label><input name="areas" value="${esc((r.riderAreas || []).join(", "))}" placeholder="blank = whole city"></div>
         <div class="fg"><label>Plate</label><input name="plate" value="${esc(r.bike?.plate || "")}"></div>
@@ -469,6 +648,20 @@ ${subNav("bikers")}${flash(req)}
     }
   });
 
+  router.post("/bikers/:id/kyc", requireSupplierAdmin, async (req, res) => {
+    const back = `/zq-admin/bikers/${req.params.id}`;
+    try {
+      if (!isId(req.params.id)) throw new Error("Bad id");
+      const b = req.body || {};
+      const out = await adminReviewKyc(req.params.id, {
+        action: b.action, reason: b.reason, idLast4: b.idLast4,
+        checks: { name: b.name === "1", face: b.face === "1", plate: b.plate === "1" },
+        by: req.session?.adminUser || "admin"
+      });
+      go(res, back + "#kyc", "success", out === "approved" ? "ID approved - rider notified." : out === "rejected" ? "Rejected - rider asked for new photos." : "Approval removed.");
+    } catch (err) { go(res, back + "#kyc", "error", err.message); }
+  });
+
   router.post("/bikers/:id/edit", requireSupplierAdmin, async (req, res) => {
     const back = `/zq-admin/bikers/${req.params.id}`;
     try {
@@ -478,7 +671,9 @@ ${subNav("bikers")}${flash(req)}
       if (!r) throw new Error("Rider not found");
       const areas = String(b.areas || "").split(/[,\n;]+/).map(s => s.trim()).filter(Boolean).slice(0, 12);
       await SupplierProfile.updateOne({ _id: r._id }, { $set: {
-        businessName: `${String(b.name || "Rider").trim()} (Rider)`,
+        businessName: `${String(b.displayName || "").trim() || String(b.name || "Rider").trim().split(/\s+/)[0]} (Rider)`,
+        riderLegalName: String(b.name || "").trim(),
+        riderDisplayName: String(b.displayName || "").trim().slice(0, 20),
         "location.city": String(b.city || r.location?.city || "Harare").trim(),
         "location.area": areas[0] || String(b.city || "").trim(),
         riderAreas: areas,
@@ -509,8 +704,7 @@ ${subNav("bikers")}${flash(req)}
       } else if (what === "online") {
         set = { riderActive: r.riderActive === false, riderMissedPings: 0 };
       } else if (what === "verified") {
-        set = { "bike.verifiedAt": r.bike?.verifiedAt ? null : new Date() };
-        msg = r.bike?.verifiedAt ? "" : "✅ You're now a *Verified* ZimQuote rider - customers see your ✅ badge and you're shown first.";
+        return go(res, back + "#kyc", "error", "Use the 🪪 Identity check panel to approve (it checks name, face and plate).");
       } else if (what === "suspended") {
         set = { suspended: !r.suspended };
         msg = !r.suspended ? "⛔ Your ZimQuote Rider account has been suspended. Please contact ZimQuote support." : "✅ Your ZimQuote Rider account has been restored.";
@@ -649,7 +843,10 @@ ${subNav("jobs")}${flash(req)}
   router.get("/biker-jobs/new", requireSupplierAdmin, async (req, res) => {
     const riders = await SupplierProfile.find({ profileType: "biker", active: true, suspended: { $ne: true } })
       .sort({ "location.city": 1, riderPoints: -1 }).limit(500).lean().catch(() => []);
-    const riderOpts = riders.map(r => `<option value="${r._id}">${esc(String(r.businessName || "").replace(/\s*\(Rider\)$/i, ""))} · ${esc(r.location?.city || "")} · ${esc(r.bike?.plate || "")}${r.riderActive === false ? " (offline)" : ""}</option>`).join("");
+    const allRiders = await SupplierProfile.find({ profileType: "biker", suspended: { $ne: true } })
+      .sort({ "location.city": 1, riderPoints: -1 }).limit(800).lean().catch(() => []);
+    const targetOpts = allRiders.map(r => `<option value="${r._id}">${canTakeJobs(r) ? "✅" : "🔒"} ${esc(r.riderLegalName || publicName(r))} · ${esc(r.location?.city || "")} · ${esc(r.bike?.plate || "")}${canTakeJobs(r) ? "" : r.active ? " (ID not approved)" : " (not paid)"}</option>`).join("");
+    const riderOpts = riders.filter(canTakeJobs).map(r => `<option value="${r._id}">${esc(r.riderLegalName || publicName(r))} · ${esc(r.location?.city || "")} · ${esc(r.bike?.plate || "")}${r.riderActive === false ? " (offline)" : ""}</option>`).join("");
     res.send(layout("New Delivery", `
 ${subNav("newjob")}${flash(req)}
 <div class="panel edit-form" style="max-width:760px">
@@ -668,8 +865,14 @@ ${subNav("newjob")}${flash(req)}
       <div class="fg"><label>When</label><input name="when" value="Now" placeholder="Now / Today 3pm"></div>
     </div>
     <div class="panel" style="background:#f8fafc;box-shadow:none;border:1px solid #e2e8f0">
-      <label style="display:block;margin-bottom:8px"><input type="radio" name="mode" value="dispatch" checked onchange="document.getElementById('asg').style.display='none'"> <strong>Send to riders</strong> - nearby riders send prices, customer chooses</label>
-      <label style="display:block"><input type="radio" name="mode" value="assign" onchange="document.getElementById('asg').style.display='grid'"> <strong>Assign a rider directly</strong> - price already agreed</label>
+      <label style="display:block;margin-bottom:8px"><input type="radio" name="mode" value="dispatch" checked onchange="document.getElementById('asg').style.display='none';document.getElementById('tgt').style.display='none'"> <strong>Send to riders</strong> - nearby riders send prices, customer chooses</label>
+      <label style="display:block;margin-bottom:8px"><input type="radio" name="mode" value="targets" onchange="document.getElementById('asg').style.display='none';document.getElementById('tgt').style.display='block'"> <strong>Send to chosen riders</strong> - ready riders get the job; unpaid / unverified riders get a 🔒 masked lead and are asked to activate</label>
+      <div id="tgt" style="display:none;margin:0 0 10px 22px">
+        <select name="targetIds" multiple size="8" style="width:100%">${targetOpts}</select>
+        <label style="display:block;margin-top:6px"><input type="checkbox" name="alsoDispatch" value="true" checked> Also alert other ready riders nearby</label>
+        <small class="muted">Hold Ctrl / ⌘ to pick several.</small>
+      </div>
+      <label style="display:block"><input type="radio" name="mode" value="assign" onchange="document.getElementById('asg').style.display='grid';document.getElementById('tgt').style.display='none'"> <strong>Assign a rider directly</strong> - price already agreed</label>
       <div id="asg" class="form-grid" style="display:none;margin-top:12px">
         <div class="fg"><label>Rider</label><select name="riderId"><option value="">- choose -</option>${riderOpts}</select></div>
         <div class="fg"><label>Agreed fare</label><input name="fare" placeholder="$5 or ZiG 120"></div>
@@ -686,17 +889,23 @@ ${subNav("newjob")}${flash(req)}
       const b = req.body || {};
       if (!String(b.task || "").trim()) throw new Error("Describe what needs doing.");
       const assign = b.mode === "assign";
+      if (b.mode === "targets" && ![].concat(b.targetIds || []).filter(isId).length) throw new Error("Pick at least one rider.");
       if (assign && !isId(b.riderId)) throw new Error("Choose a rider to assign.");
       const job = await adminCreateJob({
         customerPhone: b.customerPhone, customerName: String(b.customerName || "").trim(),
         task: String(b.task).trim(), pickup: String(b.pickup || "").trim(), dropoff: String(b.dropoff || "").trim(),
         city: String(b.city || "").trim(), when: String(b.when || "Now").trim() || "Now",
         assignRiderId: assign ? b.riderId : null, fare: assign ? String(b.fare || "").trim() : "",
-        notifyCustomer: b.notifyCustomer === "true", adminName: req.session?.adminUser || "admin"
+        notifyCustomer: b.notifyCustomer === "true", adminName: req.session?.adminUser || "admin",
+        targetRiderIds: b.mode === "targets" ? [].concat(b.targetIds || []).filter(isId) : [],
+        alsoDispatch: b.alsoDispatch === "true"
       });
       const alerted = (job.notifiedRiderPhones || []).length;
+      const t = job._targets || {};
       go(res, `/zq-admin/biker-jobs/${job._id}`, "success",
-        assign ? "Created and assigned." : alerted ? `Created - ${alerted} rider(s) alerted.` : "Created - no riders online right now; it stays open.");
+        assign ? "Created and assigned." :
+        (alerted ? `Created - ${alerted} rider(s) alerted.` : "Created - no ready riders alerted yet; it stays open.") +
+        (t.teased ? ` ${t.teased} locked rider(s) got a masked lead.` : "") + (t.failed ? ` ${t.failed} lead(s) failed.` : ""));
     } catch (err) { go(res, "/zq-admin/biker-jobs/new", "error", err.message); }
   });
 

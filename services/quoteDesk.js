@@ -1291,6 +1291,47 @@ export function booksSummary(req) {
     payments: b.payments || [], costList: b.costs || []
   };
 }
+// Re-reads the real invoice / payments / costs, so a payment deleted or a cost
+// reversed in Financial Records shows correctly here too. Cheap: 3 small reads,
+// only when someone opens the Books screen.
+export async function syncBooks(reqId) {
+  const req = await getReq(reqId);
+  if (!req?.books?.invoiceId && !(req?.books?.costs || []).length) return req;
+  try {
+    const Invoice = (await import("../models/invoice.js")).default;
+    const InvoicePayment = (await import("../models/invoicePayment.js")).default;
+    const Expense = (await import("../models/expense.js")).default;
+    const b = req.books || {};
+    const set = {};
+    if (b.invoiceId) {
+      const inv = await Invoice.findById(b.invoiceId).lean();
+      if (inv) {
+        const livePaid = inv.reversed ? 0 : Math.round((inv.amountPaid || 0) * 100) / 100;
+        if (livePaid !== (b.paid || 0)) set["books.paid"] = livePaid;
+        if ((inv.total || 0) !== (b.invoiceTotal || 0)) set["books.invoiceTotal"] = inv.total || 0;
+      }
+      const ids = (b.payments || []).map(p => p.refId).filter(Boolean);
+      if (ids.length) {
+        const alive = new Set((await InvoicePayment.find({ _id: { $in: ids }, reversed: { $ne: true } }).select("_id").lean()).map(x => String(x._id)));
+        const kept = (b.payments || []).filter(p => !p.refId || alive.has(String(p.refId)));
+        if (kept.length !== (b.payments || []).length) set["books.payments"] = kept;
+      }
+    }
+    const cids = (b.costs || []).map(c => c.refId).filter(Boolean);
+    if (cids.length) {
+      const alive = new Set((await Expense.find({ _id: { $in: cids }, reversed: { $ne: true } }).select("_id").lean()).map(x => String(x._id)));
+      const kept = (b.costs || []).filter(c => !c.refId || alive.has(String(c.refId)));
+      if (kept.length !== (b.costs || []).length) {
+        set["books.costs"] = kept;
+        set["books.costTotal"] = Math.round(kept.reduce((t, c) => t + (c.amount || 0), 0) * 100) / 100;
+      }
+    }
+    if (!Object.keys(set).length) return req;
+    await QuoteRequest.updateOne({ _id: req._id }, { $set: set });
+    return getReq(reqId);
+  } catch (e) { console.warn("[QDESK] syncBooks:", e.message); return req; }
+}
+
 const payInfo = () => String(process.env.ZQ_PAY_INFO || "").trim();   // e.g. "EcoCash 0771 234 567 (ZimQuote)"
 
 export async function sendInvoice(reqId, { by = "admin", send = true } = {}) {
@@ -1329,7 +1370,7 @@ export async function recordPayment(reqId, { amount, method = "Cash", by = "admi
   const r = await recordInvoicePayment({ invoiceId: req.books.invoiceId, amount, method, by, notify: false });
   const entry = { at: new Date(), amount: r.applied, method: r.payment.method, number: r.receiptNumber, pdfUrl: r.url || "", refId: r.payment._id };
   const upd = await QuoteRequest.findOneAndUpdate({ _id: req._id },
-    { $push: { "books.payments": entry }, $inc: { "books.paid": r.applied }, $set: { lastActivityAt: new Date() } }, { new: true }).lean();
+    { $push: { "books.payments": entry }, $set: { "books.paid": Math.round((r.invoice.amountPaid || 0) * 100) / 100, lastActivityAt: new Date() } }, { new: true }).lean();
   const paidInFull = r.invoice.status === "paid";
   let delivered = null;
   if (sendReceipt) {
@@ -1369,7 +1410,7 @@ export async function recordCost(reqId, { amount, note = "", method = "Cash", by
 
 // ── WhatsApp admin screens ───────────────────────────────────────────────────
 async function adminBooks(ctx, reqId) {
-  const req = await getReq(reqId);
+  const req = await syncBooks(reqId);
   if (!req) { await say(ctx.from, "Request not found."); return true; }
   const s = booksSummary(req);
   if (!s.booked) { await say(ctx.from, "💰 No ZimQuote quote on this request yet - tap *🧾 Make quote* → *🟢 ZimQuote quote* first."); return true; }
@@ -1392,7 +1433,7 @@ async function adminSendInvoice(ctx, reqId) {
   return true;
 }
 async function adminPayStart(ctx, reqId) {
-  const req = await getReq(reqId);
+  const req = await syncBooks(reqId);
   if (!req) { await say(ctx.from, "Request not found."); return true; }
   const s = booksSummary(req);
   if (!s.booked) { await say(ctx.from, "💰 Payments are recorded against a 🟢 ZimQuote quote - make one first."); return true; }

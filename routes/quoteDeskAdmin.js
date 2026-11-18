@@ -17,7 +17,7 @@ import {
   suggestSellers, sendToSellers, buildAndSendQuote, messageCustomer, messageSeller,
   forwardSellerReply, shareContacts, setStatus, adminCreateRequest, parseQuoteLines,
   quoteRequestLink, qRef, displayPhone, normPhone, resendQuote,
-  sendInvoice, recordPayment, recordCost, booksSummary
+  sendInvoice, recordPayment, recordCost, booksSummary, syncBooks
 } from "../services/quoteDesk.js";
 
 const isId = id => /^[a-f0-9]{24}$/i.test(String(id || ""));
@@ -139,8 +139,9 @@ ${nav("new")}${flash(req)}
   router.get("/quote-desk/:id", requireSupplierAdmin, async (req, res) => {
     if (!isId(req.params.id)) return res.redirect("/zq-admin/quote-desk");
     try {
-      const r = await QuoteRequest.findById(req.params.id).lean();
+      let r = await QuoteRequest.findById(req.params.id).lean();
       if (!r) return res.redirect("/zq-admin/quote-desk");
+      if (r.books?.invoiceId || (r.books?.costs || []).length) r = (await syncBooks(r._id)) || r;
       const id = String(r._id);
       const sugg = OPEN.includes(r.status) ? await suggestSellers(r, 20).catch(() => []) : [];
       const sentIds = new Set((r.sellers || []).map(s => String(s.supplierId)));
