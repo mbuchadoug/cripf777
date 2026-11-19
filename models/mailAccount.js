@@ -22,7 +22,7 @@ const MailAccountSchema = new mongoose.Schema({
   // How mail reaches us
   //   forward: the customer forwards mail to <slug>@MAIL_INBOUND_DOMAIN
   //   imap:    we read the inbox with their mail login (cPanel, Zoho, Gmail app password)
-  mode:         { type: String, enum: ["forward", "imap"], default: "forward" },
+  mode:         { type: String, enum: ["forward", "imap", "pop3"], default: "forward" },
   slug:         { type: String, required: true, unique: true }, // forwarding address local part
   provider:     { type: String, default: "other" },             // google | microsoft | zoho | cpanel | other
 
@@ -35,7 +35,16 @@ const MailAccountSchema = new mongoose.Schema({
     lastError: String, lastCheckedAt: Date,
     insecureTls: { type: Boolean, default: false }   // host's certificate doesn't match (common on shared cPanel)
   },
+  pop: {
+    host: String, port: Number, secure: Boolean, insecureTls: { type: Boolean, default: false },
+    user: String, passEnc: String,
+    seen: { type: [String], default: undefined },     // POP3 UIDLs already delivered
+    initialized: Boolean, lastError: String, lastCheckedAt: Date
+  },
   smtp: { host: String, port: Number, secure: Boolean, insecureTls: { type: Boolean, default: false } },
+  alertMonth:       String,                          // "2026-11"
+  alertsThisMonth:  { type: Number, default: 0 },
+  capNotifiedMonth: String,
   businessName: { type: String, default: "" },
   setupBy:      { type: String, default: "whatsapp" },          // whatsapp | web | admin
   phoneVerified:{ type: Boolean, default: true },                // web sign-ups: false until they confirm on WhatsApp

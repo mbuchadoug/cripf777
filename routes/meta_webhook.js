@@ -128,6 +128,33 @@ async function getMetaMediaUrl(mediaId) {
   return r.data?.url || null;
 }
 
+// ZimQuote Mail: download any WhatsApp media (photo / document) as bytes
+async function downloadMetaMediaBytes(mediaId) {
+  const token = process.env.META_ACCESS_TOKEN || process.env.WHATSAPP_ACCESS_TOKEN;
+  const meta = await axios.get(`https://graph.facebook.com/v24.0/${mediaId}`, { headers: { Authorization: `Bearer ${token}` } });
+  if (!meta.data?.url) throw new Error("Could not get Meta media download URL");
+  const file = await axios.get(meta.data.url, { headers: { Authorization: `Bearer ${token}` }, responseType: "arraybuffer", maxContentLength: 110 * 1024 * 1024 });
+  return { buffer: Buffer.from(file.data), mime: meta.data.mime_type || "" };
+}
+
+// ZimQuote Mail: if this person is writing an email reply, attach the file to it.
+// Returns true when Mail took the file.
+async function tryMailAttachment({ from, mediaId, filename, mime, caption }) {
+  let mail;
+  try {
+    mail = await import("../services/mailInbox.js");
+    if (!(await mail.mailAwaitingFile(from))) return false;
+  } catch (_) { return false; }
+  try {
+    const { buffer, mime: realMime } = await downloadMetaMediaBytes(mediaId);
+    await mail.handleMailFile({ from, filename, mime: mime || realMime || "application/octet-stream", data: buffer, caption });
+  } catch (err) {
+    console.error("[MAIL ATTACH]", err.message);
+    await sendText(from, "❌ We couldn't attach that file. Please send it again.");
+  }
+  return true;
+}
+
 async function downloadMetaMediaAsText(mediaUrl) {
   const token = process.env.META_ACCESS_TOKEN;
 
@@ -210,6 +237,10 @@ console.log("Full msg:", JSON.stringify(msg, null, 2));
       const caption = (msg.image?.caption || "").trim();
 
       if (!mediaId) return;
+
+      // ── Case 0: ZimQuote Mail - photo attached to an email reply ───────────
+      const _ext = mime.includes("png") ? "png" : mime.includes("webp") ? "webp" : "jpg";
+      if (await tryMailAttachment({ from, mediaId, filename: `photo-${new Date().toISOString().slice(0, 10)}-${String(Date.now()).slice(-4)}.${_ext}`, mime, caption })) return;
 
       // ── Case 1: Logo upload (existing flow, unchanged) ─────────────────────
       const biz = await getBizForPhone(from);
@@ -368,6 +399,9 @@ if (msg.type === "document") {
   const mediaUrl = msg.document?.url;        // Meta sends direct URL in webhook payload
   const mediaId  = msg.document?.id;
 
+  // ZimQuote Mail: PDF / Word / Excel / any file attached to an email reply
+  if (mediaId && await tryMailAttachment({ from, mediaId, filename: msg.document?.filename || "document", mime: mimeType, caption: (msg.document?.caption || "").trim() })) return;
+
   // Only handle PDFs - everything else ignored silently
   if (mimeType !== "application/pdf") {
     return;
@@ -488,4 +522,4 @@ if (msg.type === "interactive") {
 
 
 
-export default router;
+export default router;

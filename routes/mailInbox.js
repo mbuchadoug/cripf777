@@ -28,7 +28,8 @@ import {
   ingestRaw, forwardAddress, canStorePasswords, attToken, activatePaid, isActive, MAIL_CONFIG,
   createAccount, connectWithPassword, discoverServers, linkWaUrl, notifyMailAdmin,
   setupForClient, sendClientWelcome, sendTestEmail, sendSetupGuide,
-  updateAccount, deleteAccount, pollCollector, collectorStatus, systemCheck, MAIL_PRESETS, presetFor
+  updateAccount, deleteAccount, pollCollector, collectorStatus, systemCheck, MAIL_PRESETS, presetFor,
+  MAIL_PLANS, planLimits, deactivateAccount, readAttachment
 } from "../services/mailInbox.js";
 import { sendButtons } from "../services/metaSender.js";
 
@@ -110,10 +111,10 @@ router.get("/", (req, res) => {
 <p class="muted">Every new email to your company address arrives on your WhatsApp with a short summary. Reply from WhatsApp and we send it as a proper email from your address.</p>
 <div class="bubble">📧 <b>New email - needs action</b><br>From: <b>Jane Moyo</b> (Delta)<br>Subject: Purchase order 4471<br><br>📝 Wants 200 cases of water at $4.50, delivered Friday to Msasa.<br><br><span style="color:#0b7">↩️ Reply · 📄 Full email · ✅ Done</span></div>
 <div class="feat">
-<div><b>Works with .co.zw email</b><br><span class="muted">cPanel and local hosting, Gmail, Outlook and Microsoft 365.</span></div>
+<div><b>Works with any email</b><br><span class="muted">.co.zw, .com, .org company email (IMAP or POP3), Gmail, Yahoo, Outlook.</span></div>
 <div><b>Reply in seconds</b><br><span class="muted">Type a short note; tap ✨ Polish to turn it into a professional email.</span></div>
 <div><b>Your staff too</b><br><span class="muted">Up to 3 more WhatsApp numbers get the alerts.</span></div>
-<div><b>$${MAIL_CONFIG.PRICE} a year</b><br><span class="muted">${MAIL_CONFIG.TRIAL_DAYS} days free. Paid once a year by EcoCash.</span></div>
+<div><b>From $${MAIL_PLANS.starter.price} a year</b><br><span class="muted">${MAIL_CONFIG.TRIAL_DAYS} days free. Starter $${MAIL_PLANS.starter.price} · Business $${MAIL_PLANS.business.price} · Pro $${MAIL_PLANS.pro.price}. Paid once a year by EcoCash.</span></div>
 </div>
 ${err}
 <form method="post" action="/mail/start" class="card">
@@ -154,7 +155,7 @@ router.post("/start", form, async (req, res) => {
 const byWebToken = t => /^[a-f0-9]{24}$/.test(String(t || "")) ? MailAccount.findOne({ webToken: String(t) }) : Promise.resolve(null);
 function stepOf(acc) {
   if (!acc.phoneVerified) return 1;
-  if (!(acc.mode === "imap" && acc.status === "live") && !acc.firstMailAt) return 2;
+  if (!((acc.mode === "imap" || acc.mode === "pop3") && acc.status === "live") && !acc.firstMailAt) return 2;
   if (!acc.firstMailAt) return 3;
   return 4;
 }
@@ -166,17 +167,19 @@ function presetFieldsHtml(px, domain, sel, v = {}) {
     return `<div class="grid">
 <div style="grid-column:1/-1"><label for="${px}-preset">Email provider</label><select id="${px}-preset" data-zq-preset="${px}">${opts}</select>
 <p class="mu sm" id="${px}-note" style="margin:6px 0 0"></p></div>
-<div><label for="${px}-ih">Incoming (IMAP) server</label><input id="${px}-ih" name="imapHost" value="${e(v.imapHost || "")}" placeholder="found automatically"></div>
-<div><label for="${px}-ip">IMAP port</label><input id="${px}-ip" name="imapPort" value="${e(v.imapPort || "")}" placeholder="993"></div>
+<div><label for="${px}-pr">Incoming mail type</label><select id="${px}-pr" name="inProto">${[["auto", "Find automatically (IMAP, then POP3)"], ["imap", "IMAP (recommended)"], ["pop3", "POP3 (older company email)"]].map(([k, l]) => `<option value="${k}" ${String(v.inProto || "auto") === k ? "selected" : ""}>${l}</option>`).join("")}</select></div>
+<div><label for="${px}-ih">Incoming server</label><input id="${px}-ih" name="imapHost" value="${e(v.imapHost || "")}" placeholder="found automatically"></div>
+<div><label for="${px}-ip">Incoming port</label><input id="${px}-ip" name="imapPort" value="${e(v.imapPort || "")}" placeholder="993 IMAP / 995 POP3"></div>
 <div><label for="${px}-sh">Outgoing (SMTP) server</label><input id="${px}-sh" name="smtpHost" value="${e(v.smtpHost || "")}" placeholder="found automatically"></div>
 <div><label for="${px}-sp">SMTP port</label><input id="${px}-sp" name="smtpPort" value="${e(v.smtpPort || "")}" placeholder="465 or 587"></div>
 </div>
 <script>(function(){var P=${JSON.stringify(MAIL_PRESETS)};var px=${JSON.stringify(px)};var dom=${JSON.stringify(domain)};
 var s=document.getElementById(px+"-preset");function emailDomain(){var f=document.getElementById(px+"-email")||document.getElementById("m-email");return dom||((f&&f.value.split("@")[1])||"yourdomain.co.zw")}
-function apply(fill){var p=P[s.value]||P.auto;document.getElementById(px+"-note").textContent=p.note||"";if(!fill)return;var d=emailDomain();
-document.getElementById(px+"-ih").value=(p.imap||"").replace("{domain}",d);document.getElementById(px+"-ip").value=p.imapPort||"";
+var pr=document.getElementById(px+"-pr");
+function apply(fill){var p=P[s.value]||P.auto;document.getElementById(px+"-note").textContent=p.note||"";if(!fill)return;var d=emailDomain();var pop=pr&&pr.value==="pop3";
+document.getElementById(px+"-ih").value=((pop?p.pop:p.imap)||"").replace("{domain}",d);document.getElementById(px+"-ip").value=(pop?p.popPort:p.imapPort)||"";
 document.getElementById(px+"-sh").value=(p.smtp||"").replace("{domain}",d);document.getElementById(px+"-sp").value=p.smtpPort||"";}
-s.addEventListener("change",function(){apply(true)});apply(false);})();</script>`;
+s.addEventListener("change",function(){apply(true)});if(pr)pr.addEventListener("change",function(){if(s.value!=="auto")apply(true)});apply(false);})();</script>`;
   }
 
 function connectBlock(acc, { error = "", values = {}, action }) {
@@ -224,9 +227,9 @@ ${flash}
 <div class="${cls(1)}"><div class="num">${mark(1)}</div><div><h2>Confirm your WhatsApp</h2>
 ${st === 1 ? `<p>Tap the button. WhatsApp opens with a code typed in. Just press <b>Send</b>.</p><p><a class="btn wa" href="${esc(linkWaUrl(acc))}">Open WhatsApp</a></p><p class="muted" style="font-size:.9rem">Using a computer? Send <b>ZQ:MAIL:${esc(acc.linkCode || "")}</b> to ZimQuote on WhatsApp (+263 77 114 3904).</p>` : `<p class="muted">Confirmed.</p>`}</div></div>
 <div class="${cls(2)}"><div class="num">${mark(2)}</div><div><h2>Connect your email</h2>
-${st === 2 ? connectBlock(acc, { error, values, action: `/mail/s/${esc(acc.webToken)}/connect` }) : st > 2 ? `<p class="muted">${acc.mode === "imap" ? "Connected with your email login. Replies go out from your own address." : "Forwarding is working."}</p>` : `<p class="muted">Next.</p>`}</div></div>
+${st === 2 ? connectBlock(acc, { error, values, action: `/mail/s/${esc(acc.webToken)}/connect` }) : st > 2 ? `<p class="muted">${acc.mode !== "forward" ? "Connected with your email login. Replies go out from your own address." : "Forwarding is working."}</p>` : `<p class="muted">Next.</p>`}</div></div>
 <div class="${cls(3)}"><div class="num">${mark(3)}</div><div><h2>Send a test email</h2>
-${st === 3 ? `<p>From any other email (or ask a friend), send a short email to <b>${esc(acc.email)}</b>. It will pop up on your WhatsApp${acc.mode === "imap" ? " within 2 minutes" : " in seconds"}.</p><p class="muted">⏳ Waiting for your first email…</p>` : st > 3 ? `<p class="muted">Received - check your WhatsApp.</p>` : `<p class="muted">Last step.</p>`}</div></div>
+${st === 3 ? `<p>From any other email (or ask a friend), send a short email to <b>${esc(acc.email)}</b>. It will pop up on your WhatsApp${acc.mode !== "forward" ? " within 2 minutes" : " in seconds"}.</p><p class="muted">⏳ Waiting for your first email…</p>` : st > 3 ? `<p class="muted">Received - check your WhatsApp.</p>` : `<p class="muted">Last step.</p>`}</div></div>
 </div>
 ${st === 4 ? `<div class="card"><p><b>Done!</b> Every new email now arrives on WhatsApp. Tap <b>↩️ Reply</b> to answer.</p><p class="muted">Type <b>mail</b> on WhatsApp any time to see your inbox, add staff numbers or change settings.</p></div>` : ""}
 <script>
@@ -249,10 +252,10 @@ router.post("/s/:token/connect", form, async (req, res) => {
   const acc = await byWebToken(req.params.token).catch(() => null);
   if (!acc) return res.status(404).send(page("Not found", "<h1>Link not found</h1>"));
   const b = req.body || {};
-  const values = { user: b.user, imapHost: b.imapHost, imapPort: b.imapPort, smtpHost: b.smtpHost, smtpPort: b.smtpPort };
+  const values = { user: b.user, inProto: b.inProto, imapHost: b.imapHost, imapPort: b.imapPort, smtpHost: b.smtpHost, smtpPort: b.smtpPort };
   if (limited(req, "pw", 20)) return res.send(statusPage(acc, { error: "Too many attempts. Please try again in an hour, or tap “Set it up for me”.", values }));
   try {
-    const r = await connectWithPassword(acc, { pass: String(b.pass || ""), user: String(b.user || "").trim(), imapHost: String(b.imapHost || "").trim(), imapPort: b.imapPort, smtpHost: String(b.smtpHost || "").trim(), smtpPort: b.smtpPort });
+    const r = await connectWithPassword(acc, { pass: String(b.pass || ""), user: String(b.user || "").trim(), protocol: String(b.inProto || "auto"), imapHost: String(b.imapHost || "").trim(), imapPort: b.imapPort, smtpHost: String(b.smtpHost || "").trim(), smtpPort: b.smtpPort });
     if (acc.phoneVerified) {
       await sendButtons(acc.ownerPhone, { text: `🎉 *${acc.email} is connected!*\n\nNew emails will arrive here within about 2 minutes.${r.smtp ? `\nReplies go out from *${acc.email}*.` : ""}\n\nSend a test email to check.`, buttons: [{ id: "mail_menu", title: "📧 My Mail" }] }).catch(() => {});
     }
@@ -291,10 +294,10 @@ router.post("/connect/:token", form, async (req, res) => {
   const acc = await accByToken(req.params.token).catch(() => null);
   if (!acc) return res.status(404).send(page("Link expired", "<h1>This link has expired</h1>"));
   const b = req.body || {};
-  const values = { user: b.user, imapHost: b.imapHost, imapPort: b.imapPort, smtpHost: b.smtpHost, smtpPort: b.smtpPort };
+  const values = { user: b.user, inProto: b.inProto, imapHost: b.imapHost, imapPort: b.imapPort, smtpHost: b.smtpHost, smtpPort: b.smtpPort };
   if (limited(req, "pw", 20)) return res.send(page("Connect your email", `<h1>Connect ${esc(acc.email)}</h1><div class="card">${connectBlock(acc, { error: "Too many attempts. Try again later.", values, action: `/mail/connect/${esc(req.params.token)}` })}</div>`));
   try {
-    const r = await connectWithPassword(acc, { pass: String(b.pass || ""), user: String(b.user || "").trim(), imapHost: String(b.imapHost || "").trim(), imapPort: b.imapPort, smtpHost: String(b.smtpHost || "").trim(), smtpPort: b.smtpPort });
+    const r = await connectWithPassword(acc, { pass: String(b.pass || ""), user: String(b.user || "").trim(), protocol: String(b.inProto || "auto"), imapHost: String(b.imapHost || "").trim(), imapPort: b.imapPort, smtpHost: String(b.smtpHost || "").trim(), smtpPort: b.smtpPort });
     await sendButtons(acc.ownerPhone, {
       text: `🎉 *${acc.email} is connected!*\n\nNew emails will arrive here within about 2 minutes.` + (r.smtp ? `\nYour replies will be sent from *${acc.email}*.` : `\n⚠️ We couldn't connect your outgoing server, so replies will be sent via ZimQuote with your address as the reply-to.`) + `\n\nSend yourself a test email to check.`,
       buttons: [{ id: "mail_menu", title: "📧 My Mail" }]
@@ -309,10 +312,9 @@ router.post("/connect/:token", form, async (req, res) => {
 router.get("/att/:id", async (req, res) => {
   const id = String(req.params.id || "");
   if (!/^[a-f0-9]{20}$/.test(id) || req.query.t !== attToken(id)) return res.status(404).send("Not found");
-  const doc = await mongoose.connection.collection("mail_attachments").findOne({ _id: id }).catch(() => null);
-  if (!doc) return res.status(404).send("Not found");
-  const d = doc.data;
-  const data = Buffer.isBuffer(d) ? d : d?._bsontype === "Binary" ? Buffer.from(d.buffer) : Buffer.from(d || "");
+  const got = await readAttachment(id).catch(() => null);
+  if (!got) return res.status(404).send("Not found");
+  const { doc, data } = got;
   res.set("Content-Type", doc.contentType || "application/octet-stream");
   res.set("Content-Disposition", `inline; filename="${String(doc.filename || "attachment").replace(/["\r\n]/g, "")}"`);
   res.set("Cache-Control", "private, max-age=3600");
@@ -412,7 +414,7 @@ ${s.lastError ? `<div class="zqm-flash bad">Last error: ${e(s.lastError)}</div>`
       const stuck = all.filter(a => a.status === "setup" && new Date(a.createdAt).getTime() < now - 3600000).length;
       const help = all.filter(a => a.helpRequestedAt && a.status !== "live").length;
       const rows = accs.map(a => `<tr>
-<td><a class="btn-link" href="/zq-admin/mail/${a._id}"><b>${e(a.email)}</b></a><br><small class="muted">${e(a.businessName || "")}${a.businessName ? " · " : ""}${e(a.provider)} · ${a.mode === "imap" ? "email login" : "forwarding"}</small>${a.helpRequestedAt && a.status !== "live" ? `<br>${badge("🙋 wants help", "orange")}` : ""}</td>
+<td><a class="btn-link" href="/zq-admin/mail/${a._id}"><b>${e(a.email)}</b></a><br><small class="muted">${e(a.businessName || "")}${a.businessName ? " · " : ""}${e(a.provider)} · ${a.mode === "imap" ? "IMAP login" : a.mode === "pop3" ? "POP3 login" : "forwarding"} · ${e(planLimits(a).name)}</small>${a.helpRequestedAt && a.status !== "live" ? `<br>${badge("🙋 wants help", "orange")}` : ""}</td>
 <td><a href="https://wa.me/${e(a.ownerPhone)}" target="_blank">+${e(a.ownerPhone)}</a>${a.phoneVerified === false ? `<br>${badge("not confirmed", "gray")}` : ""}</td>
 <td>${statusBadge(a)}<br>${planBadge(a)}</td>
 <td>${a.mailCount || 0} in · ${a.replyCount || 0} out<br><small class="muted">last ${fmt(a.lastMailAt)}</small></td>
@@ -427,19 +429,38 @@ ${s.lastError ? `<div class="zqm-flash bad">Last error: ${e(s.lastError)}</div>`
   });
 
   // ── Set up for a client ────────────────────────────────────────────────────
-  router.get("/mail/new", requireSupplierAdmin, (req, res) => {
+  router.get("/mail/new", requireSupplierAdmin, async (req, res) => {
+    const sq = String(req.query.sq || "").trim();
+    let found = [], pre = { phone: req.query.phone || "", biz: req.query.biz || "" };
+    try {
+      const SP = (await import("../models/supplierProfile.js")).default;
+      if (sq) {
+        const rx = new RegExp(sq.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+        found = await SP.find({ $or: [{ businessName: rx }, { phone: new RegExp(sq.replace(/\D/g, "") || "^$") }] }, { businessName: 1, phone: 1, active: 1, tier: 1, "location.city": 1 }).limit(15).lean();
+      }
+      if (req.query.sid && mongoose.isValidObjectId(req.query.sid)) {
+        const s = await SP.findById(req.query.sid, { businessName: 1, phone: 1 }).lean();
+        if (s) pre = { phone: s.phone, biz: s.businessName };
+      }
+    } catch (_) {}
     res.send(layout("ZimQuote Mail - New", wrap(`${flash(req)}${sub("new")}
+<div class="card2" style="max-width:760px">
+<h3>🏪 Connect a listed supplier's email</h3>
+<form method="get" action="/zq-admin/mail/new" style="display:flex;gap:8px"><input name="sq" value="${e(sq)}" placeholder="Search supplier name or phone"><button class="btn btn-blue">Find</button></form>
+${sq ? (found.length ? `<div class="table-wrap" style="margin-top:10px"><table><tbody>${found.map(s => `<tr><td><b>${e(s.businessName || "-")}</b><br><small class="muted">+${e(s.phone)} · ${e(s.location?.city || "")} · ${s.active ? "active" : "inactive"}${s.tier ? " · " + e(s.tier) : ""}</small></td><td style="text-align:right"><a class="btn btn-sm btn-green" href="/zq-admin/mail/new?sid=${s._id}">Set up email</a></td></tr>`).join("")}</tbody></table></div>` : `<p class="mu sm" style="margin-top:8px">No supplier found.</p>`) : `<p class="mu sm" style="margin-top:8px">Listed sellers get ${Math.round(Number(process.env.MAIL_SUPPLIER_DISCOUNT ?? 0.25) * 100)}% off ZimQuote Mail plans.</p>`}
+</div>
 <div class="card2" style="max-width:760px">
 <h3>Set up an inbox for a client</h3>
 <p class="mu sm">On the phone with the client: type their email and password. We find their mail server (works with .co.zw cPanel hosting) and test the login. No password? Leave it blank, and you'll get the forwarding address to add in their cPanel.</p>
 <form method="post" action="/zq-admin/mail/new" autocomplete="off">
 <div class="grid">
-<div><label for="m-phone">Client WhatsApp number</label><input id="m-phone" name="phone" required value="${e(req.query.phone || "")}" placeholder="0772123456"></div>
-<div><label for="m-biz">Business name</label><input id="m-biz" name="biz" placeholder="Acme Hardware"></div>
+<div><label for="m-phone">Client WhatsApp number</label><input id="m-phone" name="phone" required value="${e(pre.phone)}" placeholder="0772123456"></div>
+<div><label for="m-biz">Business name</label><input id="m-biz" name="biz" value="${e(pre.biz)}" placeholder="Acme Hardware"></div>
 <div><label for="m-email">Email address</label><input id="m-email" name="email" type="email" required placeholder="sales@acme.co.zw"></div>
 <div><label for="m-pass">Email password (optional)</label><input id="m-pass" name="password" type="password" autocomplete="new-password"></div>
 <div><label for="m-alert">Alerts</label><select id="m-alert" name="alertMode"><option value="all">Every email</option><option value="important">Important only</option></select></div>
 <div><label for="m-trial">Free trial (days)</label><input id="m-trial" name="trial" type="number" min="0" max="365" value="${MAIL_CONFIG.TRIAL_DAYS}"></div>
+<div><label for="m-plan">Already paid? Activate a plan</label><select id="m-plan" name="plan"><option value="">No - free trial</option>${["starter", "business", "pro"].map(k => `<option value="${k}">${MAIL_PLANS[k].name} - 1 year ($${MAIL_PLANS[k].price})</option>`).join("")}</select></div>
 </div>
 ${presetFields("m", null, {})}
 <label class="chk"><input type="checkbox" name="welcome" value="1" checked> Send the client a WhatsApp welcome</label>
@@ -449,7 +470,8 @@ ${presetFields("m", null, {})}
   router.post("/mail/new", requireSupplierAdmin, pform, async (req, res) => {
     try {
       const b = req.body || {};
-      const r = await setupForClient({ phone: b.phone, email: String(b.email || "").trim(), businessName: String(b.biz || "").trim(), password: String(b.password || ""), imapHost: String(b.imapHost || "").trim(), imapPort: Number(b.imapPort) || 0, smtpHost: String(b.smtpHost || "").trim(), smtpPort: Number(b.smtpPort) || 0, alertMode: b.alertMode === "important" ? "important" : "all", trialDays: Number(b.trial) || 0 });
+      const r = await setupForClient({ phone: b.phone, email: String(b.email || "").trim(), businessName: String(b.biz || "").trim(), password: String(b.password || ""), protocol: String(b.inProto || "auto"), imapHost: String(b.imapHost || "").trim(), imapPort: Number(b.imapPort) || 0, smtpHost: String(b.smtpHost || "").trim(), smtpPort: Number(b.smtpPort) || 0, alertMode: b.alertMode === "important" ? "important" : "all", trialDays: Number(b.trial) || 0 });
+      if (["starter", "business", "pro"].includes(b.plan)) await activatePaid(r.acc._id, "", false, 365, b.plan).catch(() => {});
       let welcome = "";
       if (b.welcome) welcome = (await sendClientWelcome(r.acc)) ? " Welcome sent." : " Welcome not delivered (client hasn't messaged the bot in 24h - use “Message client from my phone”).";
       const msg = r.connected ? `Created and connected. ${r.message}${welcome}` : `Created.${r.message ? " Login: " + r.message : ""} Forwarding address: ${forwardAddress(r.acc)}.${welcome}`;
@@ -466,8 +488,11 @@ ${presetFields("m", null, {})}
     const fwd = forwardAddress(a);
     const waText = encodeURIComponent(`Hi${a.businessName ? " " + a.businessName : ""}, this is ZimQuote. Your email ${a.email} is set up on WhatsApp. Please send "mail" to +263 77 114 3904 on WhatsApp to see your inbox.`);
     const disc = req.query.discover ? await discoverServers(a.email, a.provider).catch(() => null) : null;
-    const how = a.mode === "imap"
-      ? `email login · <code>${e(a.imap?.host || "")}</code>${a.imap?.insecureTls ? " (cert mismatch allowed)" : ""}${a.smtp?.host ? ` · replies via <code>${e(a.smtp.host)}:${a.smtp.port}</code>` : " · replies via ZimQuote"}`
+    const ib = a.mode === "pop3" ? a.pop : a.imap;
+    const lim = planLimits(a);
+    const month = new Date().toISOString().slice(0, 7);
+    const how = a.mode !== "forward"
+      ? `${a.mode === "pop3" ? "POP3" : "IMAP"} login · <code>${e(ib?.host || "")}:${e(ib?.port || "")}</code>${ib?.insecureTls ? " (cert mismatch allowed)" : ""}${a.smtp?.host ? ` · replies via <code>${e(a.smtp.host)}:${a.smtp.port}</code>` : " · replies via ZimQuote"}`
       : `forwarding to <code>${e(fwd)}</code>`;
     const sysHtml = await systemPanel();
     const sysBad = sysHtml.includes("something needs fixing");
@@ -482,18 +507,20 @@ ${sysBad ? sysHtml : ""}
 <div>Team</div><div>${(a.alertPhones || []).map(p => "+" + e(p)).join(", ") || "none"}</div>
 <div>Provider</div><div>${e(a.provider)}</div>
 <div>Connected by</div><div>${how}</div>
-${a.mode === "imap" ? `<div>Forwarding address</div><div><code>${e(fwd)}</code> (not needed while the password is connected)</div>` : ""}
+<div>Plan</div><div>${e(lim.name)} · alerts this month ${a.alertMonth === month ? (a.alertsThisMonth || 0) : 0} / ${lim.alerts} · staff numbers up to ${lim.team}</div>
+${a.mode !== "forward" ? `<div>Forwarding address</div><div><code>${e(fwd)}</code> (not needed while the password is connected)</div>` : ""}
 <div>Activity</div><div>${a.mailCount || 0} emails in · ${a.replyCount || 0} replies · last ${fmt(a.lastMailAt)}</div>
 <div>Created</div><div>${fmt(a.createdAt)} via ${e(a.setupBy || "whatsapp")}</div>
 <div>Client pages</div><div><a href="/mail/s/${e(a.webToken || "")}" target="_blank">status page</a> · <a href="/mail/guide/${e(a.slug)}" target="_blank">setup guide</a></div>
 </div>
-${a.imap?.lastError ? `<div class="zqm-flash bad">Last error: ${e(a.imap.lastError)}</div>` : ""}
+${(a.mode === "pop3" ? a.pop?.lastError : a.imap?.lastError) ? `<div class="zqm-flash bad">Last error: ${e(a.mode === "pop3" ? a.pop.lastError : a.imap.lastError)}</div>` : ""}
 <div class="acts">
 <form method="post" action="/zq-admin/mail/${a._id}/test"><button class="btn btn-sm btn-blue">📨 Send test email</button></form>
 <form method="post" action="/zq-admin/mail/${a._id}/welcome"><button class="btn btn-sm btn-gray">👋 WhatsApp welcome</button></form>
 <a class="btn btn-sm btn-green" target="_blank" href="https://wa.me/${e(a.ownerPhone)}?text=${waText}">💬 Message client</a>
 <form method="post" action="/zq-admin/mail/${a._id}/guide"><button class="btn btn-sm btn-gray">📖 Resend setup steps</button></form>
-<form method="post" action="/zq-admin/mail/${a._id}/extend" onsubmit="return confirm('Mark as paid for 1 year?')"><button class="btn btn-sm btn-green">💵 +1 year paid</button></form>
+<form method="post" action="/zq-admin/mail/${a._id}/extend" onsubmit="return confirm('Activate for 1 year (paid)?')" style="display:flex;gap:6px;align-items:center"><select name="plan" style="width:auto;padding:5px 8px">${["starter", "business", "pro"].map(k => `<option value="${k}" ${a.plan === k ? "selected" : ""}>${MAIL_PLANS[k].name} $${MAIL_PLANS[k].price}</option>`).join("")}</select><button class="btn btn-sm btn-green">💵 Activate 1 year</button></form>
+${isActive(a) ? `<form method="post" action="/zq-admin/mail/${a._id}/deactivate" onsubmit="return confirm('Switch this inbox off now? Alerts stop until it is activated again.')"><button class="btn btn-sm btn-gray">⛔ Deactivate</button></form>` : ""}
 <form method="post" action="/zq-admin/mail/${a._id}/trial"><button class="btn btn-sm btn-gray">+14 days trial</button></form>
 ${a.helpRequestedAt ? `<form method="post" action="/zq-admin/mail/${a._id}/clearhelp"><button class="btn btn-sm btn-gray">✔ Help done</button></form>` : ""}
 </div></div>
@@ -526,7 +553,8 @@ ${disc ? `<p class="mu sm" style="margin-top:10px">IMAP: ${disc.imap.map(s => `$
 <div><label for="e-paid">Paid until</label><input id="e-paid" name="paidUntil" type="date" value="${day(a.paidUntil)}"></div>
 </div>
 <label for="e-sig">Signature on replies</label><textarea id="e-sig" name="signature">${e(a.signature || "")}</textarea>
-${a.mode === "imap" ? `<label class="chk"><input type="checkbox" name="useForwarding" value="1"> Forget the saved password and switch to forwarding</label>` : ""}
+<label for="e-plan">Plan</label><select id="e-plan" name="plan" style="max-width:260px">${["starter", "business", "pro"].map(k => `<option value="${k}" ${a.plan === k ? "selected" : ""}>${MAIL_PLANS[k].name} ($${MAIL_PLANS[k].price}/yr · ${MAIL_PLANS[k].alerts} alerts/month · ${MAIL_PLANS[k].team} staff)</option>`).join("")}</select>
+${a.mode !== "forward" ? `<label class="chk"><input type="checkbox" name="useForwarding" value="1"> Forget the saved password and switch to forwarding</label>` : ""}
 <div class="acts"><button class="btn btn-green">Save changes</button></div>
 </form></div>
 
@@ -547,7 +575,7 @@ ${msgs.map(m => `<tr><td>${fmt(m.receivedAt)}</td><td>${e(m.fromName)}<br><small
       const b = req.body || {};
       const acc = await updateAccount(req.params.id, {
         email: b.email, businessName: b.businessName, ownerPhone: b.ownerPhone, alertPhones: b.alertPhones ?? "",
-        displayName: b.displayName, signature: b.signature, alertMode: b.alertMode, status: b.status,
+        displayName: b.displayName, signature: b.signature, alertMode: b.alertMode, status: b.status, plan: b.plan,
         trialEndsAt: b.trialEndsAt ?? "", paidUntil: b.paidUntil ?? "", useForwarding: !!b.useForwarding
       });
       go(res, `/zq-admin/mail/${acc._id}`, "success", "Saved.");
@@ -560,23 +588,29 @@ ${msgs.map(m => `<tr><td>${fmt(m.receivedAt)}</td><td>${e(m.fromName)}<br><small
   router.post("/mail/:id/connect", requireSupplierAdmin, pform, async (req, res) => {
     const acc = await one(req); if (!acc) return go(res, "/zq-admin/mail", "error", "Inbox not found");
     try {
-      const r = await connectWithPassword(acc, { pass: String(req.body.password || ""), user: String(req.body.user || "").trim(), imapHost: String(req.body.imapHost || "").trim(), imapPort: Number(req.body.imapPort) || 0, smtpHost: String(req.body.smtpHost || "").trim(), smtpPort: Number(req.body.smtpPort) || 0 });
-      go(res, `/zq-admin/mail/${acc._id}`, "success", `Connected via ${r.imap.host}${r.smtp ? `; replies via ${r.smtp.host}:${r.smtp.port}` : "; no SMTP found, replies via ZimQuote"}. Send a test email to check.`);
+      const r = await connectWithPassword(acc, { pass: String(req.body.password || ""), user: String(req.body.user || "").trim(), protocol: String(req.body.inProto || "auto"), imapHost: String(req.body.imapHost || "").trim(), imapPort: Number(req.body.imapPort) || 0, smtpHost: String(req.body.smtpHost || "").trim(), smtpPort: Number(req.body.smtpPort) || 0 });
+      const ib = r.imap || r.pop;
+      go(res, `/zq-admin/mail/${acc._id}`, "success", `Connected by ${r.protocol === "pop3" ? "POP3" : "IMAP"} via ${ib.host}:${ib.port}${r.smtp ? `; replies via ${r.smtp.host}:${r.smtp.port}` : "; no SMTP found, replies via ZimQuote"}. Send a test email to check.`);
     } catch (err) { go(res, `/zq-admin/mail/${acc._id}`, "error", err.message); }
   });
   router.post("/mail/:id/test", requireSupplierAdmin, async (req, res) => {
     const acc = await one(req); if (!acc) return go(res, "/zq-admin/mail", "error", "Inbox not found");
     try {
       await sendTestEmail(acc);
-      go(res, `/zq-admin/mail/${acc._id}`, "success", `Test email sent to ${acc.email}. It should reach the client's WhatsApp within ${acc.mode === "imap" ? "2 minutes" : "a minute"}.`);
+      go(res, `/zq-admin/mail/${acc._id}`, "success", `Test email sent to ${acc.email}. It should reach the client's WhatsApp within ${acc.mode !== "forward" ? "2 minutes" : "a minute"}.`);
     } catch (err) { go(res, `/zq-admin/mail/${acc._id}`, "error", err.message); }
   });
   router.post("/mail/:id/welcome", requireSupplierAdmin, async (req, res) => {
     const acc = await one(req); if (!acc) return go(res, "/zq-admin/mail", "error", "Inbox not found");
     (await sendClientWelcome(acc)) ? go(res, `/zq-admin/mail/${acc._id}`, "success", "Welcome sent on WhatsApp.") : go(res, `/zq-admin/mail/${acc._id}`, "error", "Not delivered - the client hasn't messaged the bot in 24h. Use “Message client”.");
   });
-  router.post("/mail/:id/extend", requireSupplierAdmin, async (req, res) => {
-    const acc = await activatePaid(req.params.id, "", null, 365).catch(() => null);
+  router.post("/mail/:id/deactivate", requireSupplierAdmin, async (req, res) => {
+    try { const acc = await deactivateAccount(req.params.id); go(res, `/zq-admin/mail/${acc._id}`, "success", `${acc.email} switched off.`); }
+    catch (err) { go(res, "/zq-admin/mail", "error", err.message); }
+  });
+  router.post("/mail/:id/extend", requireSupplierAdmin, pform, async (req, res) => {
+    const plan = ["starter", "business", "pro"].includes(req.body?.plan) ? req.body.plan : "";
+    const acc = await activatePaid(req.params.id, "", null, 365, plan).catch(() => null);
     acc ? go(res, `/zq-admin/mail/${acc._id}`, "success", `Paid until ${fmt(acc.paidUntil)}`) : go(res, "/zq-admin/mail", "error", "Inbox not found");
   });
   router.post("/mail/:id/trial", requireSupplierAdmin, async (req, res) => {

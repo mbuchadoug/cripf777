@@ -254,7 +254,8 @@ export async function sendMainMenu(to) {
       { id: "find_supplier",       title: "🔍 Browse & Shop" },
       { id: "my_orders",           title: "📋 My Orders" },
       { id: "find_school",         title: "🎓 Schools & Tutors" },
-      { id: "my_supplier_account", title: "🏪 My Store" }
+      { id: "my_supplier_account", title: "🏪 My Store" },
+      { id: "mail_menu",           title: "📧 Business Email" }
     ]);
   }
 
@@ -268,6 +269,7 @@ export async function sendMainMenu(to) {
       { id: "my_orders",           title: "📋 My Orders" },
       { id: "find_school",         title: "🎓 Schools & Tutors" },
       { id: "my_supplier_account", title: "🏪 My Store" },
+      { id: "mail_menu",           title: "📧 Business Email" },
       { id: "sup_upgrade_plan",    title: "💳 Activate Listing" }
     ]);
   }
@@ -287,7 +289,8 @@ export async function sendMainMenu(to) {
     { id: "sup_request_sellers", title: "📝 Request a Quote" },
     { id: "find_supplier",       title: "🔍 Browse & Shop" },
     { id: "my_orders",           title: "📋 My Orders" },
-    { id: "find_school",         title: "🎓 Schools & Tutors" }
+    { id: "find_school",         title: "🎓 Schools & Tutors" },
+    { id: "mail_menu",           title: "📧 Business Email" }
   ]);
 }
 
@@ -381,6 +384,13 @@ export async function sendBusinessHomeMenu(to, biz, { isOwner = false } = {}) {
     if (_mpIdx >= 0) filtered.splice(_mpIdx, 0, _riderRow);
     else filtered.push(_riderRow);
   }
+  // ── Always show "Business Email" (ZimQuote Mail) just above Marketplace ──
+  if (!filtered.some(i => i.id === "mail_menu")) {
+    const _mpIdx2 = filtered.findIndex(i => i.id === "marketplace_menu");
+    const _mailRow = { id: "mail_menu", title: "📧 Business Email" };
+    if (_mpIdx2 >= 0) filtered.splice(_mpIdx2, 0, _mailRow);
+    else filtered.push(_mailRow);
+  }
 
   // WhatsApp interactive lists are capped at 10 rows. Same fold pattern as
   // Business Tools: collapse Branches + Users into one row when we overflow.
@@ -392,12 +402,14 @@ export async function sendBusinessHomeMenu(to, biz, { isOwner = false } = {}) {
       filtered.splice(bIdx, 0, { id: "branches_users_menu", title: "🏬 Branches & Users" });
     }
   }
-  // Hard safety: never send more than 10 rows, but always keep Request a Biker + Marketplace.
+  // Hard safety: never send more than 10 rows, but always keep Request a Biker, Business Email + Marketplace.
   if (filtered.length > 10) {
     const mp = filtered.find(i => i.id === "marketplace_menu");
     const rr = filtered.find(i => i.id === "biker_request_rider");
-    filtered = filtered.filter(i => i.id !== "marketplace_menu" && i.id !== "biker_request_rider").slice(0, 8);
+    const ml = filtered.find(i => i.id === "mail_menu");
+    filtered = filtered.filter(i => i.id !== "marketplace_menu" && i.id !== "biker_request_rider" && i.id !== "mail_menu").slice(0, 7);
     if (rr) filtered.push(rr);
+    if (ml) filtered.push(ml);
     if (mp) filtered.push(mp);
   }
 
@@ -1139,6 +1151,7 @@ export async function sendSupplierAccountMenu(to, supplierDoc) {
        { id: "sup_my_orders", title: "📦 My Orders" },
        { id: "sup_upgrade_plan", title: "⬆️ Upgrade Plan" },
        { id: "sup_more_options", title: "⚙️ More Options" },
+       { id: "mail_menu", title: "📧 Business Email" },
        { id: "main_menu_back", title: "⬅ Main Menu" }
 
     ]

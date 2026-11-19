@@ -20,10 +20,11 @@ const MailMessageSchema = new mongoose.Schema({
   important:   { type: Boolean, default: false },
   muted:       { type: Boolean, default: false },    // newsletters / bulk mail: no alert
   attachments: [{ id: String, filename: String, contentType: String, size: Number }],
+  skippedAttachments: [{ filename: String, size: Number }],       // too large to keep - open in the email app
   status:      { type: String, enum: ["new", "replied", "done"], default: "new" },
   alertedAt:   Date,
   replies: [{
-    text: String, by: String, sentAt: Date, via: String, ok: Boolean, error: String
+    text: String, by: String, sentAt: Date, via: String, ok: Boolean, error: String, files: [String]
   }],
   receivedAt:  { type: Date, default: Date.now }
 }, { timestamps: true });
