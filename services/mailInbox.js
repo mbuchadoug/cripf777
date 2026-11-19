@@ -47,6 +47,20 @@ export const MAIL_CONFIG = {
   get PRICE() { return Number(process.env.MAIL_PRICE_USD || 60); },
   get TRIAL_DAYS() { return Number(process.env.MAIL_TRIAL_DAYS || 14); },
   get TEMPLATE() { return process.env.MAIL_ALERT_TEMPLATE || "zq_mail_alert"; },
+  // ONE ordinary mailbox (e.g. zqmail@zimqoute.co.zw on your cPanel) that customers forward to.
+  // No MX changes or port 25 needed: we read it over IMAP like any other inbox.
+  get COLLECTOR() {
+    const e = process.env;
+    if (!e.MAIL_COLLECTOR_USER || !e.MAIL_COLLECTOR_PASS) return null;
+    return {
+      host: e.MAIL_COLLECTOR_HOST || `mail.${String(e.MAIL_COLLECTOR_USER).split("@")[1]}`,
+      port: Number(e.MAIL_COLLECTOR_PORT || 993),
+      user: e.MAIL_COLLECTOR_USER, pass: e.MAIL_COLLECTOR_PASS,
+      address: (e.MAIL_COLLECTOR_ADDRESS || e.MAIL_COLLECTOR_USER).toLowerCase(),
+      plus: String(e.MAIL_COLLECTOR_PLUS || "") === "1",
+      keep: String(e.MAIL_COLLECTOR_KEEP || "") === "1"
+    };
+  },
   TEAM_MAX: 3,              // extra WhatsApp numbers per inbox
   INBOX_MAX: 5,             // inboxes per WhatsApp number
   STATE_TTL_MIN: 60,
@@ -74,7 +88,24 @@ const refOf = id => String(id).slice(-4).toUpperCase();
 const daysFromNow = d => new Date(Date.now() + d * 86400000);
 const fmtDate = d => d ? new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "-";
 const randSlug = () => crypto.randomBytes(5).toString("hex");           // 10 chars
-export const forwardAddress = acc => `${acc.slug}@${MAIL_CONFIG.INBOUND_DOMAIN}`;
+export const forwardAddress = acc => {
+  const c = MAIL_CONFIG.COLLECTOR;
+  if (c) { const [l, d] = c.address.split("@"); return c.plus ? `${l}+${acc.slug}@${d}` : c.address; }
+  return `${acc.slug}@${MAIL_CONFIG.INBOUND_DOMAIN}`;
+};
+// SMTP for replies of forwarding customers + test emails. Falls back to the collector mailbox's login.
+export function platformSmtp() {
+  const e = process.env, c = MAIL_CONFIG.COLLECTOR;
+  const host = e.MAIL_OUT_HOST || (c ? (e.MAIL_COLLECTOR_SMTP_HOST || c.host) : "");
+  if (!host) return null;
+  const port = Number(e.MAIL_OUT_PORT || (c && !e.MAIL_OUT_HOST ? 465 : 587));
+  const user = e.MAIL_OUT_USER || (!e.MAIL_OUT_HOST && c ? c.user : "");
+  const pass = e.MAIL_OUT_PASS || (!e.MAIL_OUT_HOST && c ? c.pass : "");
+  return {
+    opts: { host, port, secure: port === 465, auth: user ? { user, pass } : undefined, tls: { rejectUnauthorized: String(e.MAIL_OUT_STRICT_TLS || "") === "1" }, connectionTimeout: 20000 },
+    from: (e.MAIL_OUT_FROM || user || "").toLowerCase()
+  };
+}
 export const guideUrl = acc => `${MAIL_CONFIG.SITE}/mail/guide/${acc.slug}`;
 
 export function isActive(acc) {
@@ -91,7 +122,8 @@ function planLine(acc) {
 
 // ─── Encryption for saved mail passwords (AES-256-GCM) ───────────────────────
 function _key() {
-  const k = process.env.MAIL_SECRET_KEY;
+  const s = process.env.SESSION_SECRET;
+  const k = process.env.MAIL_SECRET_KEY || (s && s !== "change_this_secret_for_dev_only" ? `zq-mail:${s}` : "");
   if (!k || k.length < 16) return null;
   return crypto.createHash("sha256").update(k).digest();
 }
@@ -272,19 +304,55 @@ function gmailForwardConfirm(parsed) {
  * @param {Buffer|string} raw
  * @param {object} opts  { rcpt: envelope recipient (forward mode) } OR { account } (imap mode)
  */
-export async function ingestRaw(raw, { rcpt = "", account = null } = {}) {
+const _addrs = v => {
+  const out = [];
+  const walk = x => { if (!x) return; if (Array.isArray(x)) return x.forEach(walk); if (x.value) return walk(x.value); if (x.address) out.push(String(x.address).toLowerCase()); if (x.group) walk(x.group); if (typeof x === "string") (x.match(/[^\s<>,;"']+@[^\s<>,;"']+/g) || []).forEach(a => out.push(a.toLowerCase())); };
+  walk(v); return out;
+};
+
+/** Which customer inboxes is this forwarded email for? (collector mailbox) */
+async function resolveCollectorAccounts(parsed) {
+  const h = parsed.headers;
+  const envelope = [..._addrs(h.get("delivered-to")), ..._addrs(h.get("x-original-to")), ..._addrs(h.get("envelope-to")), ..._addrs(h.get("x-forwarded-to")), ..._addrs(h.get("x-forwarded-for"))];
+  // 1. plus-address tag: zqmail+<slug>@...
+  for (const a of [...envelope, ..._addrs(parsed.to), ..._addrs(parsed.cc)]) {
+    const m = a.match(/^[^+@]+\+([a-f0-9]{10})@/);
+    if (m) { const acc = await MailAccount.findOne({ slug: m[1] }); if (acc) return [acc]; }
+  }
+  // 2. Gmail's forwarding confirmation names the address in the subject
+  const conf = String(parsed.subject || "").match(/Receive Mail from\s+([^\s]+@[^\s]+)/i);
+  if (conf) return MailAccount.find({ email: conf[1].toLowerCase() });
+  // 3. the customer's own address in the envelope / To / Cc headers
+  const col = MAIL_CONFIG.COLLECTOR?.address;
+  const cands = [...new Set([...envelope, ..._addrs(parsed.to), ..._addrs(parsed.cc)])].filter(a => a !== col);
+  if (!cands.length) return [];
+  const accs = await MailAccount.find({ email: { $in: cands }, mode: "forward" });
+  // prefer envelope matches (Bcc / aliases) when there are several
+  const env = accs.filter(a => envelope.includes(a.email));
+  return env.length ? env : accs;
+}
+
+export async function ingestRaw(raw, { rcpt = "", account = null, collector = false } = {}) {
   const { simpleParser } = await import("mailparser");
   const parsed = await simpleParser(raw);
 
-  // 1. Which inbox is this for?
-  let acc = account;
-  if (!acc) {
-    const rc = String(rcpt || "").toLowerCase().trim();
-    const [local, dom] = rc.split("@");
-    if (!local || dom !== MAIL_CONFIG.INBOUND_DOMAIN) return { skipped: "unknown recipient" };
-    acc = await MailAccount.findOne({ slug: local.split("+")[0] });
-    if (!acc) return { skipped: "no account" };
+  if (account) return ingestParsed(parsed, account);
+  if (collector) {
+    const accs = await resolveCollectorAccounts(parsed);
+    if (!accs.length) return { skipped: "no matching inbox" };
+    const results = [];
+    for (const acc of accs) results.push(await ingestParsed(parsed, acc));
+    return results.length === 1 ? results[0] : { ok: true, results };
   }
+  const rc = String(rcpt || "").toLowerCase().trim();
+  const [local, dom] = rc.split("@");
+  if (!local || dom !== MAIL_CONFIG.INBOUND_DOMAIN) return { skipped: "unknown recipient" };
+  const acc = await MailAccount.findOne({ slug: local.split("+")[0] });
+  if (!acc) return { skipped: "no account" };
+  return ingestParsed(parsed, acc);
+}
+
+async function ingestParsed(parsed, acc) {
 
   // 2. Gmail forwarding confirmation → send the code to WhatsApp
   const g = gmailForwardConfirm(parsed);
@@ -301,7 +369,8 @@ export async function ingestRaw(raw, { rcpt = "", account = null } = {}) {
   if (parsed.headers.get("x-zimquote-mail")) return { skipped: "own message" };
   const fromAddr = (parsed.from?.value?.[0]?.address || "").toLowerCase();
   const isTest = !!parsed.headers.get("x-zimquote-test");
-  if (!isTest && fromAddr && fromAddr === String(process.env.MAIL_OUT_FROM || "").toLowerCase()) return { skipped: "own sender" };
+  const ownFrom = platformSmtp()?.from || "";
+  if (!isTest && fromAddr && ownFrom && fromAddr === ownFrom) return { skipped: "own sender" };
   const messageId = parsed.messageId || `<zq-${crypto.randomBytes(8).toString("hex")}@local>`;
   if (await MailMessage.exists({ accountId: acc._id, messageId })) return { skipped: "duplicate" };
 
@@ -446,11 +515,12 @@ async function transportFor(acc) {
       via: "own"
     };
   }
-  if (!process.env.MAIL_OUT_HOST) throw new Error("Sending is not set up yet (MAIL_OUT_HOST missing)");
+  const ps = platformSmtp();
+  if (!ps) throw new Error("Sending is not set up yet: add MAIL_COLLECTOR_USER / MAIL_COLLECTOR_PASS (or MAIL_OUT_HOST) to .env");
   const name = (acc.displayName || acc.email).replace(/"/g, "");
   return {
-    t: nodemailer.createTransport({ host: process.env.MAIL_OUT_HOST, port: Number(process.env.MAIL_OUT_PORT || 587), secure: String(process.env.MAIL_OUT_PORT) === "465", auth: process.env.MAIL_OUT_USER ? { user: process.env.MAIL_OUT_USER, pass: process.env.MAIL_OUT_PASS } : undefined }),
-    from: `"${name} via ZimQuote" <${process.env.MAIL_OUT_FROM || process.env.MAIL_OUT_USER}>`,
+    t: nodemailer.createTransport(ps.opts),
+    from: `"${name} via ZimQuote" <${ps.from}>`,
     replyTo: acc.email,
     via: "zimquote"
   };
@@ -577,12 +647,13 @@ export function startMailPoller() {
       const accs = await MailAccount.find({ mode: "imap", status: { $in: ["live", "error"] }, "imap.passEnc": { $exists: true, $ne: "" } }).lean();
       const due = accs.filter(isActive);
       for (let i = 0; i < due.length; i += 4) await Promise.allSettled(due.slice(i, i + 4).map(pollImapAccount));
+      await pollCollector();
     } catch (e) { console.error("[MAIL POLLER]", e.message); }
   };
-  setInterval(tick, MAIL_CONFIG.POLL_MS);
+  setInterval(tick, MAIL_CONFIG.COLLECTOR ? 45000 : MAIL_CONFIG.POLL_MS);
   setTimeout(tick, 20000);
   setInterval(sendPlanReminders, 6 * 3600000);
-  console.log("[MAIL] poller started (every 90s)");
+  console.log(`[MAIL] poller started${MAIL_CONFIG.COLLECTOR ? ` - forwarding mailbox ${MAIL_CONFIG.COLLECTOR.address}` : ""}`);
 }
 
 async function sendPlanReminders() {
@@ -848,13 +919,17 @@ export async function sendSetupGuide(from, acc) {
         `*Easiest way:* open this secure page and type your email password. We check it and connect you in seconds.\n` +
         `🔒 ${MAIL_CONFIG.SITE}/mail/connect/${token}\n` +
         `_Your password is encrypted and only used to read new mail and send your replies from your own address. Never send your password here on WhatsApp._\n\n` +
-        `*Or* forward your mail instead (cPanel → *Forwarders* → *Add Forwarder*) to:\n*${fwd}*\n\n` +
+        `*Or* forward your mail instead. cPanel → *Forwarders* → *Add Forwarder*: in *Address to Forward* type only *${acc.email.split("@")[0]}*, then under *Destination → Forward to Email Address* paste:\n*${fwd}*\n\n` +
         `📖 Help: ${guide}`);
     } else {
       await sendText(from,
         `📧 *Company email (${acc.email.split("@")[1]})*\n\n` +
         `Forward your mail to this address:\n*${fwd}*\n\n` +
-        `cPanel: *Email* → *Forwarders* → *Add Forwarder* → address *${acc.email.split("@")[0]}* → *Forward to Email Address* → paste the address above.\n\n` +
+        `cPanel → *Email* → *Forwarders* → *Add Forwarder*:\n` +
+        `• *Address to Forward:* type only *${acc.email.split("@")[0]}*\n` +
+        `• *Domain:* ${acc.email.split("@")[1]}\n` +
+        `• *Destination → Forward to Email Address:* paste the address above\n` +
+        `• Tap *Add Forwarder*\n\n` +
         `📖 Step-by-step: ${guide}`);
     }
   }
@@ -1297,14 +1372,112 @@ export async function sendClientWelcome(acc) {
 
 /** Send a test email TO the customer's address (proves forwarding / login works end to end). */
 export async function sendTestEmail(acc) {
-  if (!process.env.MAIL_OUT_HOST) throw new Error("MAIL_OUT_HOST is not set");
+  const ps = platformSmtp();
+  if (!ps) throw new Error("Sending isn't set up: add MAIL_COLLECTOR_USER and MAIL_COLLECTOR_PASS (a mailbox on your cPanel) to .env and restart");
   const nodemailer = (await import("nodemailer")).default;
-  const t = nodemailer.createTransport({ host: process.env.MAIL_OUT_HOST, port: Number(process.env.MAIL_OUT_PORT || 587), secure: String(process.env.MAIL_OUT_PORT) === "465", auth: process.env.MAIL_OUT_USER ? { user: process.env.MAIL_OUT_USER, pass: process.env.MAIL_OUT_PASS } : undefined });
+  const t = nodemailer.createTransport(ps.opts);
   await t.sendMail({
-    from: `"ZimQuote Mail" <${process.env.MAIL_OUT_FROM || process.env.MAIL_OUT_USER}>`,
+    from: `"ZimQuote Mail" <${ps.from}>`,
     to: acc.email,
     subject: "ZimQuote Mail test - you can reply to this",
     text: `Hello${acc.businessName ? " " + acc.businessName : ""},\n\nThis is a test from ZimQuote Mail. If this email appears on your WhatsApp, everything is working.\n\nTry tapping Reply on WhatsApp to answer it.\n\nZimQuote`,
     headers: { "X-ZimQuote-Test": "1" }
   });
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// COLLECTOR MAILBOX (forwarding without MX/port-25 work)
+// ═════════════════════════════════════════════════════════════════════════════
+let _collectorBusy = false;
+export const collectorStatus = { lastRunAt: null, lastOkAt: null, lastError: "", processed: 0, insecureTls: false };
+
+export async function pollCollector() {
+  const c = MAIL_CONFIG.COLLECTOR;
+  if (!c || _collectorBusy) return;
+  _collectorBusy = true;
+  collectorStatus.lastRunAt = new Date();
+  const { ImapFlow } = await import("imapflow");
+  const stateCol = mongoose.connection.collection("mail_state");
+  const open = async insecure => {
+    const cl = new ImapFlow({ host: c.host, port: c.port, secure: c.port === 993, auth: { user: c.user, pass: c.pass }, logger: false, socketTimeout: 30000, ...(insecure ? { tls: { rejectUnauthorized: false } } : {}) });
+    await cl.connect(); return cl;
+  };
+  let cl = null;
+  try {
+    try { cl = await open(collectorStatus.insecureTls); }
+    catch (e) { if (!collectorStatus.insecureTls && _isTlsNameErr(e)) { collectorStatus.insecureTls = true; cl = await open(true); } else throw e; }
+    const lock = await cl.getMailboxLock("INBOX");
+    try {
+      const uv = String(cl.mailbox.uidValidity || "");
+      const st = (await stateCol.findOne({ _id: "collector" })) || {};
+      let last = st.uidValidity === uv ? Number(st.lastUid || 0) : 0;
+      const done = [];
+      if (st.uidValidity !== uv) {
+        // First run: don't replay old mail older than 1 day
+        last = 0;
+        const since = new Date(Date.now() - 86400000);
+        const recent = await cl.search({ since }, { uid: true }).catch(() => []);
+        const old = Math.max(0, Math.min(...(recent.length ? recent : [cl.mailbox.uidNext || 1])) - 1);
+        last = old;
+      }
+      let maxUid = last, n = 0;
+      for await (const m of cl.fetch(`${last + 1}:*`, { uid: true, source: true }, { uid: true })) {
+        if (m.uid <= last) continue;
+        maxUid = Math.max(maxUid, m.uid);
+        try { await ingestRaw(m.source, { collector: true }); done.push(m.uid); collectorStatus.processed++; }
+        catch (e) { console.error("[MAIL COLLECTOR INGEST]", e.message); done.push(m.uid); }
+        if (++n >= 40) break;
+      }
+      await stateCol.updateOne({ _id: "collector" }, { $set: { lastUid: maxUid, uidValidity: uv, at: new Date() } }, { upsert: true });
+      if (done.length) {
+        if (c.keep) await cl.messageFlagsAdd(done, ["\\Seen"], { uid: true }).catch(() => {});
+        else await cl.messageDelete(done, { uid: true }).catch(() => {});       // stored in MongoDB already
+      }
+    } finally { lock.release(); }
+    collectorStatus.lastOkAt = new Date(); collectorStatus.lastError = "";
+  } catch (e) {
+    collectorStatus.lastError = e?.responseText || e.message || "failed";
+    console.error("[MAIL COLLECTOR]", collectorStatus.lastError);
+  } finally {
+    if (cl) await cl.logout().catch(() => {});
+    _collectorBusy = false;
+  }
+}
+
+/** Admin: update an inbox. */
+export async function updateAccount(id, f = {}) {
+  const acc = await MailAccount.findById(id);
+  if (!acc) throw new Error("Inbox not found");
+  if (f.email !== undefined) {
+    const e = String(f.email).trim().toLowerCase();
+    if (!isEmail(e)) throw new Error("Invalid email address");
+    if (e !== acc.email) { acc.email = e; acc.provider = (await detectProvider(e)).provider; }
+  }
+  if (f.ownerPhone !== undefined) {
+    const p = normPhone(f.ownerPhone);
+    if (!/^\d{11,15}$/.test(p)) throw new Error("Invalid owner WhatsApp number");
+    acc.ownerPhone = p; acc.phoneVerified = true; acc.linkCode = undefined;
+  }
+  if (f.alertPhones !== undefined) {
+    acc.alertPhones = [...new Set(String(f.alertPhones).split(/[,;\r\n]+/).map(normPhone).filter(p => /^\d{11,15}$/.test(p) && p !== acc.ownerPhone))].slice(0, MAIL_CONFIG.TEAM_MAX);
+  }
+  for (const k of ["businessName", "displayName", "signature"]) if (f[k] !== undefined) acc[k] = String(f[k]).slice(0, k === "signature" ? 500 : 80);
+  if (f.alertMode) acc.alertMode = f.alertMode === "important" ? "important" : "all";
+  if (f.status && ["setup", "live", "paused"].includes(f.status)) acc.status = f.status;
+  if (f.trialEndsAt !== undefined) acc.trialEndsAt = f.trialEndsAt ? new Date(f.trialEndsAt + "T23:59:00+02:00") : null;
+  if (f.paidUntil !== undefined) acc.paidUntil = f.paidUntil ? new Date(f.paidUntil + "T23:59:00+02:00") : null;
+  if (f.useForwarding) { acc.mode = "forward"; acc.imap = {}; acc.smtp = {}; if (acc.status === "error") acc.status = "setup"; }
+  await acc.save(); _mailPhones.at = 0;
+  return acc;
+}
+
+/** Admin: delete an inbox with all its emails and attachments. */
+export async function deleteAccount(id) {
+  const acc = await MailAccount.findById(id);
+  if (!acc) throw new Error("Inbox not found");
+  await MailMessage.deleteMany({ accountId: acc._id }).catch(() => {});
+  await mongoose.connection.collection("mail_attachments").deleteMany({ accountId: acc._id }).catch(() => {});
+  await MailAccount.deleteOne({ _id: acc._id });
+  _mailPhones.at = 0;
+  return acc;
 }
