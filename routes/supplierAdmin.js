@@ -54,6 +54,7 @@ import {
 } from "../services/groupSmartLink.js";
 import { assignSlugToSupplier } from "../services/supplierSmartLink.js";
 import { registerBikerAdminRoutes } from "./bikerAdmin.js";
+import { registerMailAdminRoutes } from "./mailInbox.js";   // ZimQuote Mail
 import { registerQuoteDeskAdminRoutes } from "./quoteDeskAdmin.js";
 import {
   TUTOR_SUBJECTS, TUTOR_LEVELS, TUTOR_MODES, SCHOOL_CITIES
@@ -4589,6 +4590,10 @@ const isPresets     = t === "Presets" || t.startsWith("Preset:");
     { href: "/zq-admin/bikers/new",      label: "➕ Register Rider",      active: t === "Register Biker" },
     { href: "/zq-admin/biker-jobs",      label: "📦 Deliveries",          active: isDeliveries },
     { href: "/zq-admin/biker-jobs/new",  label: "➕ New Delivery",        active: t === "New Delivery" },
+    // ── ZimQuote Mail ─────────────────────────────────────────────────────────
+    { divider: "MAIL" },
+    { href: "/zq-admin/mail",            label: "📧 Mail Inboxes",        active: String(t || "").startsWith("ZimQuote Mail") && t !== "ZimQuote Mail - New" },
+    { href: "/zq-admin/mail/new",        label: "➕ Set up client email", active: t === "ZimQuote Mail - New" },
     // ── Platform ──────────────────────────────────────────────────────────────
     { divider: "PLATFORM" },
     { href: "/zq-admin/orders",          label: "📦 Orders",              active: isOrders },
@@ -17326,6 +17331,7 @@ router.post("/school-activity/send", requireSupplierAdmin, async (req, res) => {
 
 // ── Bikers & deliveries admin (routes/bikerAdmin.js) ─────────────────────────
 registerBikerAdminRoutes(router, { requireSupplierAdmin, layout, esc, badge, stat });
+registerMailAdminRoutes(router, { requireSupplierAdmin, layout, esc, badge, stat });
 // ── Quote desk admin (routes/quoteDeskAdmin.js) ──────────────────────────────
 registerQuoteDeskAdminRoutes(router, { requireSupplierAdmin, layout, esc, badge, stat });
 

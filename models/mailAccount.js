@@ -32,9 +32,16 @@ const MailAccountSchema = new mongoose.Schema({
     passEnc: String,            // AES-256-GCM, see services/mailInbox.js
     lastUid: { type: Number, default: 0 },
     uidValidity: { type: String, default: "" },
-    lastError: String, lastCheckedAt: Date
+    lastError: String, lastCheckedAt: Date,
+    insecureTls: { type: Boolean, default: false }   // host's certificate doesn't match (common on shared cPanel)
   },
-  smtp: { host: String, port: Number, secure: Boolean },
+  smtp: { host: String, port: Number, secure: Boolean, insecureTls: { type: Boolean, default: false } },
+  businessName: { type: String, default: "" },
+  setupBy:      { type: String, default: "whatsapp" },          // whatsapp | web | admin
+  phoneVerified:{ type: Boolean, default: true },                // web sign-ups: false until they confirm on WhatsApp
+  linkCode:     { type: String, index: true },                   // ZQ:MAIL:<code> confirms the WhatsApp number
+  webToken:     { type: String, index: true },                   // /mail/s/<token> status page
+  helpRequestedAt: Date,
 
   // Who gets the WhatsApp alerts (owner is always included)
   alertPhones:  { type: [String], default: [] },

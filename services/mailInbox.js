@@ -300,7 +300,8 @@ export async function ingestRaw(raw, { rcpt = "", account = null } = {}) {
   // 3. Loop / junk protection
   if (parsed.headers.get("x-zimquote-mail")) return { skipped: "own message" };
   const fromAddr = (parsed.from?.value?.[0]?.address || "").toLowerCase();
-  if (fromAddr && fromAddr === String(process.env.MAIL_OUT_FROM || "").toLowerCase()) return { skipped: "own sender" };
+  const isTest = !!parsed.headers.get("x-zimquote-test");
+  if (!isTest && fromAddr && fromAddr === String(process.env.MAIL_OUT_FROM || "").toLowerCase()) return { skipped: "own sender" };
   const messageId = parsed.messageId || `<zq-${crypto.randomBytes(8).toString("hex")}@local>`;
   if (await MailMessage.exists({ accountId: acc._id, messageId })) return { skipped: "duplicate" };
 
@@ -368,6 +369,7 @@ async function notifyOwner(acc, text, buttons = null) {
 const CAT_ICON = { order: "🛒", quote: "💬", payment: "💵", tender: "📑", support: "🛠️", personal: "👤", newsletter: "📰", other: "📧" };
 
 export async function alertNewMail(acc, msg) {
+  if (acc.phoneVerified === false) return;      // web sign-up not yet confirmed on WhatsApp
   const phones = [...new Set([acc.ownerPhone, ...(acc.alertPhones || [])])].filter(Boolean).map(normPhone);
 
   if (!isActive(acc)) {     // expired: tease, so they renew
@@ -439,7 +441,7 @@ async function transportFor(acc) {
   const nodemailer = (await import("nodemailer")).default;
   if (acc.mode === "imap" && acc.smtp?.host && acc.imap?.passEnc) {
     return {
-      t: nodemailer.createTransport({ host: acc.smtp.host, port: acc.smtp.port || 465, secure: acc.smtp.secure !== false, auth: { user: acc.imap.user || acc.email, pass: decryptSecret(acc.imap.passEnc) } }),
+      t: nodemailer.createTransport({ host: acc.smtp.host, port: acc.smtp.port || 465, secure: acc.smtp.secure !== false, auth: { user: acc.imap.user || acc.email, pass: decryptSecret(acc.imap.passEnc) }, ...(acc.smtp.insecureTls ? { tls: { rejectUnauthorized: false } } : {}) }),
       from: acc.displayName ? `"${acc.displayName.replace(/"/g, "")}" <${acc.email}>` : acc.email,
       via: "own"
     };
@@ -481,7 +483,7 @@ export async function sendReply(acc, msg, body, byPhone) {
 
 async function appendToSent(acc, raw) {
   const { ImapFlow } = await import("imapflow");
-  const c = new ImapFlow({ host: acc.imap.host, port: acc.imap.port || 993, secure: acc.imap.secure !== false, auth: { user: acc.imap.user || acc.email, pass: decryptSecret(acc.imap.passEnc) }, logger: false });
+  const c = new ImapFlow({ host: acc.imap.host, port: acc.imap.port || 993, secure: acc.imap.secure !== false, auth: { user: acc.imap.user || acc.email, pass: decryptSecret(acc.imap.passEnc) }, logger: false, ...(acc.imap.insecureTls ? { tls: { rejectUnauthorized: false } } : {}) });
   await c.connect();
   try {
     const boxes = await c.list();
@@ -510,9 +512,9 @@ async function polish(text, msg, acc) {
 // ═════════════════════════════════════════════════════════════════════════════
 const _imapBusy = new Set();
 
-export async function testImap({ host, port, secure, user, pass }) {
+export async function testImap({ host, port, secure, user, pass, insecureTls = false }) {
   const { ImapFlow } = await import("imapflow");
-  const c = new ImapFlow({ host, port, secure, auth: { user, pass }, logger: false, socketTimeout: 20000 });
+  const c = new ImapFlow({ host, port, secure, auth: { user, pass }, logger: false, socketTimeout: 20000, connectionTimeout: 15000, ...(insecureTls ? { tls: { rejectUnauthorized: false } } : {}) });
   await c.connect();
   const lock = await c.getMailboxLock("INBOX");
   let uidNext = 1, uidValidity = "";
@@ -520,9 +522,9 @@ export async function testImap({ host, port, secure, user, pass }) {
   finally { lock.release(); await c.logout().catch(() => {}); }
   return { uidNext, uidValidity };
 }
-export async function testSmtp({ host, port, secure, user, pass }) {
+export async function testSmtp({ host, port, secure, user, pass, insecureTls = false }) {
   const nodemailer = (await import("nodemailer")).default;
-  const t = nodemailer.createTransport({ host, port, secure, auth: { user, pass }, connectionTimeout: 15000 });
+  const t = nodemailer.createTransport({ host, port, secure, auth: { user, pass }, connectionTimeout: 15000, ...(insecureTls ? { tls: { rejectUnauthorized: false } } : {}) });
   await t.verify();
 }
 
@@ -531,14 +533,14 @@ export async function pollImapAccount(acc) {
   if (_imapBusy.has(id)) return;
   _imapBusy.add(id);
   const { ImapFlow } = await import("imapflow");
-  const c = new ImapFlow({ host: acc.imap.host, port: acc.imap.port || 993, secure: acc.imap.secure !== false, auth: { user: acc.imap.user || acc.email, pass: decryptSecret(acc.imap.passEnc) }, logger: false, socketTimeout: 30000 });
+  const c = new ImapFlow({ host: acc.imap.host, port: acc.imap.port || 993, secure: acc.imap.secure !== false, auth: { user: acc.imap.user || acc.email, pass: decryptSecret(acc.imap.passEnc) }, logger: false, socketTimeout: 30000, ...(acc.imap.insecureTls ? { tls: { rejectUnauthorized: false } } : {}) });
   try {
     await c.connect();
     const lock = await c.getMailboxLock("INBOX");
     try {
       const uv = String(c.mailbox.uidValidity || "");
       let last = acc.imap.lastUid || 0;
-      if (!last || (acc.imap.uidValidity && uv !== acc.imap.uidValidity)) {
+      if (!acc.imap.uidValidity || uv !== acc.imap.uidValidity) {      // first run, or the mailbox was rebuilt
         last = Math.max(0, (c.mailbox.uidNext || 1) - 1);       // start from "now", never flood old mail
         await MailAccount.updateOne({ _id: acc._id }, { $set: { "imap.lastUid": last, "imap.uidValidity": uv } });
       } else {
@@ -686,7 +688,7 @@ async function sendIntro(from) {
       `📰 Newsletters and spam stay quiet\n\n` +
       `Works with Gmail, Outlook and company email (yourname@yourcompany.co.zw).\n` +
       `🎁 *${MAIL_CONFIG.TRIAL_DAYS} days free*, then *$${MAIL_CONFIG.PRICE}/year*.`,
-    buttons: [{ id: "mail_setup", title: "📧 Connect my email" }, { id: "main_menu_back", title: "🏠 Main Menu" }]
+    buttons: [{ id: "mail_setup", title: "📧 Connect my email" }, { id: "mail_help", title: "🙋 Set it up for me" }, { id: "main_menu_back", title: "🏠 Main Menu" }]
   });
 }
 
@@ -795,8 +797,9 @@ async function setupAsk(from) {
   return sendText(from, `📧 *Connect your email*\n\nType the email address you want on WhatsApp.\n\n_Example: sales@yourcompany.co.zw or yourname@gmail.com_\n\nType *cancel* to stop.`);
 }
 
-async function createAccount(from, email) {
+export async function createAccount(from, email, { businessName = "", setupBy = "whatsapp", phoneVerified = true } = {}) {
   email = email.toLowerCase().trim();
+  from = normPhone(from);
   const existing = await MailAccount.findOne({ ownerPhone: from, email });
   if (existing) return existing;
   const count = await MailAccount.countDocuments({ ownerPhone: from });
@@ -806,6 +809,9 @@ async function createAccount(from, email) {
   for (let i = 0; i < 5; i++) { slug = randSlug(); if (!(await MailAccount.exists({ slug }))) break; }
   const acc = await MailAccount.create({
     ownerPhone: from, email, provider, slug, mode: "forward", status: "setup",
+    businessName, displayName: businessName, setupBy, phoneVerified,
+    linkCode: phoneVerified ? undefined : crypto.randomBytes(3).toString("hex").toUpperCase(),
+    webToken: crypto.randomBytes(12).toString("hex"),
     trialEndsAt: daysFromNow(MAIL_CONFIG.TRIAL_DAYS)
   });
   _mailPhones.at = 0;
@@ -854,7 +860,7 @@ export async function sendSetupGuide(from, acc) {
   }
   return sendButtons(from, {
     text: `When you're done, *send a test email to ${acc.email}* from any other email address. It will pop up here within a minute.\n\nStuck? WhatsApp our team on ${process.env.MAIL_SUPPORT_PHONE || "+263 78 990 1058"} and we'll set it up for you.`,
-    buttons: [{ id: `mail_fwd_${acc._id}`, title: "📋 Copy address" }, { id: `mail_acc_${acc._id}`, title: "📧 My Mail" }]
+    buttons: [{ id: `mail_fwd_${acc._id}`, title: "📋 Copy address" }, { id: "mail_help", title: "🙋 Set it up for me" }, { id: `mail_acc_${acc._id}`, title: "📧 My Mail" }]
   });
 }
 
@@ -873,6 +879,7 @@ export async function handleMailMessage({ from, text = "", rawText = "", action 
     if (a.startsWith("mail_")) {
       if (a === "mail_menu") { await clearState(phone); await sendMailMenu(phone); return true; }
       if (a === "mail_setup") { await setupAsk(phone); return true; }
+      if (a === "mail_help") { await requestHelp(phone); return true; }
       if (a === "mail_cancel") { await clearState(phone); await sendButtons(phone, { text: "👍 Cancelled.", buttons: [{ id: "mail_menu", title: "📧 My Mail" }] }); return true; }
 
       let m;
@@ -987,7 +994,12 @@ export async function handleMailMessage({ from, text = "", rawText = "", action 
       return true;
     }
 
-    // ── Entry words / deep link ───────────────────────────────────────────
+    // ── Deep links: always win, whatever else the user was doing ─────────
+    if (!a && /^zq:mail$/i.test(typed)) { await clearState(phone); await sendMailMenu(phone); return true; }
+    const lk = !a && typed.match(/^zq:mail:([a-z0-9]{6})$/i);
+    if (lk) { await clearState(phone); await linkWebSignup(phone, lk[1].toUpperCase()); return true; }
+
+    // ── Entry words ───────────────────────────────────────────────────────
     const s = await getSess(phone);
     if (!s.state) {
       const bizBusy = biz && biz.sessionState && !["ready", "main_menu", ""].includes(biz.sessionState);
@@ -1073,4 +1085,226 @@ export async function handleMailMessage({ from, text = "", rawText = "", action 
 async function notFound(phone) {
   await sendButtons(phone, { text: "That email or inbox was not found.", buttons: [{ id: "mail_menu", title: "📧 My Mail" }] }).catch(() => {});
   return true;
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// AUTO-DISCOVERY + CONNECT (used by the web portal, admin "set up for client"
+// and the /mail/connect page). Built for .co.zw company email on shared hosting.
+// ═════════════════════════════════════════════════════════════════════════════
+function _parseAutoconfig(xml, email) {
+  const [local, domain] = String(email).split("@");
+  const fill = s => String(s || "").replace(/%EMAILADDRESS%/g, email).replace(/%EMAILLOCALPART%/g, local).replace(/%EMAILDOMAIN%/g, domain).trim();
+  const block = (type, kind) => {
+    const re = new RegExp(`<${kind}Server[^>]*type="${type}"[^>]*>([\\s\\S]*?)</${kind}Server>`, "gi");
+    const out = []; let m;
+    while ((m = re.exec(xml))) {
+      const b = m[1];
+      const host = fill((b.match(/<hostname>([^<]+)<\/hostname>/i) || [])[1]);
+      const port = Number((b.match(/<port>(\d+)<\/port>/i) || [])[1]) || 0;
+      const sock = ((b.match(/<socketType>([^<]+)<\/socketType>/i) || [])[1] || "").toUpperCase();
+      if (host) out.push({ host, port, secure: sock === "SSL" });
+    }
+    return out;
+  };
+  return { imap: block("imap", "incoming"), smtp: block("smtp", "outgoing") };
+}
+
+/** Best server candidates for an address: known providers, autoconfig (cPanel publishes it), SRV, MX, mail.<domain>. */
+export async function discoverServers(email, provider = "") {
+  const domain = String(email).split("@")[1]?.toLowerCase() || "";
+  if (!provider) provider = (await detectProvider(email)).provider;
+  const g = guessServers(email, provider);
+  const imap = [], smtp = [];
+  const add = (arr, s) => { if (s?.host && !arr.some(x => x.host === s.host && x.port === s.port)) arr.push(s); };
+
+  if (["google", "zoho", "yahoo", "apple"].includes(provider)) { add(imap, g.imap); add(smtp, g.smtp); return { provider, imap, smtp }; }
+
+  const urls = [
+    `https://autoconfig.${domain}/mail/config-v1.1.xml?emailaddress=${encodeURIComponent(email)}`,
+    `https://${domain}/.well-known/autoconfig/mail/config-v1.1.xml?emailaddress=${encodeURIComponent(email)}`,
+    `https://autoconfig.thunderbird.net/v1.1/${domain}`
+  ];
+  for (const u of urls) {
+    try {
+      const r = await axios.get(u, { timeout: 5000, responseType: "text", validateStatus: s => s === 200 });
+      const p = _parseAutoconfig(String(r.data || ""), email);
+      p.imap.forEach(s => add(imap, { host: s.host, port: s.port || 993, secure: s.secure || s.port === 993 }));
+      p.smtp.forEach(s => add(smtp, { host: s.host, port: s.port || 465, secure: s.secure || s.port === 465 }));
+      if (imap.length) break;
+    } catch (_) { /* not published - fine */ }
+  }
+  try { (await dns.resolveSrv(`_imaps._tcp.${domain}`)).forEach(r => add(imap, { host: r.name, port: r.port || 993, secure: true })); } catch (_) {}
+  try { (await dns.resolveSrv(`_submission._tcp.${domain}`)).forEach(r => add(smtp, { host: r.name, port: r.port || 587, secure: r.port === 465 })); } catch (_) {}
+  add(imap, g.imap); add(smtp, g.smtp);
+  for (const h of (g.alt || [])) { add(imap, { host: h, port: 993, secure: true }); add(smtp, { host: h, port: 465, secure: true }); }
+  return { provider, imap: imap.slice(0, 6), smtp: smtp.slice(0, 6) };
+}
+
+const _tlsHostFromError = e => {
+  const c = e?.cert || e?.cause?.cert;
+  const alt = String(c?.subjectaltname || "").split(",").map(s => s.trim().replace(/^DNS:/, "")).find(h => h && !h.startsWith("*"));
+  return alt || c?.subject?.CN || "";
+};
+const _isTlsNameErr = e => /ERR_TLS_CERT_ALTNAME_INVALID|altnames|Hostname\/IP does not match|self[- ]signed|unable to verify|CERT_HAS_EXPIRED/i.test(`${e?.code} ${e?.message} ${e?.cause?.code || ""}`);
+
+/**
+ * Try every likely server until one accepts the login.
+ * Handles the common shared-hosting case where mail.<domain> serves the host's own certificate.
+ * @returns {{ imap: {host,port,secure,insecureTls,info}, smtp: {host,port,secure,insecureTls}|null }}
+ */
+export async function findWorkingMail({ email, user, pass, provider = "", imapHost = "", imapPort = 0, smtpHost = "", smtpPort = 0 }) {
+  user = user || email;
+  const d = await discoverServers(email, provider);
+  const imapCands = [];
+  if (imapHost) imapCands.push({ host: imapHost, port: Number(imapPort) || 993, secure: (Number(imapPort) || 993) === 993 });
+  d.imap.forEach(s => { if (!imapCands.some(x => x.host === s.host && x.port === s.port)) imapCands.push(s); });
+
+  let imapOk = null, lastErr = null, firstErr = null, authFailed = false;
+  for (const c of imapCands) {
+    const attempts = [{ ...c, insecureTls: false }];
+    if (![993, 143].includes(Number(c.port))) attempts.push({ ...c, secure: !c.secure, insecureTls: false });   // odd port: try both TLS and plain
+    for (let i = 0; i < attempts.length && !imapOk; i++) {
+      const at = attempts[i];
+      try { const { _retried, ...opts } = at; imapOk = { ...opts, info: await testImap({ ...opts, user, pass }) }; }
+      catch (e) {
+        lastErr = e; firstErr = firstErr || e;
+        if (e.authenticationFailed) { authFailed = true; break; }
+        if (_isTlsNameErr(e) && !at.insecureTls && !at._retried) {
+          at._retried = true;
+          const certHost = _tlsHostFromError(e);
+          if (certHost && certHost !== at.host) attempts.push({ ...at, host: certHost, insecureTls: false, _retried: true });
+          attempts.push({ ...at, insecureTls: true, _retried: true });
+        }
+      }
+    }
+    if (imapOk || authFailed) break;
+  }
+  if (!imapOk) {
+    const shown = imapHost ? firstErr : lastErr;
+    const err = new Error(authFailed ? "The email address or password is wrong." : `We couldn't reach your mail server (${shown?.code || shown?.message || "no answer"}). Check the server name, or let our team set it up for you.`);
+    err.authFailed = authFailed;
+    throw err;
+  }
+
+  const smtpCands = [];
+  if (smtpHost) smtpCands.push({ host: smtpHost, port: Number(smtpPort) || 465 });
+  d.smtp.forEach(s => smtpCands.push({ host: s.host, port: s.port }));
+  smtpCands.push({ host: imapOk.host, port: 465 }, { host: imapOk.host, port: 587 });
+  const seen = new Set();
+  let smtpOk = null;
+  for (const c of smtpCands) {
+    const k = `${c.host}:${c.port}`; if (seen.has(k)) continue; seen.add(k);
+    for (const insecureTls of [false, true]) {
+      if (insecureTls && !imapOk.insecureTls) continue;      // only relax TLS if the same host needed it for IMAP
+      try { await testSmtp({ host: c.host, port: c.port, secure: c.port === 465, user, pass, insecureTls }); smtpOk = { host: c.host, port: c.port, secure: c.port === 465, insecureTls }; break; }
+      catch (_) {}
+    }
+    if (smtpOk) break;
+    if (seen.size >= 6) break;
+  }
+  return { imap: imapOk, smtp: smtpOk, provider: d.provider };
+}
+
+/** Save a working login on the account and switch it to "email login" mode. */
+export async function connectWithPassword(acc, { pass, user = "", imapHost = "", imapPort = 0, smtpHost = "", smtpPort = 0 }) {
+  const r = await findWorkingMail({ email: acc.email, user: user || acc.email, pass, provider: acc.provider, imapHost, imapPort, smtpHost, smtpPort });
+  acc.mode = "imap";
+  acc.imap = {
+    host: r.imap.host, port: r.imap.port, secure: r.imap.secure, insecureTls: !!r.imap.insecureTls,
+    user: user || acc.email, passEnc: encryptSecret(pass),
+    lastUid: Math.max(0, (r.imap.info.uidNext || 1) - 1), uidValidity: r.imap.info.uidValidity,
+    lastError: "", lastCheckedAt: new Date()
+  };
+  if (r.smtp) acc.smtp = r.smtp;
+  acc.status = "live";
+  acc.connectToken = ""; acc.connectTokenExp = null;
+  await acc.save();
+  return r;
+}
+
+// ─── Web sign-up → confirm the WhatsApp number with "ZQ:MAIL:<code>" ─────────
+export const linkWaUrl = acc => `https://wa.me/${(process.env.ZQ_BOT_NUMBER || "263771143904").replace(/\D/g, "")}?text=${encodeURIComponent(`ZQ:MAIL:${acc.linkCode}`)}`;
+
+async function linkWebSignup(phone, code) {
+  const acc = await MailAccount.findOne({ linkCode: code });
+  if (!acc) { await sendButtons(phone, { text: "That ZimQuote Mail code wasn't found or was already used.", buttons: [{ id: "mail_menu", title: "📧 My Mail" }] }); return; }
+  if (acc.ownerPhone !== phone && await MailAccount.exists({ ownerPhone: phone, email: acc.email })) {
+    await MailAccount.deleteOne({ _id: acc._id });
+    await sendMailMenu(phone); return;
+  }
+  acc.ownerPhone = phone; acc.phoneVerified = true; acc.linkCode = undefined;
+  await acc.save(); _mailPhones.at = 0;
+  await sendText(phone, `✅ *WhatsApp confirmed for ${acc.email}*\n\nNew emails will arrive here.${acc.status === "live" ? "" : " Finish the last step on the web page, or use the steps below."}`);
+  if (acc.status !== "live") await sendSetupGuide(phone, acc);
+  else await sendAccountMenu(phone, acc);
+}
+
+// ─── "Set it up for me" → alert the ZimQuote team ────────────────────────────
+export async function notifyMailAdmin(text) {
+  const admin = normPhone(process.env.ZQ_ADMIN_PHONE || process.env.ADMIN_WHATSAPP_PHONE || "");
+  if (!admin) return;
+  await sendText(admin, text).catch(() => {});
+}
+async function requestHelp(phone) {
+  const accs = await MailAccount.find({ ownerPhone: phone });
+  const now = new Date();
+  for (const a of accs) await MailAccount.updateOne({ _id: a._id }, { $set: { helpRequestedAt: now } });
+  await notifyMailAdmin(
+    `🙋 *ZimQuote Mail: set-up help requested*\n\nWhatsApp: +${phone}\n` +
+    (accs.length ? accs.map(a => `📧 ${a.email} (${a.provider}, ${a.status})`).join("\n") : "No email added yet") +
+    `\n\nCall them: https://wa.me/${phone}\nAdmin: ${MAIL_CONFIG.SITE}/zq-admin/mail/new?phone=${phone}`
+  );
+  await sendButtons(phone, {
+    text: `🙋 *No problem - our team will set it up for you.*\n\nWe'll call or WhatsApp you shortly from ${process.env.MAIL_SUPPORT_PHONE || "+263 78 990 1058"}.\n\nHave ready:\n• your email address\n• your email password (or the person who manages your email)\n\nIt takes about 5 minutes.`,
+    buttons: [{ id: "mail_menu", title: "📧 My Mail" }]
+  });
+}
+
+// ─── Admin: set up an inbox for a client ─────────────────────────────────────
+/**
+ * @returns {{ acc, connected: boolean, message: string }}
+ */
+export async function setupForClient({ phone, email, businessName = "", password = "", imapHost = "", smtpHost = "", alertMode = "all", trialDays = 0 }) {
+  phone = normPhone(phone);
+  if (!/^\d{11,15}$/.test(phone)) throw new Error("Enter the client's WhatsApp number, e.g. 0772123456");
+  if (!isEmail(email)) throw new Error("Enter a valid email address");
+  const acc = await createAccount(phone, email, { businessName, setupBy: "admin", phoneVerified: true });
+  if (alertMode) acc.alertMode = alertMode;
+  if (businessName && !acc.displayName) acc.displayName = businessName;
+  if (trialDays > 0) acc.trialEndsAt = daysFromNow(trialDays);
+  await acc.save();
+  let connected = false, message = "";
+  if (password) {
+    if (!canStorePasswords()) message = "MAIL_SECRET_KEY is not set, so passwords can't be saved. Use forwarding.";
+    else {
+      try { const r = await connectWithPassword(acc, { pass: password, imapHost, smtpHost }); connected = true; message = `Connected via ${r.imap.host}${r.imap.insecureTls ? " (host certificate mismatch, allowed)" : ""}${r.smtp ? `, replies via ${r.smtp.host}:${r.smtp.port}` : ", replies via ZimQuote (no SMTP)"}.`; }
+      catch (e) { message = e.message; }
+    }
+  }
+  return { acc, connected, message };
+}
+
+/** WhatsApp welcome for a client set up by the ZimQuote team. */
+export async function sendClientWelcome(acc) {
+  const text =
+    `📧 *ZimQuote Mail is ready for ${acc.email}*\n\n` +
+    `Our team set it up for you. New emails will arrive here on WhatsApp with a short summary.\n\n` +
+    `Tap *↩️ Reply* on any email to answer it from WhatsApp - we send it as a proper email.\n\n` +
+    `🎁 Free until ${fmtDate(acc.trialEndsAt)}, then $${MAIL_CONFIG.PRICE}/year.`;
+  try { await sendButtons(acc.ownerPhone, { text, buttons: [{ id: "mail_menu", title: "📧 My Mail" }] }); return true; }
+  catch (_) { return false; }
+}
+
+/** Send a test email TO the customer's address (proves forwarding / login works end to end). */
+export async function sendTestEmail(acc) {
+  if (!process.env.MAIL_OUT_HOST) throw new Error("MAIL_OUT_HOST is not set");
+  const nodemailer = (await import("nodemailer")).default;
+  const t = nodemailer.createTransport({ host: process.env.MAIL_OUT_HOST, port: Number(process.env.MAIL_OUT_PORT || 587), secure: String(process.env.MAIL_OUT_PORT) === "465", auth: process.env.MAIL_OUT_USER ? { user: process.env.MAIL_OUT_USER, pass: process.env.MAIL_OUT_PASS } : undefined });
+  await t.sendMail({
+    from: `"ZimQuote Mail" <${process.env.MAIL_OUT_FROM || process.env.MAIL_OUT_USER}>`,
+    to: acc.email,
+    subject: "ZimQuote Mail test - you can reply to this",
+    text: `Hello${acc.businessName ? " " + acc.businessName : ""},\n\nThis is a test from ZimQuote Mail. If this email appears on your WhatsApp, everything is working.\n\nTry tapping Reply on WhatsApp to answer it.\n\nZimQuote`,
+    headers: { "X-ZimQuote-Test": "1" }
+  });
 }
