@@ -181,6 +181,7 @@ export function guessServers(email, provider, mx = "") {
     case "zoho":   return { imap: { host: "imap.zoho.com", port: 993, secure: true }, smtp: { host: "smtp.zoho.com", port: 465, secure: true } };
     case "yahoo":  return { imap: { host: "imap.mail.yahoo.com", port: 993, secure: true }, smtp: { host: "smtp.mail.yahoo.com", port: 465, secure: true } };
     case "apple":  return { imap: { host: "imap.mail.me.com", port: 993, secure: true }, smtp: { host: "smtp.mail.me.com", port: 587, secure: false } };
+    case "microsoft": return { imap: { host: "outlook.office365.com", port: 993, secure: true }, smtp: { host: "smtp-mail.outlook.com", port: 587, secure: false } };
     default:       return { imap: { host: `mail.${domain}`, port: 993, secure: true }, smtp: { host: `mail.${domain}`, port: 465, secure: true }, alt: [mx, `imap.${domain}`].filter(Boolean) };
   }
 }
@@ -1192,7 +1193,7 @@ export async function discoverServers(email, provider = "") {
   const imap = [], smtp = [];
   const add = (arr, s) => { if (s?.host && !arr.some(x => x.host === s.host && x.port === s.port)) arr.push(s); };
 
-  if (["google", "zoho", "yahoo", "apple"].includes(provider)) { add(imap, g.imap); add(smtp, g.smtp); return { provider, imap, smtp }; }
+  if (["google", "zoho", "yahoo", "apple", "microsoft"].includes(provider)) { add(imap, g.imap); add(smtp, g.smtp); return { provider, imap, smtp }; }
 
   const urls = [
     `https://autoconfig.${domain}/mail/config-v1.1.xml?emailaddress=${encodeURIComponent(email)}`,
@@ -1229,6 +1230,9 @@ const _isTlsNameErr = e => /ERR_TLS_CERT_ALTNAME_INVALID|altnames|Hostname\/IP d
  */
 export async function findWorkingMail({ email, user, pass, provider = "", imapHost = "", imapPort = 0, smtpHost = "", smtpPort = 0 }) {
   user = user || email;
+  const missing = await missingPackages();
+  if (missing.length) throw new Error(`The server is missing ${missing.join(", ")}. On the server run: npm install ${missing.join(" ")}  then restart the app.`);
+  if (!pass) throw new Error("Type the email password.");
   const d = await discoverServers(email, provider);
   const imapCands = [];
   if (imapHost) imapCands.push({ host: imapHost, port: Number(imapPort) || 993, secure: (Number(imapPort) || 993) === 993 });
@@ -1339,7 +1343,7 @@ async function requestHelp(phone) {
 /**
  * @returns {{ acc, connected: boolean, message: string }}
  */
-export async function setupForClient({ phone, email, businessName = "", password = "", imapHost = "", smtpHost = "", alertMode = "all", trialDays = 0 }) {
+export async function setupForClient({ phone, email, businessName = "", password = "", imapHost = "", imapPort = 0, smtpHost = "", smtpPort = 0, alertMode = "all", trialDays = 0 }) {
   phone = normPhone(phone);
   if (!/^\d{11,15}$/.test(phone)) throw new Error("Enter the client's WhatsApp number, e.g. 0772123456");
   if (!isEmail(email)) throw new Error("Enter a valid email address");
@@ -1352,7 +1356,7 @@ export async function setupForClient({ phone, email, businessName = "", password
   if (password) {
     if (!canStorePasswords()) message = "MAIL_SECRET_KEY is not set, so passwords can't be saved. Use forwarding.";
     else {
-      try { const r = await connectWithPassword(acc, { pass: password, imapHost, smtpHost }); connected = true; message = `Connected via ${r.imap.host}${r.imap.insecureTls ? " (host certificate mismatch, allowed)" : ""}${r.smtp ? `, replies via ${r.smtp.host}:${r.smtp.port}` : ", replies via ZimQuote (no SMTP)"}.`; }
+      try { const r = await connectWithPassword(acc, { pass: password, imapHost, imapPort, smtpHost, smtpPort }); connected = true; message = `Connected via ${r.imap.host}${r.imap.insecureTls ? " (host certificate mismatch, allowed)" : ""}${r.smtp ? `, replies via ${r.smtp.host}:${r.smtp.port}` : ", replies via ZimQuote (no SMTP)"}.`; }
       catch (e) { message = e.message; }
     }
   }
@@ -1480,4 +1484,41 @@ export async function deleteAccount(id) {
   await MailAccount.deleteOne({ _id: acc._id });
   _mailPhones.at = 0;
   return acc;
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// SYSTEM CHECK (admin page)
+// ═════════════════════════════════════════════════════════════════════════════
+export async function missingPackages() {
+  const out = [];
+  for (const p of ["mailparser", "imapflow", "nodemailer"]) { try { await import(p); } catch (_) { out.push(p); } }
+  return out;
+}
+export async function systemCheck() {
+  const e = process.env;
+  return {
+    missing: await missingPackages(),
+    secretKey: canStorePasswords(),
+    secretFromSession: !e.MAIL_SECRET_KEY && canStorePasswords(),
+    collector: MAIL_CONFIG.COLLECTOR ? { address: MAIL_CONFIG.COLLECTOR.address, host: MAIL_CONFIG.COLLECTOR.host, port: MAIL_CONFIG.COLLECTOR.port } : null,
+    sending: !!platformSmtp(),
+    ai: !!e.OPENAI_API_KEY,
+    template: MAIL_CONFIG.TEMPLATE,
+    adminPhone: !!(e.ZQ_ADMIN_PHONE || e.ADMIN_WHATSAPP_PHONE)
+  };
+}
+
+// Ready-made server settings shown in the connect forms
+export const MAIL_PRESETS = {
+  auto:      { label: "Find automatically (recommended)", imap: "", imapPort: "", smtp: "", smtpPort: "", note: "" },
+  cpanel:    { label: "Company email (.co.zw, cPanel hosting)", imap: "mail.{domain}", imapPort: 993, smtp: "mail.{domain}", smtpPort: 465, note: "Use the normal email password." },
+  gmail:     { label: "Gmail / Google Workspace", imap: "imap.gmail.com", imapPort: 993, smtp: "smtp.gmail.com", smtpPort: 465, note: "Needs an App Password: Google Account → Security → 2-Step Verification → App passwords. Or use forwarding." },
+  yahoo:     { label: "Yahoo Mail", imap: "imap.mail.yahoo.com", imapPort: 993, smtp: "smtp.mail.yahoo.com", smtpPort: 465, note: "Needs an App Password: Yahoo Account Security → Generate app password." },
+  outlook:   { label: "Outlook / Hotmail / Live", imap: "outlook.office365.com", imapPort: 993, smtp: "smtp-mail.outlook.com", smtpPort: 587, note: "Microsoft blocks password logins for most Outlook/Hotmail accounts. If it fails, use forwarding instead (Settings → Mail → Forwarding)." },
+  office365: { label: "Microsoft 365 (company)", imap: "outlook.office365.com", imapPort: 993, smtp: "smtp.office365.com", smtpPort: 587, note: "Often blocked by the company's admin. Forwarding usually works better." },
+  zoho:      { label: "Zoho Mail", imap: "imap.zoho.com", imapPort: 993, smtp: "smtp.zoho.com", smtpPort: 465, note: "Turn on IMAP access in Zoho settings first." },
+  icloud:    { label: "iCloud Mail", imap: "imap.mail.me.com", imapPort: 993, smtp: "smtp.mail.me.com", smtpPort: 587, note: "Needs an app-specific password from appleid.apple.com." }
+};
+export function presetFor(provider) {
+  return { google: "gmail", yahoo: "yahoo", microsoft: "outlook", zoho: "zoho", apple: "icloud", cpanel: "cpanel" }[provider] || "auto";
 }

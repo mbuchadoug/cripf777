@@ -28,7 +28,7 @@ import {
   ingestRaw, forwardAddress, canStorePasswords, attToken, activatePaid, isActive, MAIL_CONFIG,
   createAccount, connectWithPassword, discoverServers, linkWaUrl, notifyMailAdmin,
   setupForClient, sendClientWelcome, sendTestEmail, sendSetupGuide,
-  updateAccount, deleteAccount, pollCollector, collectorStatus
+  updateAccount, deleteAccount, pollCollector, collectorStatus, systemCheck, MAIL_PRESETS, presetFor
 } from "../services/mailInbox.js";
 import { sendButtons } from "../services/metaSender.js";
 
@@ -92,6 +92,7 @@ details{margin-top:12px}summary{cursor:pointer;color:var(--muted)}
 .brand{display:flex;align-items:center;gap:10px;padding:14px 16px;background:var(--card);border-bottom:1px solid var(--line)}
 .brand .logo{width:34px;height:34px;border-radius:9px;background:var(--accent);color:var(--ink);display:grid;place-items:center;font-weight:800;font-size:15px}
 .brand b{font-size:1.05rem}.brand span{color:var(--muted);font-size:.9rem}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:2px 12px}.mu{color:var(--muted)}.sm{font-size:.88rem}
 .fv{width:100%;border-collapse:collapse;margin:8px 0}.fv td{border:1px solid var(--line);padding:9px 10px;vertical-align:top}.fv td:first-child{width:42%;color:var(--muted);font-weight:600}
 .fv code{font-size:1rem;font-weight:700;color:var(--fg);word-break:break-all}
 </style></head><body><div class="brand"><div class="logo">ZQ</div><div><b>ZimQuote Mail</b><br><span>Your business email on WhatsApp</span></div></div><div class="wrap">${body}
@@ -158,6 +159,26 @@ function stepOf(acc) {
   return 4;
 }
 
+// Provider presets: picking one fills the server fields (admin + customer forms)
+function presetFieldsHtml(px, domain, sel, v = {}) {
+  const e = esc;
+    const opts = Object.entries(MAIL_PRESETS).map(([k, p]) => `<option value="${k}" ${k === sel ? "selected" : ""}>${e(p.label)}</option>`).join("");
+    return `<div class="grid">
+<div style="grid-column:1/-1"><label for="${px}-preset">Email provider</label><select id="${px}-preset" data-zq-preset="${px}">${opts}</select>
+<p class="mu sm" id="${px}-note" style="margin:6px 0 0"></p></div>
+<div><label for="${px}-ih">Incoming (IMAP) server</label><input id="${px}-ih" name="imapHost" value="${e(v.imapHost || "")}" placeholder="found automatically"></div>
+<div><label for="${px}-ip">IMAP port</label><input id="${px}-ip" name="imapPort" value="${e(v.imapPort || "")}" placeholder="993"></div>
+<div><label for="${px}-sh">Outgoing (SMTP) server</label><input id="${px}-sh" name="smtpHost" value="${e(v.smtpHost || "")}" placeholder="found automatically"></div>
+<div><label for="${px}-sp">SMTP port</label><input id="${px}-sp" name="smtpPort" value="${e(v.smtpPort || "")}" placeholder="465 or 587"></div>
+</div>
+<script>(function(){var P=${JSON.stringify(MAIL_PRESETS)};var px=${JSON.stringify(px)};var dom=${JSON.stringify(domain)};
+var s=document.getElementById(px+"-preset");function emailDomain(){var f=document.getElementById(px+"-email")||document.getElementById("m-email");return dom||((f&&f.value.split("@")[1])||"yourdomain.co.zw")}
+function apply(fill){var p=P[s.value]||P.auto;document.getElementById(px+"-note").textContent=p.note||"";if(!fill)return;var d=emailDomain();
+document.getElementById(px+"-ih").value=(p.imap||"").replace("{domain}",d);document.getElementById(px+"-ip").value=p.imapPort||"";
+document.getElementById(px+"-sh").value=(p.smtp||"").replace("{domain}",d);document.getElementById(px+"-sp").value=p.smtpPort||"";}
+s.addEventListener("change",function(){apply(true)});apply(false);})();</script>`;
+  }
+
 function connectBlock(acc, { error = "", values = {}, action }) {
   const isFwd = ["google", "microsoft"].includes(acc.provider);
   const fwd = forwardAddress(acc);
@@ -167,10 +188,9 @@ function connectBlock(acc, { error = "", values = {}, action }) {
 ${error ? `<div class="err">${esc(error)}</div>` : ""}
 <label for="pass">Password for ${esc(acc.email)}</label><input id="pass" name="pass" type="password" required ${isFwd ? "" : "autofocus"}>
 ${acc.provider === "google" ? `<p class="note">Gmail needs an <b>app password</b>: Google Account → Security → 2-Step Verification → App passwords.</p>` : ""}
-<details ${error ? "open" : ""}><summary>Server settings (only if we can't find them)</summary>
+<details ${error ? "open" : ""}><summary>Email provider &amp; server settings</summary>
 <label for="user">Username</label><input id="user" name="user" value="${esc(values.user || acc.email)}">
-<div class="row"><div><label for="imapHost">Incoming (IMAP) server</label><input id="imapHost" name="imapHost" value="${esc(values.imapHost || "")}" placeholder="found automatically"></div><div><label for="imapPort">Port</label><input id="imapPort" name="imapPort" value="${esc(values.imapPort || "")}" placeholder="993"></div></div>
-<div class="row"><div><label for="smtpHost">Outgoing (SMTP) server</label><input id="smtpHost" name="smtpHost" value="${esc(values.smtpHost || "")}" placeholder="found automatically"></div><div><label for="smtpPort">Port</label><input id="smtpPort" name="smtpPort" value="${esc(values.smtpPort || "")}" placeholder="465"></div></div>
+${presetFieldsHtml("p", acc.email.split("@")[1], presetFor(acc.provider), values)}
 </details>
 <p style="margin-top:14px"><button type="submit">Connect my email</button></p>
 <p class="muted" style="font-size:.88rem">Your password is encrypted. It's only used to read new emails and send your replies from your own address.</p>
@@ -335,6 +355,24 @@ export function registerMailAdminRoutes(router, { requireSupplierAdmin, layout, 
   const go = (res, url, kind, msg) => res.redirect(`${url}${url.includes("?") ? "&" : "?"}${kind}=${encodeURIComponent(msg)}`);
   const pform = express.urlencoded({ extended: false });
 
+  const presetFields = (px, a, v) => presetFieldsHtml(px, a ? String(a.email).split("@")[1] : "", a ? presetFor(a.provider) : "auto", v);
+
+  async function systemPanel() {
+    const c = await systemCheck();
+    const row = (ok, text, fix = "") => `<div>${ok ? "✅" : "❌"}</div><div>${text}${!ok && fix ? `<br><span class="sm mu">${fix}</span>` : ""}</div>`;
+    const allOk = !c.missing.length && c.secretKey && c.collector && c.sending;
+    return `<details class="card2" ${allOk ? "" : "open"}><summary><b>${allOk ? "✅ System check: all good" : "⚠️ System check: something needs fixing"}</b></summary>
+<div class="kv" style="grid-template-columns:28px 1fr">
+${row(!c.missing.length, c.missing.length ? `Missing packages: <code>${c.missing.join(", ")}</code>` : "Mail packages installed", `On the server, in the app folder: <code>npm install ${c.missing.join(" ")}</code>, then restart the app.`)}
+${row(!!c.collector, c.collector ? `Forwarding mailbox <code>${e(c.collector.address)}</code> on <code>${e(c.collector.host)}:${c.collector.port}</code>` : "Forwarding mailbox not set", "Add MAIL_COLLECTOR_USER, MAIL_COLLECTOR_PASS and MAIL_COLLECTOR_HOST to .env, then restart. With pm2: <code>pm2 restart all --update-env</code>")}
+${row(c.sending, c.sending ? "Sending (test emails, replies) ready" : "Sending not set", "Comes from the forwarding mailbox login, or set MAIL_OUT_HOST / MAIL_OUT_USER / MAIL_OUT_PASS.")}
+${row(c.secretKey, c.secretKey ? `Password connect enabled${c.secretFromSession ? " (key taken from SESSION_SECRET - set MAIL_SECRET_KEY to be safe)" : ""}` : "Password connect disabled", "Add MAIL_SECRET_KEY (openssl rand -hex 32) to .env and restart.")}
+${row(c.ai, c.ai ? "AI summaries and ✨ Polish on" : "AI summaries off (first lines of the email are used)", "Optional: OPENAI_API_KEY.")}
+${row(c.adminPhone, c.adminPhone ? "“Set it up for me” alerts go to ZQ_ADMIN_PHONE" : "No admin phone for help alerts", "Set ZQ_ADMIN_PHONE in .env.")}
+<div>ℹ️</div><div class="sm mu">Email alerts outside the 24-hour window use the WhatsApp template <code>${e(c.template)}</code>. Until Meta approves it, alerts only reach people who messaged the bot in the last 24h.</div>
+</div></details>`;
+  }
+
   function receivingPanel() {
     const c = MAIL_CONFIG.COLLECTOR;
     if (!c) return `<div class="card2 danger"><h3>⚠️ Receiving forwarded email is not set up</h3>
@@ -379,7 +417,8 @@ ${s.lastError ? `<div class="zqm-flash bad">Last error: ${e(s.lastError)}</div>`
 <td>${statusBadge(a)}<br>${planBadge(a)}</td>
 <td>${a.mailCount || 0} in · ${a.replyCount || 0} out<br><small class="muted">last ${fmt(a.lastMailAt)}</small></td>
 <td style="white-space:nowrap"><a class="btn btn-sm btn-blue" href="/zq-admin/mail/${a._id}">Open</a> <a class="btn btn-sm btn-gray" href="/zq-admin/mail/${a._id}#edit">Edit</a></td></tr>`).join("");
-      res.send(layout("ZimQuote Mail", wrap(`${flash(req)}${sub("list")}${receivingPanel()}
+      const sys = await systemPanel();
+      res.send(layout("ZimQuote Mail", wrap(`${flash(req)}${sub("list")}${sys}${MAIL_CONFIG.COLLECTOR ? receivingPanel() : ""}
 <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px">${stat(all.length, "Inboxes", "blue")}${stat(paid, "Paid", "green")}${stat(help, "Asked for help", "orange")}${stat(stuck, "Stuck in setup", "red")}${stat(mails24, "Emails 24h", "teal")}${stat(replies24, "Replies 24h", "teal")}</div>
 <form method="get" style="margin-bottom:12px;display:flex;gap:8px"><input name="q" value="${e(q)}" placeholder="Search email, business or phone" style="flex:1"><button class="btn btn-blue">Search</button></form>
 <p class="muted sm">Sign-up link to share: <code>${e(MAIL_CONFIG.SITE)}/mail</code> · WhatsApp: <code>https://wa.me/263771143904?text=ZQ:MAIL</code></p>
@@ -402,9 +441,7 @@ ${s.lastError ? `<div class="zqm-flash bad">Last error: ${e(s.lastError)}</div>`
 <div><label for="m-alert">Alerts</label><select id="m-alert" name="alertMode"><option value="all">Every email</option><option value="important">Important only</option></select></div>
 <div><label for="m-trial">Free trial (days)</label><input id="m-trial" name="trial" type="number" min="0" max="365" value="${MAIL_CONFIG.TRIAL_DAYS}"></div>
 </div>
-<details style="margin-top:10px"><summary class="mu sm">Mail server (only if auto-detect fails)</summary><div class="grid">
-<div><label for="m-ih">IMAP server</label><input id="m-ih" name="imapHost" placeholder="mail.acme.co.zw"></div>
-<div><label for="m-sh">SMTP server</label><input id="m-sh" name="smtpHost" placeholder="mail.acme.co.zw"></div></div></details>
+${presetFields("m", null, {})}
 <label class="chk"><input type="checkbox" name="welcome" value="1" checked> Send the client a WhatsApp welcome</label>
 <div class="acts"><button class="btn btn-green">Create inbox</button></div>
 </form></div>`)));
@@ -412,7 +449,7 @@ ${s.lastError ? `<div class="zqm-flash bad">Last error: ${e(s.lastError)}</div>`
   router.post("/mail/new", requireSupplierAdmin, pform, async (req, res) => {
     try {
       const b = req.body || {};
-      const r = await setupForClient({ phone: b.phone, email: String(b.email || "").trim(), businessName: String(b.biz || "").trim(), password: String(b.password || ""), imapHost: String(b.imapHost || "").trim(), smtpHost: String(b.smtpHost || "").trim(), alertMode: b.alertMode === "important" ? "important" : "all", trialDays: Number(b.trial) || 0 });
+      const r = await setupForClient({ phone: b.phone, email: String(b.email || "").trim(), businessName: String(b.biz || "").trim(), password: String(b.password || ""), imapHost: String(b.imapHost || "").trim(), imapPort: Number(b.imapPort) || 0, smtpHost: String(b.smtpHost || "").trim(), smtpPort: Number(b.smtpPort) || 0, alertMode: b.alertMode === "important" ? "important" : "all", trialDays: Number(b.trial) || 0 });
       let welcome = "";
       if (b.welcome) welcome = (await sendClientWelcome(r.acc)) ? " Welcome sent." : " Welcome not delivered (client hasn't messaged the bot in 24h - use “Message client from my phone”).";
       const msg = r.connected ? `Created and connected. ${r.message}${welcome}` : `Created.${r.message ? " Login: " + r.message : ""} Forwarding address: ${forwardAddress(r.acc)}.${welcome}`;
@@ -432,8 +469,10 @@ ${s.lastError ? `<div class="zqm-flash bad">Last error: ${e(s.lastError)}</div>`
     const how = a.mode === "imap"
       ? `email login · <code>${e(a.imap?.host || "")}</code>${a.imap?.insecureTls ? " (cert mismatch allowed)" : ""}${a.smtp?.host ? ` · replies via <code>${e(a.smtp.host)}:${a.smtp.port}</code>` : " · replies via ZimQuote"}`
       : `forwarding to <code>${e(fwd)}</code>`;
+    const sysHtml = await systemPanel();
+    const sysBad = sysHtml.includes("something needs fixing");
     res.send(layout("ZimQuote Mail - " + a.email, wrap(`${flash(req)}${sub("")}
-${a.mode === "forward" && !MAIL_CONFIG.COLLECTOR ? receivingPanel() : ""}
+${sysBad ? sysHtml : ""}
 <div class="card2">
 <h3>${e(a.email)}</h3>
 <p>${statusBadge(a)} ${planBadge(a)} ${a.helpRequestedAt && a.status !== "live" ? badge("🙋 wants help " + fmt(a.helpRequestedAt), "orange") : ""}</p>
@@ -463,13 +502,11 @@ ${a.helpRequestedAt ? `<form method="post" action="/zq-admin/mail/${a._id}/clear
 <h3>🔑 Connect with the client's password</h3>
 <p class="mu sm">Best for .co.zw company email. No forwarder is needed, and replies go out from the client's own address, with a copy in their Sent folder.</p>
 <form method="post" action="/zq-admin/mail/${a._id}/connect" autocomplete="off">
+${presetFields("c", a, { imapHost: a.imap?.host, imapPort: a.imap?.port, smtpHost: a.smtp?.host, smtpPort: a.smtp?.port })}
 <div class="grid">
 <div><label for="c-user">Username</label><input id="c-user" name="user" value="${e(a.imap?.user || a.email)}"></div>
 <div><label for="c-pass">Password</label><input id="c-pass" name="password" type="password" required autocomplete="new-password"></div>
 </div>
-<details style="margin-top:10px"><summary class="mu sm">Mail server (optional)</summary><div class="grid">
-<div><label for="c-ih">IMAP server</label><input id="c-ih" name="imapHost" value="${e(a.imap?.host || "")}"></div>
-<div><label for="c-sh">SMTP server</label><input id="c-sh" name="smtpHost" value="${e(a.smtp?.host || "")}"></div></div></details>
 <div class="acts"><button class="btn btn-green">Test &amp; connect</button><a class="btn btn-sm btn-gray" href="/zq-admin/mail/${a._id}?discover=1">🔍 Show detected servers</a></div></form>
 ${disc ? `<p class="mu sm" style="margin-top:10px">IMAP: ${disc.imap.map(s => `${e(s.host)}:${s.port}`).join(", ") || "-"}<br>SMTP: ${disc.smtp.map(s => `${e(s.host)}:${s.port}`).join(", ") || "-"}</p>` : ""}
 </div>
@@ -523,7 +560,7 @@ ${msgs.map(m => `<tr><td>${fmt(m.receivedAt)}</td><td>${e(m.fromName)}<br><small
   router.post("/mail/:id/connect", requireSupplierAdmin, pform, async (req, res) => {
     const acc = await one(req); if (!acc) return go(res, "/zq-admin/mail", "error", "Inbox not found");
     try {
-      const r = await connectWithPassword(acc, { pass: String(req.body.password || ""), user: String(req.body.user || "").trim(), imapHost: String(req.body.imapHost || "").trim(), smtpHost: String(req.body.smtpHost || "").trim() });
+      const r = await connectWithPassword(acc, { pass: String(req.body.password || ""), user: String(req.body.user || "").trim(), imapHost: String(req.body.imapHost || "").trim(), imapPort: Number(req.body.imapPort) || 0, smtpHost: String(req.body.smtpHost || "").trim(), smtpPort: Number(req.body.smtpPort) || 0 });
       go(res, `/zq-admin/mail/${acc._id}`, "success", `Connected via ${r.imap.host}${r.smtp ? `; replies via ${r.smtp.host}:${r.smtp.port}` : "; no SMTP found, replies via ZimQuote"}. Send a test email to check.`);
     } catch (err) { go(res, `/zq-admin/mail/${acc._id}`, "error", err.message); }
   });
