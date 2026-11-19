@@ -1891,12 +1891,13 @@ We will activate your listing automatically once payment is confirmed. ✅`
               const expiresAt = new Date(now.getTime() + planDetails.durationDays * 24 * 60 * 60 * 1000);
 
    supplier.tier = supplierPayment.tier;
+if (supplierPayment.tier === "corporate") supplier.tierRank = 4; // Corporate shows first in search/matching
 supplier.active = true;
 supplier.subscriptionStatus = "active";
 supplier.subscriptionStartedAt = now;
 supplier.subscriptionEndsAt = expiresAt;
 
-const capMap = { basic: 20, pro: 60, featured: 150 };
+const capMap = { basic: 20, pro: 60, featured: 150, corporate: 500 };
 const cap = capMap[supplier.tier] || 20;
 const uploaded = (supplier.products || []).filter(p => p && p !== "pending_upload");
 
@@ -1921,7 +1922,7 @@ try {
   const Branch    = (await import("../models/branch.js")).default;    // ← MOVED UP: in scope for entire try block
   const UserRole  = (await import("../models/userRole.js")).default;  // ← MOVED UP
 
-  const TIER_TO_PACKAGE = { basic: "bronze", pro: "silver", featured: "gold" };
+  const TIER_TO_PACKAGE = { basic: "bronze", pro: "silver", featured: "gold", corporate: "gold" };
   const bizPackage = TIER_TO_PACKAGE[supplierPayment.tier] || "bronze";
 
   // ── 1. Upgrade the linked Business package ────────────────────────────

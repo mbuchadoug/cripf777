@@ -1312,7 +1312,8 @@ export function formatSupplierResults(suppliers, city, searchTerm) {
   const normalizedSearchTerm = normalizeProductName(searchTerm || "");
 
   return suppliers.map((s) => {
-    const badge = s.tier === "featured" ? "🔥 "
+    const badge = s.tier === "corporate" ? "🏢 "
+      : s.tier === "featured" ? "🔥 "
       : s.tier === "pro" ? "⭐ " : "";
 
    const delivery = s.profileType === "service"

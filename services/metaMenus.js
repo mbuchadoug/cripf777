@@ -1090,6 +1090,7 @@ export async function sendSupplierUpgradeMenu(to, currentTier) {
     { id: "sup_plan_pro_monthly", title: "⭐ Pro - $12/mo", description: "Up to 60 live items" },
     { id: "sup_plan_pro_annual", title: "⭐ Pro - $120/yr (save $24)", description: "Up to 60 live items" },
     { id: "sup_plan_featured_monthly", title: "🔥 Featured - $25/mo", description: "Up to 150 live items" },
+    { id: "sup_plan_corporate_annual", title: "🏢 Corporate $200/yr", description: "Up to 500 items · bulk requests · PDF quotes" },
     { id: "back", title: "⬅ Back" }
   ]);
 }
@@ -1109,7 +1110,7 @@ export async function sendSupplierAccountMenu(to, supplierDoc) {
   if (!supplier) return sendSuppliersMenu(to);
 
   const isService = supplier.profileType === "service";
-  const tierLabel = { basic: "Basic $5/mo", pro: "Pro $12/mo", featured: "Featured $25/mo" }[supplier.tier] || supplier.tier || "None";
+  const tierLabel = { basic: "Basic $5/mo", pro: "Pro $12/mo", featured: "Featured $25/mo", corporate: "Corporate $200/yr" }[supplier.tier] || supplier.tier || "None";
   const statusIcon = supplier.active ? "🟢" : "🔴";
  const renewDate = supplier.subscriptionEndsAt
   ? new Date(supplier.subscriptionEndsAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })

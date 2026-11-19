@@ -61,10 +61,10 @@ const SupplierProfileSchema = new mongoose.Schema({
   // ── Subscription ───────────────────────────────────────────────────────────
   tier: {
     type:    String,
-    enum:    ["basic", "pro", "featured"],
+    enum:    ["basic", "pro", "featured", "corporate"],
     default: "basic"
   },
-  tierRank:             { type: Number, default: 1 }, // basic=1, pro=2, featured=3
+  tierRank:             { type: Number, default: 1 }, // basic=1, pro=2, featured=3, corporate=4
   subscriptionStatus: {
     type:    String,
     enum:    ["pending", "active", "expired", "trial"],
