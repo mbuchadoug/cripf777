@@ -27,7 +27,7 @@
 //   MAIL_OUT_HOST / MAIL_OUT_PORT / MAIL_OUT_USER / MAIL_OUT_PASS / MAIL_OUT_FROM
 //                         SMTP used for replies of "forward" accounts
 //   MAIL_PRICE_USD        60    (per inbox, per year)
-//   MAIL_TRIAL_DAYS       14
+//   MAIL_TRIAL_DAYS       1
 //   MAIL_ALERT_TEMPLATE   zq_mail_alert  (approved UTILITY template, see DEPLOY.md)
 // ═════════════════════════════════════════════════════════════════════════════
 
@@ -45,7 +45,7 @@ export const MAIL_CONFIG = {
   get INBOUND_DOMAIN() { return (process.env.MAIL_INBOUND_DOMAIN || "mail.zimquote.co.zw").toLowerCase(); },
   get SITE() { return (process.env.SITE_URL || "https://cripfcnt.com").replace(/\/$/, ""); },
   get PRICE() { return MAIL_PLANS.starter.price; },          // cheapest plan, used in short texts
-  get TRIAL_DAYS() { return Number(process.env.MAIL_TRIAL_DAYS || 14); },
+  get TRIAL_DAYS() { const v = Number(process.env.MAIL_TRIAL_DAYS); return Number.isFinite(v) && v > 0 ? v : 1; },
   get TEMPLATE() { return process.env.MAIL_ALERT_TEMPLATE || "zq_mail_alert"; },
   // ONE ordinary mailbox (e.g. zqmail@zimqoute.co.zw on your cPanel) that customers forward to.
   // No MX changes or port 25 needed: we read it over IMAP like any other inbox.
@@ -86,7 +86,9 @@ const oneLine = s => String(s || "").replace(/[\r\n\t]+/g, " ").replace(/ {2,}/g
 const isEmail = s => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(s || "").trim());
 const refOf = id => String(id).slice(-4).toUpperCase();
 const daysFromNow = d => new Date(Date.now() + d * 86400000);
-const fmtDate = d => d ? new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "-";
+const fmtDate = d => d ? new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "Africa/Harare" }) : "-";
+const fmtWhen = d => d ? new Date(d).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Africa/Harare" }) : "-";
+export const trialLabel = () => MAIL_CONFIG.TRIAL_DAYS === 1 ? "1 day free" : `${MAIL_CONFIG.TRIAL_DAYS} days free`;
 const randSlug = () => crypto.randomBytes(5).toString("hex");           // 10 chars
 export const forwardAddress = acc => {
   const c = MAIL_CONFIG.COLLECTOR;
@@ -116,8 +118,8 @@ export function isActive(acc) {
 function planLine(acc) {
   const now = Date.now();
   if (acc.paidUntil && new Date(acc.paidUntil).getTime() > now) return `✅ Paid until ${fmtDate(acc.paidUntil)}`;
-  if (acc.trialEndsAt && new Date(acc.trialEndsAt).getTime() > now) return `🎁 Free trial until ${fmtDate(acc.trialEndsAt)}`;
-  return `⛔ Expired - renew for $${MAIL_CONFIG.PRICE}/year`;
+  if (acc.trialEndsAt && new Date(acc.trialEndsAt).getTime() > now) return `🎁 Free trial until ${fmtWhen(acc.trialEndsAt)}`;
+  return `⛔ Expired - plans from $${MAIL_CONFIG.PRICE}/year`;
 }
 
 // ─── Encryption for saved mail passwords (AES-256-GCM) ───────────────────────
@@ -424,7 +426,7 @@ async function ingestParsed(parsed, acc) {
     $inc: { mailCount: 1 }
   });
   if (firstEver) {
-    await notifyOwner(acc, `🎉 *${acc.email} is connected!*\n\nYour emails will now arrive here on WhatsApp. Tap *↩️ Reply* on any email to answer it from here.`).catch(() => {});
+    await sendConnectedMessage(acc, "Your emails will now arrive here on WhatsApp. Tap *↩️ Reply* on any email to answer it from here.").catch(() => {});
   }
 
   // 6. Alert
@@ -448,7 +450,7 @@ export async function alertNewMail(acc, msg) {
   if (!isActive(acc)) {     // expired: tease, so they renew
     for (const p of phones.slice(0, 1)) {
       await sendButtons(p, {
-        text: `📧 *New email for ${acc.email}*\nFrom: *${clip(msg.fromName, 60)}*\n\n⛔ Your ZimQuote Mail plan has ended, so we can't show it.\nRenew for *$${MAIL_CONFIG.PRICE}/year* to read and reply on WhatsApp.`,
+        text: `📧 *New email for ${acc.email}*\nFrom: *${clip(msg.fromName, 60)}*\n\n⛔ Your ZimQuote Mail plan has ended, so we can't show it.\nPlans from *$${MAIL_CONFIG.PRICE}/year* - choose one to read and reply on WhatsApp.`,
         buttons: [{ id: `mail_pay_${acc._id}`, title: "💳 Renew now" }]
       }).catch(() => {});
     }
@@ -689,17 +691,17 @@ export function startMailPoller() {
 
 async function sendPlanReminders() {
   try {
-    const soon = daysFromNow(3), now = new Date(), since = new Date(Date.now() - 20 * 3600000);
+    const now = new Date(), since = new Date(Date.now() - 20 * 3600000);
     const accs = await MailAccount.find({
-      $or: [{ paidUntil: { $gt: now, $lt: soon } }, { paidUntil: null, trialEndsAt: { $gt: new Date(Date.now() - 86400000), $lt: soon } }],
+      $or: [{ paidUntil: { $gt: now, $lt: daysFromNow(7) } }, { paidUntil: null, trialEndsAt: { $gt: new Date(Date.now() - 86400000), $lt: new Date(Date.now() + 6 * 3600000) } }],
       $and: [{ $or: [{ lastReminderAt: null }, { lastReminderAt: { $lt: since } }] }]
     }).setOptions({ strictQuery: false }).lean();
     for (const a of accs) {
       const end = a.paidUntil || a.trialEndsAt;
       const ended = new Date(end) < now;
       await sendButtons(a.ownerPhone, {
-        text: `📧 *ZimQuote Mail - ${a.email}*\n\n${ended ? "Your free trial has ended." : `Your ${a.paidUntil ? "plan" : "free trial"} ends on *${fmtDate(end)}*.`}\n\nKeep getting your emails on WhatsApp for *$${MAIL_CONFIG.PRICE}/year*.`,
-        buttons: [{ id: `mail_pay_${a._id}`, title: "💳 Pay with EcoCash" }]
+        text: `📧 *ZimQuote Mail - ${a.email}*\n\n${ended ? "Your free trial has ended." : `Your ${a.paidUntil ? "plan" : "free trial"} ends *${a.paidUntil ? fmtDate(end) : fmtWhen(end)}*.`}\n\n${await pricingText(a)}`,
+        buttons: [{ id: `mail_pay_${a._id}`, title: "💳 Choose a plan" }]
       }).catch(() => {});
       await MailAccount.updateOne({ _id: a._id }, { $set: { lastReminderAt: new Date() } });
     }
@@ -881,7 +883,7 @@ async function sendIntro(from) {
     `✨ Type a quick note, tap Polish for a professional reply\n` +
     `👥 Your staff can get the alerts too\n\n` +
     `Works with company email (.co.zw, .com, .org…), Gmail, Yahoo, Outlook and more.\n\n` +
-    `🎁 *${MAIL_CONFIG.TRIAL_DAYS} days free*, then from *$${s.price} a year*.`,
+    `🎁 *Try it ${trialLabel()}*, then:\n${await pricingText(null, { short: true })}`,
     [{ id: "mail_setup", title: "📧 Connect my email" }, { id: "mail_help", title: "🙋 Set it up for me" }, { id: "main_menu_back", title: "🏠 Main Menu" }]);
 }
 
@@ -1182,7 +1184,7 @@ export async function handleMailMessage({ from, text = "", rawText = "", action 
           if (!nm) { try { const SP = (await import("../models/supplierProfile.js")).default; nm = (await SP.findOne({ phone }).lean())?.businessName || ""; } catch (_) {} }
           if (nm) { acc.displayName = nm; acc.businessName = acc.businessName || nm; await acc.save(); }
         }
-        await sendText(phone, `✅ *${email}* added.\n🎁 Free until *${fmtDate(acc.trialEndsAt)}*.`);
+        await sendText(phone, `✅ *${email}* added.\n🎁 Free trial until *${fmtWhen(acc.trialEndsAt)}*.\n\n${await pricingText(acc)}`);
         await sendSetupGuide(phone, acc);
         return true;
       }
@@ -1670,8 +1672,8 @@ export async function sendClientWelcome(acc) {
     `📧 *ZimQuote Mail is ready for ${acc.email}*\n\n` +
     `Our team set it up for you. New emails will arrive here on WhatsApp with a short summary.\n\n` +
     `Tap *↩️ Reply* on any email to answer it from WhatsApp - we send it as a proper email.\n\n` +
-    `🎁 Free until ${fmtDate(acc.trialEndsAt)}, then $${MAIL_CONFIG.PRICE}/year.`;
-  try { await sendButtons(acc.ownerPhone, { text, buttons: [{ id: "mail_menu", title: "📧 My Mail" }] }); return true; }
+    (isActive(acc) && acc.paidUntil ? `✅ Active until ${fmtDate(acc.paidUntil)}.` : `🎁 Free trial until ${fmtWhen(acc.trialEndsAt)}.\n\n${await pricingText(acc)}`);
+  try { await sendButtons(acc.ownerPhone, { text: text.length > 1000 ? text.slice(0, 999) + "…" : text, buttons: [{ id: "mail_menu", title: "📧 My Mail" }, ...(acc.paidUntil ? [] : [{ id: `mail_pay_${acc._id}`, title: "💳 Choose a plan" }])] }); return true; }
   catch (_) { return false; }
 }
 
@@ -1892,4 +1894,31 @@ export async function handleMailFile({ from, filename = "file", mime = "applicat
     await sendText(phone, `📎 *Attached:*\n${files.map(f => `• ${f.filename} (${fmtSize(f.size)})`).join("\n")}\n\nNow *type your message* (e.g. "Please find our quotation attached"), or send more files.`);
   }
   return true;
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// PRICING TEXT (shown when an email is added, connected, and before the trial ends)
+// ═════════════════════════════════════════════════════════════════════════════
+export async function pricingText(acc = null, { short = false } = {}) {
+  const lines = [];
+  let supplier = false;
+  for (const k of PLAN_KEYS) {
+    const pl = MAIL_PLANS[k];
+    const pr = acc ? await priceFor(acc, k) : { price: pl.price, base: pl.price, supplier: false };
+    supplier = supplier || pr.supplier;
+    lines.push(`• *${pl.name} $${pr.price}/year*${pr.supplier ? ` ~$${pr.base}~` : ""}${short ? "" : ` - ${pl.blurb}`}`);
+  }
+  return `💳 *Plans (paid once a year, no monthly fees):*\n${lines.join("\n")}` +
+    (supplier ? `\n🏪 Listed ZimQuote seller price (${Math.round(SUPPLIER_DISCOUNT() * 100)}% off).` : (short ? "" : `\n🏪 Listed ZimQuote sellers get ${Math.round(SUPPLIER_DISCOUNT() * 100)}% off.`));
+}
+
+/** "Connected!" message with the plans and a pay button (used by every connect path). */
+export async function sendConnectedMessage(acc, detail) {
+  const paid = acc.paidUntil && new Date(acc.paidUntil) > new Date();
+  const text = `🎉 *${acc.email} is connected!*\n\n${detail}\n\n` +
+    (paid ? `✅ Active until ${fmtDate(acc.paidUntil)}.` : `🎁 Free trial until *${fmtWhen(acc.trialEndsAt)}*.\n\n${await pricingText(acc)}`);
+  return sendButtons(acc.ownerPhone, {
+    text: text.length > 1000 ? text.slice(0, 999) + "…" : text,
+    buttons: paid ? [{ id: "mail_menu", title: "📧 My Mail" }] : [{ id: `mail_pay_${acc._id}`, title: "💳 Choose a plan" }, { id: "mail_menu", title: "📧 My Mail" }]
+  });
 }

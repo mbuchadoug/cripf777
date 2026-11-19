@@ -29,7 +29,7 @@ import {
   createAccount, connectWithPassword, discoverServers, linkWaUrl, notifyMailAdmin,
   setupForClient, sendClientWelcome, sendTestEmail, sendSetupGuide,
   updateAccount, deleteAccount, pollCollector, collectorStatus, systemCheck, MAIL_PRESETS, presetFor,
-  MAIL_PLANS, planLimits, deactivateAccount, readAttachment
+  MAIL_PLANS, planLimits, deactivateAccount, readAttachment, sendConnectedMessage, trialLabel, SUPPLIER_DISCOUNT
 } from "../services/mailInbox.js";
 import { sendButtons } from "../services/metaSender.js";
 
@@ -114,7 +114,7 @@ router.get("/", (req, res) => {
 <div><b>Works with any email</b><br><span class="muted">.co.zw, .com, .org company email (IMAP or POP3), Gmail, Yahoo, Outlook.</span></div>
 <div><b>Reply in seconds</b><br><span class="muted">Type a short note; tap ✨ Polish to turn it into a professional email.</span></div>
 <div><b>Your staff too</b><br><span class="muted">Up to 3 more WhatsApp numbers get the alerts.</span></div>
-<div><b>From $${MAIL_PLANS.starter.price} a year</b><br><span class="muted">${MAIL_CONFIG.TRIAL_DAYS} days free. Starter $${MAIL_PLANS.starter.price} · Business $${MAIL_PLANS.business.price} · Pro $${MAIL_PLANS.pro.price}. Paid once a year by EcoCash.</span></div>
+<div><b>From $${MAIL_PLANS.starter.price} a year</b><br><span class="muted">Try it ${trialLabel()}. Starter $${MAIL_PLANS.starter.price} · Business $${MAIL_PLANS.business.price} · Pro $${MAIL_PLANS.pro.price}. Paid once a year by EcoCash.</span></div>
 </div>
 ${err}
 <form method="post" action="/mail/start" class="card">
@@ -215,6 +215,18 @@ ${presetFieldsHtml("p", acc.email.split("@")[1], presetFor(acc.provider), values
     : `${pwForm || `<p><b>Forward your email</b> to your private ZimQuote address:</p>${fwdSteps}`}${pwForm ? `<details><summary>Prefer forwarding instead of a password?</summary>${fwdSteps}</details>` : ""}${help}`;
 }
 
+function pricingCard(acc) {
+  const now = Date.now();
+  const fmt = d => new Date(d).toLocaleString("en-GB", { timeZone: "Africa/Harare", day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  if (acc.paidUntil && new Date(acc.paidUntil) > now) return `<div class="card"><p>✅ <b>${esc(MAIL_PLANS[acc.plan]?.name || "Plan")}</b> active until ${esc(fmt(acc.paidUntil).split(",")[0])}.</p></div>`;
+  const trial = acc.trialEndsAt && new Date(acc.trialEndsAt) > now
+    ? `🎁 Free trial until <b>${esc(fmt(acc.trialEndsAt))}</b>.` : `⛔ Your free trial has ended.`;
+  const off = Math.round(SUPPLIER_DISCOUNT() * 100);
+  return `<div class="card"><p>${trial} After that, choose a plan (paid once a year by EcoCash, no monthly fees):</p>
+<table class="fv">${["starter", "business", "pro"].map(k => `<tr><td><b>${MAIL_PLANS[k].name}</b> $${MAIL_PLANS[k].price}/year</td><td>${esc(MAIL_PLANS[k].blurb)}</td></tr>`).join("")}</table>
+<p class="muted" style="font-size:.9rem">${off ? `Listed ZimQuote sellers get ${off}% off. ` : ""}To pay, type <b>mail</b> on WhatsApp → 💳 Choose a plan.</p></div>`;
+}
+
 function statusPage(acc, { error = "", values = {}, flash = "" } = {}) {
   const st = stepOf(acc);
   const cls = n => n < st ? "step done" : n === st ? "step now" : "step wait";
@@ -231,6 +243,7 @@ ${st === 2 ? connectBlock(acc, { error, values, action: `/mail/s/${esc(acc.webTo
 <div class="${cls(3)}"><div class="num">${mark(3)}</div><div><h2>Send a test email</h2>
 ${st === 3 ? `<p>From any other email (or ask a friend), send a short email to <b>${esc(acc.email)}</b>. It will pop up on your WhatsApp${acc.mode !== "forward" ? " within 2 minutes" : " in seconds"}.</p><p class="muted">⏳ Waiting for your first email…</p>` : st > 3 ? `<p class="muted">Received - check your WhatsApp.</p>` : `<p class="muted">Last step.</p>`}</div></div>
 </div>
+${pricingCard(acc)}
 ${st === 4 ? `<div class="card"><p><b>Done!</b> Every new email now arrives on WhatsApp. Tap <b>↩️ Reply</b> to answer.</p><p class="muted">Type <b>mail</b> on WhatsApp any time to see your inbox, add staff numbers or change settings.</p></div>` : ""}
 <script>
 (function(){var s=${st};if(s>=4)return;setInterval(function(){fetch(location.pathname.replace(/\\/$/,"")+"/status",{cache:"no-store"}).then(function(r){return r.json()}).then(function(j){if(j.step!==s&&!document.activeElement.matches("input"))location.reload()}).catch(function(){})},5000)})();
@@ -257,7 +270,7 @@ router.post("/s/:token/connect", form, async (req, res) => {
   try {
     const r = await connectWithPassword(acc, { pass: String(b.pass || ""), user: String(b.user || "").trim(), protocol: String(b.inProto || "auto"), imapHost: String(b.imapHost || "").trim(), imapPort: b.imapPort, smtpHost: String(b.smtpHost || "").trim(), smtpPort: b.smtpPort });
     if (acc.phoneVerified) {
-      await sendButtons(acc.ownerPhone, { text: `🎉 *${acc.email} is connected!*\n\nNew emails will arrive here within about 2 minutes.${r.smtp ? `\nReplies go out from *${acc.email}*.` : ""}\n\nSend a test email to check.`, buttons: [{ id: "mail_menu", title: "📧 My Mail" }] }).catch(() => {});
+      await sendConnectedMessage(acc, `New emails will arrive here within about 2 minutes.${r.smtp ? `\nReplies go out from *${acc.email}*.` : ""}\nSend a test email to check.`).catch(() => {});
     }
     res.redirect(`/mail/s/${acc.webToken}?ok=1`);
   } catch (e) {
@@ -298,10 +311,7 @@ router.post("/connect/:token", form, async (req, res) => {
   if (limited(req, "pw", 20)) return res.send(page("Connect your email", `<h1>Connect ${esc(acc.email)}</h1><div class="card">${connectBlock(acc, { error: "Too many attempts. Try again later.", values, action: `/mail/connect/${esc(req.params.token)}` })}</div>`));
   try {
     const r = await connectWithPassword(acc, { pass: String(b.pass || ""), user: String(b.user || "").trim(), protocol: String(b.inProto || "auto"), imapHost: String(b.imapHost || "").trim(), imapPort: b.imapPort, smtpHost: String(b.smtpHost || "").trim(), smtpPort: b.smtpPort });
-    await sendButtons(acc.ownerPhone, {
-      text: `🎉 *${acc.email} is connected!*\n\nNew emails will arrive here within about 2 minutes.` + (r.smtp ? `\nYour replies will be sent from *${acc.email}*.` : `\n⚠️ We couldn't connect your outgoing server, so replies will be sent via ZimQuote with your address as the reply-to.`) + `\n\nSend yourself a test email to check.`,
-      buttons: [{ id: "mail_menu", title: "📧 My Mail" }]
-    }).catch(() => {});
+    await sendConnectedMessage(acc, `New emails will arrive here within about 2 minutes.` + (r.smtp ? `\nYour replies will be sent from *${acc.email}*.` : `\n⚠️ Replies will be sent via ZimQuote with your address as the reply-to.`) + `\nSend yourself a test email to check.`).catch(() => {});
     res.send(page("Connected", `<h1>✅ Connected</h1><div class="ok"><b>${esc(acc.email)}</b> is now on your WhatsApp.</div><p>${r.smtp ? "Replies will go out from your own address." : "We couldn't reach your outgoing mail server. Replies will be sent via ZimQuote, and answers will still come back to you."}</p><p>You can close this page and go back to WhatsApp.</p>`));
   } catch (e) {
     res.send(page("Connect your email", `<h1>Connect ${esc(acc.email)}</h1><div class="card">${connectBlock(acc, { error: e.message, values, action: `/mail/connect/${esc(req.params.token)}` })}</div>`));
@@ -521,7 +531,8 @@ ${(a.mode === "pop3" ? a.pop?.lastError : a.imap?.lastError) ? `<div class="zqm-
 <form method="post" action="/zq-admin/mail/${a._id}/guide"><button class="btn btn-sm btn-gray">📖 Resend setup steps</button></form>
 <form method="post" action="/zq-admin/mail/${a._id}/extend" onsubmit="return confirm('Activate for 1 year (paid)?')" style="display:flex;gap:6px;align-items:center"><select name="plan" style="width:auto;padding:5px 8px">${["starter", "business", "pro"].map(k => `<option value="${k}" ${a.plan === k ? "selected" : ""}>${MAIL_PLANS[k].name} $${MAIL_PLANS[k].price}</option>`).join("")}</select><button class="btn btn-sm btn-green">💵 Activate 1 year</button></form>
 ${isActive(a) ? `<form method="post" action="/zq-admin/mail/${a._id}/deactivate" onsubmit="return confirm('Switch this inbox off now? Alerts stop until it is activated again.')"><button class="btn btn-sm btn-gray">⛔ Deactivate</button></form>` : ""}
-<form method="post" action="/zq-admin/mail/${a._id}/trial"><button class="btn btn-sm btn-gray">+14 days trial</button></form>
+<form method="post" action="/zq-admin/mail/${a._id}/trial"><input type="hidden" name="days" value="1"><button class="btn btn-sm btn-gray">+1 day trial</button></form>
+<form method="post" action="/zq-admin/mail/${a._id}/trial"><input type="hidden" name="days" value="7"><button class="btn btn-sm btn-gray">+7 days trial</button></form>
 ${a.helpRequestedAt ? `<form method="post" action="/zq-admin/mail/${a._id}/clearhelp"><button class="btn btn-sm btn-gray">✔ Help done</button></form>` : ""}
 </div></div>
 
@@ -613,10 +624,11 @@ ${msgs.map(m => `<tr><td>${fmt(m.receivedAt)}</td><td>${e(m.fromName)}<br><small
     const acc = await activatePaid(req.params.id, "", null, 365, plan).catch(() => null);
     acc ? go(res, `/zq-admin/mail/${acc._id}`, "success", `Paid until ${fmt(acc.paidUntil)}`) : go(res, "/zq-admin/mail", "error", "Inbox not found");
   });
-  router.post("/mail/:id/trial", requireSupplierAdmin, async (req, res) => {
+  router.post("/mail/:id/trial", requireSupplierAdmin, pform, async (req, res) => {
     const acc = await one(req); if (!acc) return go(res, "/zq-admin/mail", "error", "Inbox not found");
     const base = acc.trialEndsAt && new Date(acc.trialEndsAt) > new Date() ? new Date(acc.trialEndsAt) : new Date();
-    acc.trialEndsAt = new Date(base.getTime() + 14 * 86400000); await acc.save();
+    const days = Math.min(365, Math.max(1, Number(req.body?.days) || 1));
+    acc.trialEndsAt = new Date(base.getTime() + days * 86400000); await acc.save();
     go(res, `/zq-admin/mail/${acc._id}`, "success", `Trial until ${fmt(acc.trialEndsAt)}`);
   });
   router.post("/mail/:id/guide", requireSupplierAdmin, async (req, res) => {
