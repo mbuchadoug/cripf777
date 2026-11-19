@@ -95,6 +95,7 @@ import {
   handleSupplierRegistrationStates
 } from "./supplierRegistration.js";
 import { handleBikerMessage } from "./bikerDispatch.js";
+import { handleMailMessage } from "./mailInbox.js";   // ZimQuote Mail (email on WhatsApp)
 import { handleQuoteDesk } from "./quoteDesk.js";
 import { sendDocActions, QT_TO_INV } from "./docActions.js";
 import {
@@ -3563,7 +3564,7 @@ async function sendClientSelectList(from, biz) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-export async function handleIncomingMessage({ from, action, hasImage = false, imageUrl = null, imageCaption = "" }) {
+export async function handleIncomingMessage({ from, action, hasImage = false, imageUrl = null, imageCaption = "", rawText = "" }) {
 
   const phone = from.replace(/\D+/g, "");
 
@@ -3641,6 +3642,7 @@ a === "my_orders" ||
       a === "reg_type_service" ||
       a === "reg_type_biker" ||
       a.startsWith("biker_") ||
+      a.startsWith("mail_") ||
       a.startsWith("qd_") ||
       a.startsWith("qda_") ||
       a.startsWith("sup_hosp_type_") ||
@@ -4291,6 +4293,26 @@ try {
   if (_qdHandled) return;
 } catch (_qdErr) {
   console.error("[QUOTE DESK HOOK]", _qdErr.message);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 📧 ZIMQUOTE MAIL - business email on WhatsApp (services/mailInbox.js)
+// ───────────────────────────────────────────────────────────────────────────
+// Owns: all mail_* taps (incl. template buttons on email alerts), the words
+// "mail" / "ZQ:MAIL", and typed text while a mail flow is open (writing a reply,
+// adding a staff number, EcoCash number). State: UserSession.tempData.mailState.
+// rawText keeps the user's original capitals for email replies.
+try {
+  const _mailHandled = await handleMailMessage({
+    from,
+    text,
+    rawText:  rawText || text,
+    action:   isMetaAction ? a : "",
+    biz:      (biz && _bizIsOwnedByUser) ? biz : null
+  });
+  if (_mailHandled) return;
+} catch (_mailErr) {
+  console.error("[MAIL HOOK]", _mailErr.message);
 }
 
 // ── Numbered seller pick (TOP LEVEL) ─────────────────────────────────────────

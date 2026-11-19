@@ -1,0 +1,1076 @@
+// services/mailInbox.js
+// ═════════════════════════════════════════════════════════════════════════════
+// ZimQuote MAIL - "your business email on WhatsApp"
+// ─────────────────────────────────────────────────────────────────────────────
+// A customer connects any email address (Gmail, Outlook, cPanel/local hosting,
+// Zoho...). Every new email arrives on their WhatsApp with a short summary and
+// buttons:  ↩️ Reply · 📄 Full email · ✅ Done.  They type a reply on WhatsApp
+// (or pick a quick answer, or let ZimQuote polish it) and we send it as an email.
+//
+// TWO WAYS TO CONNECT (picked automatically from the address):
+//   forward  The customer forwards mail to  <slug>@MAIL_INBOUND_DOMAIN.
+//            Works for every provider. Gmail asks to confirm forwarding: we catch
+//            Gmail's confirmation email and send the code to their WhatsApp.
+//            Replies go out from our sending address with Reply-To = their email.
+//   imap     The customer types their email password on a secure web page
+//            (never on WhatsApp). Best for cPanel / local hosting / Zoho / Gmail
+//            app passwords. Replies go out from THEIR own address via THEIR server.
+//
+// WhatsApp side: handleMailMessage() is called by chatbotEngine.js (top-level hook)
+// and owns "mail_*" taps, the words "mail" / "ZQ:MAIL", and typed text while a
+// mail flow is open (state in UserSession.tempData.mailState / mailData).
+//
+// .env
+//   MAIL_INBOUND_DOMAIN   mail.zimquote.co.zw   (MX of this domain → our server)
+//   MAIL_INBOUND_SECRET   long random string    (webhook /mail/inbound)
+//   MAIL_SECRET_KEY       long random string    (encrypts saved mail passwords)
+//   MAIL_OUT_HOST / MAIL_OUT_PORT / MAIL_OUT_USER / MAIL_OUT_PASS / MAIL_OUT_FROM
+//                         SMTP used for replies of "forward" accounts
+//   MAIL_PRICE_USD        60    (per inbox, per year)
+//   MAIL_TRIAL_DAYS       14
+//   MAIL_ALERT_TEMPLATE   zq_mail_alert  (approved UTILITY template, see DEPLOY.md)
+// ═════════════════════════════════════════════════════════════════════════════
+
+import crypto from "crypto";
+import dns from "dns/promises";
+import mongoose from "mongoose";
+import axios from "axios";
+import MailAccount from "../models/mailAccount.js";
+import MailMessage from "../models/mailMessage.js";
+import UserSession from "../models/userSession.js";
+import { sendText, sendButtons, sendList, sendDocument } from "./metaSender.js";
+
+// ─── Config ──────────────────────────────────────────────────────────────────
+export const MAIL_CONFIG = {
+  get INBOUND_DOMAIN() { return (process.env.MAIL_INBOUND_DOMAIN || "mail.zimquote.co.zw").toLowerCase(); },
+  get SITE() { return (process.env.SITE_URL || "https://cripfcnt.com").replace(/\/$/, ""); },
+  get PRICE() { return Number(process.env.MAIL_PRICE_USD || 60); },
+  get TRIAL_DAYS() { return Number(process.env.MAIL_TRIAL_DAYS || 14); },
+  get TEMPLATE() { return process.env.MAIL_ALERT_TEMPLATE || "zq_mail_alert"; },
+  TEAM_MAX: 3,              // extra WhatsApp numbers per inbox
+  INBOX_MAX: 5,             // inboxes per WhatsApp number
+  STATE_TTL_MIN: 60,
+  MAX_TEXT: 8000,
+  MAX_ATT_BYTES: 8 * 1024 * 1024,
+  POLL_MS: 90 * 1000
+};
+
+const QUICK_ANSWERS = {
+  q1: { title: "👍 Received, thanks", text: "Thank you for your email. We have received it and will get back to you shortly." },
+  q2: { title: "📞 I'll call you", text: "Thank you for your email. I will call you shortly to discuss." },
+  q3: { title: "💰 Quote coming", text: "Thank you for your enquiry. We are preparing a quotation and will send it to you shortly." }
+};
+
+// ─── Small helpers ───────────────────────────────────────────────────────────
+const normPhone = (raw = "") => {
+  let p = String(raw).replace(/\D+/g, "");
+  if (p.startsWith("0") && p.length === 10) p = "263" + p.slice(1);
+  return p;
+};
+const clip = (s, n) => { s = String(s || "").replace(/\s+/g, " ").trim(); return s.length > n ? s.slice(0, n - 1) + "…" : s; };
+const oneLine = s => String(s || "").replace(/[\r\n\t]+/g, " ").replace(/ {2,}/g, " ").trim();
+const isEmail = s => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(s || "").trim());
+const refOf = id => String(id).slice(-4).toUpperCase();
+const daysFromNow = d => new Date(Date.now() + d * 86400000);
+const fmtDate = d => d ? new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "-";
+const randSlug = () => crypto.randomBytes(5).toString("hex");           // 10 chars
+export const forwardAddress = acc => `${acc.slug}@${MAIL_CONFIG.INBOUND_DOMAIN}`;
+export const guideUrl = acc => `${MAIL_CONFIG.SITE}/mail/guide/${acc.slug}`;
+
+export function isActive(acc) {
+  const now = Date.now();
+  return (acc.paidUntil && new Date(acc.paidUntil).getTime() > now) ||
+         (acc.trialEndsAt && new Date(acc.trialEndsAt).getTime() > now);
+}
+function planLine(acc) {
+  const now = Date.now();
+  if (acc.paidUntil && new Date(acc.paidUntil).getTime() > now) return `✅ Paid until ${fmtDate(acc.paidUntil)}`;
+  if (acc.trialEndsAt && new Date(acc.trialEndsAt).getTime() > now) return `🎁 Free trial until ${fmtDate(acc.trialEndsAt)}`;
+  return `⛔ Expired - renew for $${MAIL_CONFIG.PRICE}/year`;
+}
+
+// ─── Encryption for saved mail passwords (AES-256-GCM) ───────────────────────
+function _key() {
+  const k = process.env.MAIL_SECRET_KEY;
+  if (!k || k.length < 16) return null;
+  return crypto.createHash("sha256").update(k).digest();
+}
+export function canStorePasswords() { return !!_key(); }
+export function encryptSecret(plain) {
+  const key = _key(); if (!key) throw new Error("MAIL_SECRET_KEY is not set");
+  const iv = crypto.randomBytes(12);
+  const c = crypto.createCipheriv("aes-256-gcm", key, iv);
+  const data = Buffer.concat([c.update(String(plain), "utf8"), c.final()]);
+  return [iv.toString("base64"), c.getAuthTag().toString("base64"), data.toString("base64")].join(".");
+}
+export function decryptSecret(enc) {
+  const key = _key(); if (!key || !enc) return "";
+  const [iv, tag, data] = String(enc).split(".");
+  const d = crypto.createDecipheriv("aes-256-gcm", key, Buffer.from(iv, "base64"));
+  d.setAuthTag(Buffer.from(tag, "base64"));
+  return Buffer.concat([d.update(Buffer.from(data, "base64")), d.final()]).toString("utf8");
+}
+// Signed links for attachments (no login needed, can't be guessed)
+export function attToken(id) {
+  const k = process.env.MAIL_SECRET_KEY || process.env.SESSION_SECRET || "zq-mail";
+  return crypto.createHmac("sha256", k).update(String(id)).digest("hex").slice(0, 24);
+}
+
+// ─── Provider detection ──────────────────────────────────────────────────────
+const KNOWN = {
+  "gmail.com": "google", "googlemail.com": "google",
+  "outlook.com": "microsoft", "hotmail.com": "microsoft", "live.com": "microsoft", "msn.com": "microsoft",
+  "yahoo.com": "yahoo", "ymail.com": "yahoo",
+  "zoho.com": "zoho", "zohomail.com": "zoho",
+  "icloud.com": "apple", "me.com": "apple"
+};
+export async function detectProvider(email) {
+  const domain = String(email).split("@")[1]?.toLowerCase() || "";
+  if (KNOWN[domain]) return { provider: KNOWN[domain], domain, mx: "" };
+  let mx = "";
+  try {
+    const recs = await dns.resolveMx(domain);
+    recs.sort((a, b) => a.priority - b.priority);
+    mx = (recs[0]?.exchange || "").toLowerCase();
+  } catch (_) { /* no MX - leave blank */ }
+  let provider = "cpanel";
+  if (/google|googlemail/.test(mx)) provider = "google";
+  else if (/outlook\.com|protection\.outlook|office365/.test(mx)) provider = "microsoft";
+  else if (/zoho/.test(mx)) provider = "zoho";
+  else if (/yahoo/.test(mx)) provider = "yahoo";
+  else if (!mx) provider = "other";
+  return { provider, domain, mx };
+}
+// Best guesses for IMAP/SMTP servers. The connect page lets the customer edit them.
+export function guessServers(email, provider, mx = "") {
+  const domain = String(email).split("@")[1] || "";
+  switch (provider) {
+    case "google": return { imap: { host: "imap.gmail.com", port: 993, secure: true }, smtp: { host: "smtp.gmail.com", port: 465, secure: true } };
+    case "zoho":   return { imap: { host: "imap.zoho.com", port: 993, secure: true }, smtp: { host: "smtp.zoho.com", port: 465, secure: true } };
+    case "yahoo":  return { imap: { host: "imap.mail.yahoo.com", port: 993, secure: true }, smtp: { host: "smtp.mail.yahoo.com", port: 465, secure: true } };
+    case "apple":  return { imap: { host: "imap.mail.me.com", port: 993, secure: true }, smtp: { host: "smtp.mail.me.com", port: 587, secure: false } };
+    default:       return { imap: { host: `mail.${domain}`, port: 993, secure: true }, smtp: { host: `mail.${domain}`, port: 465, secure: true }, alt: [mx, `imap.${domain}`].filter(Boolean) };
+  }
+}
+
+// ─── Session state (UserSession.tempData.mailState / mailData) ───────────────
+async function getSess(phone) {
+  const s = await UserSession.findOne({ phone }).lean().catch(() => null);
+  const td = s?.tempData || {};
+  let state = td.mailState || "";
+  const at = td.mailStateAt ? new Date(td.mailStateAt).getTime() : 0;
+  if (state && at && Date.now() - at > MAIL_CONFIG.STATE_TTL_MIN * 60000) { state = ""; await clearState(phone); }
+  return { state, data: { ...(td.mailData || {}) } };
+}
+async function setState(phone, state, data = {}) {
+  await UserSession.updateOne({ phone },
+    { $set: { "tempData.mailState": state, "tempData.mailData": data, "tempData.mailStateAt": new Date() } },
+    { upsert: true }).catch(e => console.error("[MAIL STATE]", e.message));
+}
+async function clearState(phone) {
+  await UserSession.updateOne({ phone },
+    { $unset: { "tempData.mailState": "", "tempData.mailData": "", "tempData.mailStateAt": "" } }).catch(() => {});
+}
+
+// ─── 24-hour window tracking (only for people who use Mail) ──────────────────
+// Free-form WhatsApp messages only arrive within 24h of the person's last message.
+// Outside that window we must use the approved template.
+const _mailPhones = { set: new Set(), at: 0 };
+async function mailPhones() {
+  if (Date.now() - _mailPhones.at < 5 * 60000) return _mailPhones.set;
+  const accs = await MailAccount.find({}, { ownerPhone: 1, alertPhones: 1 }).lean().catch(() => []);
+  const s = new Set();
+  for (const a of accs) { s.add(a.ownerPhone); (a.alertPhones || []).forEach(p => s.add(p)); }
+  _mailPhones.set = s; _mailPhones.at = Date.now();
+  return s;
+}
+const seenCol = () => mongoose.connection.collection("mail_wa_seen");
+async function markSeen(phone) {
+  try { if ((await mailPhones()).has(phone)) await seenCol().updateOne({ _id: phone }, { $set: { at: new Date() } }, { upsert: true }); } catch (_) {}
+}
+async function inWindow(phone) {
+  try { const r = await seenCol().findOne({ _id: phone }); return !!(r && Date.now() - new Date(r.at).getTime() < 23 * 3600000); }
+  catch (_) { return false; }
+}
+
+// ─── WhatsApp template (3 quick-reply buttons with per-email payloads) ───────
+async function sendMailTemplate(to, vars, msgId) {
+  const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.META_PHONE_NUMBER_ID || process.env.PHONE_NUMBER_ID;
+  const TOKEN = process.env.META_ACCESS_TOKEN || process.env.WHATSAPP_ACCESS_TOKEN;
+  const btn = (i, payload) => ({ type: "button", sub_type: "quick_reply", index: String(i), parameters: [{ type: "payload", payload }] });
+  await axios.post(`https://graph.facebook.com/v24.0/${PHONE_NUMBER_ID}/messages`, {
+    messaging_product: "whatsapp", to: normPhone(to), type: "template",
+    template: {
+      name: MAIL_CONFIG.TEMPLATE, language: { code: "en" },
+      components: [
+        { type: "body", parameters: vars.map(v => ({ type: "text", text: clip(oneLine(v), 300) || "-" })) },
+        btn(0, `mail_reply_${msgId}`), btn(1, `mail_open_${msgId}`), btn(2, `mail_done_${msgId}`)
+      ]
+    }
+  }, { headers: { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json" } });
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// INBOUND: raw email → MailMessage → WhatsApp alert
+// ═════════════════════════════════════════════════════════════════════════════
+const attCol = () => mongoose.connection.collection("mail_attachments");
+
+function stripQuoted(text) {
+  const lines = String(text || "").replace(/\r/g, "").split("\n");
+  const out = [];
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i];
+    if (/^On .{5,200}wrote:\s*$/i.test(l.trim())) break;
+    if (/^-{2,}\s*(Original|Forwarded) Message\s*-{2,}/i.test(l.trim())) break;
+    if (/^From:\s.+/i.test(l.trim()) && i > 0 && /^(Sent|Date|To|Subject):/i.test((lines[i + 1] || "").trim())) break;
+    if (/^>/.test(l)) continue;
+    out.push(l);
+  }
+  return out.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+function guessCategory(subject, text) {
+  const s = `${subject} ${text}`.toLowerCase();
+  if (/\b(purchase order|p\.?o\.? ?#?\d|order no|we would like to order|please supply)\b/.test(s)) return "order";
+  if (/\b(quotation|quote|rfq|request for quot|price list|pricing)\b/.test(s)) return "quote";
+  if (/\b(invoice|payment|proof of payment|pop|remittance|statement|overdue|receipt)\b/.test(s)) return "payment";
+  if (/\b(tender|bid|eoi|expression of interest|procurement|praz)\b/.test(s)) return "tender";
+  if (/\b(complain|not working|faulty|broken|urgent|asap)\b/.test(s)) return "support";
+  return "other";
+}
+
+async function aiSummary({ fromName, subject, text }) {
+  const key = process.env.OPENAI_API_KEY;
+  if (!key || !text) return null;
+  try {
+    const r = await axios.post("https://api.openai.com/v1/chat/completions", {
+      model: process.env.MAIL_AI_MODEL || "gpt-4o-mini",
+      temperature: 0.2, max_tokens: 160,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: "You summarise business emails for a busy Zimbabwean business owner reading on WhatsApp. Reply as JSON: {\"summary\": one or two short plain sentences with the key ask, amounts, quantities and dates, max 220 characters; \"category\": one of order, quote, payment, tender, support, personal, newsletter, other; \"important\": true if it needs action soon or involves money, an order, a quote or a tender}." },
+        { role: "user", content: `From: ${fromName}\nSubject: ${subject}\n\n${String(text).slice(0, 4000)}` }
+      ]
+    }, { headers: { Authorization: `Bearer ${key}` }, timeout: 12000 });
+    const j = JSON.parse(r.data?.choices?.[0]?.message?.content || "{}");
+    return { summary: clip(j.summary, 240), category: j.category || "other", important: !!j.important };
+  } catch (e) { console.warn("[MAIL AI]", e.message); return null; }
+}
+
+// Gmail sends this to the forwarding address before forwarding starts.
+function gmailForwardConfirm(parsed) {
+  const from = (parsed.from?.value?.[0]?.address || "").toLowerCase();
+  if (!/forwarding-noreply@google\.com/.test(from)) return null;
+  const all = `${parsed.subject || ""}\n${parsed.text || ""}`;
+  const code = (all.match(/#?(\d{6,12})\)?/) || [])[1] || "";
+  const link = (String(parsed.text || "").match(/https:\/\/mail(?:-settings)?\.google\.com\/mail\/[^\s<>"]+/) || [])[0] || "";
+  return { code, link };
+}
+
+/**
+ * Process one raw RFC-822 email.
+ * @param {Buffer|string} raw
+ * @param {object} opts  { rcpt: envelope recipient (forward mode) } OR { account } (imap mode)
+ */
+export async function ingestRaw(raw, { rcpt = "", account = null } = {}) {
+  const { simpleParser } = await import("mailparser");
+  const parsed = await simpleParser(raw);
+
+  // 1. Which inbox is this for?
+  let acc = account;
+  if (!acc) {
+    const rc = String(rcpt || "").toLowerCase().trim();
+    const [local, dom] = rc.split("@");
+    if (!local || dom !== MAIL_CONFIG.INBOUND_DOMAIN) return { skipped: "unknown recipient" };
+    acc = await MailAccount.findOne({ slug: local.split("+")[0] });
+    if (!acc) return { skipped: "no account" };
+  }
+
+  // 2. Gmail forwarding confirmation → send the code to WhatsApp
+  const g = gmailForwardConfirm(parsed);
+  if (g) {
+    await notifyOwner(acc,
+      `🔐 *Gmail needs one more step*\n\nGmail sent a confirmation code for *${acc.email}*:\n\n*${g.code || "(see link)"}*\n\n` +
+      `In Gmail → Settings → *Forwarding and POP/IMAP*, paste the code and tap *Verify*. Then choose *Forward a copy of incoming mail* and *Save Changes*.` +
+      (g.link ? `\n\nOr open this link to confirm:\n${g.link}` : ""),
+      [{ id: `mail_guide_${acc._id}`, title: "📖 Show me how" }]);
+    return { confirm: true };
+  }
+
+  // 3. Loop / junk protection
+  if (parsed.headers.get("x-zimquote-mail")) return { skipped: "own message" };
+  const fromAddr = (parsed.from?.value?.[0]?.address || "").toLowerCase();
+  if (fromAddr && fromAddr === String(process.env.MAIL_OUT_FROM || "").toLowerCase()) return { skipped: "own sender" };
+  const messageId = parsed.messageId || `<zq-${crypto.randomBytes(8).toString("hex")}@local>`;
+  if (await MailMessage.exists({ accountId: acc._id, messageId })) return { skipped: "duplicate" };
+
+  const precedence = String(parsed.headers.get("precedence") || "").toLowerCase();
+  const autoSub = String(parsed.headers.get("auto-submitted") || "").toLowerCase();
+  const listHdr = parsed.headers.get("list") || {};          // mailparser groups List-* headers here
+  const bulk = !!(parsed.headers.get("list-unsubscribe") || listHdr.unsubscribe || listHdr.id) || /bulk|list|junk/.test(precedence);
+  const autoReply = !!autoSub && autoSub !== "no";
+
+  // 4. Text + attachments
+  const text = stripQuoted(parsed.text || "").slice(0, MAIL_CONFIG.MAX_TEXT);
+  const subject = oneLine(parsed.subject || "(no subject)");
+  const fromName = oneLine(parsed.from?.value?.[0]?.name || fromAddr || "Unknown sender");
+  const attachments = [];
+  for (const a of (parsed.attachments || []).slice(0, 8)) {
+    if (!a?.content || a.size > MAIL_CONFIG.MAX_ATT_BYTES) continue;
+    if (a.related && /^image\//.test(a.contentType || "") && a.size < 40000) continue;   // logos in signatures
+    const id = crypto.randomBytes(10).toString("hex");
+    try {
+      await attCol().insertOne({ _id: id, accountId: acc._id, filename: a.filename || "attachment", contentType: a.contentType || "application/octet-stream", size: a.size, data: a.content, createdAt: new Date() });
+      attachments.push({ id, filename: a.filename || "attachment", contentType: a.contentType, size: a.size });
+    } catch (e) { console.warn("[MAIL ATT]", e.message); }
+  }
+
+  // 5. Summary + category
+  let ai = null;
+  if (!bulk && !autoReply) ai = await aiSummary({ fromName, subject, text });
+  const category = bulk ? "newsletter" : (ai?.category || guessCategory(subject, text));
+  const important = !bulk && (ai ? ai.important : ["order", "quote", "payment", "tender", "support"].includes(category));
+  const summary = ai?.summary || clip(text, 220) || "(no text - see attachments)";
+
+  const msg = await MailMessage.create({
+    accountId: acc._id, messageId,
+    inReplyTo: parsed.inReplyTo || "", references: Array.isArray(parsed.references) ? parsed.references.join(" ") : (parsed.references || ""),
+    fromName, fromEmail: fromAddr,
+    replyTo: (parsed.replyTo?.value?.[0]?.address || "").toLowerCase(),
+    to: parsed.to?.text || "", cc: parsed.cc?.text || "",
+    subject, text, summary, category, important,
+    muted: bulk || autoReply, attachments,
+    receivedAt: parsed.date || new Date()
+  });
+  msg.ref = refOf(msg._id); await msg.save();
+
+  const firstEver = !acc.firstMailAt;
+  await MailAccount.updateOne({ _id: acc._id }, {
+    $set: { lastMailAt: new Date(), ...(firstEver ? { firstMailAt: new Date() } : {}), ...(acc.status === "setup" ? { status: "live" } : {}) },
+    $inc: { mailCount: 1 }
+  });
+  if (firstEver) {
+    await notifyOwner(acc, `🎉 *${acc.email} is connected!*\n\nYour emails will now arrive here on WhatsApp. Tap *↩️ Reply* on any email to answer it from here.`).catch(() => {});
+  }
+
+  // 6. Alert
+  if (!msg.muted && (acc.alertMode === "all" || important) && acc.status !== "paused") {
+    await alertNewMail(acc, msg).catch(e => console.error("[MAIL ALERT]", e.message));
+  }
+  return { ok: true, id: String(msg._id) };
+}
+
+async function notifyOwner(acc, text, buttons = null) {
+  if (buttons?.length) return sendButtons(acc.ownerPhone, { text, buttons }).catch(() => sendText(acc.ownerPhone, text));
+  return sendText(acc.ownerPhone, text);
+}
+
+const CAT_ICON = { order: "🛒", quote: "💬", payment: "💵", tender: "📑", support: "🛠️", personal: "👤", newsletter: "📰", other: "📧" };
+
+export async function alertNewMail(acc, msg) {
+  const phones = [...new Set([acc.ownerPhone, ...(acc.alertPhones || [])])].filter(Boolean).map(normPhone);
+
+  if (!isActive(acc)) {     // expired: tease, so they renew
+    for (const p of phones.slice(0, 1)) {
+      await sendButtons(p, {
+        text: `📧 *New email for ${acc.email}*\nFrom: *${clip(msg.fromName, 60)}*\n\n⛔ Your ZimQuote Mail plan has ended, so we can't show it.\nRenew for *$${MAIL_CONFIG.PRICE}/year* to read and reply on WhatsApp.`,
+        buttons: [{ id: `mail_pay_${acc._id}`, title: "💳 Renew now" }]
+      }).catch(() => {});
+    }
+    return;
+  }
+
+  const icon = CAT_ICON[msg.category] || "📧";
+  const att = msg.attachments?.length ? `\n📎 ${msg.attachments.length} attachment${msg.attachments.length > 1 ? "s" : ""}` : "";
+  const text =
+    `${icon} *New email${msg.important ? " - needs action" : ""}*\n` +
+    `📥 ${acc.email}\n` +
+    `From: *${clip(msg.fromName, 60)}*${msg.fromEmail && msg.fromEmail !== msg.fromName ? ` (${msg.fromEmail})` : ""}\n` +
+    `Subject: ${clip(msg.subject, 120)}\n\n` +
+    `📝 ${msg.summary}${att}\n\nRef: ${msg.ref}`;
+  const buttons = [
+    { id: `mail_reply_${msg._id}`, title: "↩️ Reply" },
+    { id: `mail_open_${msg._id}`, title: "📄 Full email" },
+    { id: `mail_done_${msg._id}`, title: "✅ Done" }
+  ];
+
+  for (const p of phones) {
+    let sent = false;
+    if (await inWindow(p)) {
+      try { await sendButtons(p, { text, buttons }); sent = true; } catch (_) {}
+    }
+    if (!sent) {
+      try {
+        await sendMailTemplate(p, [acc.email, `${msg.fromName}${msg.fromEmail ? ` (${msg.fromEmail})` : ""}`, msg.subject, msg.summary], msg._id);
+        sent = true;
+      } catch (e) {
+        console.warn(`[MAIL ALERT] template failed for ${p}: ${e?.response?.data?.error?.message || e.message}`);
+        try { await sendButtons(p, { text, buttons }); sent = true; } catch (_) {}
+      }
+    }
+  }
+  await MailMessage.updateOne({ _id: msg._id }, { $set: { alertedAt: new Date() } });
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// OUTBOUND: send a reply
+// ═════════════════════════════════════════════════════════════════════════════
+function htmlEscape(s) { return String(s || "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+
+function buildReply(acc, msg, body) {
+  const to = msg.replyTo || msg.fromEmail;
+  const subject = /^re:/i.test(msg.subject || "") ? msg.subject : `Re: ${msg.subject || ""}`;
+  const sig = acc.signature ? `\n\n${acc.signature}` : "";
+  const waNumber = normPhone(acc.ownerPhone);
+  const waLink = `https://wa.me/${waNumber}`;
+  const quoted = String(msg.text || "").split("\n").slice(0, 30).map(l => `> ${l}`).join("\n");
+  const when = new Date(msg.receivedAt || Date.now()).toUTCString();
+  const textPart = `${body}${sig}\n\nChat with us on WhatsApp: ${waLink}\n\nOn ${when}, ${msg.fromName} <${msg.fromEmail}> wrote:\n${quoted}`;
+  const htmlPart =
+    `<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.5;color:#1f2933">` +
+    `${htmlEscape(body).replace(/\n/g, "<br>")}${sig ? "<br><br>" + htmlEscape(acc.signature).replace(/\n/g, "<br>") : ""}` +
+    `<p style="margin:18px 0"><a href="${waLink}" style="display:inline-block;background:#1fa855;color:#fff;text-decoration:none;padding:9px 16px;border-radius:6px;font-weight:bold">💬 Reply on WhatsApp</a></p>` +
+    `<div style="color:#6b7280;border-left:3px solid #d1d5db;padding-left:10px;margin-top:16px">On ${htmlEscape(when)}, ${htmlEscape(msg.fromName)} &lt;${htmlEscape(msg.fromEmail)}&gt; wrote:<br>${htmlEscape(String(msg.text || "").slice(0, 3000)).replace(/\n/g, "<br>")}</div></div>`;
+  const refs = [msg.references, msg.messageId].filter(Boolean).join(" ").trim();
+  return { to, subject, text: textPart, html: htmlPart, inReplyTo: msg.messageId, references: refs };
+}
+
+async function transportFor(acc) {
+  const nodemailer = (await import("nodemailer")).default;
+  if (acc.mode === "imap" && acc.smtp?.host && acc.imap?.passEnc) {
+    return {
+      t: nodemailer.createTransport({ host: acc.smtp.host, port: acc.smtp.port || 465, secure: acc.smtp.secure !== false, auth: { user: acc.imap.user || acc.email, pass: decryptSecret(acc.imap.passEnc) } }),
+      from: acc.displayName ? `"${acc.displayName.replace(/"/g, "")}" <${acc.email}>` : acc.email,
+      via: "own"
+    };
+  }
+  if (!process.env.MAIL_OUT_HOST) throw new Error("Sending is not set up yet (MAIL_OUT_HOST missing)");
+  const name = (acc.displayName || acc.email).replace(/"/g, "");
+  return {
+    t: nodemailer.createTransport({ host: process.env.MAIL_OUT_HOST, port: Number(process.env.MAIL_OUT_PORT || 587), secure: String(process.env.MAIL_OUT_PORT) === "465", auth: process.env.MAIL_OUT_USER ? { user: process.env.MAIL_OUT_USER, pass: process.env.MAIL_OUT_PASS } : undefined }),
+    from: `"${name} via ZimQuote" <${process.env.MAIL_OUT_FROM || process.env.MAIL_OUT_USER}>`,
+    replyTo: acc.email,
+    via: "zimquote"
+  };
+}
+
+export async function sendReply(acc, msg, body, byPhone) {
+  const r = buildReply(acc, msg, body);
+  if (!r.to || !isEmail(r.to)) throw new Error("This email has no reply address");
+  const { t, from, replyTo, via } = await transportFor(acc);
+  const MailComposer = (await import("nodemailer/lib/mail-composer/index.js")).default;
+  const mailOpts = {
+    from, to: r.to, subject: r.subject, text: r.text, html: r.html,
+    inReplyTo: r.inReplyTo, references: r.references,
+    ...(replyTo ? { replyTo } : {}),
+    headers: { "X-ZimQuote-Mail": "reply" }
+  };
+  const raw = await new MailComposer(mailOpts).compile().build();
+  try {
+    await t.sendMail({ envelope: { from: from.match(/<([^>]+)>/)?.[1] || from, to: [r.to] }, raw });
+  } catch (e) {
+    await MailMessage.updateOne({ _id: msg._id }, { $push: { replies: { text: body, by: byPhone, sentAt: new Date(), via, ok: false, error: e.message } } });
+    throw e;
+  }
+  await MailMessage.updateOne({ _id: msg._id }, { $set: { status: "replied" }, $push: { replies: { text: body, by: byPhone, sentAt: new Date(), via, ok: true } } });
+  await MailAccount.updateOne({ _id: acc._id }, { $inc: { replyCount: 1 } });
+  // Put a copy in their Sent folder (Gmail already does this itself)
+  if (via === "own" && acc.provider !== "google") appendToSent(acc, raw).catch(e => console.warn("[MAIL SENT COPY]", e.message));
+  return { to: r.to, via };
+}
+
+async function appendToSent(acc, raw) {
+  const { ImapFlow } = await import("imapflow");
+  const c = new ImapFlow({ host: acc.imap.host, port: acc.imap.port || 993, secure: acc.imap.secure !== false, auth: { user: acc.imap.user || acc.email, pass: decryptSecret(acc.imap.passEnc) }, logger: false });
+  await c.connect();
+  try {
+    const boxes = await c.list();
+    const sent = boxes.find(b => b.specialUse === "\\Sent") || boxes.find(b => /^(inbox\.)?sent( items| messages)?$/i.test(b.path));
+    if (sent) await c.append(sent.path, raw, ["\\Seen"]);
+  } finally { await c.logout().catch(() => {}); }
+}
+
+async function polish(text, msg, acc) {
+  const key = process.env.OPENAI_API_KEY;
+  if (!key) return null;
+  try {
+    const r = await axios.post("https://api.openai.com/v1/chat/completions", {
+      model: process.env.MAIL_AI_MODEL || "gpt-4o-mini", temperature: 0.3, max_tokens: 400,
+      messages: [
+        { role: "system", content: "Rewrite the business owner's short WhatsApp note as a clear, polite, professional email reply. Keep every fact, price, quantity and date exactly as given. Do not invent anything. No subject line, no signature, no placeholders. British English. Keep it short." },
+        { role: "user", content: `Email we are replying to (from ${msg.fromName}):\n${String(msg.text || "").slice(0, 1500)}\n\nOwner's note:\n${text}` }
+      ]
+    }, { headers: { Authorization: `Bearer ${key}` }, timeout: 15000 });
+    return String(r.data?.choices?.[0]?.message?.content || "").trim() || null;
+  } catch (e) { console.warn("[MAIL POLISH]", e.message); return null; }
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// IMAP POLLER (accounts connected with a password)
+// ═════════════════════════════════════════════════════════════════════════════
+const _imapBusy = new Set();
+
+export async function testImap({ host, port, secure, user, pass }) {
+  const { ImapFlow } = await import("imapflow");
+  const c = new ImapFlow({ host, port, secure, auth: { user, pass }, logger: false, socketTimeout: 20000 });
+  await c.connect();
+  const lock = await c.getMailboxLock("INBOX");
+  let uidNext = 1, uidValidity = "";
+  try { uidNext = c.mailbox.uidNext || 1; uidValidity = String(c.mailbox.uidValidity || ""); }
+  finally { lock.release(); await c.logout().catch(() => {}); }
+  return { uidNext, uidValidity };
+}
+export async function testSmtp({ host, port, secure, user, pass }) {
+  const nodemailer = (await import("nodemailer")).default;
+  const t = nodemailer.createTransport({ host, port, secure, auth: { user, pass }, connectionTimeout: 15000 });
+  await t.verify();
+}
+
+export async function pollImapAccount(acc) {
+  const id = String(acc._id);
+  if (_imapBusy.has(id)) return;
+  _imapBusy.add(id);
+  const { ImapFlow } = await import("imapflow");
+  const c = new ImapFlow({ host: acc.imap.host, port: acc.imap.port || 993, secure: acc.imap.secure !== false, auth: { user: acc.imap.user || acc.email, pass: decryptSecret(acc.imap.passEnc) }, logger: false, socketTimeout: 30000 });
+  try {
+    await c.connect();
+    const lock = await c.getMailboxLock("INBOX");
+    try {
+      const uv = String(c.mailbox.uidValidity || "");
+      let last = acc.imap.lastUid || 0;
+      if (!last || (acc.imap.uidValidity && uv !== acc.imap.uidValidity)) {
+        last = Math.max(0, (c.mailbox.uidNext || 1) - 1);       // start from "now", never flood old mail
+        await MailAccount.updateOne({ _id: acc._id }, { $set: { "imap.lastUid": last, "imap.uidValidity": uv } });
+      } else {
+        let maxUid = last, n = 0;
+        for await (const m of c.fetch(`${last + 1}:*`, { uid: true, source: true }, { uid: true })) {
+          if (m.uid <= last) continue;
+          maxUid = Math.max(maxUid, m.uid);
+          if (++n > 25) break;
+          try { await ingestRaw(m.source, { account: acc }); } catch (e) { console.error("[MAIL IMAP INGEST]", e.message); }
+        }
+        await MailAccount.updateOne({ _id: acc._id }, { $set: { "imap.lastUid": maxUid, "imap.lastCheckedAt": new Date(), "imap.lastError": "", ...(acc.status === "error" ? { status: "live" } : {}) } });
+      }
+    } finally { lock.release(); }
+  } catch (e) {
+    const msg = e?.responseText || e.message || "connection failed";
+    const wasOk = acc.status !== "error";
+    await MailAccount.updateOne({ _id: acc._id }, { $set: { "imap.lastError": msg, "imap.lastCheckedAt": new Date(), ...(e.authenticationFailed ? { status: "error" } : {}) } });
+    if (e.authenticationFailed && wasOk) {
+      await notifyOwner(acc, `⚠️ *We can't open ${acc.email}*\n\nThe email password was refused (maybe it was changed). Tap below to connect again.`,
+        [{ id: `mail_reconnect_${acc._id}`, title: "🔑 Reconnect" }]).catch(() => {});
+    }
+  } finally {
+    await c.logout().catch(() => {});
+    _imapBusy.delete(id);
+  }
+}
+
+let _pollerStarted = false;
+export function startMailPoller() {
+  if (_pollerStarted) return; _pollerStarted = true;
+  const tick = async () => {
+    if (mongoose.connection.readyState !== 1) return;
+    try {
+      const accs = await MailAccount.find({ mode: "imap", status: { $in: ["live", "error"] }, "imap.passEnc": { $exists: true, $ne: "" } }).lean();
+      const due = accs.filter(isActive);
+      for (let i = 0; i < due.length; i += 4) await Promise.allSettled(due.slice(i, i + 4).map(pollImapAccount));
+    } catch (e) { console.error("[MAIL POLLER]", e.message); }
+  };
+  setInterval(tick, MAIL_CONFIG.POLL_MS);
+  setTimeout(tick, 20000);
+  setInterval(sendPlanReminders, 6 * 3600000);
+  console.log("[MAIL] poller started (every 90s)");
+}
+
+async function sendPlanReminders() {
+  try {
+    const soon = daysFromNow(3), now = new Date(), since = new Date(Date.now() - 20 * 3600000);
+    const accs = await MailAccount.find({
+      $or: [{ paidUntil: { $gt: now, $lt: soon } }, { paidUntil: null, trialEndsAt: { $gt: new Date(Date.now() - 86400000), $lt: soon } }],
+      $and: [{ $or: [{ lastReminderAt: null }, { lastReminderAt: { $lt: since } }] }]
+    }).setOptions({ strictQuery: false }).lean();
+    for (const a of accs) {
+      const end = a.paidUntil || a.trialEndsAt;
+      const ended = new Date(end) < now;
+      await sendButtons(a.ownerPhone, {
+        text: `📧 *ZimQuote Mail - ${a.email}*\n\n${ended ? "Your free trial has ended." : `Your ${a.paidUntil ? "plan" : "free trial"} ends on *${fmtDate(end)}*.`}\n\nKeep getting your emails on WhatsApp for *$${MAIL_CONFIG.PRICE}/year*.`,
+        buttons: [{ id: `mail_pay_${a._id}`, title: "💳 Pay with EcoCash" }]
+      }).catch(() => {});
+      await MailAccount.updateOne({ _id: a._id }, { $set: { lastReminderAt: new Date() } });
+    }
+  } catch (e) { console.error("[MAIL REMIND]", e.message); }
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// PAYMENTS (EcoCash via Paynow, annual)
+// ═════════════════════════════════════════════════════════════════════════════
+async function startPayment(from, acc, ecocash) {
+  const paynow = (await import("./paynow.js")).default;
+  const reference = `MAIL_${acc._id}_${Date.now()}`;
+  const payment = paynow.createPayment(reference, process.env.PAYNOW_AUTH_EMAIL || "bmusasa99@gmail.com");
+  payment.currency = "USD";
+  payment.add(`ZimQuote Mail - ${acc.email} (1 year)`, MAIL_CONFIG.PRICE);
+  const response = await paynow.sendMobile(payment, ecocash, "ecocash");
+  if (!response?.success || !response.pollUrl) throw new Error(response?.error || "EcoCash did not start");
+  await MailAccount.updateOne({ _id: acc._id }, { $push: { payments: { reference, plan: "starter", amount: MAIL_CONFIG.PRICE, ecocashPhone: ecocash, pollUrl: response.pollUrl, status: "pending" } } });
+  await sendText(from, `💳 *Payment request sent*\n\nAmount: *$${MAIL_CONFIG.PRICE} USD* (1 year)\nEcoCash: *${ecocash}*\n\n👉 Check your phone and approve the EcoCash prompt. We'll confirm here.`);
+
+  let tries = 0;
+  const iv = setInterval(async () => {
+    tries++;
+    try {
+      const st = await paynow.pollTransaction(response.pollUrl);
+      const s = String(st?.status || "").toLowerCase();
+      if (s === "paid") {
+        clearInterval(iv);
+        await activatePaid(acc._id, reference, from);
+      } else if (["cancelled", "failed"].includes(s) || tries >= 24) {
+        clearInterval(iv);
+        await MailAccount.updateOne({ _id: acc._id, "payments.reference": reference }, { $set: { "payments.$.status": "failed" } });
+        await sendButtons(from, { text: "❌ The EcoCash payment was not completed.", buttons: [{ id: `mail_pay_${acc._id}`, title: "🔁 Try again" }] }).catch(() => {});
+      }
+    } catch (e) { if (tries >= 24) clearInterval(iv); }
+  }, 10000);
+}
+
+export async function activatePaid(accountId, reference = "", notifyPhone = null, days = 365) {
+  const acc = await MailAccount.findById(accountId);
+  if (!acc) return null;
+  const base = acc.paidUntil && acc.paidUntil > new Date() ? acc.paidUntil : (acc.trialEndsAt && acc.trialEndsAt > new Date() ? acc.trialEndsAt : new Date());
+  acc.paidUntil = new Date(new Date(base).getTime() + days * 86400000);
+  acc.plan = "starter";
+  if (reference) {
+    const p = acc.payments.find(x => x.reference === reference);
+    if (p) { p.status = "paid"; p.paidAt = new Date(); }
+  }
+  if (acc.status === "paused") acc.status = acc.firstMailAt ? "live" : "setup";
+  await acc.save();
+  const to = notifyPhone || acc.ownerPhone;
+  await sendButtons(to, {
+    text: `✅ *Payment received - thank you!*\n\n📧 ${acc.email}\nZimQuote Mail is active until *${fmtDate(acc.paidUntil)}*.`,
+    buttons: [{ id: "mail_menu", title: "📧 My Mail" }]
+  }).catch(() => {});
+  return acc;
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// WHATSAPP FLOW
+// ═════════════════════════════════════════════════════════════════════════════
+const ENTRY_WORDS = /^(zq:mail|mail|my mail|email|emails|my email|inbox|zimquote mail)$/i;
+
+async function accountsOf(phone) {
+  return MailAccount.find({ $or: [{ ownerPhone: phone }, { alertPhones: phone }] }).sort({ createdAt: 1 });
+}
+async function canUse(phone, acc) {
+  return acc && (acc.ownerPhone === phone || (acc.alertPhones || []).includes(phone));
+}
+async function loadMsg(phone, id) {
+  if (!mongoose.isValidObjectId(id)) return {};
+  const msg = await MailMessage.findById(id);
+  if (!msg) return {};
+  const acc = await MailAccount.findById(msg.accountId);
+  if (!(await canUse(phone, acc))) return {};
+  return { msg, acc };
+}
+
+async function sendIntro(from) {
+  return sendButtons(from, {
+    text:
+      `📧 *ZimQuote Mail - your email on WhatsApp*\n\n` +
+      `Never miss an order, quote request or payment email again.\n\n` +
+      `✅ Every new email arrives here with a short summary\n` +
+      `↩️ Reply from WhatsApp - we send it as a proper email\n` +
+      `✨ Type a quick note, we can turn it into a polished reply\n` +
+      `👥 Your staff can get the alerts too\n` +
+      `📰 Newsletters and spam stay quiet\n\n` +
+      `Works with Gmail, Outlook and company email (yourname@yourcompany.co.zw).\n` +
+      `🎁 *${MAIL_CONFIG.TRIAL_DAYS} days free*, then *$${MAIL_CONFIG.PRICE}/year*.`,
+    buttons: [{ id: "mail_setup", title: "📧 Connect my email" }, { id: "main_menu_back", title: "🏠 Main Menu" }]
+  });
+}
+
+async function sendMailMenu(from) {
+  const accs = await accountsOf(from);
+  if (!accs.length) return sendIntro(from);
+  if (accs.length === 1) return sendAccountMenu(from, accs[0]);
+  const rows = accs.slice(0, 8).map(a => ({ id: `mail_acc_${a._id}`, title: clip(a.email, 24), description: clip(`${statusWord(a)} · ${planLine(a)}`, 72) }));
+  if (accs.filter(a => a.ownerPhone === from).length < MAIL_CONFIG.INBOX_MAX) rows.push({ id: "mail_setup", title: "➕ Add another email", description: "Connect one more inbox" });
+  return sendList(from, "📧 *ZimQuote Mail*\n\nChoose an inbox:", rows);
+}
+function statusWord(a) {
+  if (a.status === "paused") return "⏸ Paused";
+  if (a.status === "error") return "⚠️ Needs reconnecting";
+  if (a.status === "setup") return "🛠 Waiting for first email";
+  return "🟢 Live";
+}
+
+async function sendAccountMenu(from, acc) {
+  const isOwner = acc.ownerPhone === from;
+  const unread = await MailMessage.countDocuments({ accountId: acc._id, status: "new", muted: false });
+  const text =
+    `📧 *${acc.email}*\n${statusWord(acc)}\n${planLine(acc)}\n\n` +
+    `📬 ${acc.mailCount || 0} emails · ↩️ ${acc.replyCount || 0} replies · 🔔 ${unread} open\n` +
+    `Connected by: ${acc.mode === "imap" ? "email login (replies from your own address)" : "forwarding"}`;
+  const rows = [
+    { id: `mail_inbox_${acc._id}`, title: "📬 Latest emails", description: "Read and reply to recent emails" }
+  ];
+  if (acc.status === "setup" || acc.status === "error") rows.push({ id: `mail_guide_${acc._id}`, title: "🛠 Finish setup", description: "Steps to connect this inbox" });
+  if (isOwner) {
+    rows.push(
+      { id: `mail_alerts_${acc._id}`, title: acc.alertMode === "all" ? "🔔 Alerts: all emails" : "🔔 Alerts: important", description: "Tap to switch between all and important only" },
+      { id: `mail_team_${acc._id}`, title: "👥 Team alerts", description: `Staff numbers that also get alerts (${(acc.alertPhones || []).length}/${MAIL_CONFIG.TEAM_MAX})` },
+      { id: `mail_sig_${acc._id}`, title: "✍️ Email signature", description: acc.signature ? clip(acc.signature, 60) : "Added to the end of your replies" },
+      { id: `mail_name_${acc._id}`, title: "🏷 Sender name", description: acc.displayName ? clip(acc.displayName, 60) : "Name people see on your replies" },
+      { id: `mail_pay_${acc._id}`, title: "💳 Plan & payment", description: clip(planLine(acc).replace(/^[^\s]+\s/, ""), 72) },
+      { id: `mail_pause_${acc._id}`, title: acc.status === "paused" ? "▶️ Resume alerts" : "⏸ Pause alerts", description: "Stop or restart WhatsApp alerts" }
+    );
+    if (acc.mode === "forward" && canStorePasswords() && !["google", "microsoft"].includes(acc.provider)) rows.push({ id: `mail_reconnect_${acc._id}`, title: "🔑 Use email login", description: "Reply from your own address instead of via ZimQuote" });
+  }
+  rows.push({ id: "mail_setup", title: "➕ Add another email", description: "Connect one more inbox" });
+  return sendList(from, text, rows.slice(0, 10));
+}
+
+async function sendInbox(from, acc) {
+  const msgs = await MailMessage.find({ accountId: acc._id, muted: false }).sort({ receivedAt: -1 }).limit(9).lean();
+  const muted = await MailMessage.countDocuments({ accountId: acc._id, muted: true, receivedAt: { $gt: new Date(Date.now() - 7 * 86400000) } });
+  if (!msgs.length) {
+    return sendButtons(from, { text: `📭 No emails yet for *${acc.email}*.${acc.status === "setup" ? "\n\nSend a test email to this address from another email to check that it works." : ""}`, buttons: [{ id: `mail_acc_${acc._id}`, title: "⬅ Back" }] });
+  }
+  const rows = msgs.map(m => ({
+    id: `mail_open_${m._id}`,
+    title: clip(`${m.status === "new" ? "🔵" : m.status === "replied" ? "↩️" : "✅"} ${m.fromName}`, 24),
+    description: clip(`${m.subject} - ${m.summary}`, 72)
+  }));
+  rows.push({ id: `mail_acc_${acc._id}`, title: "⬅ Back", description: acc.email });
+  return sendList(from, `📬 *Latest emails - ${acc.email}*\n🔵 open · ↩️ replied · ✅ done${muted ? `\n📰 ${muted} newsletters this week kept quiet` : ""}`, rows);
+}
+
+async function sendFullEmail(from, msg, acc) {
+  const head = `📄 *${clip(msg.subject, 150)}*\nFrom: ${msg.fromName} <${msg.fromEmail}>\nTo: ${clip(msg.to || acc.email, 150)}${msg.cc ? `\nCc: ${clip(msg.cc, 150)}` : ""}\nDate: ${new Date(msg.receivedAt).toLocaleString("en-GB", { timeZone: "Africa/Harare" })}\n\n`;
+  let body = msg.text || "(no text)";
+  const LIM = 3600;
+  if ((head + body).length <= LIM) await sendText(from, head + body);
+  else {
+    await sendText(from, head + body.slice(0, LIM - head.length));
+    const rest = body.slice(LIM - head.length);
+    await sendText(from, rest.length > LIM ? rest.slice(0, LIM - 40) + "\n\n…(email shortened)" : rest);
+  }
+  for (const a of (msg.attachments || []).slice(0, 5)) {
+    const link = `${MAIL_CONFIG.SITE}/mail/att/${a.id}?t=${attToken(a.id)}`;
+    await sendDocument(from, { link, filename: a.filename || "attachment" }).catch(() => sendText(from, `📎 ${a.filename}: ${link}`));
+  }
+  return sendButtons(from, {
+    text: `Ref ${msg.ref} · ${msg.status === "replied" ? "↩️ replied" : msg.status === "done" ? "✅ done" : "🔵 open"}`,
+    buttons: [{ id: `mail_reply_${msg._id}`, title: "↩️ Reply" }, { id: `mail_done_${msg._id}`, title: "✅ Done" }, { id: `mail_inbox_${acc._id}`, title: "📬 Inbox" }]
+  });
+}
+
+async function startReply(from, msg) {
+  await setState(from, "reply", { msgId: String(msg._id) });
+  const to = msg.replyTo || msg.fromEmail;
+  return sendList(from,
+    `↩️ *Reply to ${clip(msg.fromName, 50)}*\n${to}\nRe: ${clip(msg.subject, 80)}\n\n✍️ *Type your reply now* (a short note is fine - you can tap ✨ Polish before sending),\nor pick a quick answer below.`,
+    [
+      ...Object.entries(QUICK_ANSWERS).map(([k, q]) => ({ id: `mail_quick_${k}_${msg._id}`, title: q.title, description: clip(q.text, 72) })),
+      { id: "mail_cancel", title: "❌ Cancel", description: "Don't reply now" }
+    ]);
+}
+
+async function showPreview(from, msg, text, { polished = false, original = "" } = {}) {
+  await setState(from, "confirm", { msgId: String(msg._id), text, original: original || text, polished });
+  const to = msg.replyTo || msg.fromEmail;
+  const buttons = [{ id: `mail_send_${msg._id}`, title: "✅ Send" }];
+  buttons.push(polished ? { id: `mail_mine_${msg._id}`, title: "↩️ Use my words" } : { id: `mail_polish_${msg._id}`, title: "✨ Polish it" });
+  buttons.push({ id: "mail_cancel", title: "❌ Cancel" });
+  const head = `📤 *Send this email?*\nTo: ${to}\nSubject: Re: ${clip(String(msg.subject || "").replace(/^re:\s*/i, ""), 80)}\n\n`;
+  const tail = `${polished ? "\n\n✨ _Polished by ZimQuote_" : ""}\n\n_To change it, just type a new reply._`;
+  if ((head + text + tail).length <= 1000) return sendButtons(from, { text: head + text + tail, buttons });
+  await sendText(from, head + String(text).slice(0, 3800));          // WhatsApp button text is limited to 1024 characters
+  return sendButtons(from, { text: `☝️ That's your full reply.${tail}`, buttons });
+}
+
+async function setupAsk(from) {
+  await setState(from, "setup_email", {});
+  return sendText(from, `📧 *Connect your email*\n\nType the email address you want on WhatsApp.\n\n_Example: sales@yourcompany.co.zw or yourname@gmail.com_\n\nType *cancel* to stop.`);
+}
+
+async function createAccount(from, email) {
+  email = email.toLowerCase().trim();
+  const existing = await MailAccount.findOne({ ownerPhone: from, email });
+  if (existing) return existing;
+  const count = await MailAccount.countDocuments({ ownerPhone: from });
+  if (count >= MAIL_CONFIG.INBOX_MAX) throw new Error(`You can connect up to ${MAIL_CONFIG.INBOX_MAX} inboxes.`);
+  const { provider } = await detectProvider(email);
+  let slug = "";
+  for (let i = 0; i < 5; i++) { slug = randSlug(); if (!(await MailAccount.exists({ slug }))) break; }
+  const acc = await MailAccount.create({
+    ownerPhone: from, email, provider, slug, mode: "forward", status: "setup",
+    trialEndsAt: daysFromNow(MAIL_CONFIG.TRIAL_DAYS)
+  });
+  _mailPhones.at = 0;
+  return acc;
+}
+
+export async function sendSetupGuide(from, acc) {
+  const fwd = forwardAddress(acc);
+  const guide = guideUrl(acc);
+  if (acc.provider === "google") {
+    await sendText(from,
+      `📧 *Gmail: 2 minutes, on a computer or phone browser*\n\n` +
+      `1️⃣ Open Gmail → ⚙️ *Settings* → *See all settings*\n` +
+      `2️⃣ Tab *Forwarding and POP/IMAP* → *Add a forwarding address*\n` +
+      `3️⃣ Paste this address:\n*${fwd}*\n` +
+      `4️⃣ Gmail sends a code - *we'll send it to you here*. Paste it and tap *Verify*.\n` +
+      `5️⃣ Choose *Forward a copy of incoming mail*, keep Gmail's copy, then *Save Changes*.\n\n` +
+      `📖 Step-by-step with pictures: ${guide}`);
+  } else if (acc.provider === "microsoft") {
+    await sendText(from,
+      `📧 *Outlook / Hotmail / Microsoft 365*\n\n` +
+      `1️⃣ Open outlook.com (or Outlook on the web) → ⚙️ *Settings* → *Mail* → *Forwarding*\n` +
+      `2️⃣ Tick *Enable forwarding* and paste:\n*${fwd}*\n` +
+      `3️⃣ Tick *Keep a copy of forwarded messages* → *Save*\n\n` +
+      `_Company Microsoft 365 email: if forwarding is blocked, ask whoever manages your email to allow forwarding to this address._\n\n` +
+      `📖 Step-by-step: ${guide}`);
+  } else {
+    const canPw = canStorePasswords();
+    if (canPw) {
+      const token = crypto.randomBytes(16).toString("hex");
+      await MailAccount.updateOne({ _id: acc._id }, { $set: { connectToken: token, connectTokenExp: daysFromNow(2) } });
+      await sendText(from,
+        `📧 *Company email (${acc.email.split("@")[1]})*\n\n` +
+        `*Easiest way:* open this secure page and type your email password. We check it and connect you in seconds.\n` +
+        `🔒 ${MAIL_CONFIG.SITE}/mail/connect/${token}\n` +
+        `_Your password is encrypted and only used to read new mail and send your replies from your own address. Never send your password here on WhatsApp._\n\n` +
+        `*Or* forward your mail instead (cPanel → *Forwarders* → *Add Forwarder*) to:\n*${fwd}*\n\n` +
+        `📖 Help: ${guide}`);
+    } else {
+      await sendText(from,
+        `📧 *Company email (${acc.email.split("@")[1]})*\n\n` +
+        `Forward your mail to this address:\n*${fwd}*\n\n` +
+        `cPanel: *Email* → *Forwarders* → *Add Forwarder* → address *${acc.email.split("@")[0]}* → *Forward to Email Address* → paste the address above.\n\n` +
+        `📖 Step-by-step: ${guide}`);
+    }
+  }
+  return sendButtons(from, {
+    text: `When you're done, *send a test email to ${acc.email}* from any other email address. It will pop up here within a minute.\n\nStuck? WhatsApp our team on ${process.env.MAIL_SUPPORT_PHONE || "+263 78 990 1058"} and we'll set it up for you.`,
+    buttons: [{ id: `mail_fwd_${acc._id}`, title: "📋 Copy address" }, { id: `mail_acc_${acc._id}`, title: "📧 My Mail" }]
+  });
+}
+
+/**
+ * Called from chatbotEngine.js for every inbound message (top-level hook).
+ * @returns {Promise<boolean>} true when the message was handled here
+ */
+export async function handleMailMessage({ from, text = "", rawText = "", action = "", biz = null }) {
+  const phone = normPhone(from);
+  const a = String(action || "").toLowerCase();
+  const typed = String(rawText || text || "").trim();
+  markSeen(phone);
+
+  try {
+    // ── Button / list taps ────────────────────────────────────────────────
+    if (a.startsWith("mail_")) {
+      if (a === "mail_menu") { await clearState(phone); await sendMailMenu(phone); return true; }
+      if (a === "mail_setup") { await setupAsk(phone); return true; }
+      if (a === "mail_cancel") { await clearState(phone); await sendButtons(phone, { text: "👍 Cancelled.", buttons: [{ id: "mail_menu", title: "📧 My Mail" }] }); return true; }
+
+      let m;
+      if ((m = a.match(/^mail_quick_(q\d)_([a-f0-9]{24})$/))) {
+        const { msg } = await loadMsg(phone, m[2]); if (!msg) return notFound(phone);
+        await showPreview(phone, msg, QUICK_ANSWERS[m[1]]?.text || ""); return true;
+      }
+      if ((m = a.match(/^mail_(reply|open|done|send|polish|mine)_([a-f0-9]{24})$/))) {
+        const [, verb, id] = m;
+        const { msg, acc } = await loadMsg(phone, id);
+        if (!msg) return notFound(phone);
+        if (!isActive(acc) && verb !== "done") {
+          await sendButtons(phone, { text: `⛔ ZimQuote Mail for *${acc.email}* has ended.\nRenew for *$${MAIL_CONFIG.PRICE}/year* to read and reply.`, buttons: [{ id: `mail_pay_${acc._id}`, title: "💳 Renew now" }] });
+          return true;
+        }
+        if (verb === "reply") { await startReply(phone, msg); return true; }
+        if (verb === "open") { await sendFullEmail(phone, msg, acc); return true; }
+        if (verb === "done") {
+          await MailMessage.updateOne({ _id: msg._id }, { $set: { status: "done" } });
+          await sendButtons(phone, { text: `✅ Marked done: ${clip(msg.subject, 80)}`, buttons: [{ id: `mail_inbox_${acc._id}`, title: "📬 Inbox" }] });
+          return true;
+        }
+        const s = await getSess(phone);
+        const draft = s.state === "confirm" && s.data.msgId === id ? s.data : null;
+        if (!draft) { await startReply(phone, msg); return true; }
+        if (verb === "polish") {
+          await sendText(phone, "✨ Polishing your reply…");
+          const p = await polish(draft.original || draft.text, msg, acc);
+          if (!p) { await sendText(phone, "Sorry, polishing isn't available right now. You can send your own words."); await showPreview(phone, msg, draft.text); return true; }
+          await showPreview(phone, msg, p, { polished: true, original: draft.original || draft.text }); return true;
+        }
+        if (verb === "mine") { await showPreview(phone, msg, draft.original || draft.text); return true; }
+        if (verb === "send") {
+          await clearState(phone);
+          try {
+            const r = await sendReply(acc, msg, draft.text, phone);
+            await sendButtons(phone, {
+              text: `✅ *Email sent* to ${r.to}${r.via === "zimquote" ? `\n_Sent via ZimQuote; their replies go to ${acc.email}._` : ""}`,
+              buttons: [{ id: `mail_inbox_${acc._id}`, title: "📬 Inbox" }, { id: "mail_menu", title: "📧 My Mail" }]
+            });
+          } catch (e) {
+            await sendButtons(phone, { text: `❌ The email could not be sent.\n${clip(e.message, 200)}\n\nYour reply was not lost - tap below to try again.`, buttons: [{ id: `mail_reply_${msg._id}`, title: "🔁 Try again" }] });
+          }
+          return true;
+        }
+      }
+
+      if ((m = a.match(/^mail_(acc|inbox|guide|fwd|alerts|team|sig|name|pay|pause|reconnect|teamdel)_([a-f0-9]{24})(?:_(\d+))?$/))) {
+        const [, verb, id, extra] = m;
+        const acc = mongoose.isValidObjectId(id) ? await MailAccount.findById(id) : null;
+        if (!(await canUse(phone, acc))) return notFound(phone);
+        const owner = acc.ownerPhone === phone;
+        switch (verb) {
+          case "acc": await clearState(phone); await sendAccountMenu(phone, acc); return true;
+          case "inbox": await sendInbox(phone, acc); return true;
+          case "guide": await sendSetupGuide(phone, acc); return true;
+          case "fwd": await sendText(phone, forwardAddress(acc)); return true;
+        }
+        if (!owner) { await sendText(phone, "Only the owner of this inbox can change its settings."); return true; }
+        switch (verb) {
+          case "alerts":
+            acc.alertMode = acc.alertMode === "all" ? "important" : "all"; await acc.save();
+            await sendButtons(phone, { text: acc.alertMode === "all" ? "🔔 You'll get an alert for *every* email (newsletters stay quiet)." : "🔔 You'll only get alerts for *important* emails: orders, quotes, payments, tenders and complaints. Everything else is in 📬 Latest emails.", buttons: [{ id: `mail_acc_${acc._id}`, title: "📧 My Mail" }] });
+            return true;
+          case "team": {
+            const list = (acc.alertPhones || []).map((p, i) => `${i + 1}. +${p}`).join("\n") || "No staff numbers yet.";
+            await setState(phone, "team_add", { accId: id });
+            const btns = (acc.alertPhones || []).slice(0, 2).map((p, i) => ({ id: `mail_teamdel_${id}_${i}`, title: clip(`🗑 Remove ${p.slice(-4)}`, 20) }));
+            btns.push({ id: `mail_acc_${id}`, title: "⬅ Back" });
+            await sendButtons(phone, { text: `👥 *Team alerts - ${acc.email}*\n\n${list}\n\nTo add someone, *type their WhatsApp number* (e.g. 0772123456). Up to ${MAIL_CONFIG.TEAM_MAX}.`, buttons: btns });
+            return true;
+          }
+          case "teamdel": {
+            const i = Number(extra);
+            acc.alertPhones = (acc.alertPhones || []).filter((_, k) => k !== i); await acc.save(); _mailPhones.at = 0;
+            await clearState(phone);
+            await sendButtons(phone, { text: "🗑 Removed.", buttons: [{ id: `mail_team_${id}`, title: "👥 Team alerts" }] });
+            return true;
+          }
+          case "sig": await setState(phone, "sig", { accId: id }); await sendText(phone, `✍️ Type the signature to add under your replies, e.g.\n\nTidings Moyo\nSales Manager, Acme (Pvt) Ltd\n+263 77 123 4567\n\nType *none* to remove it.`); return true;
+          case "name": await setState(phone, "name", { accId: id }); await sendText(phone, `🏷 Type the name people should see when you reply, e.g. *Acme Hardware* or *Tidings - Acme Hardware*.`); return true;
+          case "pause":
+            acc.status = acc.status === "paused" ? (acc.firstMailAt ? "live" : "setup") : "paused"; await acc.save();
+            await sendButtons(phone, { text: acc.status === "paused" ? "⏸ Alerts paused. Emails are still saved." : "▶️ Alerts are back on.", buttons: [{ id: `mail_acc_${id}`, title: "📧 My Mail" }] });
+            return true;
+          case "pay":
+            await setState(phone, "pay", { accId: id });
+            await sendButtons(phone, {
+              text: `💳 *ZimQuote Mail - ${acc.email}*\n${planLine(acc)}\n\n*$${MAIL_CONFIG.PRICE} for 1 year* (paid once, no monthly fees).\n\nType the *EcoCash number* to pay from, or tap *Use this number*.`,
+              buttons: [{ id: `mail_paysame_${id}`, title: "📱 Use this number" }, { id: `mail_acc_${id}`, title: "⬅ Back" }]
+            });
+            return true;
+          case "reconnect": {
+            if (!canStorePasswords()) { await sendSetupGuide(phone, acc); return true; }
+            const token = crypto.randomBytes(16).toString("hex");
+            await MailAccount.updateOne({ _id: acc._id }, { $set: { connectToken: token, connectTokenExp: daysFromNow(2) } });
+            await sendText(phone, `🔑 Open this secure page to connect *${acc.email}* with your email password:\n${MAIL_CONFIG.SITE}/mail/connect/${token}\n\n_Never send your password on WhatsApp._`);
+            return true;
+          }
+        }
+      }
+      if ((m = a.match(/^mail_paysame_([a-f0-9]{24})$/))) {
+        const acc = await MailAccount.findById(m[1]);
+        if (!(await canUse(phone, acc))) return notFound(phone);
+        await clearState(phone);
+        try { await startPayment(phone, acc, "0" + phone.slice(3)); }
+        catch (e) { await sendButtons(phone, { text: `❌ ${clip(e.message, 160)}`, buttons: [{ id: `mail_pay_${acc._id}`, title: "🔁 Try again" }] }); }
+        return true;
+      }
+      // Unknown mail_ tap: show menu rather than falling through
+      await sendMailMenu(phone);
+      return true;
+    }
+
+    // ── Entry words / deep link ───────────────────────────────────────────
+    const s = await getSess(phone);
+    if (!s.state) {
+      const bizBusy = biz && biz.sessionState && !["ready", "main_menu", ""].includes(biz.sessionState);
+      if (!a && !bizBusy && ENTRY_WORDS.test(typed)) { await sendMailMenu(phone); return true; }
+      return false;
+    }
+
+    // ── Typed text inside a mail flow ─────────────────────────────────────
+    if (a) { await clearState(phone); return false; }   // they tapped something else: leave the mail flow
+    if (!typed) return false;
+    if (/^(cancel|stop|exit)$/i.test(typed)) { await clearState(phone); await sendButtons(phone, { text: "👍 Cancelled.", buttons: [{ id: "mail_menu", title: "📧 My Mail" }] }); return true; }
+    if (/^(menu|main menu|home)$/i.test(typed)) { await clearState(phone); return false; }
+
+    switch (s.state) {
+      case "setup_email": {
+        const email = typed.replace(/^mailto:/i, "").toLowerCase();
+        if (!isEmail(email)) { await sendText(phone, "❌ That doesn't look like an email address. Try again, e.g. *sales@yourcompany.co.zw*, or type *cancel*."); return true; }
+        if (email.endsWith("@" + MAIL_CONFIG.INBOUND_DOMAIN)) { await sendText(phone, "That's a ZimQuote address. Type *your own* email address."); return true; }
+        await clearState(phone);
+        let acc;
+        try { acc = await createAccount(phone, email); }
+        catch (e) { await sendText(phone, `❌ ${e.message}`); return true; }
+        if (biz?.name && !acc.displayName) { acc.displayName = biz.name; await acc.save(); }
+        await sendText(phone, `✅ *${email}* added. 🎁 Free until *${fmtDate(acc.trialEndsAt)}*.\n\nOne quick step to connect it 👇`);
+        await sendSetupGuide(phone, acc);
+        return true;
+      }
+      case "reply": {
+        const { msg } = await loadMsg(phone, s.data.msgId);
+        if (!msg) { await clearState(phone); return notFound(phone); }
+        if (typed.length < 2) { await sendText(phone, "Type your reply, or *cancel*."); return true; }
+        await showPreview(phone, msg, typed);
+        return true;
+      }
+      case "confirm": {           // they typed a new version instead of tapping Send
+        const { msg } = await loadMsg(phone, s.data.msgId);
+        if (!msg) { await clearState(phone); return notFound(phone); }
+        await showPreview(phone, msg, typed);
+        return true;
+      }
+      case "team_add": {
+        const acc = await MailAccount.findById(s.data.accId);
+        if (!acc || acc.ownerPhone !== phone) { await clearState(phone); return notFound(phone); }
+        const p = normPhone(typed);
+        if (!/^\d{11,15}$/.test(p)) { await sendText(phone, "❌ Type a WhatsApp number like *0772123456*, or *cancel*."); return true; }
+        if ((acc.alertPhones || []).length >= MAIL_CONFIG.TEAM_MAX) { await clearState(phone); await sendText(phone, `You already have ${MAIL_CONFIG.TEAM_MAX} staff numbers. Remove one first.`); return true; }
+        if (p !== acc.ownerPhone && !(acc.alertPhones || []).includes(p)) { acc.alertPhones.push(p); await acc.save(); _mailPhones.at = 0; }
+        await clearState(phone);
+        await sendButtons(phone, { text: `✅ +${p} will now get email alerts for ${acc.email} and can reply.\n\n_Ask them to send "hi" to this WhatsApp number once, so alerts can reach them._`, buttons: [{ id: `mail_team_${acc._id}`, title: "👥 Team alerts" }, { id: `mail_acc_${acc._id}`, title: "📧 My Mail" }] });
+        return true;
+      }
+      case "sig": case "name": {
+        const acc = await MailAccount.findById(s.data.accId);
+        if (!acc || acc.ownerPhone !== phone) { await clearState(phone); return notFound(phone); }
+        const val = /^none$/i.test(typed) ? "" : typed.slice(0, s.state === "sig" ? 500 : 80);
+        if (s.state === "sig") acc.signature = val; else acc.displayName = val;
+        await acc.save(); await clearState(phone);
+        await sendButtons(phone, { text: `✅ Saved.${val ? `\n\n${val}` : ""}`, buttons: [{ id: `mail_acc_${acc._id}`, title: "📧 My Mail" }] });
+        return true;
+      }
+      case "pay": {
+        const acc = await MailAccount.findById(s.data.accId);
+        if (!acc) { await clearState(phone); return notFound(phone); }
+        let n = typed.replace(/\D+/g, "");
+        if (n.startsWith("263")) n = "0" + n.slice(3);
+        if (/^same$/i.test(typed)) n = "0" + phone.slice(3);
+        if (!/^07\d{8}$/.test(n)) { await sendText(phone, "❌ Type an EcoCash number like *0772123456*, or *cancel*."); return true; }
+        await clearState(phone);
+        try { await startPayment(phone, acc, n); }
+        catch (e) { await sendButtons(phone, { text: `❌ ${clip(e.message, 160)}`, buttons: [{ id: `mail_pay_${acc._id}`, title: "🔁 Try again" }] }); }
+        return true;
+      }
+    }
+    await clearState(phone);
+    return false;
+  } catch (err) {
+    console.error("[MAIL]", err);
+    try { await sendText(phone, "❌ Something went wrong with ZimQuote Mail. Please try again."); } catch (_) {}
+    return true;
+  }
+}
+
+async function notFound(phone) {
+  await sendButtons(phone, { text: "That email or inbox was not found.", buttons: [{ id: "mail_menu", title: "📧 My Mail" }] }).catch(() => {});
+  return true;
+}

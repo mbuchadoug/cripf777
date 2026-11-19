@@ -428,6 +428,7 @@ if (msg.type === "document") {
 
     const from = msg.from;
   let action = "";
+  let rawTextForEngine = "";   // original capitals (ZimQuote Mail replies need them)
 
 // ===========================
 // 🔥 NORMALIZE INPUT HERE
@@ -437,6 +438,7 @@ if (msg.type === "document") {
 if (msg.type === "text") {
   const rawText = (msg.text?.body || "").trim();
   const lowered = rawText.toLowerCase();
+  rawTextForEngine = rawText;
 
   // ── ZQ:REQUEST deep link - drops buyer straight into Request Sellers flow ──
   // Share link: https://wa.me/263771143904?text=ZQ%3AREQUEST
@@ -475,7 +477,7 @@ if (msg.type === "interactive") {
     .toLowerCase();
 }
     // 🔥 IMPORTANT: do NOT touch res below this line
-    await handleIncomingMessage({ from, action, hasImage: false, imageUrl: null, imageCaption: "" });
+    await handleIncomingMessage({ from, action, hasImage: false, imageUrl: null, imageCaption: "", rawText: rawTextForEngine });
 
 
   } catch (e) {

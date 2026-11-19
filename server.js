@@ -154,6 +154,9 @@ import webReceipts from "./routes/web_receipts.js";
 import videoRoutes from "./routes/videos.js";
 import cron from "node-cron";
 import { autoCloseExpiredRequests } from "./services/buyerRequests.js";
+import mailInboxRoutes from "./routes/mailInbox.js";               // ZimQuote Mail (email on WhatsApp)
+import { startMailPoller } from "./services/mailInbox.js";
+import { startMailSmtpServer } from "./services/mailSmtpServer.js";
 
 dotenv.config();
 
@@ -228,6 +231,8 @@ app.use(express.urlencoded({ extended: true }));*/
 // 1️⃣ Stripe webhook FIRST (raw body)
 app.use("/stripe/webhook", express.raw({ type: "application/json" }));
 app.use("/stripe/webhook", stripeWebhookRoutes);
+// ZimQuote Mail: own body parsers (raw email in, password form) - keep BEFORE express.json
+app.use("/mail", mailInboxRoutes);
 app.use("/wa/cripfcnt", cripfcntWhatsAppRoutes);   // ← add here
 
  app.use("/api/boardroom", boardroomApiRoutes);
@@ -493,6 +498,8 @@ mongoose
     console.log("✅ Connected to MongoDB");
 
     // ✅ START SCHEDULER ONLY AFTER DB IS READY
+    // ZimQuote Mail: read connected inboxes + (optional) receive forwarded mail
+    try { startMailPoller(); startMailSmtpServer(); } catch (e) { console.error("[MAIL START]", e.message); }
     startBattleScheduler({
       enabled: process.env.BATTLE_SCHEDULER_ENABLED === "true",
       intervalMs: 30000,
