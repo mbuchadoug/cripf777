@@ -222,7 +222,8 @@ async function mailPhones() {
 }
 const seenCol = () => mongoose.connection.collection("mail_wa_seen");
 async function markSeen(phone) {
-  try { if ((await mailPhones()).has(phone)) await seenCol().updateOne({ _id: phone }, { $set: { at: new Date() } }, { upsert: true }); } catch (_) {}
+  try { if ((await mailPhones()).has(phone)) { await seenCol().updateOne({ _id: phone }, { $set: { at: new Date() } }, { upsert: true }); return true; } } catch (_) {}
+  return false;
 }
 async function inWindow(phone) {
   try { const r = await seenCol().findOne({ _id: phone }); return !!(r && Date.now() - new Date(r.at).getTime() < 23 * 3600000); }
@@ -230,20 +231,98 @@ async function inWindow(phone) {
 }
 
 // ─── WhatsApp template (3 quick-reply buttons with per-email payloads) ───────
+// Meta answers #132001 when the template doesn't exist in that language, so we try
+// the configured language, then "en" and "en_US", and remember the one that works.
+const _tpl = { lang: null };
+const statusCol = () => mongoose.connection.collection("mail_status");
+async function noteTemplate(ok, err = null, lang = "") {
+  const d = err?.response?.data?.error;
+  const set = ok ? { ok: true, lastOkAt: new Date(), lang } : { ok: false, lastErrorAt: new Date(), error: clip(d?.message || err?.message || "unknown error", 300), code: d?.code || null };
+  try { await statusCol().updateOne({ _id: "alert_template" }, { $set: { ...set, template: MAIL_CONFIG.TEMPLATE, at: new Date() } }, { upsert: true }); } catch (_) {}
+}
 async function sendMailTemplate(to, vars, msgId) {
   const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.META_PHONE_NUMBER_ID || process.env.PHONE_NUMBER_ID;
   const TOKEN = process.env.META_ACCESS_TOKEN || process.env.WHATSAPP_ACCESS_TOKEN;
   const btn = (i, payload) => ({ type: "button", sub_type: "quick_reply", index: String(i), parameters: [{ type: "payload", payload }] });
-  await axios.post(`https://graph.facebook.com/v24.0/${PHONE_NUMBER_ID}/messages`, {
-    messaging_product: "whatsapp", to: normPhone(to), type: "template",
-    template: {
-      name: MAIL_CONFIG.TEMPLATE, language: { code: "en" },
-      components: [
-        { type: "body", parameters: vars.map(v => ({ type: "text", text: clip(oneLine(v), 300) || "-" })) },
-        btn(0, `mail_reply_${msgId}`), btn(1, `mail_open_${msgId}`), btn(2, `mail_done_${msgId}`)
-      ]
+  const langs = [...new Set([_tpl.lang, process.env.MAIL_ALERT_LANG, "en", "en_US"].filter(Boolean))];
+  let lastErr = null;
+  for (const lang of langs) {
+    try {
+      await axios.post(`https://graph.facebook.com/v24.0/${PHONE_NUMBER_ID}/messages`, {
+        messaging_product: "whatsapp", to: normPhone(to), type: "template",
+        template: {
+          name: MAIL_CONFIG.TEMPLATE, language: { code: lang },
+          components: [
+            { type: "body", parameters: vars.map(v => ({ type: "text", text: clip(oneLine(v), 300) || "-" })) },
+            btn(0, `mail_reply_${msgId}`), btn(1, `mail_open_${msgId}`), btn(2, `mail_done_${msgId}`)
+          ]
+        }
+      }, { headers: { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json" } });
+      if (_tpl.lang !== lang) { _tpl.lang = lang; }
+      noteTemplate(true, null, lang);
+      return;
+    } catch (e) {
+      lastErr = e;
+      if (e?.response?.data?.error?.code !== 132001) break;      // only a language mismatch is worth another try
     }
-  }, { headers: { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json" } });
+  }
+  noteTemplate(false, lastErr);
+  throw lastErr;
+}
+
+// ─── Alerts that could not be delivered wait here until the person's next message ─
+// (WhatsApp only lets us start a conversation with an approved template. If that
+// fails, nothing is lost: the alerts are sent the moment they message the bot.)
+const pendingCol = () => mongoose.connection.collection("mail_pending");
+async function queuePending(phone, msgId) {
+  try {
+    const cur = await pendingCol().findOne({ _id: phone });
+    const ids = [...new Set([...(cur?.ids || []), String(msgId)])].slice(-20);
+    await pendingCol().updateOne({ _id: phone }, { $set: { ids, at: new Date() } }, { upsert: true });
+  } catch (_) {}
+}
+const _delivering = new Set();
+export async function deliverPending(phone) {
+  phone = normPhone(phone);
+  if (_delivering.has(phone)) return 0;
+  _delivering.add(phone);
+  try {
+    const cur = await pendingCol().findOne({ _id: phone }).catch(() => null);
+    const ids = [...(cur?.ids || [])];
+    if (!ids.length) return 0;
+    await pendingCol().updateOne({ _id: phone }, { $set: { ids: [], at: new Date() } }).catch(() => {});
+    const msgs = (await MailMessage.find({ _id: { $in: ids.filter(i => mongoose.isValidObjectId(i)) } }).sort({ receivedAt: -1 }))
+      .filter(m => m.status !== "done");
+    if (!msgs.length) return 0;
+    const show = msgs.slice(0, 3);
+    await sendText(phone, `📬 *${msgs.length} new email${msgs.length > 1 ? "s" : ""} arrived while you were away*`).catch(() => {});
+    for (const m of show.reverse()) {
+      const acc = await MailAccount.findById(m.accountId);
+      if (!acc) continue;
+      await sendButtons(phone, alertCard(acc, m)).catch(() => {});
+    }
+    if (msgs.length > 3) {
+      await safeButtons(phone, `…and ${msgs.length - 3} more.`, [{ id: `mail_inbox_${msgs[0].accountId}_0`, title: "📬 Inbox" }]).catch(() => {});
+    }
+    return msgs.length;
+  } finally { _delivering.delete(phone); }
+}
+
+/** Template health for the admin System check. */
+export async function templateHealth() {
+  const st = await statusCol().findOne({ _id: "alert_template" }).catch(() => null) || {};
+  const out = { template: MAIL_CONFIG.TEMPLATE, lastOkAt: st.lastOkAt || null, lastErrorAt: st.lastErrorAt || null, error: st.error || "", code: st.code || null, lang: st.lang || "", metaStatus: "" };
+  const waba = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || process.env.META_WABA_ID || process.env.WABA_ID;
+  const TOKEN = process.env.META_ACCESS_TOKEN || process.env.WHATSAPP_ACCESS_TOKEN;
+  if (waba && TOKEN) {
+    try {
+      const r = await axios.get(`https://graph.facebook.com/v24.0/${waba}/message_templates`, { params: { name: MAIL_CONFIG.TEMPLATE, fields: "name,status,language,category" }, headers: { Authorization: `Bearer ${TOKEN}` }, timeout: 10000 });
+      const list = (r.data?.data || []).filter(t => t.name === MAIL_CONFIG.TEMPLATE);
+      out.metaStatus = list.length ? list.map(t => `${t.status} (${t.language}, ${t.category})`).join(", ") : "NOT FOUND";
+    } catch (e) { out.metaStatus = "could not check: " + clip(e?.response?.data?.error?.message || e.message, 120); }
+  }
+  out.ok = /APPROVED/.test(out.metaStatus) || (!!out.lastOkAt && (!out.lastErrorAt || new Date(out.lastOkAt) > new Date(out.lastErrorAt)));
+  return out;
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -483,6 +562,28 @@ You'll still get alerts for important emails (orders, quotes, payments). All ema
   }
   await MailAccount.updateOne({ _id: acc._id }, acc.alertMonth === month ? { $inc: { alertsThisMonth: 1 } } : { $set: { alertMonth: month, alertsThisMonth: 1 } });
 
+  const card = alertCard(acc, msg);
+  for (const p of phones) {
+    let sent = false;
+    if (await inWindow(p)) {
+      try { await sendButtons(p, card); sent = true; } catch (_) {}
+    }
+    if (!sent) {
+      try {
+        await sendMailTemplate(p, [acc.email, `${msg.fromName}${msg.fromEmail ? ` (${msg.fromEmail})` : ""}`, msg.subject, msg.summary], msg._id);
+        sent = true;
+      } catch (e) {
+        console.warn(`[MAIL ALERT] template ${MAIL_CONFIG.TEMPLATE} failed for ${p}: ${e?.response?.data?.error?.message || e.message} - alert kept until their next message`);
+        await queuePending(p, msg._id);
+        try { await sendButtons(p, card); } catch (_) {}
+      }
+    }
+  }
+  await MailMessage.updateOne({ _id: msg._id }, { $set: { alertedAt: new Date() } });
+}
+
+/** The WhatsApp card for one email (text + Reply / Full email / Done). */
+function alertCard(acc, msg) {
   const icon = CAT_ICON[msg.category] || "📧";
   const att = (msg.attachments?.length ? `\n📎 ${msg.attachments.length} attachment${msg.attachments.length > 1 ? "s" : ""}: ${clip(msg.attachments.map(x => x.filename).join(", "), 120)}` : "") +
     (msg.skippedAttachments?.length ? `\n⚠️ ${msg.skippedAttachments.length} file${msg.skippedAttachments.length > 1 ? "s" : ""} too large for WhatsApp - open in your email app` : "");
@@ -497,23 +598,7 @@ You'll still get alerts for important emails (orders, quotes, payments). All ema
     { id: `mail_open_${msg._id}`, title: "📄 Full email" },
     { id: `mail_done_${msg._id}`, title: "✅ Done" }
   ];
-
-  for (const p of phones) {
-    let sent = false;
-    if (await inWindow(p)) {
-      try { await sendButtons(p, { text, buttons }); sent = true; } catch (_) {}
-    }
-    if (!sent) {
-      try {
-        await sendMailTemplate(p, [acc.email, `${msg.fromName}${msg.fromEmail ? ` (${msg.fromEmail})` : ""}`, msg.subject, msg.summary], msg._id);
-        sent = true;
-      } catch (e) {
-        console.warn(`[MAIL ALERT] template failed for ${p}: ${e?.response?.data?.error?.message || e.message}`);
-        try { await sendButtons(p, { text, buttons }); sent = true; } catch (_) {}
-      }
-    }
-  }
-  await MailMessage.updateOne({ _id: msg._id }, { $set: { alertedAt: new Date() } });
+  return { text, buttons };
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -560,9 +645,10 @@ async function transportFor(acc) {
   };
 }
 
-export async function sendReply(acc, msg, body, byPhone, files = []) {
+export async function sendReply(acc, msg, body, byPhone, files = [], { cc = [], bcc = [] } = {}) {
   const r = buildReply(acc, msg, body);
   if (!r.to || !isEmail(r.to)) throw new Error("This email has no reply address");
+  cc = cleanAddrs(cc, [r.to]); bcc = cleanAddrs(bcc, [r.to, ...cc]);
   const { t, from, replyTo, via } = await transportFor(acc);
   const MailComposer = (await import("nodemailer/lib/mail-composer/index.js")).default;
   const attachments = [];
@@ -573,6 +659,7 @@ export async function sendReply(acc, msg, body, byPhone, files = []) {
   }
   const mailOpts = {
     from, to: r.to, subject: r.subject, text: r.text, html: r.html,
+    ...(cc.length ? { cc } : {}),
     inReplyTo: r.inReplyTo, references: r.references,
     ...(replyTo ? { replyTo } : {}),
     ...(attachments.length ? { attachments } : {}),
@@ -580,16 +667,59 @@ export async function sendReply(acc, msg, body, byPhone, files = []) {
   };
   const raw = await new MailComposer(mailOpts).compile().build();
   try {
-    await t.sendMail({ envelope: { from: from.match(/<([^>]+)>/)?.[1] || from, to: [r.to] }, raw });
+    await t.sendMail({ envelope: { from: from.match(/<([^>]+)>/)?.[1] || from, to: [r.to, ...cc, ...bcc] }, raw });     // Bcc: envelope only, never in the headers
   } catch (e) {
     await MailMessage.updateOne({ _id: msg._id }, { $push: { replies: { text: body, by: byPhone, sentAt: new Date(), via, ok: false, error: e.message } } });
     throw e;
   }
-  await MailMessage.updateOne({ _id: msg._id }, { $set: { status: "replied" }, $push: { replies: { text: body, by: byPhone, sentAt: new Date(), via, ok: true, files: (files || []).map(f => f.filename) } } });
+  await MailMessage.updateOne({ _id: msg._id }, { $set: { status: "replied" }, $push: { replies: { text: body, by: byPhone, sentAt: new Date(), via, ok: true, files: (files || []).map(f => f.filename), cc, bcc } } });
   await MailAccount.updateOne({ _id: acc._id }, { $inc: { replyCount: 1 } });
   // Put a copy in their Sent folder (Gmail already does this itself)
   if (via === "own" && acc.mode === "imap" && acc.provider !== "google") appendToSent(acc, raw).catch(e => console.warn("[MAIL SENT COPY]", e.message));
-  return { to: r.to, via };
+  return { to: r.to, cc, bcc, via };
+}
+
+// ─── Addresses (Cc / Bcc / Reply all) ────────────────────────────────────────
+const MAX_RCPT = 20;
+export const parseAddrs = s => [...new Set((String(s || "").match(/[A-Z0-9._%+'-]+@[A-Z0-9-]+(?:\.[A-Z0-9-]+)*\.[A-Z]{2,}/gi) || []).map(x => x.toLowerCase()))];
+function cleanAddrs(list, exclude = []) {
+  const ex = new Set(exclude.map(x => String(x || "").toLowerCase()));
+  return [...new Set((list || []).map(x => String(x || "").toLowerCase().trim()))].filter(x => isEmail(x) && !ex.has(x)).slice(0, MAX_RCPT);
+}
+/** Everyone else on the original email (To + Cc), minus us and the person we reply to. */
+function replyAllCc(acc, msg) {
+  const ours = new Set([acc.email.toLowerCase(), String(MAIL_CONFIG.COLLECTOR?.address || "").toLowerCase()]);
+  const to = String(msg.replyTo || msg.fromEmail || "").toLowerCase();
+  return parseAddrs(`${msg.to || ""}, ${msg.cc || ""}`).filter(a => !ours.has(a) && a !== to && !a.endsWith("@" + MAIL_CONFIG.INBOUND_DOMAIN));
+}
+
+/** A brand-new email (not a reply), with Cc / Bcc and attachments. */
+export async function sendNewEmail(acc, { to = [], cc = [], bcc = [], subject = "", text = "", files = [] }, byPhone) {
+  to = cleanAddrs(to); cc = cleanAddrs(cc, to); bcc = cleanAddrs(bcc, [...to, ...cc]);
+  if (!to.length) throw new Error("Add at least one address to send to");
+  const { t, from, replyTo, via } = await transportFor(acc);
+  const MailComposer = (await import("nodemailer/lib/mail-composer/index.js")).default;
+  const attachments = [];
+  for (const f of (files || [])) {
+    const got = await readAttachment(f.id);
+    if (!got) throw new Error(`The file ${f.filename} is no longer available. Send it again.`);
+    attachments.push({ filename: f.filename || got.doc.filename, content: got.data, contentType: f.contentType || got.doc.contentType });
+  }
+  const sig = acc.signature ? `\n\n${acc.signature}` : "";
+  const waLink = `https://wa.me/${normPhone(acc.ownerPhone)}`;
+  const html = `<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.5;color:#1f2933">${htmlEscape(text).replace(/\n/g, "<br>")}${sig ? "<br><br>" + htmlEscape(acc.signature).replace(/\n/g, "<br>") : ""}` +
+    `<p style="margin:18px 0"><a href="${waLink}" style="display:inline-block;background:#1fa855;color:#fff;text-decoration:none;padding:9px 16px;border-radius:6px;font-weight:bold">💬 Reply on WhatsApp</a></p></div>`;
+  const raw = await new MailComposer({
+    from, to, ...(cc.length ? { cc } : {}), subject: subject || "(no subject)",
+    text: `${text}${sig}\n\nChat with us on WhatsApp: ${waLink}`, html,
+    ...(replyTo ? { replyTo } : {}), ...(attachments.length ? { attachments } : {}),
+    headers: { "X-ZimQuote-Mail": "new" }
+  }).compile().build();
+  await t.sendMail({ envelope: { from: from.match(/<([^>]+)>/)?.[1] || from, to: [...to, ...cc, ...bcc] }, raw });
+  await MailAccount.updateOne({ _id: acc._id }, { $inc: { replyCount: 1 } });
+  if (via === "own" && acc.mode === "imap" && acc.provider !== "google") appendToSent(acc, raw).catch(e => console.warn("[MAIL SENT COPY]", e.message));
+  console.log(`[MAIL NEW] ${acc.email} → ${to.join(", ")}${cc.length ? ` cc ${cc.length}` : ""}${bcc.length ? ` bcc ${bcc.length}` : ""} by ${byPhone}`);
+  return { to, cc, bcc, via };
 }
 
 async function appendToSent(acc, raw) {
@@ -603,15 +733,15 @@ async function appendToSent(acc, raw) {
   } finally { await c.logout().catch(() => {}); }
 }
 
-async function polish(text, msg, acc) {
+async function polish(text, msg, acc, { newEmail = false } = {}) {
   const key = process.env.OPENAI_API_KEY;
   if (!key) return null;
   try {
     const r = await axios.post("https://api.openai.com/v1/chat/completions", {
       model: process.env.MAIL_AI_MODEL || "gpt-4o-mini", temperature: 0.3, max_tokens: 400,
       messages: [
-        { role: "system", content: "Rewrite the business owner's short WhatsApp note as a clear, polite, professional email reply. Keep every fact, price, quantity and date exactly as given. Do not invent anything. No subject line, no signature, no placeholders. British English. Keep it short." },
-        { role: "user", content: `Email we are replying to (from ${msg.fromName}):\n${String(msg.text || "").slice(0, 1500)}\n\nOwner's note:\n${text}` }
+        { role: "system", content: `Rewrite the business owner's short WhatsApp note as a clear, polite, professional ${newEmail ? "email" : "email reply"}. Keep every fact, price, quantity and date exactly as given. Do not invent anything. No subject line, no signature, no placeholders. British English. Keep it short.` },
+        { role: "user", content: newEmail ? `New email to ${msg.fromName}. Subject: ${msg.subject || ""}\n\nOwner's note:\n${text}` : `Email we are replying to (from ${msg.fromName}):\n${String(msg.text || "").slice(0, 1500)}\n\nOwner's note:\n${text}` }
       ]
     }, { headers: { Authorization: `Bearer ${key}` }, timeout: 15000 });
     return String(r.data?.choices?.[0]?.message?.content || "").trim() || null;
@@ -1021,6 +1151,7 @@ async function sendAccountMenu(from, acc) {
     (acc.companyName ? `\n🏢 ${acc.companyName}` : "") +
     `\n📱 Emails go to: ${nums.map(p => "+" + p).join(", ")}`;
   const rows = [{ id: `mail_inbox_${acc._id}_0`, title: `📬 Inbox (${open} open)`, description: "Read and reply to your emails" }];
+  if (isActive(acc)) rows.push({ id: `mail_new_${acc._id}`, title: "✉️ New email", description: "Write an email with Cc, Bcc and files" });
   if (acc.status !== "live") rows.push({ id: `mail_guide_${acc._id}`, title: "🛠 Connect / fix", description: "Simple steps to connect this email" });
   if (isOwner) {
     rows.push(
@@ -1083,27 +1214,35 @@ async function sendFullEmail(from, msg, acc) {
     [{ id: `mail_reply_${msg._id}`, title: "↩️ Reply" }, { id: `mail_done_${msg._id}`, title: "✅ Done" }, { id: `mail_inbox_${acc._id}_0`, title: "📬 Inbox" }]);
 }
 
-async function startReply(from, msg) {
-  await setState(from, "reply", { msgId: String(msg._id) });
+async function startReply(from, msg, { all = false } = {}) {
+  const acc = await MailAccount.findById(msg.accountId).catch(() => null);
+  const others = acc ? replyAllCc(acc, msg) : [];
+  const cc = all ? others : [];
+  await setState(from, "reply", { msgId: String(msg._id), cc, bcc: [] });
   const to = msg.replyTo || msg.fromEmail;
   return safeList(from,
-    `↩️ *Reply to ${clip(msg.fromName, 50)}*\n${to}\nRe: ${clip(msg.subject, 80)}\n\n✍️ *Type your reply now.* A short note is fine - you can tap ✨ Polish before sending.\n📎 To attach a quote, invoice or photo, just send the file here.\n\nOr pick a ready answer:`,
+    `↩️ *Reply${all ? " all" : ""} to ${clip(msg.fromName, 50)}*\n${to}${cc.length ? `\nCc: ${clip(cc.join(", "), 200)}` : ""}\nRe: ${clip(msg.subject, 80)}\n\n✍️ *Type your reply now.* A short note is fine - you can tap ✨ Polish before sending.\n📎 To attach a quote, invoice or photo, just send the file here.\n👥 You can add Cc / Bcc before sending.\n\nOr pick a ready answer:`,
     [
       ...Object.entries(QUICK_ANSWERS).map(([k, q]) => ({ id: `mail_quick_${k}_${msg._id}`, title: q.title, description: q.text })),
+      ...(!all && others.length ? [{ id: `mail_rall_${msg._id}`, title: "👥 Reply all", description: `Also send to ${clip(others.join(", "), 60)}` }] : []),
       { id: "mail_cancel", title: "❌ Cancel", description: "Don't reply now" }
     ]);
 }
 
-async function showPreview(from, msg, text, { polished = false, original = "", files } = {}) {
-  if (files === undefined) { const cur = await getSess(from); files = cur.data?.msgId === String(msg._id) ? (cur.data.files || []) : []; }
-  await setState(from, "confirm", { msgId: String(msg._id), text, original: original || text, polished, files });
+async function showPreview(from, msg, text, { polished = false, original = "", files, cc, bcc } = {}) {
+  const cur = await getSess(from);
+  const keep = cur.data?.msgId === String(msg._id) ? cur.data : {};
+  if (files === undefined) files = keep.files || [];
+  if (cc === undefined) cc = keep.cc || [];
+  if (bcc === undefined) bcc = keep.bcc || [];
+  await setState(from, "confirm", { msgId: String(msg._id), text, original: original || text, polished, files, cc, bcc });
   const to = msg.replyTo || msg.fromEmail;
   const buttons = [{ id: `mail_send_${msg._id}`, title: "✅ Send" }];
   buttons.push(polished ? { id: `mail_mine_${msg._id}`, title: "↩️ Use my words" } : { id: `mail_polish_${msg._id}`, title: "✨ Polish it" });
-  buttons.push({ id: "mail_cancel", title: "❌ Cancel" });
-  const head = `📤 *Send this email?*\nTo: ${to}\nSubject: Re: ${clip(String(msg.subject || "").replace(/^re:\s*/i, ""), 80)}\n\n`;
+  buttons.push({ id: "mail_dmore", title: "➕ Cc, Bcc & more" });
+  const head = `📤 *Send this email?*\nTo: ${to}${cc.length ? `\nCc: ${clip(cc.join(", "), 250)}` : ""}${bcc.length ? `\nBcc: ${clip(bcc.join(", "), 250)}` : ""}\nSubject: Re: ${clip(String(msg.subject || "").replace(/^re:\s*/i, ""), 80)}\n\n`;
   const fl = files.length ? `\n\n📎 *Attached (${fmtSize(files.reduce((t, f) => t + (f.size || 0), 0))}):*\n${files.map(f => `• ${f.filename} (${fmtSize(f.size)})`).join("\n")}` : "";
-  const tail = `${fl}${polished ? "\n\n✨ _Polished by ZimQuote_" : ""}\n\n_To change it, type a new reply. To attach a file (PDF, Word, Excel, photo), just send it here._`;
+  const tail = `${fl}${polished ? "\n\n✨ _Polished by ZimQuote_" : ""}\n\n_To change it, type a new reply. To attach a file (PDF, Word, Excel, photo), just send it here. Type *cancel* to stop._`;
   if ((head + text + tail).length <= 1000) return safeButtons(from, head + text + tail, buttons);
   await sendText(from, head + String(text).slice(0, 3800));
   return safeButtons(from, `☝️ That's your full reply.${tail}`, buttons);
@@ -1253,6 +1392,9 @@ export async function mailFirst({ from, text = "", action = "" }) {
   const phone = normPhone(from);
   if (!phone) return false;
   await markSeen(phone);
+  // Alerts that couldn't reach them while they were away: send them now
+  // (a moment later, so their own message is answered first). Quick _id lookup.
+  pendingCol().findOne({ _id: phone }).then(p => { if (p?.ids?.length) setTimeout(() => deliverPending(phone).catch(() => {}), 1500); }).catch(() => {});
   const a = String(action || "").trim().toLowerCase();
   if (a.startsWith("mail_")) return true;
   if (a) return false;
@@ -1290,7 +1432,7 @@ export async function handleMailMessage({ from, text = "", rawText = "", action 
     if (!typed) return false;
     if (/^(cancel|stop|exit)$/i.test(typed)) { await clearState(phone); await safeButtons(phone, "👍 Cancelled.", [{ id: "mail_menu", title: "📧 My Mail" }]); return true; }
     if (/^(menu|main menu|home|hi|hello|hie|hey)$/i.test(typed)) { await clearState(phone); return false; }
-    if (ENTRY_WORDS.test(typed) && !["reply", "confirm", "sig", "name"].includes(s.state)) { await clearState(phone); await sendMailMenu(phone); return true; }
+    if (ENTRY_WORDS.test(typed) && !["reply", "confirm", "sig", "name", "addr", "new_to", "new_subject", "new_body", "new_confirm"].includes(s.state)) { await clearState(phone); await sendMailMenu(phone); return true; }
 
     switch (s.state) {
       case "pick": {                                  // numbered fallback menu
@@ -1354,6 +1496,35 @@ export async function handleMailMessage({ from, text = "", rawText = "", action 
         await showPreview(phone, msg, typed);
         return true;
       }
+      case "addr": {                                  // typing Cc / Bcc / To addresses for a draft
+        const add = parseAddrs(typed);
+        if (!add.length) { await sendText(phone, "❌ I couldn't find an email address. Type it like *name@company.co.zw* (several: separate with commas), or *cancel*."); return true; }
+        const d = { ...s.data };
+        const field = d.field || "cc";
+        delete d.field;
+        if (field === "to") d.to = add.slice(0, MAX_RCPT);
+        else d[field] = [...new Set([...(d[field] || []), ...add])].slice(0, MAX_RCPT);
+        return showDraft(phone, d);
+      }
+      case "new_to": {
+        const to = parseAddrs(typed);
+        if (!to.length) { await sendText(phone, "❌ Type at least one email address, like *orders@delta.co.zw*. Several? Separate them with commas. Or *cancel*."); return true; }
+        const d = { ...s.data, to: to.slice(0, MAX_RCPT) };
+        if (d.text) return showDraft(phone, d);
+        await setState(phone, "new_subject", d);
+        await sendText(phone, `✉️ *New email - step 2 of 3*\nTo: ${d.to.join(", ")}\n\nType the *subject* (e.g. "Quotation for 200 cases").`);
+        return true;
+      }
+      case "new_subject": {
+        const d = { ...s.data, subject: typed.slice(0, 200) };
+        if (d.text) return showDraft(phone, d);
+        await setState(phone, "new_body", d);
+        await sendText(phone, `✉️ *New email - step 3 of 3*\nSubject: ${d.subject}\n\n✍️ *Type your message.* A short note is fine - you can tap ✨ Polish before sending.\n📎 To attach files (PDF, Word, Excel, photos), just send them here.`);
+        return true;
+      }
+      case "new_body": case "new_confirm": {
+        return showDraft(phone, { ...s.data, text: typed, original: typed, polished: false });
+      }
       case "team_add": {
         const acc = await MailAccount.findById(s.data.accId);
         if (!acc || !(await canManage(phone, acc))) { await clearState(phone); return notFound(phone); }
@@ -1405,6 +1576,19 @@ async function handleTap(phone, a) {
   if (a === "mail_cancel") { await clearState(phone); await safeButtons(phone, "👍 Cancelled.", [{ id: "mail_menu", title: "📧 My Mail" }]); return true; }
 
   let m;
+  if ((m = a.match(/^mail_new_([a-f0-9]{24})$/))) {
+    const acc = await loadAcc(phone, m[1]); if (!acc) return notFound(phone);
+    if (!isActive(acc)) { await safeButtons(phone, `⛔ ZimQuote Mail for *${acc.email}* has ended.\nRenew from *$${MAIL_PLANS.starter.price} a year* to send emails.`, [{ id: `mail_pay_${acc._id}`, title: "💳 Renew now" }]); return true; }
+    await setState(phone, "new_to", { compose: true, accId: String(acc._id), to: [], cc: [], bcc: [], files: [] });
+    await sendText(phone, `✉️ *New email from ${acc.email} - step 1 of 3*\n\nType who it's to: one or more email addresses, separated by commas.\n_e.g. orders@delta.co.zw, john@gmail.com_\n\nYou can add Cc / Bcc and files before sending. Type *cancel* to stop.`);
+    return true;
+  }
+  if ((m = a.match(/^mail_rall_([a-f0-9]{24})$/))) {
+    const { msg, acc } = await loadMsg(phone, m[1]); if (!msg) return notFound(phone);
+    if (!isActive(acc)) return handleTap(phone, `mail_reply_${m[1]}`);
+    await startReply(phone, msg, { all: true }); return true;
+  }
+  if ((m = a.match(/^mail_d(more|cc|bcc|to|subj|all|clr|nofiles|send|polish|mine)$/))) return draftAction(phone, m[1]);
   if ((m = a.match(/^mail_quick_(q\d)_([a-f0-9]{24})$/))) {
     const { msg } = await loadMsg(phone, m[2]); if (!msg) return notFound(phone);
     await showPreview(phone, msg, QUICK_ANSWERS[m[1]]?.text || ""); return true;
@@ -1462,8 +1646,8 @@ async function handleTap(phone, a) {
     if (verb === "send") {
       await clearState(phone);
       try {
-        const r = await sendReply(acc, msg, draft.text, phone, draft.files || []);
-        await safeButtons(phone, `✅ *Email sent* to ${r.to}${(draft.files || []).length ? ` with ${draft.files.length} attachment${draft.files.length > 1 ? "s" : ""}` : ""}${r.via === "zimquote" ? `\n_Sent via ZimQuote; their replies go to ${acc.email}._` : ""}`,
+        const r = await sendReply(acc, msg, draft.text, phone, draft.files || [], { cc: draft.cc || [], bcc: draft.bcc || [] });
+        await safeButtons(phone, `✅ *Email sent* to ${r.to}${(draft.files || []).length ? ` with ${draft.files.length} attachment${draft.files.length > 1 ? "s" : ""}` : ""}${r.cc.length ? `\nCc: ${clip(r.cc.join(", "), 200)}` : ""}${r.bcc.length ? `\nBcc: ${r.bcc.length} hidden` : ""}${r.via === "zimquote" ? `\n_Sent via ZimQuote; their replies go to ${acc.email}._` : ""}`,
           [{ id: `mail_inbox_${acc._id}_0`, title: "📬 Inbox" }, { id: "mail_menu", title: "📧 My Mail" }]);
       } catch (e) {
         await safeButtons(phone, `❌ The email could not be sent.\n${clip(e.message, 200)}\n\nTap below to try again.`, [{ id: `mail_reply_${msg._id}`, title: "🔁 Try again" }]);
@@ -1991,6 +2175,7 @@ export async function systemCheck() {
     sending: !!platformSmtp(),
     ai: !!e.OPENAI_API_KEY,
     template: MAIL_CONFIG.TEMPLATE,
+    templateHealth: await templateHealth().catch(() => null),
     adminPhone: !!(e.ZQ_ADMIN_PHONE || e.ADMIN_WHATSAPP_PHONE)
   };
 }
@@ -2046,7 +2231,7 @@ export async function readAttachment(id) {
 
 /** Is this person writing a reply (so a file they send should be attached)? */
 export async function mailAwaitingFile(from) {
-  try { const s = await getSess(normPhone(from)); return s.state === "reply" || s.state === "confirm"; }
+  try { const s = await getSess(normPhone(from)); return ["reply", "confirm", "new_body", "new_confirm"].includes(s.state); }
   catch (_) { return false; }
 }
 
@@ -2054,9 +2239,10 @@ export async function mailAwaitingFile(from) {
 export async function handleMailFile({ from, filename = "file", mime = "application/octet-stream", data, caption = "" }) {
   const phone = normPhone(from);
   const s = await getSess(phone);
-  if (s.state !== "reply" && s.state !== "confirm") return false;
-  const { msg, acc } = await loadMsg(phone, s.data.msgId);
-  if (!msg) { await clearState(phone); await notFound(phone); return true; }
+  if (!["reply", "confirm", "new_body", "new_confirm"].includes(s.state)) return false;
+  const compose = s.state.startsWith("new_");
+  const { msg, acc } = compose ? { msg: null, acc: await loadAcc(phone, s.data.accId) } : await loadMsg(phone, s.data.msgId);
+  if (compose ? !acc : !msg) { await clearState(phone); await notFound(phone); return true; }
   const files = [...(s.data.files || [])];
   const buf = Buffer.isBuffer(data) ? data : Buffer.from(data || "");
   const limit = maxOutBytes();
@@ -2069,6 +2255,12 @@ export async function handleMailFile({ from, filename = "file", mime = "applicat
   const id = crypto.randomBytes(10).toString("hex");
   await saveAttachment(id, { accountId: acc._id, filename, contentType: mime, data: buf, outgoing: true });
   files.push({ id, filename, size: buf.length, contentType: mime });
+  if (compose) {
+    if (s.state === "new_confirm" || caption) return showDraft(phone, { ...s.data, files, ...(caption && s.state !== "new_confirm" ? { text: caption, original: caption } : {}) });
+    await setState(phone, "new_body", { ...s.data, files });
+    await sendText(phone, `📎 *Attached:*\n${files.map(f => `• ${f.filename} (${fmtSize(f.size)})`).join("\n")}\n\nNow *type your message*, or send more files.`);
+    return true;
+  }
   if (s.state === "confirm" || caption) {
     const text = caption && s.state !== "confirm" ? caption : (s.data.text || caption || "");
     await showPreview(phone, msg, text, { polished: s.state === "confirm" ? !!s.data.polished : false, original: s.state === "confirm" ? (s.data.original || text) : text, files });
@@ -2104,4 +2296,97 @@ export async function sendConnectedMessage(acc, detail) {
     text: text.length > 1000 ? text.slice(0, 999) + "…" : text,
     buttons: paid ? [{ id: "mail_menu", title: "📧 My Mail" }] : [{ id: `mail_pay_${acc._id}`, title: "💳 Choose a plan" }, { id: "mail_menu", title: "📧 My Mail" }]
   });
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// DRAFTS: Cc / Bcc / Reply all / new emails (works for replies and new emails)
+// ═════════════════════════════════════════════════════════════════════════════
+/** Show the right preview for whatever draft is open. */
+async function showDraft(phone, d) {
+  if (!d.compose) {
+    const { msg } = await loadMsg(phone, d.msgId);
+    if (!msg) { await clearState(phone); return notFound(phone); }
+    if (!d.text) { await setState(phone, "reply", d); await sendText(phone, `👥 Saved.${(d.cc || []).length ? `\nCc: ${d.cc.join(", ")}` : ""}${(d.bcc || []).length ? `\nBcc: ${d.bcc.join(", ")}` : ""}\n\n✍️ Now *type your reply*.`); return true; }
+    await showPreview(phone, msg, d.text, { polished: !!d.polished, original: d.original || d.text, files: d.files || [], cc: d.cc || [], bcc: d.bcc || [] });
+    return true;
+  }
+  const acc = await loadAcc(phone, d.accId);
+  if (!acc) { await clearState(phone); return notFound(phone); }
+  if (!d.to?.length) { await setState(phone, "new_to", d); await sendText(phone, "✉️ Type who it's to (email addresses, separated by commas)."); return true; }
+  if (!d.subject) { await setState(phone, "new_subject", d); await sendText(phone, "✉️ Type the *subject*."); return true; }
+  if (!d.text) { await setState(phone, "new_body", d); await sendText(phone, "✍️ *Type your message*, or send files to attach."); return true; }
+  await setState(phone, "new_confirm", d);
+  const files = d.files || [];
+  const head = `📤 *Send this email?*\nFrom: ${acc.email}\nTo: ${clip(d.to.join(", "), 250)}${(d.cc || []).length ? `\nCc: ${clip(d.cc.join(", "), 250)}` : ""}${(d.bcc || []).length ? `\nBcc: ${clip(d.bcc.join(", "), 250)}` : ""}\nSubject: ${clip(d.subject, 120)}\n\n`;
+  const fl = files.length ? `\n\n📎 *Attached (${fmtSize(files.reduce((t, f) => t + (f.size || 0), 0))}):*\n${files.map(f => `• ${f.filename} (${fmtSize(f.size)})`).join("\n")}` : "";
+  const tail = `${fl}${d.polished ? "\n\n✨ _Polished by ZimQuote_" : ""}\n\n_To change it, type a new message. To attach a file, just send it here. Type *cancel* to stop._`;
+  const buttons = [{ id: "mail_dsend", title: "✅ Send" }, d.polished ? { id: "mail_dmine", title: "↩️ Use my words" } : { id: "mail_dpolish", title: "✨ Polish it" }, { id: "mail_dmore", title: "➕ Cc, Bcc & more" }];
+  if ((head + d.text + tail).length <= 1000) return safeButtons(phone, head + d.text + tail, buttons);
+  await sendText(phone, head + String(d.text).slice(0, 3800));
+  return safeButtons(phone, `☝️ That's your full email.${tail}`, buttons);
+}
+
+async function draftAction(phone, verb) {
+  const s = await getSess(phone);
+  const isDraft = ["reply", "confirm", "addr", "new_to", "new_subject", "new_body", "new_confirm"].includes(s.state);
+  if (!isDraft) { await safeButtons(phone, "That email draft has closed. Start again from your inbox.", [{ id: "mail_menu", title: "📧 My Mail" }]); return true; }
+  const d = { ...s.data }; delete d.field;
+  const compose = !!d.compose;
+  const ctx = compose ? { acc: await loadAcc(phone, d.accId) } : await loadMsg(phone, d.msgId);
+  if (compose ? !ctx.acc : !ctx.msg) { await clearState(phone); return notFound(phone); }
+  const acc = ctx.acc, msg = ctx.msg;
+  const others = msg ? replyAllCc(acc, msg).filter(x => !(d.cc || []).includes(x)) : [];
+  switch (verb) {
+    case "more": {
+      const rows = [
+        { id: "mail_dcc", title: "➕ Add Cc", description: (d.cc || []).length ? clip(`Cc: ${d.cc.join(", ")}`, 72) : "Send a copy to someone" },
+        { id: "mail_dbcc", title: "🕶 Add Bcc", description: (d.bcc || []).length ? clip(`Bcc: ${d.bcc.join(", ")}`, 72) : "Hidden copy - others won't see it" }
+      ];
+      if (others.length) rows.push({ id: "mail_dall", title: "👥 Reply all", description: clip(`Add ${others.join(", ")}`, 72) });
+      if (compose) {
+        rows.push({ id: "mail_dto", title: "✏️ Change To", description: clip(`To: ${(d.to || []).join(", ")}`, 72) });
+        rows.push({ id: "mail_dsubj", title: "✏️ Change subject", description: clip(d.subject || "-", 72) });
+      }
+      if ((d.cc || []).length || (d.bcc || []).length) rows.push({ id: "mail_dclr", title: "🧹 Remove Cc & Bcc", description: "Send only to the main address" });
+      if ((d.files || []).length) rows.push({ id: "mail_dnofiles", title: "🗑 Remove files", description: `${d.files.length} attached` });
+      if (d.text) rows.push({ id: compose ? "mail_dsend" : `mail_send_${d.msgId}`, title: "✅ Send now", description: "Send the email as it is" });
+      rows.push({ id: "mail_cancel", title: "❌ Cancel", description: "Don't send" });
+      await safeList(phone, `➕ *More options*\n\n📎 To attach a file (PDF, Word, Excel, photo), just send it here.`, rows.slice(0, 10));
+      return true;
+    }
+    case "cc": case "bcc": case "to":
+      await setState(phone, "addr", { ...d, field: verb });
+      await sendText(phone, verb === "to" ? "✏️ Type the address(es) to send to, separated by commas." : `Type the email address(es) to add as *${verb === "cc" ? "Cc (copy)" : "Bcc (hidden copy)"}*.\nSeveral? Separate them with commas.\n_e.g. accounts@delta.co.zw, boss@gmail.com_`);
+      return true;
+    case "subj":
+      await setState(phone, "new_subject", d);
+      await sendText(phone, "✏️ Type the new *subject*.");
+      return true;
+    case "all": d.cc = [...new Set([...(d.cc || []), ...others])].slice(0, MAX_RCPT); return showDraft(phone, d);
+    case "clr": d.cc = []; d.bcc = []; return showDraft(phone, d);
+    case "nofiles": d.files = []; return showDraft(phone, d);
+    case "polish": case "mine": {
+      if (!d.text) return showDraft(phone, d);
+      if (verb === "mine") return showDraft(phone, { ...d, text: d.original || d.text, polished: false });
+      await sendText(phone, "✨ Polishing your email…");
+      const p = compose ? await polish(d.original || d.text, { fromName: (d.to || []).join(", "), subject: d.subject }, acc, { newEmail: true }) : await polish(d.original || d.text, msg, acc);
+      if (!p) { await sendText(phone, "Sorry, polishing isn't available right now. You can send your own words."); return showDraft(phone, d); }
+      return showDraft(phone, { ...d, text: p, original: d.original || d.text, polished: true });
+    }
+    case "send": {
+      if (!compose) return handleTap(phone, `mail_send_${d.msgId}`);
+      if (!d.text) return showDraft(phone, d);
+      await clearState(phone);
+      try {
+        const r = await sendNewEmail(acc, d, phone);
+        await safeButtons(phone, `✅ *Email sent* to ${clip(r.to.join(", "), 200)}${(d.files || []).length ? ` with ${d.files.length} attachment${d.files.length > 1 ? "s" : ""}` : ""}${r.cc.length ? `\nCc: ${clip(r.cc.join(", "), 200)}` : ""}${r.bcc.length ? `\nBcc: ${r.bcc.length} hidden` : ""}${r.via === "zimquote" ? `\n_Sent via ZimQuote; replies go to ${acc.email}._` : ""}`,
+          [{ id: `mail_new_${acc._id}`, title: "✉️ New email" }, { id: "mail_menu", title: "📧 My Mail" }]);
+      } catch (e) {
+        await setState(phone, "new_confirm", d);
+        await safeButtons(phone, `❌ The email could not be sent.\n${clip(e.message, 200)}`, [{ id: "mail_dsend", title: "🔁 Try again" }, { id: "mail_cancel", title: "❌ Cancel" }]);
+      }
+      return true;
+    }
+  }
+  return true;
 }

@@ -382,7 +382,7 @@ export function registerMailAdminRoutes(router, { requireSupplierAdmin, layout, 
   async function systemPanel() {
     const c = await systemCheck();
     const row = (ok, text, fix = "") => `<div>${ok ? "✅" : "❌"}</div><div>${text}${!ok && fix ? `<br><span class="sm mu">${fix}</span>` : ""}</div>`;
-    const allOk = !c.missing.length && c.secretKey && c.collector && c.sending;
+    const allOk = !c.missing.length && c.secretKey && c.collector && c.sending && !!c.templateHealth?.ok;
     return `<details class="card2" ${allOk ? "" : "open"}><summary><b>${allOk ? "✅ System check: all good" : "⚠️ System check: something needs fixing"}</b></summary>
 <div class="kv" style="grid-template-columns:28px 1fr">
 ${row(!c.missing.length, c.missing.length ? `Missing packages: <code>${c.missing.join(", ")}</code>` : "Mail packages installed", `On the server, in the app folder: <code>npm install ${c.missing.join(" ")}</code>, then restart the app.`)}
@@ -391,7 +391,11 @@ ${row(c.sending, c.sending ? "Sending (test emails, replies) ready" : "Sending n
 ${row(c.secretKey, c.secretKey ? `Password connect enabled${c.secretFromSession ? " (key taken from SESSION_SECRET - set MAIL_SECRET_KEY to be safe)" : ""}` : "Password connect disabled", "Add MAIL_SECRET_KEY (openssl rand -hex 32) to .env and restart.")}
 ${row(c.ai, c.ai ? "AI summaries and ✨ Polish on" : "AI summaries off (first lines of the email are used)", "Optional: OPENAI_API_KEY.")}
 ${row(c.adminPhone, c.adminPhone ? "“Set it up for me” alerts go to ZQ_ADMIN_PHONE" : "No admin phone for help alerts", "Set ZQ_ADMIN_PHONE in .env.")}
-<div>ℹ️</div><div class="sm mu">Email alerts outside the 24-hour window use the WhatsApp template <code>${e(c.template)}</code>. Until Meta approves it, alerts only reach people who messaged the bot in the last 24h.</div>
+${(() => { const h = c.templateHealth || {}; const ok = !!h.ok;
+  const state = h.metaStatus ? `Meta says: <b>${e(h.metaStatus)}</b>` : (h.lastOkAt ? `last delivered ${fmt(h.lastOkAt)}${h.lang ? ` (language ${e(h.lang)})` : ""}` : "not used yet");
+  const err = h.error && (!h.lastOkAt || new Date(h.lastErrorAt) > new Date(h.lastOkAt)) ? `<br><span style="color:#b91c1c">Last error ${fmt(h.lastErrorAt)}: ${e(h.error)}${h.code ? ` (#${e(h.code)})` : ""}</span>` : "";
+  return row(ok, `Alerts outside the 24-hour window: template <code>${e(c.template)}</code> · ${state}${err}`,
+    `Create it in WhatsApp Manager → Message templates → Create: <b>Category Utility</b>, name <code>${e(c.template)}</code>, language <b>English</b>.<br>Body:<br><code>You have a new email in {{1}}.<br>From: {{2}}<br>Subject: {{3}}<br>Summary: {{4}}<br>Tap a button below to reply on WhatsApp, read the full email, or mark it done.</code><br>Buttons (Quick reply): <code>Reply</code> · <code>Full email</code> · <code>Done</code>.<br>Until it's approved, nothing is lost: alerts are kept and sent the moment the person next messages the bot.${h.metaStatus ? "" : " Add WHATSAPP_BUSINESS_ACCOUNT_ID to .env to see Meta's approval status here."}`); })()}
 </div></details>`;
   }
 
