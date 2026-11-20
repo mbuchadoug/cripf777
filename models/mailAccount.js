@@ -52,8 +52,16 @@ const MailAccountSchema = new mongoose.Schema({
   webToken:     { type: String, index: true },                   // /mail/s/<token> status page
   helpRequestedAt: Date,
 
-  // Who gets the WhatsApp alerts (owner is always included)
+  // The business on ZimQuote this inbox belongs to (supplier / business / school).
+  // One company can have many inboxes, each going to different WhatsApp numbers.
+  companyType:  { type: String, default: "", index: true },      // supplier | business | school
+  companyId:    { type: String, default: "", index: true },
+  companyName:  { type: String, default: "" },
+
+  // Who gets the WhatsApp alerts. The owner is included unless ownerAlerts is false
+  // (a manager who looks after the inbox but lets staff receive the emails).
   alertPhones:  { type: [String], default: [] },
+  ownerAlerts:  { type: Boolean, default: true },
   alertMode:    { type: String, enum: ["all", "important"], default: "all" },
   signature:    { type: String, default: "" },
 

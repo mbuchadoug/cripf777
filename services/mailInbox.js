@@ -61,8 +61,9 @@ export const MAIL_CONFIG = {
       keep: String(e.MAIL_COLLECTOR_KEEP || "") === "1"
     };
   },
-  TEAM_MAX: 3,              // extra WhatsApp numbers per inbox
-  INBOX_MAX: 5,             // inboxes per WhatsApp number
+  TEAM_MAX: 3,              // extra WhatsApp numbers per inbox (WhatsApp side follows the plan)
+  ADMIN_TEAM_MAX: 10,       // extra WhatsApp numbers an admin can add to one inbox
+  get INBOX_MAX() { const v = Number(process.env.MAIL_INBOX_MAX); return Number.isFinite(v) && v > 0 ? v : 10; },   // inboxes per WhatsApp number
   STATE_TTL_MIN: 60,
   MAX_TEXT: 8000,
   MAX_ATT_BYTES: 8 * 1024 * 1024,
@@ -436,6 +437,13 @@ async function ingestParsed(parsed, acc) {
   return { ok: true, id: String(msg._id) };
 }
 
+/** WhatsApp numbers that receive this inbox's emails. */
+export function alertRecipients(acc) {
+  const staff = (acc.alertPhones || []).filter(Boolean);
+  const withOwner = acc.ownerAlerts === false && staff.length ? staff : [acc.ownerPhone, ...staff];
+  return [...new Set(withOwner.filter(Boolean).map(normPhone))];
+}
+
 async function notifyOwner(acc, text, buttons = null) {
   if (buttons?.length) return sendButtons(acc.ownerPhone, { text, buttons }).catch(() => sendText(acc.ownerPhone, text));
   return sendText(acc.ownerPhone, text);
@@ -445,7 +453,7 @@ const CAT_ICON = { order: "🛒", quote: "💬", payment: "💵", tender: "📑"
 
 export async function alertNewMail(acc, msg) {
   if (acc.phoneVerified === false) return;      // web sign-up not yet confirmed on WhatsApp
-  const phones = [...new Set([acc.ownerPhone, ...(acc.alertPhones || [])])].filter(Boolean).map(normPhone);
+  const phones = alertRecipients(acc);
 
   if (!isActive(acc)) {     // expired: tease, so they renew
     for (const p of phones.slice(0, 1)) {
@@ -816,24 +824,118 @@ const ENTRY_WORDS = /^(mail|my mail|email|emails|my email|inbox|zimquote mail|bu
 const PAGE = 7;                      // emails per inbox page (list max 10 rows incl. navigation)
 const SUPPORT_PHONE = () => process.env.MAIL_SUPPORT_PHONE || "+263 78 990 1058";
 
+// ═════════════════════════════════════════════════════════════════════════════
+// COMPANY: every inbox belongs to a business registered on ZimQuote
+// ═════════════════════════════════════════════════════════════════════════════
+// A phone belongs to a company when it is a listed supplier (or one of its
+// notification contacts), an owner / manager / staff of a Business-tools account,
+// or a registered school. Company owners and managers see and manage ALL of the
+// company's inboxes, whichever WhatsApp numbers the emails go to.
+const _pv = p => { const n = normPhone(p); return [...new Set([n, "+" + n, n.startsWith("263") ? "0" + n.slice(3) : n])]; };
+async function _model(file) { try { return (await import(`../models/${file}.js`)).default; } catch (_) { return null; } }
+const _companyCache = new Map();          // phone -> { at, list }   (30s, keeps menus fast)
+
+export async function findCompaniesForPhone(phone, { fresh = false } = {}) {
+  const key = normPhone(phone);
+  if (!key) return [];
+  const hit = _companyCache.get(key);
+  if (!fresh && hit && Date.now() - hit.at < 30000) return hit.list;
+  const v = _pv(key), out = [], seen = new Set();
+  const add = c => { const k = `${c.type}:${c.id}`; if (!seen.has(k)) { seen.add(k); out.push(c); } };
+  const SP = await _model("supplierProfile");
+  if (SP) {
+    const list = await SP.find({ $or: [{ phone: { $in: v } }, { notificationContacts: { $in: v } }] }).limit(10).lean().catch(() => []);
+    for (const s of list || []) if (s.profileType !== "biker") add({ type: "supplier", id: String(s._id), name: s.businessName || "", role: v.includes(String(s.phone)) ? "owner" : "staff", businessId: s.businessId ? String(s.businessId) : "" });
+  }
+  const UR = await _model("userRole"), BZ = await _model("business");
+  if (UR && BZ) {
+    const roles = await UR.find({ phone: { $in: v }, pending: { $ne: true } }).limit(10).lean().catch(() => []);
+    for (const r of roles || []) {
+      if (!r.businessId || out.some(c => c.businessId === String(r.businessId))) continue;   // already have it as a supplier
+      const b = await BZ.findById(r.businessId).lean().catch(() => null);
+      if (!b || !b.name || /^pending_/i.test(b.name)) continue;
+      if (b.supplierProfileId && seen.has(`supplier:${b.supplierProfileId}`)) continue;
+      add({ type: "business", id: String(b._id), name: b.name, role: ["owner", "manager", "admin"].includes(r.role) ? "owner" : "staff" });
+    }
+  }
+  const SC = await _model("schoolProfile");
+  if (SC) {
+    const list = await SC.find({ phone: { $in: v } }).limit(5).lean().catch(() => []);
+    for (const s of list || []) add({ type: "school", id: String(s._id), name: s.schoolName || "", role: "owner" });
+  }
+  out.sort((a, b) => (a.role === "owner" ? 0 : 1) - (b.role === "owner" ? 0 : 1));
+  if (out.length) _companyCache.set(key, { at: Date.now(), list: out });   // never cache "not registered" (they may register any minute)
+  else _companyCache.delete(key);
+  return out;
+}
+export async function companyFor(phone) { return (await findCompaniesForPhone(phone))[0] || null; }
+
+/** Admin: find a registered company from "supplier:<id>", a phone number or a name. */
+export async function resolveCompany(ref) {
+  ref = String(ref || "").trim();
+  if (!ref) return null;
+  let m;
+  if ((m = ref.match(/^(supplier|business|school):([a-f0-9]{24})$/i))) {
+    const type = m[1].toLowerCase(), file = { supplier: "supplierProfile", business: "business", school: "schoolProfile" }[type];
+    const M = await _model(file); const d = M ? await M.findById(m[2]).lean().catch(() => null) : null;
+    if (!d) throw new Error("That company was not found on ZimQuote.");
+    return { type, id: String(d._id), name: d.businessName || d.name || d.schoolName || "" };
+  }
+  const digits = ref.replace(/\D/g, "");
+  if (/^[\d\s+()-]+$/.test(ref) && digits.length >= 9) {
+    const c = (await findCompaniesForPhone(digits, { fresh: true }))[0];
+    if (!c) throw new Error(`No business on ZimQuote uses +${normPhone(digits)}. Register the business first, or type its name.`);
+    return c;
+  }
+  const rx = new RegExp(ref.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+  const found = [];
+  const SP = await _model("supplierProfile"), BZ = await _model("business"), SC = await _model("schoolProfile");
+  if (SP) for (const s of await SP.find({ businessName: rx, profileType: { $ne: "biker" } }).limit(6).lean().catch(() => []) || []) found.push({ type: "supplier", id: String(s._id), name: s.businessName });
+  if (BZ) for (const b of await BZ.find({ name: rx }).limit(6).lean().catch(() => []) || []) if (!/^pending_/i.test(b.name || "") && !(b.supplierProfileId && found.some(f => f.id === String(b.supplierProfileId)))) found.push({ type: "business", id: String(b._id), name: b.name });
+  if (SC) for (const s of await SC.find({ schoolName: rx }).limit(6).lean().catch(() => []) || []) found.push({ type: "school", id: String(s._id), name: s.schoolName });
+  const exact = found.filter(f => String(f.name || "").toLowerCase() === ref.toLowerCase());
+  if (exact.length === 1) return exact[0];
+  if (found.length === 1) return found[0];
+  if (!found.length) throw new Error(`No business called "${ref}" is registered on ZimQuote. Register it first (Suppliers → Add), then set up the email.`);
+  throw new Error(`More than one business matches "${ref}": ${found.slice(0, 6).map(f => f.name).join(", ")}. Type the full name or the business's phone number.`);
+}
+export const companyRef = acc => acc?.companyId ? `${acc.companyType}:${acc.companyId}` : "";
+function setCompany(acc, c) {
+  acc.companyType = c?.type || ""; acc.companyId = c?.id || ""; acc.companyName = c?.name || "";
+  if (c?.name && !acc.businessName) acc.businessName = c.name;
+}
+
 async function accountsOf(phone) {
-  return MailAccount.find({ $or: [{ ownerPhone: phone }, { alertPhones: phone }] }).sort({ createdAt: 1 });
+  const own = await MailAccount.find({ $or: [{ ownerPhone: phone }, { alertPhones: phone }] }).sort({ createdAt: 1 });
+  const managed = (await findCompaniesForPhone(phone).catch(() => [])).filter(c => c.role === "owner");
+  if (!managed.length) return own;
+  const more = await MailAccount.find({ $or: managed.map(c => ({ companyType: c.type, companyId: c.id })) }).sort({ createdAt: 1 });
+  const ids = new Set(own.map(a => String(a._id)));
+  return [...own, ...more.filter(a => !ids.has(String(a._id)))];
 }
 function canUse(phone, acc) {
   return !!acc && (acc.ownerPhone === phone || (acc.alertPhones || []).includes(phone));
 }
+/** Owner of the inbox, or an owner / manager of the company it belongs to. */
+async function canManage(phone, acc) {
+  if (!acc) return false;
+  if (acc.ownerPhone === phone) return true;
+  if (!acc.companyId) return false;
+  return (await findCompaniesForPhone(phone).catch(() => [])).some(c => c.role === "owner" && c.type === acc.companyType && c.id === String(acc.companyId));
+}
+async function canOpen(phone, acc) { return canUse(phone, acc) || await canManage(phone, acc); }
 async function loadMsg(phone, id) {
   if (!mongoose.isValidObjectId(id)) return {};
   const msg = await MailMessage.findById(id);
   if (!msg) return {};
   const acc = await MailAccount.findById(msg.accountId);
-  if (!canUse(phone, acc)) return {};
+  if (!(await canOpen(phone, acc))) return {};
   return { msg, acc };
 }
 async function loadAcc(phone, id) {
   if (!mongoose.isValidObjectId(id)) return null;
   const acc = await MailAccount.findById(id);
-  return canUse(phone, acc) ? acc : null;
+  return (await canOpen(phone, acc)) ? acc : null;
 }
 // The Request-a-Quote flow keeps its own typing state; leave it when the user comes to Mail.
 async function leaveOtherFlows(phone) {
@@ -882,7 +984,8 @@ async function sendIntro(from) {
     `↩️ Reply from WhatsApp - we send it as a proper email\n` +
     `✨ Type a quick note, tap Polish for a professional reply\n` +
     `👥 Your staff can get the alerts too\n\n` +
-    `Works with company email (.co.zw, .com, .org…), Gmail, Yahoo, Outlook and more.\n\n` +
+    `Works with company email (.co.zw, .com, .org…), Gmail, Yahoo, Outlook and more.\n` +
+    `🏢 For businesses registered on ZimQuote. One business can connect many emails, each to different WhatsApp numbers.\n\n` +
     `🎁 *Try it ${trialLabel()}*, then:\n${await pricingText(null, { short: true })}`,
     [{ id: "mail_setup", title: "📧 Connect my email" }, { id: "mail_help", title: "🙋 Set it up for me" }, { id: "main_menu_back", title: "🏠 Main Menu" }]);
 }
@@ -892,26 +995,37 @@ export async function sendMailMenu(from) {
   const accs = await accountsOf(from);
   if (!accs.length) return sendIntro(from);
   if (accs.length === 1) return sendAccountMenu(from, accs[0]);
-  const rows = accs.slice(0, 8).map((a, i) => ({ id: `mail_acc_${a._id}`, title: `${i + 1}. ${a.email}`, description: `${statusWord(a)} · ${planLine(a)}` }));
+  const rows = accs.slice(0, 8).map((a, i) => {
+    const to = alertRecipients(a);
+    const who = to.length === 1 && to[0] === from ? "" : ` · 📱 ${to.length === 1 ? "…" + to[0].slice(-4) : to.length + " numbers"}`;
+    return { id: `mail_acc_${a._id}`, title: `${i + 1}. ${a.email}`, description: `${statusWord(a)} · ${planLine(a)}${who}` };
+  });
   if (accs.filter(a => a.ownerPhone === from).length < MAIL_CONFIG.INBOX_MAX) rows.push({ id: "mail_setup", title: "➕ Add another email", description: "Connect one more inbox" });
   rows.push({ id: "main_menu_back", title: "🏠 Main Menu", description: "Back to ZimQuote" });
   return safeList(from, "📧 *ZimQuote Mail*\n\nChoose an inbox:", rows);
 }
 
 async function sendAccountMenu(from, acc) {
-  const isOwner = acc.ownerPhone === from;
+  if (!acc.companyId) {                         // older inbox: link it to the owner's business on ZimQuote
+    const c = await companyFor(acc.ownerPhone).catch(() => null);
+    if (c) { setCompany(acc, c); await acc.save().catch(() => {}); }
+  }
+  const isOwner = await canManage(from, acc);
+  const nums = alertRecipients(acc);
   const open = await MailMessage.countDocuments({ accountId: acc._id, status: "new", muted: false }).catch(() => 0);
   const lim = planLimits(acc);
   const text =
     `📧 *${acc.email}*\n${statusWord(acc)} · ${planLine(acc)}\n` +
     `📬 ${acc.mailCount || 0} emails · 🔵 ${open} open · ↩️ ${acc.replyCount || 0} replies\n` +
-    `Plan: ${lim.name} · Connected by ${howWord(acc)}`;
+    `Plan: ${lim.name} · Connected by ${howWord(acc)}` +
+    (acc.companyName ? `\n🏢 ${acc.companyName}` : "") +
+    `\n📱 Emails go to: ${nums.map(p => "+" + p).join(", ")}`;
   const rows = [{ id: `mail_inbox_${acc._id}_0`, title: `📬 Inbox (${open} open)`, description: "Read and reply to your emails" }];
   if (acc.status !== "live") rows.push({ id: `mail_guide_${acc._id}`, title: "🛠 Connect / fix", description: "Simple steps to connect this email" });
   if (isOwner) {
     rows.push(
       { id: `mail_alerts_${acc._id}`, title: acc.alertMode === "all" ? "🔔 Alerts: every email" : "🔔 Alerts: important", description: "Tap to switch: every email / important only" },
-      { id: `mail_team_${acc._id}`, title: "👥 Staff alerts", description: `Staff WhatsApp numbers (${(acc.alertPhones || []).length}/${lim.team})` },
+      { id: `mail_team_${acc._id}`, title: "👥 WhatsApp numbers", description: `Numbers that get these emails (${(acc.alertPhones || []).length}/${Math.max(lim.team, (acc.alertPhones || []).length)} extra)` },
       { id: `mail_sig_${acc._id}`, title: "✍️ Signature", description: acc.signature ? acc.signature : "Added under your replies" },
       { id: `mail_name_${acc._id}`, title: "🏷 Sender name", description: acc.displayName || "Name people see on your replies" },
       { id: `mail_pay_${acc._id}`, title: "💳 Plan & payment", description: planLine(acc).replace(/^\S+\s/, "") },
@@ -995,17 +1109,33 @@ async function showPreview(from, msg, text, { polished = false, original = "", f
   return safeButtons(from, `☝️ That's your full reply.${tail}`, buttons);
 }
 
-async function setupAsk(from) {
-  await leaveOtherFlows(from);
-  await setState(from, "setup_email", {});
-  return sendText(from, `📧 *Connect your email - step 1 of 2*\n\nType the email address you want on WhatsApp.\n\n_Examples:_\n• sales@yourcompany.co.zw\n• info@yourshop.com\n• yourname@gmail.com\n\nType *cancel* to stop.`);
+/** ZimQuote Mail is for businesses registered on ZimQuote. */
+async function sendRegisterFirst(from) {
+  await clearState(from);
+  return safeButtons(from,
+    `🏢 *Register your business first*\n\nZimQuote Mail is for businesses registered on ZimQuote. Register your business (it takes about 2 minutes), then type *mail* to connect your emails.\n\n` +
+    `Already registered with another WhatsApp number? Use that number, or ask the owner to add you as a contact on the business.\n\nNeed help? Tap *Set it up for me* and our team will do it with you.`,
+    [{ id: "register_supplier", title: "🏪 Register business" }, { id: "mail_help", title: "🙋 Set it up for me" }, { id: "main_menu_back", title: "🏠 Main Menu" }]);
 }
 
-export async function createAccount(from, email, { businessName = "", setupBy = "whatsapp", phoneVerified = true } = {}) {
+async function setupAsk(from) {
+  await leaveOtherFlows(from);
+  const co = await companyFor(from);
+  if (!co) return sendRegisterFirst(from);
+  await setState(from, "setup_email", {});
+  return sendText(from, `📧 *Connect an email for ${co.name || "your business"} - step 1 of 2*\n\nType the email address you want on WhatsApp.\n\n_Examples:_\n• sales@yourcompany.co.zw\n• info@yourshop.com\n• yourname@gmail.com\n\nType *cancel* to stop.`);
+}
+
+export async function createAccount(from, email, { businessName = "", setupBy = "whatsapp", phoneVerified = true, company = undefined } = {}) {
   email = email.toLowerCase().trim();
   from = normPhone(from);
   const existing = await MailAccount.findOne({ ownerPhone: from, email });
   if (existing) return existing;
+  if (company === undefined) company = await companyFor(from);
+  if (!company) {
+    const err = new Error("Your business must be registered on ZimQuote before you connect an email. Register it first, then try again.");
+    err.code = "NO_COMPANY"; throw err;
+  }
   const count = await MailAccount.countDocuments({ ownerPhone: from });
   if (count >= MAIL_CONFIG.INBOX_MAX) throw new Error(`You can connect up to ${MAIL_CONFIG.INBOX_MAX} inboxes.`);
   const { provider } = await detectProvider(email);
@@ -1013,7 +1143,8 @@ export async function createAccount(from, email, { businessName = "", setupBy = 
   for (let i = 0; i < 5; i++) { slug = randSlug(); if (!(await MailAccount.exists({ slug }))) break; }
   const acc = await MailAccount.create({
     ownerPhone: from, email, provider, slug, mode: "forward", status: "setup",
-    businessName, displayName: businessName, setupBy, phoneVerified,
+    businessName: businessName || company.name || "", displayName: businessName || company.name || "", setupBy, phoneVerified,
+    companyType: company.type, companyId: company.id, companyName: company.name || "",
     linkCode: phoneVerified ? undefined : crypto.randomBytes(3).toString("hex").toUpperCase(),
     webToken: crypto.randomBytes(12).toString("hex"),
     trialEndsAt: daysFromNow(MAIL_CONFIG.TRIAL_DAYS)
@@ -1178,13 +1309,13 @@ export async function handleMailMessage({ from, text = "", rawText = "", action 
         await clearState(phone);
         let acc;
         try { acc = await createAccount(phone, email); }
-        catch (e) { await sendText(phone, `❌ ${e.message}`); return true; }
+        catch (e) { if (e.code === "NO_COMPANY") { await sendRegisterFirst(phone); return true; } await sendText(phone, `❌ ${e.message}`); return true; }
         if (!acc.displayName) {
           let nm = biz?.name && !String(biz.name).startsWith("pending_supplier_") ? biz.name : "";
           if (!nm) { try { const SP = (await import("../models/supplierProfile.js")).default; nm = (await SP.findOne({ phone }).lean())?.businessName || ""; } catch (_) {} }
           if (nm) { acc.displayName = nm; acc.businessName = acc.businessName || nm; await acc.save(); }
         }
-        await sendText(phone, `✅ *${email}* added.\n🎁 Free trial until *${fmtWhen(acc.trialEndsAt)}*.\n\n${await pricingText(acc)}`);
+        await sendText(phone, `✅ *${email}* added${acc.companyName ? ` for *${acc.companyName}*` : ""}.\n🎁 Free trial until *${fmtWhen(acc.trialEndsAt)}*.\n\n${await pricingText(acc)}\n\n📱 Want these emails on other WhatsApp numbers too (e.g. your sales team)? Open the inbox → *👥 WhatsApp numbers*.`);
         await sendSetupGuide(phone, acc);
         return true;
       }
@@ -1203,19 +1334,19 @@ export async function handleMailMessage({ from, text = "", rawText = "", action 
       }
       case "team_add": {
         const acc = await MailAccount.findById(s.data.accId);
-        if (!acc || acc.ownerPhone !== phone) { await clearState(phone); return notFound(phone); }
+        if (!acc || !(await canManage(phone, acc))) { await clearState(phone); return notFound(phone); }
         const p = normPhone(typed);
         if (!/^\d{11,15}$/.test(p)) { await sendText(phone, "❌ Type a WhatsApp number like *0772123456*, or *cancel*."); return true; }
         const max = planLimits(acc).team;
-        if ((acc.alertPhones || []).length >= max) { await clearState(phone); await safeButtons(phone, `Your plan allows ${max} staff number${max > 1 ? "s" : ""}. Remove one, or upgrade your plan.`, [{ id: `mail_pay_${acc._id}`, title: "💳 Plans" }, { id: `mail_team_${acc._id}`, title: "👥 Staff alerts" }]); return true; }
+        if ((acc.alertPhones || []).length >= max) { await clearState(phone); await safeButtons(phone, `Your plan allows ${max} extra WhatsApp number${max > 1 ? "s" : ""} for this email. Remove one, or upgrade your plan.`, [{ id: `mail_pay_${acc._id}`, title: "💳 Plans" }, { id: `mail_team_${acc._id}`, title: "👥 WhatsApp numbers" }]); return true; }
         if (p !== acc.ownerPhone && !(acc.alertPhones || []).includes(p)) { acc.alertPhones = [...(acc.alertPhones || []), p]; await acc.save(); _mailPhones.at = 0; }
         await clearState(phone);
-        await safeButtons(phone, `✅ +${p} will now get email alerts for ${acc.email} and can reply.\n\n_Ask them to send "hi" to this WhatsApp number once, so alerts can reach them._`, [{ id: `mail_team_${acc._id}`, title: "👥 Staff alerts" }, { id: `mail_acc_${acc._id}`, title: "📧 My Mail" }]);
+        await safeButtons(phone, `✅ +${p} will now get the emails for ${acc.email} and can reply.\n\n_Ask them to send "hi" to this WhatsApp number once, so alerts can reach them._`, [{ id: `mail_team_${acc._id}`, title: "👥 WhatsApp numbers" }, { id: `mail_acc_${acc._id}`, title: "📧 My Mail" }]);
         return true;
       }
       case "sig": case "name": {
         const acc = await MailAccount.findById(s.data.accId);
-        if (!acc || acc.ownerPhone !== phone) { await clearState(phone); return notFound(phone); }
+        if (!acc || !(await canManage(phone, acc))) { await clearState(phone); return notFound(phone); }
         const val = /^none$/i.test(typed) ? "" : typed.slice(0, s.state === "sig" ? 500 : 80);
         if (s.state === "sig") acc.signature = val; else acc.displayName = val;
         await acc.save(); await clearState(phone);
@@ -1267,7 +1398,7 @@ async function handleTap(phone, a) {
   }
   if ((m = a.match(/^mail_plan_(starter|business|pro)_([a-f0-9]{24})$/))) {
     const acc = await loadAcc(phone, m[2]); if (!acc) return notFound(phone);
-    if (acc.ownerPhone !== phone) { await sendText(phone, "Only the owner of this inbox can pay for it."); return true; }
+    if (!(await canManage(phone, acc))) { await sendText(phone, "Only the owner of this inbox can pay for it."); return true; }
     const pl = MAIL_PLANS[m[1]]; const pr = await priceFor(acc, m[1]);
     await setState(phone, "pay", { accId: String(acc._id), plan: m[1] });
     await safeButtons(phone, `💳 *${pl.name} - $${pr.price} for 1 year*\n${pl.blurb}\n📧 ${acc.email}\n\nType the *EcoCash number* to pay from, or tap *Use this number*.`,
@@ -1319,11 +1450,11 @@ async function handleTap(phone, a) {
     }
   }
 
-  if ((m = a.match(/^mail_(acc|guide|fwd|alerts|team|sig|name|pay|pause|reconnect|teamdel)_([a-f0-9]{24})(?:_(\d+))?$/))) {
+  if ((m = a.match(/^mail_(acc|guide|fwd|alerts|team|sig|name|pay|pause|reconnect|teamdel|ownalerts)_([a-f0-9]{24})(?:_(\d+))?$/))) {
     const [, verb, id, extra] = m;
     const acc = await loadAcc(phone, id);
     if (!acc) return notFound(phone);
-    const owner = acc.ownerPhone === phone;
+    const owner = await canManage(phone, acc);
     switch (verb) {
       case "acc": await clearState(phone); await sendAccountMenu(phone, acc); return true;
       case "guide": await sendSetupGuide(phone, acc); return true;
@@ -1337,18 +1468,29 @@ async function handleTap(phone, a) {
         return true;
       case "team": {
         const max = planLimits(acc).team;
-        const list = (acc.alertPhones || []).map((p, i) => `${i + 1}. +${p}`).join("\n") || "No staff numbers yet.";
+        const staff = acc.alertPhones || [];
+        const ownerOn = !(acc.ownerAlerts === false && staff.length);
+        const list = [`📱 +${acc.ownerPhone} (owner)${ownerOn ? "" : " - not getting these emails"}`, ...staff.map((p, i) => `${i + 1}. +${p}`)].join("\n");
         await setState(phone, "team_add", { accId: id });
-        const btns = (acc.alertPhones || []).slice(0, 2).map((p, i) => ({ id: `mail_teamdel_${id}_${i}`, title: `🗑 Remove …${p.slice(-4)}` }));
-        btns.push({ id: `mail_acc_${id}`, title: "⬅ Back" });
-        await safeButtons(phone, `👥 *Staff alerts - ${acc.email}*\n\n${list}\n\nTo add someone, *type their WhatsApp number* (e.g. 0772123456). Your plan allows ${max}.`, btns);
+        const rows = staff.slice(0, 7).map((p, i) => ({ id: `mail_teamdel_${id}_${i}`, title: `🗑 Remove …${p.slice(-4)}`, description: `Stop sending ${acc.email} to +${p}` }));
+        if (staff.length) rows.push({ id: `mail_ownalerts_${id}`, title: ownerOn ? "🔕 Owner: stop emails" : "🔔 Owner: get emails", description: ownerOn ? `Only the numbers above get ${acc.email}` : `+${acc.ownerPhone} gets ${acc.email} again` });
+        rows.push({ id: `mail_acc_${id}`, title: "⬅ Back", description: acc.email });
+        await safeList(phone, `👥 *WhatsApp numbers for ${acc.email}*\n\n${list}\n\nTo add a number, *type it now* (e.g. 0772123456). Your plan allows ${max} extra number${max > 1 ? "s" : ""}.\n\n_Tip: a business can connect several emails (sales@, accounts@…), each going to different numbers. Tap ➕ Add another email in My Mail._`, rows);
+        return true;
+      }
+      case "ownalerts": {
+        acc.ownerAlerts = acc.ownerAlerts === false ? true : false;
+        if (!(acc.alertPhones || []).length) acc.ownerAlerts = true;
+        await acc.save(); _mailPhones.at = 0; await clearState(phone);
+        await safeButtons(phone, acc.ownerAlerts === false ? `🔕 +${acc.ownerPhone} will no longer get emails for ${acc.email}. The other numbers still do, and the owner can still open 📬 Inbox.` : `🔔 +${acc.ownerPhone} will get emails for ${acc.email} again.`, [{ id: `mail_team_${id}`, title: "👥 WhatsApp numbers" }, { id: `mail_acc_${id}`, title: "📧 My Mail" }]);
         return true;
       }
       case "teamdel": {
         const i = Number(extra);
         acc.alertPhones = (acc.alertPhones || []).filter((_, k) => k !== i); await acc.save(); _mailPhones.at = 0;
         await clearState(phone);
-        await safeButtons(phone, "🗑 Removed.", [{ id: `mail_team_${id}`, title: "👥 Staff alerts" }]);
+        if (!(acc.alertPhones || []).length && acc.ownerAlerts === false) { acc.ownerAlerts = true; await acc.save(); }
+        await safeButtons(phone, "🗑 Removed.", [{ id: `mail_team_${id}`, title: "👥 WhatsApp numbers" }]);
         return true;
       }
       case "sig": await setState(phone, "sig", { accId: id }); await sendText(phone, `✍️ Type the signature to add under your replies, e.g.\n\nTidings Moyo\nSales Manager, Acme (Pvt) Ltd\n+263 77 123 4567\n\nType *none* to remove it.`); return true;
@@ -1615,6 +1757,10 @@ async function linkWebSignup(phone, code) {
     await sendMailMenu(phone); return;
   }
   acc.ownerPhone = phone; acc.phoneVerified = true; acc.linkCode = undefined;
+  if (!acc.companyId || !(await findCompaniesForPhone(phone)).some(c => c.id === String(acc.companyId))) {
+    const c = await companyFor(phone);
+    if (c) setCompany(acc, c);
+  }
   await acc.save(); _mailPhones.at = 0;
   await sendText(phone, `✅ *WhatsApp confirmed for ${acc.email}*\n\nNew emails will arrive here.${acc.status === "live" ? "" : " Finish the last step on the web page, or use the steps below."}`);
   if (acc.status !== "live") await sendSetupGuide(phone, acc);
@@ -1646,11 +1792,18 @@ async function requestHelp(phone) {
 /**
  * @returns {{ acc, connected: boolean, message: string }}
  */
-export async function setupForClient({ phone, email, businessName = "", password = "", protocol = "auto", imapHost = "", imapPort = 0, smtpHost = "", smtpPort = 0, alertMode = "all", trialDays = 0, planKey = "", paidDays = 0 }) {
+export async function setupForClient({ phone, email, businessName = "", password = "", protocol = "auto", imapHost = "", imapPort = 0, smtpHost = "", smtpPort = 0, alertMode = "all", trialDays = 0, planKey = "", paidDays = 0, company = "", alertPhones = "", ownerAlerts = true }) {
   phone = normPhone(phone);
   if (!/^\d{11,15}$/.test(phone)) throw new Error("Enter the client's WhatsApp number, e.g. 0772123456");
   if (!isEmail(email)) throw new Error("Enter a valid email address");
-  const acc = await createAccount(phone, email, { businessName, setupBy: "admin", phoneVerified: true });
+  const co = company ? (typeof company === "object" ? company : await resolveCompany(company)) : await companyFor(phone);
+  if (!co) throw new Error(`+${phone} is not linked to a business on ZimQuote. Register the business first (Suppliers → Add), or type the registered business's name or phone in "ZimQuote business".`);
+  const acc = await createAccount(phone, email, { businessName, setupBy: "admin", phoneVerified: true, company: co });
+  if (!acc.companyId) setCompany(acc, co);
+  const extra = parsePhones(alertPhones).filter(p => p !== phone);
+  if (extra.length) acc.alertPhones = [...new Set([...(acc.alertPhones || []), ...extra])].slice(0, MAIL_CONFIG.ADMIN_TEAM_MAX);
+  acc.ownerAlerts = ownerAlerts === false && (acc.alertPhones || []).length ? false : true;
+  _mailPhones.at = 0;
   if (alertMode) acc.alertMode = alertMode;
   if (businessName && !acc.displayName) acc.displayName = businessName;
   if (trialDays > 0) acc.trialEndsAt = daysFromNow(trialDays);
@@ -1665,6 +1818,8 @@ export async function setupForClient({ phone, email, businessName = "", password
   }
   return { acc, connected, message };
 }
+
+const parsePhones = s => [...new Set(String(s || "").split(/[,;\r\n]+/).map(normPhone).filter(p => /^\d{11,15}$/.test(p)))];
 
 /** WhatsApp welcome for a client set up by the ZimQuote team. */
 export async function sendClientWelcome(acc) {
@@ -1766,7 +1921,13 @@ export async function updateAccount(id, f = {}) {
     acc.ownerPhone = p; acc.phoneVerified = true; acc.linkCode = undefined;
   }
   if (f.alertPhones !== undefined) {
-    acc.alertPhones = [...new Set(String(f.alertPhones).split(/[,;\r\n]+/).map(normPhone).filter(p => /^\d{11,15}$/.test(p) && p !== acc.ownerPhone))].slice(0, 5);
+    acc.alertPhones = parsePhones(f.alertPhones).filter(p => p !== acc.ownerPhone).slice(0, MAIL_CONFIG.ADMIN_TEAM_MAX);
+  }
+  if (f.ownerAlerts !== undefined) acc.ownerAlerts = !!f.ownerAlerts || !(acc.alertPhones || []).length;
+  if (f.company !== undefined) {
+    const ref = String(f.company || "").trim();
+    if (ref && ref !== companyRef(acc)) setCompany(acc, await resolveCompany(ref));
+    else if (!ref) setCompany(acc, null);
   }
   for (const k of ["businessName", "displayName", "signature"]) if (f[k] !== undefined) acc[k] = String(f[k]).slice(0, k === "signature" ? 500 : 80);
   if (f.alertMode) acc.alertMode = f.alertMode === "important" ? "important" : "all";

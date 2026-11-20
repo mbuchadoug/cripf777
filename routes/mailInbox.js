@@ -29,7 +29,8 @@ import {
   createAccount, connectWithPassword, discoverServers, linkWaUrl, notifyMailAdmin,
   setupForClient, sendClientWelcome, sendTestEmail, sendSetupGuide,
   updateAccount, deleteAccount, pollCollector, collectorStatus, systemCheck, MAIL_PRESETS, presetFor,
-  MAIL_PLANS, planLimits, deactivateAccount, readAttachment, sendConnectedMessage, trialLabel, SUPPLIER_DISCOUNT
+  MAIL_PLANS, planLimits, deactivateAccount, readAttachment, sendConnectedMessage, trialLabel, SUPPLIER_DISCOUNT,
+  companyFor, resolveCompany, companyRef, alertRecipients
 } from "../services/mailInbox.js";
 import { sendButtons } from "../services/metaSender.js";
 
@@ -113,12 +114,13 @@ router.get("/", (req, res) => {
 <div class="feat">
 <div><b>Works with any email</b><br><span class="muted">.co.zw, .com, .org company email (IMAP or POP3), Gmail, Yahoo, Outlook.</span></div>
 <div><b>Reply in seconds</b><br><span class="muted">Type a short note; tap ✨ Polish to turn it into a professional email.</span></div>
-<div><b>Your staff too</b><br><span class="muted">Up to 3 more WhatsApp numbers get the alerts.</span></div>
+<div><b>Your whole team</b><br><span class="muted">Each email can go to several WhatsApp numbers, and one business can connect many emails (sales@, accounts@…).</span></div>
 <div><b>From $${MAIL_PLANS.starter.price} a year</b><br><span class="muted">Try it ${trialLabel()}. Starter $${MAIL_PLANS.starter.price} · Business $${MAIL_PLANS.business.price} · Pro $${MAIL_PLANS.pro.price}. Paid once a year by EcoCash.</span></div>
 </div>
 ${err}
 <form method="post" action="/mail/start" class="card">
 <h2>Start free in 2 minutes</h2>
+<p class="muted" style="font-size:.9rem;margin-top:0">For businesses registered on ZimQuote. Use the WhatsApp number your business is registered with. Not registered yet? <a href="https://wa.me/263771143904?text=ZQ:REGISTER">Register on WhatsApp</a> first.</p>
 <label for="biz">Business name</label><input id="biz" name="biz" required placeholder="e.g. Acme Hardware">
 <label for="email">Email address you want on WhatsApp</label><input id="email" name="email" type="email" required placeholder="e.g. sales@acme.co.zw" autocomplete="email">
 <label for="phone">Your WhatsApp number</label><input id="phone" name="phone" inputmode="tel" required placeholder="e.g. 0772 123 456" autocomplete="tel">
@@ -139,6 +141,14 @@ router.post("/start", form, async (req, res) => {
     const existing = await MailAccount.findOne({ ownerPhone: phone, email });
     if (existing && existing.phoneVerified !== false) {
       return res.send(page("Already connected", `<h1>${esc(email)} is already set up</h1><p>Type <b>mail</b> to ZimQuote on WhatsApp (+263 77 114 3904) to see your inbox and settings.</p><p><a class="btn wa" href="https://wa.me/263771143904?text=ZQ:MAIL">Open WhatsApp</a></p>`));
+    }
+    if (!existing && !(await companyFor(phone))) {
+      return res.send(page("Register your business first", `<h1>Register your business on ZimQuote first</h1>
+<p>ZimQuote Mail is for businesses registered on ZimQuote, and we couldn't find a business for <b>+${esc(phone)}</b>.</p>
+<ol><li>Tap the button below. WhatsApp opens with <b>ZQ:REGISTER</b> typed in. Press <b>Send</b> and follow the steps (about 2 minutes).</li>
+<li>Then come back here, or type <b>mail</b> on WhatsApp, to connect your email.</li></ol>
+<p><a class="btn wa" href="https://wa.me/263771143904?text=ZQ:REGISTER">Register my business on WhatsApp</a></p>
+<p class="muted">Already registered with another number? <a href="/mail">Go back</a> and type that WhatsApp number. Need help? WhatsApp ${esc(SUPPORT())}.</p>`));
     }
     const acc = existing || await createAccount(phone, email, { businessName: biz, setupBy: "web", phoneVerified: false });
     if (!acc.webToken || (!acc.phoneVerified && !acc.linkCode)) {
@@ -410,7 +420,9 @@ ${s.lastError ? `<div class="zqm-flash bad">Last error: ${e(s.lastError)}</div>`
       const f = String(req.query.filter || "");
       const filter = {};
       const rx = s => new RegExp(s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
-      if (q) filter.$or = [{ email: rx(q) }, { businessName: rx(q) }, { ownerPhone: new RegExp(q.replace(/\D/g, "") || "^$") }];
+      if (q) filter.$or = [{ email: rx(q) }, { businessName: rx(q) }, { companyName: rx(q) }, { ownerPhone: new RegExp(q.replace(/\D/g, "") || "^$") }, { alertPhones: new RegExp(q.replace(/\D/g, "") || "^$") }];
+      const cm = String(req.query.company || "").match(/^(supplier|business|school):([a-f0-9]{24})$/);
+      if (cm) Object.assign(filter, { companyType: cm[1], companyId: cm[2] });
       if (f === "help") filter.helpRequestedAt = { $ne: null };
       if (f === "stuck") Object.assign(filter, { status: "setup", createdAt: { $lt: new Date(Date.now() - 3600000) } });
       const accs = await MailAccount.find(filter).sort(f === "help" ? { helpRequestedAt: -1 } : { createdAt: -1 }).limit(300).lean();
@@ -424,15 +436,16 @@ ${s.lastError ? `<div class="zqm-flash bad">Last error: ${e(s.lastError)}</div>`
       const stuck = all.filter(a => a.status === "setup" && new Date(a.createdAt).getTime() < now - 3600000).length;
       const help = all.filter(a => a.helpRequestedAt && a.status !== "live").length;
       const rows = accs.map(a => `<tr>
-<td><a class="btn-link" href="/zq-admin/mail/${a._id}"><b>${e(a.email)}</b></a><br><small class="muted">${e(a.businessName || "")}${a.businessName ? " · " : ""}${e(a.provider)} · ${a.mode === "imap" ? "IMAP login" : a.mode === "pop3" ? "POP3 login" : "forwarding"} · ${e(planLimits(a).name)}</small>${a.helpRequestedAt && a.status !== "live" ? `<br>${badge("🙋 wants help", "orange")}` : ""}</td>
-<td><a href="https://wa.me/${e(a.ownerPhone)}" target="_blank">+${e(a.ownerPhone)}</a>${a.phoneVerified === false ? `<br>${badge("not confirmed", "gray")}` : ""}</td>
+<td><a class="btn-link" href="/zq-admin/mail/${a._id}"><b>${e(a.email)}</b></a><br><small class="muted">${e(a.businessName || "")}${a.businessName ? " · " : ""}${e(a.provider)} · ${a.mode === "imap" ? "IMAP login" : a.mode === "pop3" ? "POP3 login" : "forwarding"} · ${e(planLimits(a).name)}</small>${a.companyId ? `<br><a class="sm" href="/zq-admin/mail?company=${e(companyRef(a))}">🏢 ${e(a.companyName || "business")}</a>` : `<br>${badge("no business linked", "gray")}`}${a.helpRequestedAt && a.status !== "live" ? `<br>${badge("🙋 wants help", "orange")}` : ""}</td>
+<td><a href="https://wa.me/${e(a.ownerPhone)}" target="_blank">+${e(a.ownerPhone)}</a>${a.phoneVerified === false ? `<br>${badge("not confirmed", "gray")}` : ""}${(a.alertPhones || []).length ? `<br><small class="muted">+${a.alertPhones.length} more number${a.alertPhones.length > 1 ? "s" : ""}${a.ownerAlerts === false ? " · owner muted" : ""}</small>` : ""}</td>
 <td>${statusBadge(a)}<br>${planBadge(a)}</td>
 <td>${a.mailCount || 0} in · ${a.replyCount || 0} out<br><small class="muted">last ${fmt(a.lastMailAt)}</small></td>
 <td style="white-space:nowrap"><a class="btn btn-sm btn-blue" href="/zq-admin/mail/${a._id}">Open</a> <a class="btn btn-sm btn-gray" href="/zq-admin/mail/${a._id}#edit">Edit</a></td></tr>`).join("");
       const sys = await systemPanel();
-      res.send(layout("ZimQuote Mail", wrap(`${flash(req)}${sub("list")}${sys}${MAIL_CONFIG.COLLECTOR ? receivingPanel() : ""}
+      const coBanner = cm && accs[0] ? `<div class="card2"><h3>🏢 ${e(accs[0].companyName || "Business")}: ${accs.length} email${accs.length === 1 ? "" : "s"}</h3><div class="acts"><a class="btn btn-sm btn-green" href="/zq-admin/mail/new?company=${e(cm[0])}">➕ Connect another email for this business</a><a class="btn btn-sm btn-gray" href="/zq-admin/mail">All inboxes</a></div></div>` : "";
+      res.send(layout("ZimQuote Mail", wrap(`${flash(req)}${sub("list")}${coBanner}${sys}${MAIL_CONFIG.COLLECTOR ? receivingPanel() : ""}
 <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px">${stat(all.length, "Inboxes", "blue")}${stat(paid, "Paid", "green")}${stat(help, "Asked for help", "orange")}${stat(stuck, "Stuck in setup", "red")}${stat(mails24, "Emails 24h", "teal")}${stat(replies24, "Replies 24h", "teal")}</div>
-<form method="get" style="margin-bottom:12px;display:flex;gap:8px"><input name="q" value="${e(q)}" placeholder="Search email, business or phone" style="flex:1"><button class="btn btn-blue">Search</button></form>
+<form method="get" style="margin-bottom:12px;display:flex;gap:8px"><input name="q" value="${e(q)}" placeholder="Search email, business or any WhatsApp number" style="flex:1"><button class="btn btn-blue">Search</button></form>
 <p class="muted sm">Sign-up link to share: <code>${e(MAIL_CONFIG.SITE)}/mail</code> · WhatsApp: <code>https://wa.me/263771143904?text=ZQ:MAIL</code></p>
 <div class="table-wrap"><table><thead><tr><th>Inbox</th><th>Owner</th><th>Status</th><th>Activity</th><th></th></tr></thead><tbody>${rows || `<tr><td colspan="5" class="muted">Nothing here.</td></tr>`}</tbody></table></div>`)));
     } catch (err) { res.status(500).send(layout("ZimQuote Mail", `<div class="alert red">${e(err.message)}</div>`)); }
@@ -441,7 +454,7 @@ ${s.lastError ? `<div class="zqm-flash bad">Last error: ${e(s.lastError)}</div>`
   // ── Set up for a client ────────────────────────────────────────────────────
   router.get("/mail/new", requireSupplierAdmin, async (req, res) => {
     const sq = String(req.query.sq || "").trim();
-    let found = [], pre = { phone: req.query.phone || "", biz: req.query.biz || "" };
+    let found = [], pre = { phone: req.query.phone || "", biz: req.query.biz || "", company: String(req.query.company || ""), companyName: "" };
     try {
       const SP = (await import("../models/supplierProfile.js")).default;
       if (sq) {
@@ -450,9 +463,14 @@ ${s.lastError ? `<div class="zqm-flash bad">Last error: ${e(s.lastError)}</div>`
       }
       if (req.query.sid && mongoose.isValidObjectId(req.query.sid)) {
         const s = await SP.findById(req.query.sid, { businessName: 1, phone: 1 }).lean();
-        if (s) pre = { phone: s.phone, biz: s.businessName };
+        if (s) pre = { phone: s.phone, biz: s.businessName, company: `supplier:${s._id}`, companyName: s.businessName };
       }
     } catch (_) {}
+    if (pre.company && !pre.companyName) {
+      try { const c = await resolveCompany(pre.company); pre.companyName = c?.name || ""; pre.biz = pre.biz || c?.name || ""; } catch (_) { pre.company = ""; }
+    }
+    let others = [];
+    if (pre.company) { const [t, i] = pre.company.split(":"); others = await MailAccount.find({ companyType: t, companyId: i }, { email: 1, ownerPhone: 1, alertPhones: 1, ownerAlerts: 1 }).lean().catch(() => []); }
     res.send(layout("ZimQuote Mail - New", wrap(`${flash(req)}${sub("new")}
 <div class="card2" style="max-width:760px">
 <h3>🏪 Connect a listed supplier's email</h3>
@@ -460,11 +478,14 @@ ${s.lastError ? `<div class="zqm-flash bad">Last error: ${e(s.lastError)}</div>`
 ${sq ? (found.length ? `<div class="table-wrap" style="margin-top:10px"><table><tbody>${found.map(s => `<tr><td><b>${e(s.businessName || "-")}</b><br><small class="muted">+${e(s.phone)} · ${e(s.location?.city || "")} · ${s.active ? "active" : "inactive"}${s.tier ? " · " + e(s.tier) : ""}</small></td><td style="text-align:right"><a class="btn btn-sm btn-green" href="/zq-admin/mail/new?sid=${s._id}">Set up email</a></td></tr>`).join("")}</tbody></table></div>` : `<p class="mu sm" style="margin-top:8px">No supplier found.</p>`) : `<p class="mu sm" style="margin-top:8px">Listed sellers get ${Math.round(Number(process.env.MAIL_SUPPLIER_DISCOUNT ?? 0.25) * 100)}% off ZimQuote Mail plans.</p>`}
 </div>
 <div class="card2" style="max-width:760px">
-<h3>Set up an inbox for a client</h3>
-<p class="mu sm">On the phone with the client: type their email and password. We find their mail server (works with .co.zw cPanel hosting) and test the login. No password? Leave it blank, and you'll get the forwarding address to add in their cPanel.</p>
+<h3>Set up an inbox for a client${pre.companyName ? ` - ${e(pre.companyName)}` : ""}</h3>
+<p class="mu sm">The business must be registered on ZimQuote. On the phone with the client: type their email and password. We find their mail server (works with .co.zw cPanel hosting) and test the login. No password? Leave it blank, and you'll get the forwarding address to add in their cPanel.</p>
+${others.length ? `<p class="sm">Already connected for this business: ${others.map(o => `<b>${e(o.email)}</b> → ${alertRecipients(o).map(p => "+" + e(p)).join(", ")}`).join(" · ")}</p>` : ""}
 <form method="post" action="/zq-admin/mail/new" autocomplete="off">
 <div class="grid">
-<div><label for="m-phone">Client WhatsApp number</label><input id="m-phone" name="phone" required value="${e(pre.phone)}" placeholder="0772123456"></div>
+<div><label for="m-co">ZimQuote business</label><input id="m-co" name="company" value="${e(pre.company)}" placeholder="Blank = the business of the WhatsApp number below">${pre.companyName ? `<span class="sm mu">🏢 ${e(pre.companyName)}</span>` : `<span class="sm mu">Or type the business name or its phone. <a href="/zq-admin/suppliers/new">Register a business</a></span>`}</div>
+<div><label for="m-phone">Owner WhatsApp number</label><input id="m-phone" name="phone" required value="${e(pre.phone)}" placeholder="0772123456"></div>
+<div><label for="m-team">Other WhatsApp numbers that get these emails</label><input id="m-team" name="alertPhones" placeholder="0773111222, 0774333444"><label class="chk sm"><input type="checkbox" name="ownerAlerts" value="1" checked> Owner also gets these emails</label></div>
 <div><label for="m-biz">Business name</label><input id="m-biz" name="biz" value="${e(pre.biz)}" placeholder="Acme Hardware"></div>
 <div><label for="m-email">Email address</label><input id="m-email" name="email" type="email" required placeholder="sales@acme.co.zw"></div>
 <div><label for="m-pass">Email password (optional)</label><input id="m-pass" name="password" type="password" autocomplete="new-password"></div>
@@ -480,13 +501,13 @@ ${presetFields("m", null, {})}
   router.post("/mail/new", requireSupplierAdmin, pform, async (req, res) => {
     try {
       const b = req.body || {};
-      const r = await setupForClient({ phone: b.phone, email: String(b.email || "").trim(), businessName: String(b.biz || "").trim(), password: String(b.password || ""), protocol: String(b.inProto || "auto"), imapHost: String(b.imapHost || "").trim(), imapPort: Number(b.imapPort) || 0, smtpHost: String(b.smtpHost || "").trim(), smtpPort: Number(b.smtpPort) || 0, alertMode: b.alertMode === "important" ? "important" : "all", trialDays: Number(b.trial) || 0 });
+      const r = await setupForClient({ phone: b.phone, company: String(b.company || "").trim(), alertPhones: String(b.alertPhones || ""), ownerAlerts: !!b.ownerAlerts, email: String(b.email || "").trim(), businessName: String(b.biz || "").trim(), password: String(b.password || ""), protocol: String(b.inProto || "auto"), imapHost: String(b.imapHost || "").trim(), imapPort: Number(b.imapPort) || 0, smtpHost: String(b.smtpHost || "").trim(), smtpPort: Number(b.smtpPort) || 0, alertMode: b.alertMode === "important" ? "important" : "all", trialDays: Number(b.trial) || 0 });
       if (["starter", "business", "pro"].includes(b.plan)) await activatePaid(r.acc._id, "", false, 365, b.plan).catch(() => {});
       let welcome = "";
       if (b.welcome) welcome = (await sendClientWelcome(r.acc)) ? " Welcome sent." : " Welcome not delivered (client hasn't messaged the bot in 24h - use “Message client from my phone”).";
       const msg = r.connected ? `Created and connected. ${r.message}${welcome}` : `Created.${r.message ? " Login: " + r.message : ""} Forwarding address: ${forwardAddress(r.acc)}.${welcome}`;
       go(res, `/zq-admin/mail/${r.acc._id}`, r.connected || !b.password ? "success" : "error", msg);
-    } catch (err) { go(res, `/zq-admin/mail/new?phone=${encodeURIComponent(req.body?.phone || "")}`, "error", err.message); }
+    } catch (err) { go(res, `/zq-admin/mail/new?phone=${encodeURIComponent(req.body?.phone || "")}${/^(supplier|business|school):[a-f0-9]{24}$/.test(req.body?.company || "") ? `&company=${encodeURIComponent(req.body.company)}` : ""}`, "error", err.message); }
   });
 
   // ── One inbox ──────────────────────────────────────────────────────────────
@@ -506,15 +527,17 @@ ${presetFields("m", null, {})}
       : `forwarding to <code>${e(fwd)}</code>`;
     const sysHtml = await systemPanel();
     const sysBad = sysHtml.includes("something needs fixing");
+    const sibs = a.companyId ? await MailAccount.countDocuments({ companyType: a.companyType, companyId: a.companyId }).catch(() => 1) : 0;
     res.send(layout("ZimQuote Mail - " + a.email, wrap(`${flash(req)}${sub("")}
 ${sysBad ? sysHtml : ""}
 <div class="card2">
 <h3>${e(a.email)}</h3>
 <p>${statusBadge(a)} ${planBadge(a)} ${a.helpRequestedAt && a.status !== "live" ? badge("🙋 wants help " + fmt(a.helpRequestedAt), "orange") : ""}</p>
 <div class="kv">
-<div>Business</div><div>${e(a.businessName || "-")}</div>
-<div>Owner WhatsApp</div><div><a href="https://wa.me/${e(a.ownerPhone)}" target="_blank">+${e(a.ownerPhone)}</a>${a.phoneVerified === false ? " (not confirmed yet)" : ""}</div>
-<div>Team</div><div>${(a.alertPhones || []).map(p => "+" + e(p)).join(", ") || "none"}</div>
+<div>ZimQuote business</div><div>${a.companyId ? `🏢 ${e(a.companyName || "-")} · <a href="/zq-admin/mail?company=${e(companyRef(a))}">${sibs} email${sibs === 1 ? "" : "s"}</a> · <a href="/zq-admin/mail/new?company=${e(companyRef(a))}">➕ connect another</a>` : `<span style="color:#b45309">Not linked - set it in Edit below</span>`}</div>
+<div>Business name</div><div>${e(a.businessName || "-")}</div>
+<div>Owner WhatsApp</div><div><a href="https://wa.me/${e(a.ownerPhone)}" target="_blank">+${e(a.ownerPhone)}</a>${a.phoneVerified === false ? " (not confirmed yet)" : ""}${a.ownerAlerts === false && (a.alertPhones || []).length ? " (manages it, doesn't get the emails)" : ""}</div>
+<div>Emails go to</div><div>${alertRecipients(a).map(p => `<a href="https://wa.me/${e(p)}" target="_blank">+${e(p)}</a>`).join(", ")}</div>
 <div>Provider</div><div>${e(a.provider)}</div>
 <div>Connected by</div><div>${how}</div>
 <div>Plan</div><div>${e(lim.name)} · alerts this month ${a.alertMonth === month ? (a.alertsThisMonth || 0) : 0} / ${lim.alerts} · staff numbers up to ${lim.team}</div>
@@ -556,7 +579,8 @@ ${disc ? `<p class="mu sm" style="margin-top:10px">IMAP: ${disc.imap.map(s => `$
 <div><label for="e-email">Email address</label><input id="e-email" name="email" type="email" value="${e(a.email)}" required></div>
 <div><label for="e-biz">Business name</label><input id="e-biz" name="businessName" value="${e(a.businessName || "")}"></div>
 <div><label for="e-owner">Owner WhatsApp</label><input id="e-owner" name="ownerPhone" value="${e(a.ownerPhone)}" required></div>
-<div><label for="e-team">Team WhatsApp numbers (comma-separated, max ${MAIL_CONFIG.TEAM_MAX})</label><input id="e-team" name="alertPhones" value="${e((a.alertPhones || []).join(", "))}"></div>
+<div><label for="e-team">Other WhatsApp numbers (comma-separated, max ${MAIL_CONFIG.ADMIN_TEAM_MAX})</label><input id="e-team" name="alertPhones" value="${e((a.alertPhones || []).join(", "))}"><label class="chk sm"><input type="checkbox" name="ownerAlerts" value="1" ${a.ownerAlerts === false ? "" : "checked"}> Owner also gets these emails</label></div>
+<div><label for="e-co">ZimQuote business</label><input id="e-co" name="company" value="${e(companyRef(a))}" placeholder="Business name, phone, or supplier:&lt;id&gt;">${a.companyName ? `<span class="sm mu">🏢 ${e(a.companyName)}</span>` : ""}</div>
 <div><label for="e-name">Sender name on replies</label><input id="e-name" name="displayName" value="${e(a.displayName || "")}"></div>
 <div><label for="e-alert">Alerts</label><select id="e-alert" name="alertMode"><option value="all" ${a.alertMode !== "important" ? "selected" : ""}>Every email</option><option value="important" ${a.alertMode === "important" ? "selected" : ""}>Important only</option></select></div>
 <div><label for="e-status">Status</label><select id="e-status" name="status">${["setup", "live", "paused"].map(s => `<option value="${s}" ${a.status === s ? "selected" : ""}>${s === "setup" ? "Setup" : s === "live" ? "Live" : "Paused (no alerts)"}</option>`).join("")}${a.status === "error" ? `<option value="" selected>Login failing</option>` : ""}</select></div>
@@ -585,7 +609,7 @@ ${msgs.map(m => `<tr><td>${fmt(m.receivedAt)}</td><td>${e(m.fromName)}<br><small
     try {
       const b = req.body || {};
       const acc = await updateAccount(req.params.id, {
-        email: b.email, businessName: b.businessName, ownerPhone: b.ownerPhone, alertPhones: b.alertPhones ?? "",
+        email: b.email, businessName: b.businessName, ownerPhone: b.ownerPhone, alertPhones: b.alertPhones ?? "", ownerAlerts: !!b.ownerAlerts, company: b.company ?? "",
         displayName: b.displayName, signature: b.signature, alertMode: b.alertMode, status: b.status, plan: b.plan,
         trialEndsAt: b.trialEndsAt ?? "", paidUntil: b.paidUntil ?? "", useForwarding: !!b.useForwarding
       });
