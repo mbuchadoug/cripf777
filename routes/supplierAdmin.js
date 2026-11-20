@@ -15,7 +15,9 @@ import { sendBuyerSearchHelpTemplate } from "../services/buyerSearchFollowUp.js"
 import BuyerRequest from "../models/buyerRequest2.js";
 import { notifyBuyerRequestApproved, notifyBuyerRequestRejected, notifyAdminPhotoReview } from "../services/buyerRequestNotifications.js";
 import CategoryPreset from "../models/categoryPreset.js";
-import { SUPPLIER_CATEGORIES } from "../services/supplierPlans.js";
+import { SUPPLIER_CATEGORIES, SUPPLIER_PLANS as _SP } from "../services/supplierPlans.js";
+// Plan prices for admin labels - read from the same file the bot charges from.
+const _planPrice = t => { const p = _SP[t] || {}; return [p.monthly && `$${p.monthly.price}/mo`, p.annual && `$${p.annual.price}/yr`].filter(Boolean).join(" · "); };
 import { TEMPLATES, getPresetCategories, setTemplateForCategory } from "../services/supplierProductTemplates.js";
 
 import smartLinkRoutes from "./supplierSmartLinkAdmin.js";
@@ -57,7 +59,7 @@ import { registerBikerAdminRoutes } from "./bikerAdmin.js";
 import { registerMailAdminRoutes } from "./mailInbox.js";   // ZimQuote Mail
 import { registerQuoteDeskAdminRoutes } from "./quoteDeskAdmin.js";
 import {
-  TUTOR_SUBJECTS, TUTOR_LEVELS, TUTOR_MODES, SCHOOL_CITIES
+  TUTOR_SUBJECTS, TUTOR_LEVELS, TUTOR_MODES, SCHOOL_CITIES, SCHOOL_ANNUAL_PRICE
 } from "../services/schoolPlans.js";
 
 // ── Staff E-Business Card imports ─────────────────────────────────────────────
@@ -813,9 +815,9 @@ router.get("/suppliers/new", requireSupplierAdmin, async (req, res) => {
             <div class="fg">
               <label>Tier / Plan <span style="color:red">*</span></label>
               <select name="tier" required>
-                <option value="basic">Basic - up to 20 items</option>
-                <option value="pro">Pro - up to 60 items</option>
-                <option value="featured">Featured - up to 150 items</option>
+                <option value="basic">Basic - up to 20 items (${_planPrice("basic")})</option>
+                <option value="pro">Pro - up to 60 items (${_planPrice("pro")})</option>
+                <option value="featured">Featured - up to 150 items (${_planPrice("featured")})</option>
               </select>
             </div>
           </div>
@@ -1571,7 +1573,7 @@ const supplier = await SupplierProfile.create({
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
-// PRIVATE TUTORS  (SupplierProfile profileType: "tutor", $5/mo basic plan)
+// PRIVATE TUTORS  (SupplierProfile profileType: "tutor", basic plan)
 // A tutor rides the supplier rails: smart link, seller chat, and viewer-phone
 // notifications all work automatically. This route creates the full Business +
 // SupplierProfile + slug so the tutor is live and shareable immediately, and
@@ -1605,7 +1607,7 @@ router.get("/suppliers/new-tutor", requireSupplierAdmin, async (req, res) => {
     <div class="panel" style="max-width:900px">
       <div class="panel-head">
         <h3>🧑‍🏫 Register Private Tutor</h3>
-        <span style="font-size:12px;color:var(--muted)">$5/mo basic plan · appears under "Private Tutor" search · gets parent phone numbers on profile views</span>
+        <span style="font-size:12px;color:var(--muted)">Basic plan ${_planPrice("basic")} · appears under "Private Tutor" search · gets parent phone numbers on profile views</span>
       </div>
       <form method="POST" action="/zq-admin/suppliers/new-tutor" enctype="multipart/form-data" class="edit-form">
         <div style="margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--border)">
@@ -1676,7 +1678,7 @@ router.get("/suppliers/new-tutor", requireSupplierAdmin, async (req, res) => {
           <p style="font-weight:700;font-size:13px;margin-bottom:14px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">6. Plan & Status</p>
           <div class="form-grid">
             <div class="fg"><label>Tier</label><select name="tier">
-              <option value="basic">Basic ($5/mo)</option><option value="pro">Pro ($12/mo)</option><option value="featured">Featured ($25/mo)</option></select></div>
+              <option value="basic">Basic (${_planPrice("basic")})</option><option value="pro">Pro (${_planPrice("pro")})</option><option value="featured">Featured (${_planPrice("featured")})</option></select></div>
             <div class="fg"><label>Billing Cycle</label><select name="billingCycle"><option value="monthly">Monthly</option><option value="annual">Annual</option></select></div>
             <div class="fg"><label>Duration (days)</label><input name="durationDays" type="number" value="30" /></div>
             <div class="fg"><label>Activate now?</label><select name="setActive"><option value="true">✅ Active (live)</option><option value="false">⏸ Inactive</option></select></div>
@@ -3050,9 +3052,9 @@ router.get("/suppliers/:id/activate", requireSupplierAdmin, async (req, res) => 
               <label>Tier / Plan</label>
               <select name="tier" required>
                 <option value="">Select a plan...</option>
-                <option value="basic">✅ Basic - $5/month</option>
-                <option value="pro">⭐ Pro - $12/month</option>
-                <option value="featured">🔥 Featured - $25/month</option>
+                <option value="basic">✅ Basic - ${_planPrice("basic")}</option>
+                <option value="pro">⭐ Pro - ${_planPrice("pro")}</option>
+                <option value="featured">🔥 Featured - ${_planPrice("featured")}</option>
               </select>
             </div>
             <div class="fg">
@@ -17140,7 +17142,7 @@ router.get("/school-activity", requireSupplierAdmin, async (req, res) => {
         <option value="mask">🕵️ Masked - teaser only (+263 77 2XX XXXX); unlock on activation</option>
         <option value="show">📞 Show - reveal the full visitor number</option>
       </select>
-      <p style="font-size:11px;color:var(--muted);margin-top:4px">Inactive schools see a masked teaser and are told to reply <b>menu</b> and activate ($50/year) to see the full number and reply. Active schools see the real number.</p>
+      <p style="font-size:11px;color:var(--muted);margin-top:4px">Inactive schools see a masked teaser and are told to reply <b>menu</b> and activate ($${SCHOOL_ANNUAL_PRICE}/year) to see the full number and reply. Active schools see the real number.</p>
 
       <div id="saViewsWrap" style="margin-top:14px">
         <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Add to view counter</label>
@@ -17283,7 +17285,7 @@ router.post("/school-activity/send", requireSupplierAdmin, async (req, res) => {
 
         // The activate nudge: shown to schools that can't yet see/reply (inactive
         // or masked). NO price here - the alert only shows a masked number and a
-        // warm nudge; the $50 appears only when the school replies *menu* and the
+        // warm nudge; the price appears only when the school replies *menu* and the
         // bot takes them to the one-tap Activate step. This keeps the message
         // encouraging ("a real parent is interested") rather than a paywall.
         const lockedForReply = !isActive;

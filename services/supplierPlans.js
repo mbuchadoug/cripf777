@@ -9,12 +9,17 @@ export const SUPPLIER_PLANS = {
   },
   pro: {
     name: "Pro",
-    monthly: { price: 10,  currency: "USD", durationDays: 30  },
+    monthly: { price: 12,  currency: "USD", durationDays: 30  },
     annual:  { price: 100, currency: "USD", durationDays: 365 }
   },
   featured: {
     name: "Featured",
     monthly: { price: 25,  currency: "USD", durationDays: 30  }
+  },
+  // Corporate: annual only. For companies with big catalogues and bulk requests.
+  corporate: {
+    name: "Corporate",
+    annual:  { price: 200, currency: "USD", durationDays: 365 }
   }
 };
 
@@ -41,6 +46,13 @@ export const SUPPLIER_PLAN_FEATURES = {
     "Unlimited uploads",
     "Unlimited orders",
     "Upgrade anytime"
+  ],
+  corporate: [
+    "Up to 500 live items",
+    "Bulk and corporate requests",
+    "Automatic PDF quotations",
+    "Delivery with ZimQuote riders",
+    "Billed once a year"
   ]
 };
 

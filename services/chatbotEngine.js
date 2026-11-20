@@ -95,6 +95,7 @@ import {
   handleSupplierRegistrationStates
 } from "./supplierRegistration.js";
 import { handleBikerMessage } from "./bikerDispatch.js";
+import { handleMailMessage } from "./mailInbox.js";   // ZimQuote Mail (email on WhatsApp)
 import { handleQuoteDesk } from "./quoteDesk.js";
 import { sendDocActions, QT_TO_INV } from "./docActions.js";
 import {
@@ -3563,7 +3564,7 @@ async function sendClientSelectList(from, biz) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-export async function handleIncomingMessage({ from, action, hasImage = false, imageUrl = null, imageCaption = "" }) {
+export async function handleIncomingMessage({ from, action, hasImage = false, imageUrl = null, imageCaption = "", rawText = "" }) {
 
   const phone = from.replace(/\D+/g, "");
 
@@ -3641,6 +3642,7 @@ a === "my_orders" ||
       a === "reg_type_service" ||
       a === "reg_type_biker" ||
       a.startsWith("biker_") ||
+      a.startsWith("mail_") ||
       a.startsWith("qd_") ||
       a.startsWith("qda_") ||
       a.startsWith("sup_hosp_type_") ||
@@ -4291,6 +4293,26 @@ try {
   if (_qdHandled) return;
 } catch (_qdErr) {
   console.error("[QUOTE DESK HOOK]", _qdErr.message);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 📧 ZIMQUOTE MAIL - business email on WhatsApp (services/mailInbox.js)
+// ───────────────────────────────────────────────────────────────────────────
+// Owns: all mail_* taps (incl. template buttons on email alerts), the words
+// "mail" / "ZQ:MAIL", and typed text while a mail flow is open (writing a reply,
+// adding a staff number, EcoCash number). State: UserSession.tempData.mailState.
+// rawText keeps the user's original capitals for email replies.
+try {
+  const _mailHandled = await handleMailMessage({
+    from,
+    text,
+    rawText:  rawText || text,
+    action:   isMetaAction ? a : "",
+    biz:      (biz && _bizIsOwnedByUser) ? biz : null
+  });
+  if (_mailHandled) return;
+} catch (_mailErr) {
+  console.error("[MAIL HOOK]", _mailErr.message);
 }
 
 // ── Numbered seller pick (TOP LEVEL) ─────────────────────────────────────────
@@ -8514,7 +8536,8 @@ if (
           { id: "sup_plan_basic_annual",    title: "✅ Basic - $50/year",   description: "Up to 20 live items · save $70" },
           { id: "sup_plan_pro_monthly",     title: "⭐ Pro - $12/month",    description: "Up to 60 live items" },
           { id: "sup_plan_pro_annual",      title: "⭐ Pro - $120/year",    description: "Up to 60 live items · save $24" },
-          { id: "sup_plan_featured_monthly",title: "🔥 Featured $25/mo",    description: "Up to 150 live items + featured badge" }
+          { id: "sup_plan_featured_monthly",title: "🔥 Featured $25/mo",    description: "Up to 150 live items + featured badge" },
+          { id: "sup_plan_corporate_annual", title: "🏢 Corporate $200/yr", description: "Up to 500 items · bulk requests · PDF quotes" }
         ]
       );
     }
@@ -13984,7 +14007,7 @@ if (biz?.sessionState === "supplier_select_listed_products") {
 
   const uploaded = (supplier.products || []).filter(p => p && p !== "pending_upload");
 
-  const capMap = { basic: 20, pro: 60, featured: 150 };
+  const capMap = { basic: 20, pro: 60, featured: 150, corporate: 500 };
   const cap =
     Number(biz?.sessionData?.listedSelectionCap) ||
     capMap[supplier.tier] ||
@@ -15634,7 +15657,7 @@ if (a === "sup_add_listed_products") {
   const supplier = await SupplierProfile.findOne({ phone });
   if (!supplier) return sendSuppliersMenu(from);
 
-  const capMap = { basic: 20, pro: 60, featured: 150 };
+  const capMap = { basic: 20, pro: 60, featured: 150, corporate: 500 };
   const cap = capMap[supplier.tier] || 20;
   const listed = supplier.listedProducts || [];
   const uploaded = (supplier.products || []).filter(p => p && p !== "pending_upload");
@@ -15684,7 +15707,7 @@ if (biz?.sessionState === "supplier_add_listed_products") {
 
   const uploaded = (supplier.products || []).filter(p => p && p !== "pending_upload");
 
-  const capMap = { basic: 20, pro: 60, featured: 150 };
+  const capMap = { basic: 20, pro: 60, featured: 150, corporate: 500 };
   const cap = capMap[supplier.tier] || 20;
 
   const current = supplier.listedProducts || [];
@@ -15717,7 +15740,7 @@ if (a === "sup_replace_listed_products") {
   const supplier = await SupplierProfile.findOne({ phone });
   if (!supplier) return sendText(from, "❌ Supplier not found.");
 
-  const capMap = { basic: 20, pro: 60, featured: 150 };
+  const capMap = { basic: 20, pro: 60, featured: 150, corporate: 500 };
   const cap = capMap[supplier.tier] || 20;
 
   const uploaded = (supplier.products || []).filter(p => p && p !== "pending_upload");
@@ -15740,7 +15763,7 @@ if (a === "sup_manage_listed_products") {
   const supplier = await SupplierProfile.findOne({ phone });
   if (!supplier) return sendSuppliersMenu(from);
 
-  const capMap = { basic: 20, pro: 60, featured: 150 };
+  const capMap = { basic: 20, pro: 60, featured: 150, corporate: 500 };
   const cap = capMap[supplier.tier] || 20;
   const listed = (supplier.listedProducts || []).filter(Boolean);
   const isService = supplier.profileType === "service";
@@ -15913,7 +15936,7 @@ if (a === "sup_view_products") {
 
   const isService = supplier.profileType === "service";
   const label = isService ? "Services" : "Products";
-  const capMap = { basic: 20, pro: 60, featured: 150 };
+  const capMap = { basic: 20, pro: 60, featured: 150, corporate: 500 };
   const cap = capMap[supplier.tier] || 20;
 
   const allItems = (supplier.products || []).filter(p => p !== "pending_upload");
@@ -16319,7 +16342,8 @@ if (a === "sup_upgrade_plan" || a === "sup_renew_plan") {
         { id: "sup_plan_basic_annual", title: "✅ Basic - $50/year", description: "Up to 20 live items · save $70" },
         { id: "sup_plan_pro_monthly", title: "⭐ Pro - $12/month", description: "Up to 60 live items" },
         { id: "sup_plan_pro_annual", title: "⭐ Pro - $120/year", description: "Up to 60 live items · save $24" },
-        { id: "sup_plan_featured_monthly", title: "🔥 Featured $25/mo", description: "Up to 150 live items + featured badge" }
+        { id: "sup_plan_featured_monthly", title: "🔥 Featured $25/mo", description: "Up to 150 live items + featured badge" },
+        { id: "sup_plan_corporate_annual", title: "🏢 Corporate $200/yr", description: "Up to 500 items · bulk requests · PDF quotes" }
       ]
     );
   }
@@ -17663,7 +17687,8 @@ To go live and start receiving orders, you need to choose a plan and pay. It's l
         { id: "sup_plan_basic_annual", title: "✅ Basic $50/yr", description: "Pay once for the whole year" },
         { id: "sup_plan_pro_monthly", title: "⭐ Pro - $12/month", description: "Up to 60 live items" },
         { id: "sup_plan_pro_annual", title: "⭐ Pro $120/yr", description: "Most popular choice" },
-        { id: "sup_plan_featured_monthly", title: "🔥 Featured $25/mo", description: "Top of search - buyers see you first" }
+        { id: "sup_plan_featured_monthly", title: "🔥 Featured $25/mo", description: "Top of search - buyers see you first" },
+        { id: "sup_plan_corporate_annual", title: "🏢 Corporate $200/yr", description: "Up to 500 items · bulk requests · PDF quotes" }
       ]
     );
   }
@@ -18056,7 +18081,7 @@ if (a.startsWith("sup_view_")) {
         : "🏠 Collection only");
 
   const badge = supplier.topSupplierBadge ? "\n🏅 Top Supplier" : "";
-  const tierBadge = supplier.tier === "featured" ? " 🔥" : supplier.tier === "pro" ? " ⭐" : "";
+  const tierBadge = supplier.tier === "corporate" ? " 🏢" : supplier.tier === "featured" ? " 🔥" : supplier.tier === "pro" ? " ⭐" : "";
   const offeringLabel = supplier.profileType === "service" ? "🔧" : "📦";
     const offeringText = getSupplierCatalogueSourceItems(supplier)
     .slice(0, 5)

@@ -17,7 +17,7 @@
 import mongoose from "mongoose";
 import SupplierProfile from "../models/supplierProfile.js";
 import BikerJob from "../models/bikerJob.js";
-import { SUPPLIER_CITIES } from "../services/supplierPlans.js";
+import { SUPPLIER_CITIES, SUPPLIER_PLANS } from "../services/supplierPlans.js";
 import { metroGroup, detectCity } from "../services/bikerPlaces.js";
 import {
   adminCreateJob, adminAssignJob, adminCancelJob, adminCompleteJob, adminRedispatchJob,
@@ -271,7 +271,7 @@ ${subNav("newbiker")}${flash(req)}
       <div class="fg"><label>Activate now?</label>
         <select name="setActive"><option value="true">Yes - paid / approved</option><option value="false">No - rider pays on WhatsApp</option></select></div>
       <div class="fg"><label>Subscription length</label>
-        <select name="durationDays"><option value="30">1 month ($5)</option><option value="365">1 year ($50)</option><option value="7">7-day trial</option><option value="90">3 months</option></select></div>
+        <select name="durationDays"><option value="30">1 month ($${SUPPLIER_PLANS.basic.monthly.price})</option><option value="365">1 year ($${SUPPLIER_PLANS.basic.annual.price})</option><option value="7">7-day trial</option><option value="90">3 months</option></select></div>
     </div>
     <div class="fg full"><label>Admin note</label><textarea name="adminNote" rows="2" placeholder="e.g. Paid cash at office, referred by Blessing"></textarea></div>
     <div class="form-actions">
