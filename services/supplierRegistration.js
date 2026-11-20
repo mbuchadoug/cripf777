@@ -1891,13 +1891,12 @@ We will activate your listing automatically once payment is confirmed. ✅`
               const expiresAt = new Date(now.getTime() + planDetails.durationDays * 24 * 60 * 60 * 1000);
 
    supplier.tier = supplierPayment.tier;
-if (supplierPayment.tier === "corporate") supplier.tierRank = 4; // Corporate shows first in search/matching
 supplier.active = true;
 supplier.subscriptionStatus = "active";
 supplier.subscriptionStartedAt = now;
 supplier.subscriptionEndsAt = expiresAt;
 
-const capMap = { basic: 20, pro: 60, featured: 150, corporate: 500 };
+const capMap = { basic: 20, pro: 60, featured: 150 };
 const cap = capMap[supplier.tier] || 20;
 const uploaded = (supplier.products || []).filter(p => p && p !== "pending_upload");
 
@@ -1922,7 +1921,7 @@ try {
   const Branch    = (await import("../models/branch.js")).default;    // ← MOVED UP: in scope for entire try block
   const UserRole  = (await import("../models/userRole.js")).default;  // ← MOVED UP
 
-  const TIER_TO_PACKAGE = { basic: "bronze", pro: "silver", featured: "gold", corporate: "gold" };
+  const TIER_TO_PACKAGE = { basic: "bronze", pro: "silver", featured: "gold" };
   const bizPackage = TIER_TO_PACKAGE[supplierPayment.tier] || "bronze";
 
   // ── 1. Upgrade the linked Business package ────────────────────────────
@@ -2239,8 +2238,8 @@ To go live and start getting students, choose a plan and pay. Parents will then 
 
 💳 *Choose your plan:*`,
     [
-      { id: "sup_plan_basic_monthly", title: "✅ $5 / month",  description: "Listed in tutor search" },
-      { id: "sup_plan_basic_annual",  title: "✅ $50 / year",  description: "Save $10 - pay once" }
+      { id: "sup_plan_basic_monthly", title: "✅ $10 / month", description: "Listed in tutor search" },
+      { id: "sup_plan_basic_annual",  title: "✅ $50 / year",  description: "Save $70 - pay once" }
     ]
   );
 }

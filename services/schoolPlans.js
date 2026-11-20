@@ -204,15 +204,15 @@ export const SCHOOL_GRADE_TO = [
 ];
 
 // ── Subscription plans ────────────────────────────────────────────────────────
-// School listings are billed ANNUALLY only, at a flat $50/year (same simple pricing
+// School listings are billed ANNUALLY only, at a flat $100/year (same simple pricing
 // as tutors). There is no monthly school plan - the activation CTA always offers
-// the $50/year basic plan. (Featured kept as an optional annual upgrade.)
+// the $100/year basic plan. (Featured kept as an optional annual upgrade.)
 export const SCHOOL_PLANS = {
   basic: {
     id:       "basic",
     name:     "Basic",
-    monthly:  { price: 50, label: "$50/year", id: "school_plan_basic_annual" },
-    annual:   { price: 50, label: "$50/year", id: "school_plan_basic_annual" },
+    monthly:  { price: 100, label: "$100/year", id: "school_plan_basic_annual" },
+    annual:   { price: 100, label: "$100/year", id: "school_plan_basic_annual" },
     features: "Listed in search · Profile PDF · Application link · Parent enquiry alerts"
   },
   featured: {
@@ -225,7 +225,7 @@ export const SCHOOL_PLANS = {
 };
 
 // Canonical annual price used by the activation CTA / masked-number nudge.
-export const SCHOOL_ANNUAL_PRICE = 50;
+export const SCHOOL_ANNUAL_PRICE = 100;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SPECIALISED INSTITUTIONS (culinary, driving, music, vocational, college, ...)
@@ -260,13 +260,13 @@ export function institutionLabel(id = "") {
 // ─────────────────────────────────────────────────────────────────────────────
 // PRIVATE TEACHERS / TUTORS
 // Registered as SupplierProfile with profileType = "tutor".
-// Billed on the existing $5/mo supplier "basic" plan (no new payment plumbing).
+// Billed on the existing $10/mo supplier "basic" plan (no new payment plumbing).
 // TUTOR_PLAN is a display reference only - actual activation reuses the supplier
 // plan action ids (sup_plan_basic_monthly / sup_plan_basic_annual).
 // ─────────────────────────────────────────────────────────────────────────────
 export const TUTOR_PLAN = {
-  monthly: { price: 5,  label: "$5/month",           actionId: "sup_plan_basic_monthly" },
-  annual:  { price: 50, label: "$50/year (save $10)", actionId: "sup_plan_basic_annual"  },
+  monthly: { price: 10, label: "$10/month",          actionId: "sup_plan_basic_monthly" },
+  annual:  { price: 50, label: "$50/year (save $70)", actionId: "sup_plan_basic_annual"  },
   features: "Listed in tutor search · Shareable smart link · Parent enquiry alerts with their phone number · Seller chat"
 };
 

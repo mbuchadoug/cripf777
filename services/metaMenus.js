@@ -249,13 +249,12 @@ export async function sendMainMenu(to) {
     }
     // Trial supplier (no invoicing tools yet) → keep marketplace-first menu.
     return sendList(to, MENU_MSG, [
-      { id: "sup_request_sellers", title: "📝 Request a Quote" },
+      { id: "sup_request_sellers", title: "⚡ Request Sellers" },
       { id: "biker_request_rider", title: "🏍️ Request a Biker" },
       { id: "find_supplier",       title: "🔍 Browse & Shop" },
       { id: "my_orders",           title: "📋 My Orders" },
       { id: "find_school",         title: "🎓 Schools & Tutors" },
-      { id: "my_supplier_account", title: "🏪 My Store" },
-      { id: "mail_menu",           title: "📧 Business Email" }
+      { id: "my_supplier_account", title: "🏪 My Store" }
     ]);
   }
 
@@ -263,13 +262,12 @@ export async function sendMainMenu(to) {
   if (supplier && !supplier.active) {
     return sendList(to, MENU_MSG + "\n\n⚠️ Your listing is currently inactive - activate it to appear in search and receive customer enquiries.", [
       ...(hasStaffRole && isRealBiz ? [{ id: "biz_tools_menu", title: "📊 Business Tools" }] : []),
-      { id: "sup_request_sellers", title: "📝 Request a Quote" },
+      { id: "sup_request_sellers", title: "⚡ Request Sellers" },
       { id: "biker_request_rider", title: "🏍️ Request a Biker" },
       { id: "find_supplier",       title: "🔍 Browse & Shop" },
       { id: "my_orders",           title: "📋 My Orders" },
       { id: "find_school",         title: "🎓 Schools & Tutors" },
       { id: "my_supplier_account", title: "🏪 My Store" },
-      { id: "mail_menu",           title: "📧 Business Email" },
       { id: "sup_upgrade_plan",    title: "💳 Activate Listing" }
     ]);
   }
@@ -286,11 +284,10 @@ export async function sendMainMenu(to) {
   return sendList(to, MENU_MSG, [
     { id: "register_supplier",   title: "🏪 List My Business" },
     { id: "biker_request_rider", title: "🏍️ Request a Biker" },
-    { id: "sup_request_sellers", title: "📝 Request a Quote" },
+    { id: "sup_request_sellers", title: "⚡ Request Sellers" },
     { id: "find_supplier",       title: "🔍 Browse & Shop" },
     { id: "my_orders",           title: "📋 My Orders" },
-    { id: "find_school",         title: "🎓 Schools & Tutors" },
-    { id: "mail_menu",           title: "📧 Business Email" }
+    { id: "find_school",         title: "🎓 Schools & Tutors" }
   ]);
 }
 
@@ -384,13 +381,6 @@ export async function sendBusinessHomeMenu(to, biz, { isOwner = false } = {}) {
     if (_mpIdx >= 0) filtered.splice(_mpIdx, 0, _riderRow);
     else filtered.push(_riderRow);
   }
-  // ── Always show "Business Email" (ZimQuote Mail) just above Marketplace ──
-  if (!filtered.some(i => i.id === "mail_menu")) {
-    const _mpIdx2 = filtered.findIndex(i => i.id === "marketplace_menu");
-    const _mailRow = { id: "mail_menu", title: "📧 Business Email" };
-    if (_mpIdx2 >= 0) filtered.splice(_mpIdx2, 0, _mailRow);
-    else filtered.push(_mailRow);
-  }
 
   // WhatsApp interactive lists are capped at 10 rows. Same fold pattern as
   // Business Tools: collapse Branches + Users into one row when we overflow.
@@ -402,14 +392,12 @@ export async function sendBusinessHomeMenu(to, biz, { isOwner = false } = {}) {
       filtered.splice(bIdx, 0, { id: "branches_users_menu", title: "🏬 Branches & Users" });
     }
   }
-  // Hard safety: never send more than 10 rows, but always keep Request a Biker, Business Email + Marketplace.
+  // Hard safety: never send more than 10 rows, but always keep Request a Biker + Marketplace.
   if (filtered.length > 10) {
     const mp = filtered.find(i => i.id === "marketplace_menu");
     const rr = filtered.find(i => i.id === "biker_request_rider");
-    const ml = filtered.find(i => i.id === "mail_menu");
-    filtered = filtered.filter(i => i.id !== "marketplace_menu" && i.id !== "biker_request_rider" && i.id !== "mail_menu").slice(0, 7);
+    filtered = filtered.filter(i => i.id !== "marketplace_menu" && i.id !== "biker_request_rider").slice(0, 8);
     if (rr) filtered.push(rr);
-    if (ml) filtered.push(ml);
     if (mp) filtered.push(mp);
   }
 
@@ -422,7 +410,7 @@ export async function sendBusinessHomeMenu(to, biz, { isOwner = false } = {}) {
 ============================================================================= */
 export async function sendMarketplaceMenu(to, biz, { isOwner = false } = {}) {
   const items = [
-    { id: "sup_request_sellers", title: "📝 Request a Quote" },
+    { id: "sup_request_sellers", title: "⚡ Request Sellers" },
     { id: "biker_request_rider", title: "🏍️ Request a Biker" },
     { id: "find_supplier",       title: "🔍 Browse & Shop" },
     { id: "my_orders",           title: "📋 My Orders" },
@@ -1055,7 +1043,7 @@ const searchTip = "\n\n";
 if (supplier?.active) {
 return sendList(to, `🛒 *ZimQuote Marketplace*${searchTip}`, [
 
-  { id: "sup_request_sellers", title: "📝 Request a Quote" },
+  { id: "sup_request_sellers", title: "⚡ Request Sellers" },
     { id: "find_supplier",       title: "🔍 Browse & Shop" },
   { id: "buyer_my_requests",   title: "📋 My Quote Requests" },
   { id: "my_orders",           title: "🛒 My Orders" },
@@ -1087,7 +1075,7 @@ if (supplier && !supplier.active) {
 
 return sendList(to, `🛒 *ZimQuote Marketplace*${searchTip}`, [
   { id: "find_supplier",     title: "🔍 Browse & Shop" },
-  { id: "sup_request_sellers", title: "📝 Request a Quote" },
+  { id: "sup_request_sellers", title: "⚡ Request Sellers" },
   { id: "buyer_my_requests", title: "📋 My Quote Requests" },
   { id: "register_supplier", title: "🏪 List My Business" },
   { id: "my_orders",         title: "📋 My Orders" },
@@ -1097,12 +1085,11 @@ return sendList(to, `🛒 *ZimQuote Marketplace*${searchTip}`, [
 
 export async function sendSupplierUpgradeMenu(to, currentTier) {
   return sendList(to, `⭐ Upgrade Your Listing\nCurrent: ${(currentTier || "basic").toUpperCase()}\n\nAll plans include unlimited uploads and unlimited orders.`, [
-    { id: "sup_plan_basic_monthly", title: "✅ Basic - $5/mo", description: "Up to 20 live items" },
-    { id: "sup_plan_basic_annual", title: "✅ Basic - $50/yr (save $10)", description: "Up to 20 live items" },
+    { id: "sup_plan_basic_monthly", title: "✅ Basic - $10/mo", description: "Up to 20 live items" },
+    { id: "sup_plan_basic_annual", title: "✅ Basic - $50/yr (save $70)", description: "Up to 20 live items" },
     { id: "sup_plan_pro_monthly", title: "⭐ Pro - $12/mo", description: "Up to 60 live items" },
     { id: "sup_plan_pro_annual", title: "⭐ Pro - $120/yr (save $24)", description: "Up to 60 live items" },
     { id: "sup_plan_featured_monthly", title: "🔥 Featured - $25/mo", description: "Up to 150 live items" },
-    { id: "sup_plan_corporate_annual", title: "🏢 Corporate $200/yr", description: "Up to 500 items · bulk requests · PDF quotes" },
     { id: "back", title: "⬅ Back" }
   ]);
 }
@@ -1122,7 +1109,7 @@ export async function sendSupplierAccountMenu(to, supplierDoc) {
   if (!supplier) return sendSuppliersMenu(to);
 
   const isService = supplier.profileType === "service";
-  const tierLabel = { basic: "Basic $5/mo", pro: "Pro $12/mo", featured: "Featured $25/mo", corporate: "Corporate $200/yr" }[supplier.tier] || supplier.tier || "None";
+  const tierLabel = { basic: "Basic $10/mo", pro: "Pro $12/mo", featured: "Featured $25/mo" }[supplier.tier] || supplier.tier || "None";
   const statusIcon = supplier.active ? "🟢" : "🔴";
  const renewDate = supplier.subscriptionEndsAt
   ? new Date(supplier.subscriptionEndsAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })
@@ -1151,7 +1138,6 @@ export async function sendSupplierAccountMenu(to, supplierDoc) {
        { id: "sup_my_orders", title: "📦 My Orders" },
        { id: "sup_upgrade_plan", title: "⬆️ Upgrade Plan" },
        { id: "sup_more_options", title: "⚙️ More Options" },
-       { id: "mail_menu", title: "📧 Business Email" },
        { id: "main_menu_back", title: "⬅ Main Menu" }
 
     ]
@@ -1200,7 +1186,7 @@ export async function sendSchoolAccountMenu(to, schoolDoc) {
 
   const statusIcon    = school.active   ? "🟢" : "🔴";
   const verifiedBadge = school.verified ? " ✅" : "";
-  const tierLabel     = { basic: "$50/year", featured: "Featured" }[school.tier] || "$50/year";
+  const tierLabel     = { basic: "$100/year", featured: "Featured" }[school.tier] || "$100/year";
   const renewDate     = school.subscriptionEndsAt
     ? new Date(school.subscriptionEndsAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
     : "Not active";
@@ -1215,11 +1201,11 @@ if (!school.active) {
     `🟡 *Not activated yet* - activate to go live and start getting parents.\n` +
     `📍 ${school.suburb || ""}, ${school.city}\n` +
     `📚 ${curriculumText}\n\n` +
-    `_Activate your listing below - just $50/year._`,
+    `_Activate your listing below - just $100/year._`,
     [
       { id: "school_pay_plan",    title: "💳 Activate Listing" },
       { id: "school_my_profile",  title: "👁 View My Profile" },
-      { id: "sup_request_sellers", title: "📝 Request a Quote" },
+      { id: "sup_request_sellers", title: "⚡ Request Sellers" },
       { id: "find_supplier",      title: "🔍 Browse & Shop" },
       { id: "find_school",        title: "🏫 Preview Schools" },
       { id: "main_menu_back",     title: "⬅ Main Menu" }
@@ -1255,7 +1241,7 @@ if (!school.active) {
 // them one tap to the marketplace to source uniforms, stationery, books, etc.
 export async function sendSchoolMarketplaceMenu(to) {
   return sendList(to, "🛍️ *Buy Supplies & More*\nSource uniforms, stationery, books, furniture and services from ZimQuote sellers.", [
-    { id: "sup_request_sellers", title: "📝 Request a Quote" },
+    { id: "sup_request_sellers", title: "⚡ Request Quotes" },
     { id: "find_supplier",       title: "🔍 Browse & Shop" },
     { id: "find_school",         title: "🎓 Schools & Tutors" },
     { id: "school_account",      title: "⬅ Back to School" }

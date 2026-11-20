@@ -1098,13 +1098,13 @@ async function _saveSchoolAndOfferPlans(from, biz, saveBiz, phone, reg) {
 Now choose a plan to go live and start receiving parent inquiries.`
   );
 
-  // ONE simple package: $50/year. No confusing tiers - a single clear choice
+  // ONE simple package: $100/year. No confusing tiers - a single clear choice
   // converts best and matches how the activate nudge is worded everywhere.
   return sendButtons(from, {
     text:
 `💳 *Activate ${reg.schoolName}*
 
-One simple plan - *$50 / year*:
+One simple plan - *$100 / year*:
 ✅ Listed in parent search
 ✅ Branch picker for all your campuses
 ✅ Downloadable school profile PDF
@@ -1113,7 +1113,7 @@ One simple plan - *$50 / year*:
 
 Tap below to activate and start receiving parents.`,
     buttons: [
-      { id: "school_plan_basic_annual", title: "✅ Activate $50/yr" }
+      { id: "school_plan_basic_annual", title: "✅ Activate $100/yr" }
     ]
   });
 }
