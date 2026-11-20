@@ -95,7 +95,7 @@ import {
   handleSupplierRegistrationStates
 } from "./supplierRegistration.js";
 import { handleBikerMessage } from "./bikerDispatch.js";
-import { handleMailMessage } from "./mailInbox.js";   // ZimQuote Mail (email on WhatsApp)
+import { handleMailMessage, mailFirst } from "./mailInbox.js";   // ZimQuote Mail (email on WhatsApp)
 import { handleQuoteDesk } from "./quoteDesk.js";
 import { sendDocActions, QT_TO_INV } from "./docActions.js";
 import {
@@ -4001,6 +4001,24 @@ a.startsWith("sup_load_preset_") ||
     }
 
     return { editUpdates, skipIndices, hasEditCmd, hasSkipCmd, haveMode };
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // 📧 ZIMQUOTE MAIL - first look (before any other flow)
+  // Email buttons (Reply / Full email / Done), ZQ:MAIL and typing inside an
+  // open mail step must reach Mail even when another flow (Request a Quote,
+  // riders, invoices…) is unfinished. Anything else goes on as normal, and the
+  // regular mail hook further down still handles the word "mail".
+  // ═══════════════════════════════════════════════════════════════════════
+  try {
+    if (await mailFirst({ from, text, action: isMetaAction ? a : "" })) {
+      const _mailFirstHandled = await handleMailMessage({
+        from, text, rawText: rawText || text, action: isMetaAction ? a : "", biz: null
+      });
+      if (_mailFirstHandled) return;
+    }
+  } catch (_mailFirstErr) {
+    console.error("[MAIL FIRST]", _mailFirstErr.message);
   }
 
   // =========================

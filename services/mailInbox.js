@@ -1240,6 +1240,28 @@ async function sendPlans(from, acc) {
  * Called from chatbotEngine.js for every inbound message (top-level hook).
  * @returns {Promise<boolean>} true when the message was handled here
  */
+/**
+ * Called by chatbotEngine for EVERY incoming message, before any other flow.
+ * 1) Keeps the 24-hour window fresh for Mail users, whatever flow they are in,
+ *    so new emails arrive as normal messages with buttons.
+ * 2) Returns true when Mail must answer this message first: an email button
+ *    (Reply / Full email / Done…), the ZQ:MAIL link, or typing while a mail step
+ *    is open (writing a reply, adding a number…). Without this, an unfinished
+ *    flow elsewhere (Request a Quote, riders…) swallowed the tap until "cancel".
+ */
+export async function mailFirst({ from, text = "", action = "" }) {
+  const phone = normPhone(from);
+  if (!phone) return false;
+  await markSeen(phone);
+  const a = String(action || "").trim().toLowerCase();
+  if (a.startsWith("mail_")) return true;
+  if (a) return false;
+  const t = String(text || "").trim();
+  if (/^zq:mail(:[a-z0-9]{6})?$/i.test(t)) return true;
+  if (!t) return false;
+  return !!(await getSess(phone)).state;
+}
+
 export async function handleMailMessage({ from, text = "", rawText = "", action = "", biz = null }) {
   const phone = normPhone(from);
   const a = String(action || "").toLowerCase();
