@@ -57,6 +57,7 @@ import {
 import { assignSlugToSupplier } from "../services/supplierSmartLink.js";
 import { registerBikerAdminRoutes } from "./bikerAdmin.js";
 import { registerMailAdminRoutes } from "./mailInbox.js";   // ZimQuote Mail
+import { registerPageSellersAdminRoutes } from "./pageSellersAdmin.js";   // Website page sellers
 import { registerQuoteDeskAdminRoutes } from "./quoteDeskAdmin.js";
 import {
   TUTOR_SUBJECTS, TUTOR_LEVELS, TUTOR_MODES, SCHOOL_CITIES, SCHOOL_ANNUAL_PRICE
@@ -4582,6 +4583,7 @@ const isPresets     = t === "Presets" || t.startsWith("Preset:");
     { href: "/zq-admin/school-groups",   label: "🏫 School Groups",         active: isSchoolGroups },
     { href: "/zq-admin/tutor-groups",    label: "🧑‍🏫 Tutor Groups",        active: isTutorGroups },
     { href: "/zq-admin/suppliers/assign-slugs", label: "🏷️ Assign Slugs",      active: isAssignSlugs },
+    { href: "/zq-admin/page-sellers",    label: "🧩 Website Page Sellers", active: String(t || "").startsWith("Page Sellers") },
     // ── Schools ───────────────────────────────────────────────────────────────
     { divider: "SCHOOLS" },
     { href: "/zq-admin/schools",         label: "🏫 Schools",             active: isSchools && t !== "Register School" },
@@ -17334,6 +17336,8 @@ router.post("/school-activity/send", requireSupplierAdmin, async (req, res) => {
 // ── Bikers & deliveries admin (routes/bikerAdmin.js) ─────────────────────────
 registerBikerAdminRoutes(router, { requireSupplierAdmin, layout, esc, badge, stat });
 registerMailAdminRoutes(router, { requireSupplierAdmin, layout, esc, badge, stat });
+// ── Website page sellers (routes/pageSellersAdmin.js) ────────────────────────
+registerPageSellersAdminRoutes(router, { requireSupplierAdmin, layout, esc, badge });
 // ── Quote desk admin (routes/quoteDeskAdmin.js) ──────────────────────────────
 registerQuoteDeskAdminRoutes(router, { requireSupplierAdmin, layout, esc, badge, stat });
 

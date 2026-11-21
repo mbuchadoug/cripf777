@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { runSupplierSearch } from "../services/supplierSearch.js";
 import SupplierProfile from "../models/supplierProfile.js";
+import { publicPagePayload, pinnedForLive, mergePinned } from "../services/pageSellers.js";
 
 /* ============================================================================
    Public trades API for the zimqoute.co.zw tool pages.
@@ -76,7 +77,11 @@ router.get("/suppliers", async (req, res) => {
         if (key && !seen[key]) { seen[key] = 1; out.push(mapSupplier(s)); }
       });
     }
-    res.json({ area, count: out.length, suppliers: out.slice(0, 12) });
+    // Admin-picked sellers for this page (Zq-admin > Page Sellers). No ?page= -> unchanged.
+    let pinned = null;
+    try { pinned = await pinnedForLive(req.query.page, area); } catch (e) { console.error("[suppliers pin]", e.message); }
+    const list = mergePinned(pinned, out, 12);
+    res.json({ area, count: list.length, suppliers: list.slice(0, 12) });
   } catch (err) {
     console.error("[suppliers]", err.message);
     res.json({ area: "", count: 0, suppliers: [] });
@@ -87,13 +92,31 @@ async function listTrade(req, res, trade) {
   try {
     const area = req.query.area ? String(req.query.area).slice(0, 40) : "";
     const results = await runSupplierSearch({ city: area, product: trade });
-    const plumbers = (results || []).slice(0, 6).map(mapSupplier);
+    let plumbers = (results || []).slice(0, 6).map(mapSupplier);
+    try {
+      const pinned = await pinnedForLive(req.query.page, area);
+      if (pinned) plumbers = mergePinned(pinned, plumbers, 6 + pinned.list.length);
+    } catch (e) { console.error("[trades pin]", e.message); }
     res.json({ trade, area, count: plumbers.length, plumbers });
   } catch (err) {
     console.error("[trades list]", err.message);
     res.json({ trade, area: "", count: 0, plumbers: [] }); // fail soft - strip just hides
   }
 }
+
+/* ── Sellers chosen by admin for one site page ─────────────────────────────
+   GET /api/page-sellers?page=/blog/brake-pads-and-discs-price-harare
+   Used by zimqoute.co.zw/assets/zq-sellers.js. {managed:false} = page keeps
+   its built-in (static) sellers. Phones are never exposed.                 */
+router.get("/page-sellers", async (req, res) => {
+  try {
+    res.setHeader("Cache-Control", "public, max-age=60");
+    res.json(await publicPagePayload(req.query.page || "/"));
+  } catch (err) {
+    console.error("[page-sellers]", err.message);
+    res.json({ managed: false });
+  }
+});
 
 /* ── Web registration lead (list on the web) ───────────────────────────────
    Creates a PENDING supplier profile: active:false, subscriptionStatus:"pending".
