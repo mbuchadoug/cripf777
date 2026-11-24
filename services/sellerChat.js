@@ -3230,11 +3230,23 @@ ${pendingQuote ? `Quote ref: *${pendingQuote.refNum}* · Total: *$${pendingQuote
 
 The seller will contact you to confirm delivery schedule and payment.
 📞 ${seller.contactDetails || seller.phone}`,
-    buttons: [
+    // 💳 Pay Now appears when the seller has connected their own Paynow account
+    buttons: (await _scPayButtons(seller, pendingQuote, [
       { id: `sc_contact_${supplierId}`, title: "📞 Contact seller" },
       { id: `sc_back_${supplierId}`,    title: "⬅ Back to Seller" }
-    ]
+    ]))
   });
+}
+
+// Adds "💳 Pay Now" (seller's own Paynow) in front of the given buttons, keeping
+// WhatsApp's 3-button limit. Never throws - on any problem the buttons stay as before.
+async function _scPayButtons(seller, pendingQuote, buttons) {
+  try {
+    const { payNowButton } = await import("./sellerPay.js");
+    const pay = payNowButton(seller, pendingQuote?.total || 0);
+    if (pay) return [pay, ...buttons].slice(0, 3);
+  } catch (_) {}
+  return buttons;
 }
 
 async function _scOrderCollect(from, supplierId, biz, saveBiz) {
@@ -3270,10 +3282,11 @@ ${pendingQuote ? `Quote: *${pendingQuote.refNum}* · Total: *$${pendingQuote.tot
 📞 ${seller.contactDetails || seller.phone}
 
 Contact the seller to arrange collection time and payment.`,
-    buttons: [
+    // 💳 Pay Now appears when the seller has connected their own Paynow account
+    buttons: (await _scPayButtons(seller, pendingQuote, [
       { id: `sc_contact_${supplierId}`, title: "📞 Contact seller" },
       { id: `sc_back_${supplierId}`,    title: "⬅ Back to Seller" }
-    ]
+    ]))
   });
 }
 

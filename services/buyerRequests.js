@@ -200,7 +200,7 @@ export async function autoCloseExpiredRequests({
             `Your request is saved - new matching sellers will be notified automatically.`,
           buttons: [
             { id: "sup_request_sellers", title: "⚡ New Request"   },
-            { id: "find_supplier",       title: "🔍 Browse & Shop" }
+            { id: "find_supplier",       title: "🔍 Find, Buy & Hire" }
           ]
         });
       }

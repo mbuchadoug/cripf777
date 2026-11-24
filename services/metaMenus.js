@@ -251,7 +251,7 @@ export async function sendMainMenu(to) {
     return sendList(to, MENU_MSG, [
       { id: "sup_request_sellers", title: "📝 Request a Quote" },
       { id: "biker_request_rider", title: "🏍️ Request a Biker" },
-      { id: "find_supplier",       title: "🔍 Browse & Shop" },
+      { id: "find_supplier",       title: "🔍 Find, Buy & Hire" },
       { id: "my_orders",           title: "📋 My Orders" },
       { id: "find_school",         title: "🎓 Schools & Tutors" },
       { id: "my_supplier_account", title: "🏪 My Store" },
@@ -265,7 +265,7 @@ export async function sendMainMenu(to) {
       ...(hasStaffRole && isRealBiz ? [{ id: "biz_tools_menu", title: "📊 Business Tools" }] : []),
       { id: "sup_request_sellers", title: "📝 Request a Quote" },
       { id: "biker_request_rider", title: "🏍️ Request a Biker" },
-      { id: "find_supplier",       title: "🔍 Browse & Shop" },
+      { id: "find_supplier",       title: "🔍 Find, Buy & Hire" },
       { id: "my_orders",           title: "📋 My Orders" },
       { id: "find_school",         title: "🎓 Schools & Tutors" },
       { id: "my_supplier_account", title: "🏪 My Store" },
@@ -287,7 +287,7 @@ export async function sendMainMenu(to) {
     { id: "register_supplier",   title: "🏪 List My Business" },
     { id: "biker_request_rider", title: "🏍️ Request a Biker" },
     { id: "sup_request_sellers", title: "📝 Request a Quote" },
-    { id: "find_supplier",       title: "🔍 Browse & Shop" },
+    { id: "find_supplier",       title: "🔍 Find, Buy & Hire" },
     { id: "my_orders",           title: "📋 My Orders" },
     { id: "find_school",         title: "🎓 Schools & Tutors" },
     { id: "mail_menu",           title: "📧 Business Email" }
@@ -424,7 +424,7 @@ export async function sendMarketplaceMenu(to, biz, { isOwner = false } = {}) {
   const items = [
     { id: "sup_request_sellers", title: "📝 Request a Quote" },
     { id: "biker_request_rider", title: "🏍️ Request a Biker" },
-    { id: "find_supplier",       title: "🔍 Browse & Shop" },
+    { id: "find_supplier",       title: "🔍 Find, Buy & Hire" },
     { id: "my_orders",           title: "📋 My Orders" },
     { id: "find_school",         title: "🎓 Schools & Tutors" },
     ...(isOwner ? [{ id: "my_supplier_account", title: "🏪 My Store" }] : []),
@@ -1056,7 +1056,7 @@ if (supplier?.active) {
 return sendList(to, `🛒 *ZimQuote Marketplace*${searchTip}`, [
 
   { id: "sup_request_sellers", title: "📝 Request a Quote" },
-    { id: "find_supplier",       title: "🔍 Browse & Shop" },
+    { id: "find_supplier",       title: "🔍 Find, Buy & Hire" },
   { id: "buyer_my_requests",   title: "📋 My Quote Requests" },
   { id: "my_orders",           title: "🛒 My Orders" },
   { id: "my_supplier_account", title: "🏪 My Store" },
@@ -1075,7 +1075,7 @@ if (supplier && !supplier.active) {
 
       : `🏪 *ZimQuote Marketplace*${searchTip}\n\n⚠️ Your registration is incomplete.\nFinish setup to activate your listing.`,
     [
-      { id: "find_supplier",       title: "🔍 Browse & Shop" },      { id: "my_supplier_account", title: "🏪 My Supplier Account" },
+      { id: "find_supplier",       title: "🔍 Find, Buy & Hire" },      { id: "my_supplier_account", title: "🏪 My Supplier Account" },
       complete
         ? { id: "sup_upgrade_plan",  title: "💳 Activate Listing" }
         : { id: "register_supplier", title: "⏳ Finish Registration" },
@@ -1086,7 +1086,7 @@ if (supplier && !supplier.active) {
 }
 
 return sendList(to, `🛒 *ZimQuote Marketplace*${searchTip}`, [
-  { id: "find_supplier",     title: "🔍 Browse & Shop" },
+  { id: "find_supplier",     title: "🔍 Find, Buy & Hire" },
   { id: "sup_request_sellers", title: "📝 Request a Quote" },
   { id: "buyer_my_requests", title: "📋 My Quote Requests" },
   { id: "register_supplier", title: "🏪 List My Business" },
@@ -1175,6 +1175,7 @@ export async function sendSupplierMoreOptionsMenu(to, supplierDoc) {
     { id: "sup_my_earnings", title: "💵 Earnings Summary" },
     { id: "sup_my_reviews", title: "⭐ My Reviews" },
     { id: "sup_renew_plan", title: "🔄 Renew Subscription" },
+    { id: "zqpay_setup", title: "💳 Accept EcoCash", description: (supplier.payments?.paynowEnabled ? "ON - buyers can Pay Now" : "Let buyers pay you in WhatsApp") },
     { id: "my_supplier_account", title: "⬅ Back" }
   ]);
 }
@@ -1192,7 +1193,7 @@ export async function sendSchoolAccountMenu(to, schoolDoc) {
   // No school profile - send back to registration
   return sendList(to, "👋 *Welcome to ZimQuote!*\nZimbabwe's marketplace for products & services.", [
     { id: "register_supplier", title: "🏪 List My Business" },
-    { id: "find_supplier",     title: "🔍 Browse & Shop" },
+    { id: "find_supplier",     title: "🔍 Find, Buy & Hire" },
     { id: "find_school",       title: "🎓 Schools & Tutors" },
     { id: "my_orders",         title: "📋 My Orders" },
   ]);
@@ -1261,7 +1262,7 @@ if (!school.active) {
 export async function sendSchoolMarketplaceMenu(to) {
   return sendList(to, "🛍️ *Buy Supplies & More*\nSource uniforms, stationery, books, furniture and services from ZimQuote sellers.", [
     { id: "sup_request_sellers", title: "📝 Request a Quote" },
-    { id: "find_supplier",       title: "🔍 Browse & Shop" },
+    { id: "find_supplier",       title: "🔍 Find, Buy & Hire" },
     { id: "find_school",         title: "🎓 Schools & Tutors" },
     { id: "school_account",      title: "⬅ Back to School" }
   ]);

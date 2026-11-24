@@ -3,6 +3,18 @@
 import SupplierProfile from "../models/supplierProfile.js";
 import { sendText, sendList, sendButtons } from "./metaSender.js";
 import { SUPPLIER_CITIES } from "./supplierPlans.js";
+import { ruleIntent, getSearchIntent, aiInterpret, aiEnabled, intentBonus } from "./searchBrain.js";
+
+// WhatsApp list row titles must be <= 24 characters or Meta rejects the whole
+// list (several category labels are longer, e.g. "Air Conditioning & Refrigeration").
+function _zqT24(t = "") {
+  const s = String(t || "");
+  if (s.length <= 24) return s;
+  let out = "";
+  for (const ch of s) { if ((out + ch).length > 23) break; out += ch; }
+  return out.trimEnd() + "…";
+}
+
 
 export async function startSupplierSearch(from, biz, saveBiz) {
  biz.sessionState = "supplier_search_category";
@@ -30,7 +42,7 @@ await saveBiz(biz);
    return sendList(from, "🔍 What are you looking for?", [
     ...SUPPLIER_CATEGORIES.map(c => ({
       id: `sup_search_cat_${c.id}`,
-      title: c.label
+      title: _zqT24(c.label)
     })),
     { id: "sup_search_all", title: "🔍 Search by product or service name" }
   ]);
@@ -594,7 +606,7 @@ function _splitServiceBlobPublic(arr) {
   });
 }
 
-export async function runSupplierSearch({ city, category, product, profileType, area }) {
+export async function runSupplierSearch({ city, category, product, profileType, area, _intent = undefined }) {
   const _stack = new Error().stack.split('').slice(1,4).join(' | ');
   console.log(`[TRACE-RS] runSupplierSearch called: product="${product}" city="${city}" area="${area}" | CALLER: ${_stack}`);
   const query = {
@@ -789,12 +801,28 @@ const passes = hasListedProducts || hasProducts;
 });
 console.log(`[TRACE-FILTER] before filter: ${preFilterCount}, after filter: ${results.length}`);
 
+  // Relevance first (best match + intent), paid tier only breaks ties.
+  // Previously this list was ordered by tier alone, so a featured seller with
+  // a loose match sat above a dedicated specialist.
+  if (product && results.length > 1) {
+    try {
+      const _int = _intent !== undefined ? _intent : ruleIntent(product);
+      const _rel = new Map(results.map(s => [String(s._id),
+        scoreSupplierMatch(s, product) + intentBonus(s, _int)]));
+      results.sort((a, b) =>
+        (_rel.get(String(b._id)) - _rel.get(String(a._id))) ||
+        ((b.tierRank || 0) - (a.tierRank || 0)) ||
+        ((b.credibilityScore || 0) - (a.credibilityScore || 0)));
+    } catch (_) {}
+  }
+
   if (area && results.length > 1) {
     const areaLower = area.toLowerCase();
     results.sort((a, b) => {
       const aInArea = (a.location?.area || "").toLowerCase().includes(areaLower) ? 0 : 1;
       const bInArea = (b.location?.area || "").toLowerCase().includes(areaLower) ? 0 : 1;
       if (aInArea !== bInArea) return aInArea - bInArea;
+      if (product) return 0;   // keep relevance order within the area group (stable sort)
       return (b.tierRank || 0) - (a.tierRank || 0);
     });
   }
@@ -886,6 +914,12 @@ function scoreProductMatch(productName = "", searchTerm = "") {
   const expandedTerms = getExpandedSearchTerms(_effSearch);
   const productTokens = tokenizeProductName(productNorm);
   const scores = [];
+  // DIRECT terms = the query, its stems and its own synonym entry. Everything
+  // else in expandedTerms came in by reverse lookup (e.g. "electrician" pulls
+  // in the "solar installation" entry, which pulls in "solar"). Those can
+  // still show a seller as RELATED, but never as a STRONG match - this is what
+  // put a cable shop above electricians for "find electrician harare".
+  const _direct = new Set([_effSearch, ...stemVariants(_effSearch), ...expandSearchTerms(_effSearch).map(normalizeProductName)]);
 
   for (const term of expandedTerms) {
     const termTokens = tokenizeProductName(term);
@@ -911,6 +945,7 @@ function scoreProductMatch(productName = "", searchTerm = "") {
       score += 10;
     }
 
+    if (!_direct.has(term)) score = Math.min(score, 35);
     scores.push(score);
   }
 
@@ -1132,8 +1167,19 @@ function buildProductSearchOffersFromSupplier(supplier, searchTerm = "") {
   return offers.slice(0, 12);
 }
 
-export async function runSupplierOfferSearch({ city, category, product, profileType, area, _noWiderPass = false }) {
-  const suppliers = await runSupplierSearch({ city, category, product, profileType, area });
+export async function runSupplierOfferSearch({ city, category, product, profileType, area, _noWiderPass = false, _aiTried = false }) {
+  // What does the buyer mean? (rules first; Claude only for unknown words)
+  let _intent = null;
+  try {
+    if (product) {
+      const _syn = expandSearchTerms(String(product).toLowerCase().trim());
+      _intent = await getSearchIntent(product, { knownToSynonyms: _syn.length > 1 });
+    } else if (category) {
+      _intent = { categories: [category], profileType: null, source: "category" };
+    }
+  } catch (_) { _intent = null; }
+
+  const suppliers = await runSupplierSearch({ city, category, product, profileType, area, _intent });
 
   console.log(`[OFFER SEARCH] product="${product}" city="${city}" area="${area}" → ${suppliers.length} suppliers found`);
   suppliers.forEach(s => {
@@ -1158,7 +1204,10 @@ export async function runSupplierOfferSearch({ city, category, product, profileT
   // can never pull an unrelated trade into results. Also protects same-domain
   // service sellers (e.g. a plumber who never typed "geyser") from the gate.
   try {
-    const _domainCats = _inferCategoriesFromSearch(product || "", expandSearchTerms(product || ""));
+    const _domainCats = [...new Set([
+      ..._inferCategoriesFromSearch(product || "", expandSearchTerms(product || "")),
+      ...((_intent && _intent.categories) || [])
+    ])];
     if (_domainCats.length) {
       const _haveOffer = new Set(offers.map(o => o.supplierId));
       for (const s of suppliers) {
@@ -1202,7 +1251,7 @@ export async function runSupplierOfferSearch({ city, category, product, profileT
     const _localSup = new Set(offers.map(o => o.supplierId));
     if (_localSup.size < 4) {
       try {
-        const wider = await runSupplierOfferSearch({ category, product, profileType, _noWiderPass: true });
+        const wider = await runSupplierOfferSearch({ category, product, profileType, _noWiderPass: true, _aiTried: true });
         const _extraSup = new Set();
         const keep = [];
         for (const o of wider) {
@@ -1234,9 +1283,24 @@ export async function runSupplierOfferSearch({ city, category, product, profileT
     const r = _relBySupplier.get(o.supplierId) || 0;
     if ((o.matchScore || 0) > r) _relBySupplier.set(o.supplierId, o.matchScore || 0);
   }
+  // Intent adjustment: an electrician outranks a cable shop for "electrician",
+  // and the reverse for "cable". Only applied to sellers that already matched
+  // (relevance > 0), so it re-orders results - it never invents a match.
+  if (_intent) {
+    const _supById = new Map(suppliers.map(s => [String(s._id), s]));
+    for (const id of new Set(offers.map(o => o.supplierId))) {
+      const r = _relBySupplier.get(id) || 0;
+      const sup = _supById.get(id);
+      if (!sup) continue;
+      const b = intentBonus(sup, _intent);
+      if (r > 0 || b >= 20) _relBySupplier.set(id, Math.max(1, r + b));
+    }
+  }
   const _band = id => {
     const r = _relBySupplier.get(id) || 0;
-    return r >= 45 ? 2 : r >= 20 ? 1 : 0;
+    // 3 = exact/near-exact (an exact item or service name), 2 = strong,
+    // 1 = related, 0 = category-only. Price/tier only order sellers WITHIN a band.
+    return r >= 90 ? 3 : r >= 45 ? 2 : r >= 20 ? 1 : 0;
   };
 
   // -- Relevance gate: when genuinely-related sellers exist, drop the
@@ -1281,7 +1345,29 @@ export async function runSupplierOfferSearch({ city, category, product, profileT
     if (!_seenSup.has(o.supplierId)) { _seenSup.add(o.supplierId); _firstOfSupplier.push(o); }
     else _rest.push(o);
   }
-  return [..._firstOfSupplier, ..._rest].slice(0, Math.max(60, _firstOfSupplier.length));
+  let _final = [..._firstOfSupplier, ..._rest].slice(0, Math.max(60, _firstOfSupplier.length));
+
+  // ── AI rescue: nothing found → ask Claude what the buyer meant, retry once ─
+  // "mupombi harare", "electrishan", "someone to fix my geyser" → plumber etc.
+  if (!_final.length && product && !_aiTried && aiEnabled()) {
+    try {
+      const ai = await aiInterpret(product);
+      const tries = [...new Set([ai?.query, ...(ai?.alternatives || [])]
+        .map(t => String(t || "").toLowerCase().trim())
+        .filter(t => t && t !== String(product).toLowerCase().trim()))].slice(0, 3);
+      for (const t of tries) {
+        const res = await runSupplierOfferSearch({
+          city: city || ai?.city || null, category,
+          product: t, profileType: profileType || null, area, _noWiderPass, _aiTried: true
+        });
+        if (res.length) {
+          console.log(`[SEARCH AI RESCUE] "${product}" → "${t}" (${res.length} offers)`);
+          return res.map(o => ({ ...o, _aiRewrite: t }));
+        }
+      }
+    } catch (e) { console.warn("[SEARCH AI RESCUE]", e.message); }
+  }
+  return _final;
 }
 
 export function formatSupplierOfferResults(offers = [], searchTerm = "") {

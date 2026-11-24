@@ -187,6 +187,17 @@ import {
   formatServiceRate,
   buildFastAddHelpText
 } from "./invoiceHelpers.js";
+
+// WhatsApp list row titles must be <= 24 characters or Meta rejects the whole
+// list (several category labels are longer, e.g. "Air Conditioning & Refrigeration").
+function _zqT24(t = "") {
+  const s = String(t || "");
+  if (s.length <= 24) return s;
+  let out = "";
+  for (const ch of s) { if ((out + ch).length > 23) break; out += ch; }
+  return out.trimEnd() + "…";
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function msDays(ms) { return ms / (1000 * 60 * 60 * 24); }
@@ -2669,7 +2680,7 @@ async function sendBuyerRequestResponseToBuyer({ request, supplier, response }) 
         `🏪 ${supplierName}\n` +
         `This provider is not available for your request right now.`,
       buttons: [
-        { id: "find_supplier", title: "🔍 Browse & Shop" },
+        { id: "find_supplier", title: "🔍 Find, Buy & Hire" },
         { id: "sup_request_sellers", title: "📝 Request Again" }
       ]
     });
@@ -3564,6 +3575,19 @@ async function sendClientSelectList(from, biz) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ── Search without the "Which city?" question ──────────────────────────────
+// Every place that used to ask "Which city?" now searches straight away: the
+// buyer's last search city, else all of Zimbabwe (nearby-city top-up keeps thin
+// local results useful). Reuses the existing sup_search_city_ handler.
+async function _zqAutoCity(from, biz, product) {
+  const { runAutoCitySearch } = await import("./findMenu.js");
+  return runAutoCitySearch({
+    from, biz, saveBiz: biz ? saveBizSafe : null,
+    product: String(product || "").trim(),
+    dispatch: (act) => handleIncomingMessage({ from, action: act })
+  });
+}
+
 export async function handleIncomingMessage({ from, action, hasImage = false, imageUrl = null, imageCaption = "", rawText = "" }) {
 
   const phone = from.replace(/\D+/g, "");
@@ -3843,6 +3867,8 @@ a.startsWith("sup_load_preset_") ||
       a.startsWith("school_followup_") ||
       a.startsWith("school_leads_page_") ||
       a.startsWith("sfaq_") ||
+      a.startsWith("zqf_") ||
+      a.startsWith("zqpay_") ||
       a.startsWith("sc_") ||
       // ── Group smart link list-reply taps ─────────────────────────────────
       // zqg_sel_<id>        = buyer tapped a seller row in a group list
@@ -4323,6 +4349,51 @@ try {
   }
 } catch (_sgErr) {
   console.error("[SFAQ GUARD]", _sgErr.message);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 💳 PAY NOW (Paynow, seller's own account) - taps + typed replies
+// ───────────────────────────────────────────────────────────────────────────
+// Runs before every free-text grabber so an EcoCash number, amount or Paynow
+// key is never mistaken for a product search. Only acts when a zqPay /
+// zqPaySetup state exists (set by a zqpay_ tap) or on a zqpay_ tap itself.
+try {
+  if (a.startsWith("zqpay_")) {
+    const { handleSellerPayAction } = await import("./sellerPay.js");
+    if (await handleSellerPayAction({ from, action: a })) return;
+  } else if (!isMetaAction && !hasImage && text.trim()) {
+    const _pySess = await UserSession.findOne({ phone }, { "tempData.zqPay": 1, "tempData.zqPaySetup": 1 }).lean();
+    if (_pySess?.tempData?.zqPay || _pySess?.tempData?.zqPaySetup) {
+      const { handleSellerPayText } = await import("./sellerPay.js");
+      if (await handleSellerPayText({ from, text })) return;
+    }
+  }
+} catch (_pyErr) {
+  console.error("[SELLER PAY]", _pyErr.message);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🔍 FIND, BUY & HIRE - numbered browse replies (before every number grabber)
+// ───────────────────────────────────────────────────────────────────────────
+// Only active for 20 min after the Find menu was shown, and only for a bare
+// number. Any other typed text or tap disarms it, so a later "2" (e.g. picking
+// seller #2 from results) is never mistaken for a menu choice.
+try {
+  if (!isMetaAction && !hasImage && /^\d{1,2}$/.test(text.trim())) {
+    const { handleFindNumber } = await import("./findMenu.js");
+    const _fnHandled = await handleFindNumber({
+      from, text, biz, saveBiz: biz ? saveBizSafe : null,
+      dispatch: (act) => handleIncomingMessage({ from, action: act })
+    });
+    if (_fnHandled) return;
+  } else if (!a.startsWith("zqf_")) {
+    await UserSession.updateOne(
+      { phone, "tempData.zqFind": { $exists: true } },
+      { $unset: { "tempData.zqFind": "" } }
+    );
+  }
+} catch (_fnErr) {
+  console.error("[FIND MENU]", _fnErr.message);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -6516,7 +6587,7 @@ if (_introRequest.status === "closed") {
               `💵 *Quote:* ${text.trim()}\n\n` +
               `Contact the seller directly to confirm your order.`,
             buttons: [
-              { id: "find_supplier",       title: "🔍 Browse & Shop" },
+              { id: "find_supplier",       title: "🔍 Find, Buy & Hire" },
               { id: "sup_request_sellers", title: "📝 Request a Quote" }
             ]
           });
@@ -7165,7 +7236,7 @@ await UserSession.findOneAndUpdate(
       text: "✅ Request cancelled.",
       buttons: [
         { id: "sup_request_sellers", title: "📝 Request a Quote" },
-        { id: "find_supplier",       title: "🔍 Browse & Shop" }
+        { id: "find_supplier",       title: "🔍 Find, Buy & Hire" }
       ]
     });
   }
@@ -7532,7 +7603,7 @@ if (al === "my requests" || al === "buyer_my_requests") {
           text: "✅ Request cancelled.",
           buttons: [
             { id: "sup_request_sellers", title: "📝 Request a Quote" },
-            { id: "find_supplier",       title: "🔍 Browse & Shop" }
+            { id: "find_supplier",       title: "🔍 Find, Buy & Hire" }
           ]
         });
       }
@@ -8361,13 +8432,8 @@ if (parsed.city || parsed.area) {
   return;
 }
 
-  return sendList(from, `🔍 Looking for: *${cleanProduct}*\n\nWhich city?`, [
-    ...SUPPLIER_CITIES.slice(0, 9).map(c => ({
-      id: `sup_search_city_${c.toLowerCase().replace(/\s+/g, '_')}`,
-      title: c
-    })),
-    { id: "sup_search_city_all", title: "📍 All Cities" }
-  ]);
+  // No more "Which city?" question: remembered city, else all of Zimbabwe.
+    return _zqAutoCity(from, biz, cleanProduct);
 }
   const hasActiveBuyerFlow =
     !!sess?.tempData?.orderState ||
@@ -8550,6 +8616,8 @@ a === "sup_search_next_page" ||
   // ── School FAQ (sfaq_) - parents visiting via ZQ:SCHOOL link ────────────────
   // Same issue: parent taps a school FAQ button → redirected without this.
   a.startsWith("sfaq_") ||
+  a.startsWith("zqf_") ||
+  a.startsWith("zqpay_") ||
   // ── Group smart link list-reply taps ─────────────────────────────────────
   // zqg_sel_<id>        = buyer tapped a seller row in a group list
   // zqg_register_<slug> = buyer tapped "List Your Business Here"
@@ -9056,13 +9124,8 @@ if (shortcode.city && results.length) {
       biz.sessionState = "supplier_search_city";
       await saveBizSafe(biz);
     }
-    return sendList(from, `🔍 Looking for: *${shortcode.product}*\n\nWhich city?`, [
-      ...SUPPLIER_CITIES.slice(0, 9).map(c => ({
-        id: `sup_search_city_${c.toLowerCase().replace(/\s+/g, '_')}`,
-        title: c
-      })),
-      { id: "sup_search_city_all", title: "📍 All Cities" }
-    ]);
+    // No more "Which city?" question: remembered city, else all of Zimbabwe.
+    return _zqAutoCity(from, biz, shortcode.product);
   }
 }
 
@@ -9886,7 +9949,7 @@ await sendText(from, "❌ Order cancelled.");
 return sendButtons(from, {
   text: "What would you like to do next?",
   buttons: [
-    { id: "find_supplier", title: "🔍 Browse & Shop" },
+    { id: "find_supplier", title: "🔍 Find, Buy & Hire" },
     { id: "my_orders", title: "📋 My Orders" },
     
   ]
@@ -9972,7 +10035,7 @@ ${pricedCount === finalItems.length ? "All items were auto-priced. Supplier can 
     return sendButtons(from, {
       text: "What would you like to do next?",
       buttons: [
-        { id: "find_supplier", title: "🔍 Browse & Shop" },
+        { id: "find_supplier", title: "🔍 Find, Buy & Hire" },
         { id: "my_orders", title: "📋 My Orders" },
         
       ]
@@ -10045,7 +10108,7 @@ if (!supplierId) {
 return sendButtons(from, {
   text: "What would you like to do next?",
   buttons: [
-    { id: "find_supplier", title: "🔍 Browse & Shop" },
+    { id: "find_supplier", title: "🔍 Find, Buy & Hire" },
     { id: "register_supplier", title: "📦 Become a Supplier" },
     
   ]
@@ -10169,7 +10232,7 @@ ${pricedCount === finalItems.length
 return sendButtons(from, {
   text: "What would you like to do next?",
   buttons: [
-    { id: "find_supplier", title: "🔍 Browse & Shop" },
+    { id: "find_supplier", title: "🔍 Find, Buy & Hire" },
     { id: "register_supplier", title: "📦 Become a Supplier" },
     
   ]
@@ -13243,13 +13306,8 @@ if (shortcode.city) {
     };
     biz.sessionState = "supplier_search_city";
     await saveBizSafe(biz);
-    return sendList(from, `🔍 Looking for: *${shortcode.product}*\n\nWhich city?`, [
-      ...SUPPLIER_CITIES.slice(0, 9).map(c => ({
-        id: `sup_search_city_${c.toLowerCase().replace(/\s+/g, '_')}`,
-        title: c
-      })),
-      { id: "sup_search_city_all", title: "📍 All Cities" }
-    ]);
+    // No more "Which city?" question: remembered city, else all of Zimbabwe.
+    return _zqAutoCity(from, biz, shortcode.product);
   }
 }
 
@@ -13512,10 +13570,8 @@ if (biz.sessionState === "supplier_search_city" && !isMetaAction && !schoolAdmin
     biz.sessionState = "supplier_search_city";
     await saveBizSafe(biz);
 
-    return sendList(from, `🔍 Looking for: *${cleanProduct}*\n\nWhich city?`, [
-      ...SUPPLIER_CITIES.slice(0, 9).map(c => ({ id: `sup_search_city_${c.toLowerCase().replace(/\s+/g, '_')}`, title: c })),
-      { id: "sup_search_city_all", title: "📍 All Cities" }
-    ]);
+    // No more "Which city?" question: remembered city, else all of Zimbabwe.
+    return _zqAutoCity(from, biz, cleanProduct);
   }
 
  const productQuery = text.trim().toLowerCase().replace(/\s+/g, " ");
@@ -13536,10 +13592,8 @@ if (biz.sessionState === "supplier_search_city" && !isMetaAction && !schoolAdmin
     biz.sessionState = "supplier_search_city";
     await saveBizSafe(biz);
 
-    return sendList(from, `🔍 Looking for: *${productQuery}*\n\nWhich city?`, [
-      ...SUPPLIER_CITIES.slice(0, 9).map(c => ({ id: `sup_search_city_${c.toLowerCase().replace(/\s+/g, '_')}`, title: c })),
-      { id: "sup_search_city_all", title: "📍 All Cities" }
-    ]);
+    // No more "Which city?" question: remembered city, else all of Zimbabwe.
+    return _zqAutoCity(from, biz, productQuery);
   }
 }
 
@@ -13704,16 +13758,14 @@ if (biz.sessionState === "supplier_search_city" && !isMetaAction && !schoolAdmin
           biz.sessionData = { ...(biz.sessionData || {}), supplierSearch: { product: shortcode.product } };
           biz.sessionState = "supplier_search_city";
           await saveBizSafe(biz);
-          return sendList(from, `🔍 Looking for: *${shortcode.product}*\n\nWhich city?`, [
-            ...SUPPLIER_CITIES.slice(0, 9).map(c => ({ id: `sup_search_city_${c.toLowerCase().replace(/\s+/g, '_')}`, title: c })),
-            { id: "sup_search_city_all", title: "📍 All Cities" }
-          ]);
+          // No more "Which city?" question: remembered city, else all of Zimbabwe.
+    return _zqAutoCity(from, biz, shortcode.product);
         }
         // Truly unrecognised - show helpful prompt
         return sendButtons(from, {
           text: `🔍 *Looking for something?*\n\nTry:\n_find cement_\n_find plumber harare_\n_find teacher_\n_find car hire -_\n\nOr type *menu* to see all options.`,
           buttons: [
-            { id: "find_supplier", title: "🔍 Browse & Shop" },
+            { id: "find_supplier", title: "🔍 Find, Buy & Hire" },
             { id: "register_supplier", title: "📦 List My Business" }
           ]
         });
@@ -13735,7 +13787,7 @@ if (biz.sessionState === "supplier_search_city" && !isMetaAction && !schoolAdmin
 return sendButtons(from, {
   text: "What would you like to do next?",
   buttons: [
-    { id: "find_supplier", title: "🔍 Browse & Shop" },
+    { id: "find_supplier", title: "🔍 Find, Buy & Hire" },
     { id: "my_orders", title: "📋 My Orders" },
     
   ]
@@ -14217,29 +14269,12 @@ if (a === "find_supplier") {
     },
     { upsert: true }
   );
-return sendText(from,
-`🔍 *Find Suppliers on ZimQuote*
-
-Type what you need. Add a suburb or city to narrow results.
-
-*📦 Products:*
-_find cement harare_, _find cooking oil bulawayo_, _find mealie meal borrowdale_, _find tyres avondale_, _find school uniforms glen view_, _find solar panels highlands_
-
-*🧹 Cleaning Services:*
-_find deep cleaning harare_, _find house cleaning borrowdale_, _find office cleaning harare_, _find industrial cleaning harare_, _find restaurant cleaning harare_, _find carpet cleaning highlands_, _find end of tenancy cleaning harare_
-
-*🔧 Services:*
-_find plumber highlands_, _find electrician borrowdale_, _find teacher harare_, _find tutor glen view_, _find painter avondale_, _find welder harare_, _find catering harare_, _find photographer bulawayo_, _find it support harare_
-
-*🚗 Transport:*
-_find car hire harare_, _find delivery bulawayo_, _find moving company harare_
-
-Or pick a category 👇`,
-  ).then(() => sendList(from, "📂 Choose how you want to buy:", [
-    { id: "sup_search_type_product", title: "📦 Browse Products" },
-    { id: "sup_search_type_service", title: "🧰 Browse Services" },
-    { id: "sup_request_sellers", title: "📝 Request a Quote" }
-  ]));
+// One short "Find, Buy & Hire" screen: type what you need, or reply a number
+// to browse (numbered list - no paging, no "Which city?").
+{
+  const { sendFindHome } = await import("./findMenu.js");
+  return sendFindHome(from);
+}
 
 }
 
@@ -14278,7 +14313,7 @@ if (a === "sup_search_type_product" || a === "sup_search_type_service") {
   const categoryRows = [
     ...filteredCategories.slice(0, 8).map(c => ({
       id: `sup_search_cat_${c.id}`,
-      title: c.label
+      title: _zqT24(c.label)
     })),
     { id: "sup_search_all", title: "🔍 Search Products" },
     ...(filteredCategories.length > 8
@@ -14321,7 +14356,7 @@ if (a.startsWith("sup_search_collar_")) {
     : collarCategories.slice(0, 9);
 
   const rows = [
-    ...firstBatch.map(c => ({ id: `sup_search_cat_${c.id}`, title: c.label })),
+    ...firstBatch.map(c => ({ id: `sup_search_cat_${c.id}`, title: _zqT24(c.label) })),
     ...(hasMore ? [{ id: `sup_search_collar_more_${collarKey}`, title: "➕ More" }] : []),
     { id: "sup_search_type_service", title: "⬅ Back" }
   ];
@@ -14340,7 +14375,7 @@ if (a.startsWith("sup_search_collar_more_")) {
   const rows = [
     ...collarCategories.slice(8, 17).map(c => ({
       id: `sup_search_cat_${c.id}`,
-      title: c.label
+      title: _zqT24(c.label)
     })),
     { id: `sup_search_collar_${collarKey}`, title: "⬅ Back" }
   ];
@@ -14374,7 +14409,7 @@ if (a === "sup_search_more_categories") {
   // WhatsApp max 10 rows - products overflow: items 9-17, capped at 9 + Back
   const overflowRows = filteredCategories.slice(9, 18).map(c => ({
     id: `sup_search_cat_${c.id}`,
-    title: c.label
+    title: _zqT24(c.label)
   }));
 
   return sendList(from, "📦 More Product Categories", [
@@ -15960,7 +15995,7 @@ if (a === "my_orders" || a.startsWith("my_orders_page_")) {
       return sendButtons(from, {
         text: "📋 *My Orders*\n\nYou haven't placed any orders yet.",
         buttons: [
-          { id: "find_supplier", title: "🔍 Browse & Shop" },
+          { id: "find_supplier", title: "🔍 Find, Buy & Hire" },
           { id: "suppliers_home", title: "🛒 Marketplace" }
         ]
       });
@@ -16811,7 +16846,7 @@ if (a.startsWith("sup_collar_")) {
   const categoryRows = [
     ...filteredCategories.slice(0, 9).map(c => ({
       id: `sup_cat_${c.id}`,
-      title: c.label
+      title: _zqT24(c.label)
     })),
     ...(filteredCategories.length > 9
       ? [{ id: `sup_collar_more_${collarKey}`, title: "➕ More Categories" }]
@@ -16837,7 +16872,7 @@ if (a.startsWith("sup_collar_more_")) {
   return sendList(from, "🗂 More Categories", [
     ...filteredCategories.slice(9).map(c => ({
       id: `sup_cat_${c.id}`,
-      title: c.label
+      title: _zqT24(c.label)
     })),
     { id: `sup_collar_${collarKey}`, title: "⬅ Back" }
   ]);
@@ -16867,7 +16902,7 @@ if (a === "sup_cat_more") {
   // Keep product flow paginated and valid
   const moreRows = filteredCategories.slice(9, 18).map(c => ({
     id: `sup_cat_${c.id}`,
-    title: c.label
+    title: _zqT24(c.label)
   }));
 
   if (filteredCategories.length > 18) {
@@ -16885,7 +16920,7 @@ if (a === "sup_cat_more_2") {
 
   const moreRows = filteredCategories.slice(18, 27).map(c => ({
     id: `sup_cat_${c.id}`,
-    title: c.label
+    title: _zqT24(c.label)
   }));
 
   return sendList(from, "🗂 More Categories (Page 2)", moreRows);
@@ -17002,7 +17037,7 @@ if (a.startsWith("sup_grp_")) {
     .slice(0, 9)
     .map(c => ({
       id: `sup_cat_${c.id}`,
-      title: c.label
+      title: _zqT24(c.label)
     }));
 
   rows.push({ id: "reg_type_service", title: "⬅ Service Groups" });
@@ -17595,7 +17630,7 @@ if (a === "sup_website_skip") {
   const categoryRows = [
     ...filteredCategories.slice(0, 9).map(c => ({
       id: `sup_cat_${c.id}`,
-      title: c.label
+      title: _zqT24(c.label)
     })),
     ...(filteredCategories.length > 9
       ? [{ id: "sup_cat_more", title: "➕ More Categories" }]
@@ -17894,13 +17929,15 @@ if (a.startsWith("sup_search_cat_")) {
     );
   }
 
-  return sendList(from, "📍 Which city?", [
-    ...SUPPLIER_CITIES.slice(0, 9).map(c => ({
-      id: `sup_search_city_${c.toLowerCase().replace(/\s+/g, '_')}`,
-      title: c
-    })),
-    { id: "sup_search_city_other", title: "📍 Other" }
-  ]);
+  // No more "Which city?" question: remembered city (if it has sellers in this
+  // category), else all of Zimbabwe.
+  {
+    const { runCategoryBrowse } = await import("./findMenu.js");
+    return runCategoryBrowse({
+      from, biz, saveBiz: biz ? saveBizSafe : null, category,
+      dispatch: (act) => handleIncomingMessage({ from, action: act })
+    });
+  }
 }
 
   // ── Supplier search: city selected ────────────────────────────────────────
@@ -19288,7 +19325,7 @@ if (
     return sendButtons(from, {
       text: "What would you like to do next?",
       buttons: [
-        { id: "find_supplier", title: "🔍 Browse & Shop" },
+        { id: "find_supplier", title: "🔍 Find, Buy & Hire" },
         { id: "my_orders",     title: "📋 My Orders" }
       ]
     });
@@ -20598,7 +20635,7 @@ ${pricedCount === finalItems.length ? "All items were auto-priced. Supplier can 
     return sendButtons(from, {
       text: "What would you like to do next?",
       buttons: [
-        { id: "find_supplier", title: "🔍 Browse & Shop" },
+        { id: "find_supplier", title: "🔍 Find, Buy & Hire" },
         { id: "my_orders", title: "📋 My Orders" }
       ]
     });
@@ -20684,7 +20721,7 @@ Supplier will confirm your booking shortly. 🎉`);
   return sendButtons(from, {
     text: "What would you like to do next?",
     buttons: [
-      { id: "find_supplier", title: "🔍 Browse & Shop" },
+      { id: "find_supplier", title: "🔍 Find, Buy & Hire" },
       { id: "my_orders", title: "📋 My Orders" }
     ]
   });
@@ -21033,7 +21070,7 @@ if (!isMetaAction && text && text.trim().length > 1) {
         `_Type *0* for main menu · *00* to cancel_`,
       buttons: [
         { id: "sup_request_mode_bulk", title: "📋 Bulk List" },
-        { id: "find_supplier",         title: "🔍 Browse & Shop" }
+        { id: "find_supplier",         title: "🔍 Find, Buy & Hire" }
       ]
     });
   }
@@ -21085,7 +21122,7 @@ if (a === "sup_request_sellers") {
       `_Type *0* for main menu · *00* to cancel_`,
     buttons: [
       { id: "sup_request_mode_bulk", title: "📋 Bulk List" },
-      { id: "find_supplier",         title: "🔍 Browse & Shop" }
+      { id: "find_supplier",         title: "🔍 Find, Buy & Hire" }
     ]
   });
 }
@@ -21567,7 +21604,7 @@ if (a.startsWith("buyer_view_all_quotes_")) {
       text: "❌ Request not found or has expired.",
       buttons: [
         { id: "sup_request_sellers", title: "📝 Request a Quote" },
-        { id: "find_supplier",       title: "🔍 Browse & Shop" }
+        { id: "find_supplier",       title: "🔍 Find, Buy & Hire" }
       ]
     });
   }
@@ -21585,7 +21622,7 @@ if (a.startsWith("buyer_view_all_quotes_")) {
         `${_bvqRequest.status === "open" ? "🟢 Sellers have been notified. Check back soon." : "🔴 This request is closed with no quotes."}`,
       buttons: [
         { id: "sup_request_sellers", title: "📝 Request a Quote" },
-        { id: "find_supplier",       title: "🔍 Browse & Shop" }
+        { id: "find_supplier",       title: "🔍 Find, Buy & Hire" }
       ]
     });
   }
@@ -21598,7 +21635,7 @@ if (a.startsWith("buyer_view_all_quotes_")) {
     text: "What would you like to do next?",
     buttons: [
       { id: "sup_request_sellers", title: "📝 Request a Quote" },
-      { id: "find_supplier",       title: "🔍 Browse & Shop" }
+      { id: "find_supplier",       title: "🔍 Find, Buy & Hire" }
     ]
   });
 }
@@ -21616,7 +21653,7 @@ if (a === "buyer_my_requests") {
         `Use Request Sellers to ask multiple sellers to quote your exact item.`,
       buttons: [
         { id: "sup_request_sellers", title: "📝 Request a Quote" },
-        { id: "find_supplier",       title: "🔍 Browse & Shop" }
+        { id: "find_supplier",       title: "🔍 Find, Buy & Hire" }
       ]
     });
   }
@@ -21636,7 +21673,7 @@ if (a === "buyer_my_requests") {
   });
  
   _bmrRows.push({ id: "sup_request_sellers", title: "📝 Request a Quote" });
-  _bmrRows.push({ id: "find_supplier",       title: "🔍 Browse & Shop" });
+  _bmrRows.push({ id: "find_supplier",       title: "🔍 Find, Buy & Hire" });
  
   return sendList(
     from,
@@ -22010,13 +22047,8 @@ if (biz?.sessionState === "supplier_search_product" && !isMetaAction) {
   biz.sessionState = "supplier_search_city";
   await saveBizSafe(biz);
 
-  return sendList(from, `🔍 Looking for: *${cleanProduct}*\n\nWhich city?`, [
-    ...SUPPLIER_CITIES.slice(0, 9).map(c => ({
-      id: `sup_search_city_${c.toLowerCase().replace(/\s+/g, '_')}`,
-      title: c
-    })),
-    { id: "sup_search_city_all", title: "📍 All Cities" }
-  ]);
+  // No more "Which city?" question: remembered city, else all of Zimbabwe.
+    return _zqAutoCity(from, biz, cleanProduct);
 }
 
   // ── Buyer order: product name text input ──────────────────────────────────
@@ -22085,7 +22117,7 @@ ${pricedCount === finalItems.length ? "All items were auto-priced. Supplier can 
     return sendButtons(from, {
       text: "What would you like to do next?",
       buttons: [
-        { id: "find_supplier", title: "🔍 Browse & Shop" },
+        { id: "find_supplier", title: "🔍 Find, Buy & Hire" },
         { id: "my_orders", title: "📋 My Orders" },
         { id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }
       ]
@@ -22240,7 +22272,7 @@ ${pricedCount === finalItems.length
 return sendButtons(from, {
   text: "What would you like to do next?",
   buttons: [
-    { id: "find_supplier", title: "🔍 Browse & Shop" },
+    { id: "find_supplier", title: "🔍 Find, Buy & Hire" },
     { id: "my_orders", title: "📋 My Orders" },
     { id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }
   ]

@@ -213,6 +213,17 @@ const SupplierProfileSchema = new mongoose.Schema({
   revealBuyerPhone:   { type: Boolean, default: false },
   revealVisitorPhone: { type: Boolean, default: false },
 
+  // ── Pay Now (seller's OWN Paynow account - money goes straight to them) ────
+  // Set by the seller in WhatsApp: My Store → More Options → 💳 Accept EcoCash.
+  // The key is stored encrypted when ZQ_SECRET is set (see services/sellerPay.js).
+  payments: {
+    paynowEnabled:        { type: Boolean, default: false },
+    paynowIntegrationId:  { type: String,  default: "" },
+    paynowIntegrationKey: { type: String,  default: "" },
+    paynowEmail:          { type: String,  default: "" },
+    connectedAt:          { type: Date }
+  },
+
   // ── Contact visibility (admin-controlled) ──────────────────────────────────
   // When true, the supplier/owner can type "my contacts" in the chatbot and see
   // a list of phone numbers that have opened their smart link or staff card.
