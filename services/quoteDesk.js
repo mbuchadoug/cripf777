@@ -249,6 +249,10 @@ const ESCAPE_RE  = /^(0|00|menu|main menu|back|exit|home|stop|hi|hie|hey|hello|c
 const START_RE   = /^(request (a )?quote|request quotes?|get (a )?quote|i need a quote|need a quote|quotation please|request a quotation|quote request|request sellers)[.!]*$/i;
 const MYQ_RE     = /^(my quotes?|my requests?|my quotations?)$/i;
 const DESK_RE    = /^(desk|quote desk|quotes desk|qdesk|requests desk)$/i;
+// Website tools (zimqoute.co.zw) open WhatsApp with a ready request:
+//   "Request a quote:\n<what>\nWhere: <suburb, town>\nWhen: ...\nFrom: <page>"
+// Everything after the colon becomes the request in ONE step (no extra questions).
+const WEB_RE     = /^\s*(?:📝\s*)?(?:request a quote|quote request|get a quote|request a quotation)\s*[:\-–]\s*([\s\S]{4,})$/i;
 
 export async function handleQuoteDesk({ from, text = "", action = "", biz = null, saveBiz = null, imageUrl = null }) {
   const phone = normPhone(from);
@@ -282,6 +286,10 @@ export async function handleQuoteDesk({ from, text = "", action = "", biz = null
         return adminAction(ctx, a);
       }
       if (a.startsWith("qd_")) return customerOrSellerAction(ctx, a);
+
+      // B2) Ready-made request from a website tool - always starts fresh, even mid-flow.
+      const web = !a && txt.match(WEB_RE);
+      if (web) return onWebRequest(ctx, web[1]);
 
       // C) Typed text inside one of our flows
       if (sess.state) {
@@ -397,6 +405,45 @@ async function onRequestText(ctx, txt) {
   }
   return createRequest(ctx, draft);
 }
+// "Request a quote: ..." from a website tool. Lines like "Where:", "When:",
+// "Budget:", "From:" are understood; the rest is what they need.
+async function onWebRequest(ctx, body) {
+  await clearCompetingFlows(ctx.phone);
+  await clearState(ctx.phone);
+  const lines = String(body || "").split(/\r?\n/).map(s => s.trim()).filter(Boolean).slice(0, 40);
+  const LABEL = /^([A-Za-z][A-Za-z /]{1,18})\s*:\s*(.*)$/;
+  let where = "", page = "";
+  const need = [], extra = [];
+  for (const l of lines) {
+    const m = l.match(LABEL);
+    const k = m ? m[1].trim().toLowerCase() : "";
+    if (m && /^(where|location|area|suburb|town|city|site|deliver to)$/.test(k)) { where = m[2].trim(); continue; }
+    if (m && /^(from|page|source|via)$/.test(k)) { page = m[2].trim(); continue; }
+    if (m && /^(need|what|request|item|items|service)$/.test(k)) { if (m[2].trim()) need.push(m[2].trim()); continue; }
+    if (need.length) extra.push(l); else need.push(l);
+  }
+  const what = need.join(", ").slice(0, 600);
+  if (what.length < 3) return startRequest(ctx);
+  const text = [what, ...extra].join("\n").slice(0, 1400) + (page ? `\n🌐 Website: ${page}`.slice(0, 120) : "");
+  // A list from a calculator ("- Cement (50kg): 280 bags") becomes the items; otherwise the first line.
+  const bullets = extra.filter(l => /^[-•*]\s*\S/.test(l)).map(l => l.replace(/^[-•*]\s*/, "").replace(/:\s*/, " ").trim());
+  const items = await parseItems(bullets.length ? bullets.join("\n") : what);
+  const loc = locate(where || text, ctx.sess.lastCity);
+  const draft = { text, items, city: loc.city, area: loc.area };
+  if (where && !draft.city && !draft.area) {               // unknown place name: keep what they typed
+    draft.area = titleCase(where.split(",")[0].trim()).slice(0, 60);
+    const last = where.split(",").slice(1).join(",").trim();
+    if (last) draft.city = titleCase(last).slice(0, 40);
+  }
+  if (!draft.city && !draft.area) {
+    if (ctx.sess.lastCity) { draft.city = ctx.sess.lastCity; return createRequest(ctx, draft); }
+    await setState(ctx.phone, "qd_loc", { draft });
+    await say(ctx.from, `📝 *${cut(what, 120)}*\n\n📍 *Where are you?* (suburb or town)\n_e.g. Avondale, Harare_`);
+    return true;
+  }
+  return createRequest(ctx, draft);
+}
+
 async function onLocationText(ctx, txt) {
   const draft = ctx.sess.data.draft;
   if (!draft) return startRequest(ctx);

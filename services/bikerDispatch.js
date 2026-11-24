@@ -384,6 +384,10 @@ const REQUEST_RE   = /^(request\s+(a\s+)?(rider|biker)|find\s+(a\s+)?(rider|bike
 const REGISTER_RE  = /^(become\s+a\s+(rider|biker)|register\s+as\s+(a\s+)?(rider|biker)|list\s+as\s+(a\s+)?(rider|biker)|(rider|biker)\s+signup|i\s*a?m\s+a\s+(rider|biker)|join\s+as\s+(a\s+)?(rider|biker))$/i;
 const RIDER_WORD_RE = /^((go\s+)?online|(go\s+)?offline|open jobs|new jobs|jobs near me|points|my points|earnings|stats)$/i;
 const MYDEL_RE     = /^(my deliveries|deliveries|my rides|track|track delivery|my delivery|my bikers?)$/i;
+// Website delivery tool: "Request a biker: Collect documents, CBD to Avondale"
+const WEB_REQ_RE   = /^\s*(?:🏍️?\s*)?(?:request|book|need)\s+a\s+(?:biker|rider|delivery)\s*[:\-–]\s*([\s\S]{4,})$/i;
+// A website QUOTE request must never be swallowed by a half-finished biker flow.
+const WEB_QUOTE_RE = /^\s*(?:📝\s*)?(?:request a quote|quote request|get a quote|request a quotation)\s*[:\-–]/i;
 
 // For the WhatsApp webhook: is this phone in a biker step that expects a PHOTO?
 // (ID photo / photo with bike). The webhook downloads the image and passes it on
@@ -431,6 +435,9 @@ export async function handleBikerMessage({ from, text = "", action = "", biz = n
       const riderLink = txt.match(/ZQ:RIDER:([a-f0-9]{24})/i);
       if (riderLink) return bookSpecificRider(ctx, riderLink[1]);
       if (/^ZQ:BGROUP:/i.test(txt)) return bikerGroupLink(ctx, txt.replace(/^ZQ:BGROUP:/i, "").trim());
+      const webReq = !a && txt.match(WEB_REQ_RE);
+      if (webReq) return webRiderRequest(ctx, webReq[1]);
+      if (!a && sess.state && WEB_QUOTE_RE.test(txt)) { await clearState(phone); return false; }
 
       // D) An in-progress biker flow owns typed text
       if (sess.state) {
@@ -1119,6 +1126,27 @@ export async function startRiderRequest(ctx, { preferredRider = null, prefill = 
   if (live.length) await ask(ctx.from, body, [{ id: "biker_mydel", title: `📦 My Deliveries (${live.length})` }]);
   else await say(ctx.from, body);
   return true;
+}
+
+// One message from the website ("Collect documents, CBD to Avondale\nCity: Harare")
+// → same path as typing it in the bot. Respects the open-request limit.
+async function webRiderRequest(ctx, body) {
+  const live = await BikerJob.countDocuments({ customerPhone: ctx.phone, status: "open" }).catch(() => 0);
+  if (live >= BIKER_CONFIG.MAX_OPEN_PER_CUSTOMER) return startRiderRequest(ctx);
+  await clearCompetingFlows(ctx.phone);
+  const lines = String(body || "").split(/\r?\n/).map(s => s.trim()).filter(Boolean).slice(0, 12);
+  let city = "";
+  const rest = [];
+  for (const l of lines) {
+    const m = l.match(/^(city|town)\s*:\s*(.+)$/i);
+    if (m) { city = m[2].trim(); continue; }
+    if (/^(from|page|source|fare|estimate)\s*:/i.test(l)) continue;     // website info lines
+    rest.push(l);
+  }
+  if (city) await setLastCity(ctx.phone, titleCity(city));
+  await setState(ctx.phone, "biker_req_what", { req: {} });
+  ctx.sess = await getSess(ctx.phone);
+  return reqWhat(ctx, rest.join(", "));
 }
 
 async function reqWhat(ctx, raw) {
