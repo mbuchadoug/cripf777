@@ -5323,6 +5323,50 @@ try {
     } catch (_) {}
   }
 
+  // ── Marketplace intent beats a stale school / tutor / college search ───────
+  // Those three searches stay "armed" after a parent browses them, and their
+  // free-text handlers (below) run before the product search. So a later
+  // "electrician harare" came back as "no exact match - here are schools".
+  // If the message is clearly a product/service request (searchBrain rules)
+  // and mentions nothing educational, disarm them and run the marketplace
+  // search instead. Education searches ("primary school borrowdale",
+  // "maths tutor") are untouched.
+  if (!isMetaAction && !hasImage && text.trim().length > 2 &&
+      !/^\d+$/.test(text.trim()) && !/^(ZQ:|APPLY:)/i.test(text.trim())) {
+    try {
+      const _miText = text.trim().replace(/^(find|search)\s+/i, "");
+      const _eduWords = /\b(schools?|academy|college|primary|secondary|high school|pre-?school|creche|nursery|ecd|grade|form [1-6]|boarding|universit(y|ies)|tutors?|lessons|teachers?|driving school)\b/i;
+      if (!_eduWords.test(_miText)) {
+        const { ruleIntent } = await import("./searchBrain.js");
+        if (ruleIntent(_miText)) {
+          const _bizSt  = String((biz && biz.sessionState) || "");
+          const _bizEdu = /^(school_search|tutor_search|inst_search)/.test(_bizSt);
+          let _tdEdu = false;
+          if (!biz) {
+            const _mis = await UserSession.findOne({ phone }, { tempData: 1 }).lean();
+            const _td  = _mis?.tempData || {};
+            _tdEdu = !!(_td.schoolSearchActive || _td.tutorSearchActive || _td.instSearchActive);
+          }
+          if (_bizEdu || _tdEdu) {
+            const { runAutoCitySearch, OTHER_SEARCH_MARKERS, resetBizBrowseState } = await import("./findMenu.js");
+            await UserSession.updateOne({ phone }, { $unset: OTHER_SEARCH_MARKERS });
+            if (resetBizBrowseState(biz)) await saveBizSafe(biz);
+            const _mp = parseShortcodeSearch(`find ${_miText}`) || { product: _miText, city: null };
+            console.log(`[MARKET OVER EDU] "${_miText}" → marketplace search (was in ${_bizEdu ? _bizSt : "edu search"})`);
+            return runAutoCitySearch({
+              from, biz, saveBiz: biz ? saveBizSafe : null,
+              product: String(_mp.product || _miText).toLowerCase().trim(),
+              city: _mp.city || null,
+              dispatch: (act) => handleIncomingMessage({ from, action: act })
+            });
+          }
+        }
+      }
+    } catch (_miErr) {
+      console.error("[MARKET OVER EDU]", _miErr.message);
+    }
+  }
+
   // ── School search FREE-TEXT (typed school name / city inside the funnel) ─────
   // If the user is in the parent school-search funnel and types free text instead
   // of tapping a city button, route it to SCHOOL search - not the Request Sellers

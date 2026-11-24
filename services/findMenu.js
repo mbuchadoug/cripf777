@@ -49,6 +49,26 @@ export const FIND_GROUPS = [
 ];
 
 async function _session() { return (await import("../models/userSession.js")).default; }
+
+// Opening Find, Buy & Hire (or running a marketplace search) must switch OFF
+// any earlier school / tutor / college / group browsing. Those handlers run
+// before the product search, so a leftover flag made "electrician harare"
+// come back as "no exact match - here are schools".
+export const OTHER_SEARCH_MARKERS = {
+  "tempData.schoolSearchActive": "", "tempData.schoolResultIds": "",
+  "tempData.tutorSearchActive": "", "tempData.instSearchActive": "",
+  "tempData.grpListIds": "", "tempData.grpListType": "",
+  "tempData.sfaqState": "", "tempData.sfaqBranchId": ""
+};
+export function resetBizBrowseState(biz) {
+  if (!biz) return false;
+  const st = String(biz.sessionState || "");
+  if (/^(school_search|tutor_search|inst_search|sfaq_|supplier_search_city)/.test(st)) {
+    biz.sessionState = "ready";
+    return true;
+  }
+  return false;
+}
 const _phone = (from) => String(from || "").replace(/\D+/g, "");
 
 async function _arm(from, data) {
@@ -75,6 +95,7 @@ export async function sendFindHome(from) {
 
   const lines = FIND_GROUPS.map((g, i) => `*${i + 1}.* ${g.label}${g.hint ? `\n      _${g.hint}_` : ""}`).join("\n");
 
+  await UserSession.updateOne({ phone: _phone(from) }, { $unset: OTHER_SEARCH_MARKERS });
   await _arm(from, { level: "home" });
   return sendText(from,
 `🔍 *Find, Buy & Hire*
@@ -168,13 +189,14 @@ export async function runAutoCitySearch({ from, biz, saveBiz, product, city = nu
     { phone },
     {
       $set: { "tempData.supplierSearchProduct": product, ...(type ? { "tempData.supplierSearchType": type } : {}) },
-      $unset: { "tempData.supplierSearchCategory": "", "tempData.supplierSearchMode": "", "tempData.zqFind": "" }
+      $unset: { "tempData.supplierSearchCategory": "", "tempData.supplierSearchMode": "", "tempData.zqFind": "", ...OTHER_SEARCH_MARKERS }
     },
     { upsert: true }
   );
   if (biz) {
     biz.sessionData = { ...(biz.sessionData || {}), supplierSearch: { product, ...(type ? { type } : {}) } };
-    if (biz.sessionState === "supplier_search_city" || biz.sessionState === "supplier_search_product") biz.sessionState = "ready";
+    if (biz.sessionState === "supplier_search_product") biz.sessionState = "ready";
+    resetBizBrowseState(biz);
     if (saveBiz) await saveBiz(biz);
   }
   console.log(`[FIND] "${product}" → ${useCity || "all cities"} (no city question)`);
@@ -205,13 +227,14 @@ export async function runCategoryBrowse({ from, biz, saveBiz, category, city = n
     { phone },
     {
       $set: { "tempData.supplierSearchCategory": category, "tempData.supplierSearchType": type },
-      $unset: { "tempData.supplierSearchProduct": "", "tempData.supplierSearchMode": "", "tempData.zqFind": "" }
+      $unset: { "tempData.supplierSearchProduct": "", "tempData.supplierSearchMode": "", "tempData.zqFind": "", ...OTHER_SEARCH_MARKERS }
     },
     { upsert: true }
   );
   if (biz) {
     biz.sessionData = { ...(biz.sessionData || {}), supplierSearch: { category, type } };
-    if (biz.sessionState === "supplier_search_city" || biz.sessionState === "supplier_search_product") biz.sessionState = "ready";
+    if (biz.sessionState === "supplier_search_product") biz.sessionState = "ready";
+    resetBizBrowseState(biz);
     if (saveBiz) await saveBiz(biz);
   }
   return dispatch(_cityAction(useCity));
