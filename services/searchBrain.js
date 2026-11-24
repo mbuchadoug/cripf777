@@ -76,7 +76,7 @@ const RULES = [
   { re: /\b(medicine|pharmacy|chemist|tablets for|pills)\b/, kind: "product", type: "product", cats: ["health"], canonical: null }
 ];
 
-import { getCategoriesSync, getAllCategories } from "./categoryRegistry.js";
+import { getCategoriesSync, getAllCategories, getSectionsSync } from "./categoryRegistry.js";
 
 const _escRx = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -84,15 +84,28 @@ const _escRx = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 // contains a keyword of category X, X is part of the intent. This is how a new
 // category like "borehole_drilling" with keywords "borehole, drilling" starts
 // working in search without a code change.
+function _kwHit(q, keywords) {
+  const kw = (keywords || []).map(k => String(k || "").toLowerCase().trim()).filter(k => k.length >= 3);
+  return kw.some(k => new RegExp(`(^|\\s)${_escRx(k)}(s|es)?(\\s|$)`).test(q.trim()));
+}
+// Category + section keywords (built-in defaults + admin keywords from
+// /zq-admin/categories). A hit here means the buyer NAMED a category or a
+// section ("electrician", "plumbers", "trades", "hardware") → those sellers are
+// ranked first (category-first). Sections expand to all their categories.
 function _adminHits(q) {
   const hits = [];
-  for (const c of getCategoriesSync()) {
-    if (c.active === false || !(c.keywords || []).length) continue;
-    const kw = c.keywords.map(k => String(k || "").toLowerCase().trim()).filter(k => k.length >= 3);
-    if (kw.some(k => new RegExp(`(^|\\s)${_escRx(k)}(s|es)?(\\s|$)`).test(q.trim()))) {
-      hits.push({ kind: c.type === "product" ? "product" : "service",
-                  type: c.type === "both" ? null : c.type, cats: [c.id], canonical: null });
+  const cats = getCategoriesSync().filter(c => c.active !== false);
+  for (const c of cats) {
+    if (_kwHit(q, c.keywords)) {
+      hits.push({ kind: c.type === "product" ? "product" : "service", type: c.type === "both" ? null : c.type,
+                  cats: [c.id], canonical: null, named: true });
     }
+  }
+  for (const sec of getSectionsSync().filter(x => x.active !== false)) {
+    if (!_kwHit(q, sec.keywords)) continue;
+    const ids = cats.filter(c => c.section === sec.id).map(c => c.id);
+    if (ids.length) hits.push({ kind: sec.type === "product" ? "product" : "service", type: sec.type === "both" ? null : sec.type,
+                                cats: ids, canonical: null, named: true, section: sec.id });
   }
   return hits;
 }
@@ -100,7 +113,10 @@ function _adminHits(q) {
 export function ruleIntent(text = "") {
   const q = " " + String(text || "").toLowerCase().replace(/[^a-z0-9\s-]/g, " ").replace(/\s+/g, " ").trim() + " ";
   if (!q.trim()) return null;
-  const hits = [...RULES.filter(r => r.re.test(q)), ..._adminHits(q)];
+  let hits = [...RULES.filter(r => r.re.test(q)), ..._adminHits(q)];
+  // A whole section ("trades", "solar") only counts when nothing more precise
+  // matched - "solar panels" must mean the Solar category, not every power seller.
+  if (hits.some(h => !h.section)) hits = hits.filter(h => !h.section);
   if (!hits.length) return null;
   const first = hits[0];
   const types = new Set(hits.map(h => h.type).filter(Boolean));
@@ -109,6 +125,10 @@ export function ruleIntent(text = "") {
     profileType: types.size === 1 ? [...types][0] : null,   // mixed → don't push either way
     categories: [...new Set(hits.flatMap(h => h.cats))],
     canonical: first.canonical || null,
+    // Buyer named a category/section (or a trade like "electrician") →
+    // sellers IN those categories are listed before item-only matches.
+    named: hits.some(h => h.named) || first.kind === "service" || first.kind === "delivery",
+    section: (hits.find(h => h.section) || {}).section || null,
     source: "rules"
   };
 }
@@ -304,4 +324,29 @@ export async function aiClassifySeller(seller = {}) {
     console.warn("[AI CLASSIFY]", e.message);
     return null;
   } finally { clearTimeout(timer); }
+}
+
+// ADMIN: buyer keywords for a category name (guided "new category" step)
+export async function aiSuggestKeywords(label = "", existing = "") {
+  if (!aiEnabled() || !_underDailyCap() || !String(label).trim()) return null;
+  _aiCount++;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 10000);
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST", signal: ctrl.signal,
+      headers: { "content-type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
+      body: JSON.stringify({
+        model: process.env.ZQ_AI_MODEL || "claude-haiku-5-5", max_tokens: 300,
+        system: "You help a Zimbabwe WhatsApp marketplace. Given a seller category name, list 8-15 short lowercase search phrases buyers in Zimbabwe actually type to find it: the job title (singular and plural), the main items/services, common local terms (English, Shona or Ndebele where common) and frequent misspellings. Reply with ONLY a JSON array of strings.",
+        messages: [{ role: "user", content: `Category: ${label}\nAlready have: ${existing || "none"}` }]
+      })
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const raw = (data?.content || []).map(c => c?.text || "").join("");
+    const arr = JSON.parse(raw.slice(raw.indexOf("["), raw.lastIndexOf("]") + 1));
+    return arr.map(x => String(x || "").toLowerCase().trim().slice(0, 40)).filter(Boolean).slice(0, 15);
+  } catch (e) { console.warn("[AI KEYWORDS]", e.message); return null; }
+  finally { clearTimeout(timer); }
 }

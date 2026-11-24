@@ -1,25 +1,20 @@
-# ZimQuote v4 - Categories, Classify Sellers, Search Tester
+# ZimQuote v5 - Sections → Categories, category-first search, fast reclassify
 
-Copy into /var/www/cripf777 (same folders as in this zip), then:
-  pm2 restart cripfcnt --update-env
+Copy all folders into /var/www/cripf777, then:  pm2 restart cripfcnt --update-env
+(v5 contains everything from v4; no database migration needed - old custom
+categories keep working and land in the "Other" section until you move them.)
 
-NEW
-  routes/categoryAdmin.js       /zq-admin/categories, /zq-admin/categorize, /zq-admin/search-tester
-  models/searchCategory.js      your categories + extra keywords for built-in ones
-  services/categoryRegistry.js  merges built-in + your categories (60 s cache)
-CHANGED
-  routes/supplierAdmin.js       3 lines: import, register, sidebar links
-  models/supplierProfile.js     + searchTags, classifiedAt, classifiedBy
-  services/supplierSearch.js    uses tags + category keywords; tolerant city match
-  services/searchBrain.js       admin keywords in query understanding; Claude "Suggest"
-  services/findMenu.js          your categories appear in Find, Buy & Hire groups
-  scripts/searchAudit.mjs       knows your categories + tags
-UNCHANGED since v3 (included so the zip is complete)
-  chatbotEngine.js, metaMenus.js, sellerChat.js, buyerRequests.js, sellerPay.js
+Changed since v4:
+  services/categoryRegistry.js  sections + default placement/keywords for all built-in categories
+  services/searchBrain.js       category & section keywords → buyer intent ("named" = category-first)
+  services/supplierSearch.js    category-first ranking, wider candidate pool (200)
+  services/findMenu.js          Find, Buy & Hire menu = your sections & categories, live
+  routes/categoryAdmin.js       new Categories page, inline classify, bulk ALL-matching, auto-assign
+  models/searchCategory.js      kind (section/category), section, order
 
-Suggested first hour:
-  1. /zq-admin/categorize → "Fix city/suburb spelling"
-  2. /zq-admin/categories → map every "unknown category id" (top red box)
-  3. /zq-admin/categorize?status=live → Classify / ✨ Suggest for each live seller
-  4. /zq-admin/search-tester → electrician / plumber / cement in Harare
-  5. node scripts/searchAudit.mjs → "fixable" should drop to 0
+First 30 minutes:
+  1. /zq-admin/categories  - rename built-ins to buyer words (e.g. "⚡ Electrical Services" → "⚡ Electricians"),
+                             add keywords where you see "no keywords", add your own sections/categories.
+  2. /zq-admin/categorize  - "Auto-assign by words": electric → Electricians, plumb → Plumbers, weld → Welders…
+  3. Filter "No category" → add categories inline (or ✨ for ticked sellers).
+  4. /zq-admin/search-tester - electrician / plumbers / trades / cement.

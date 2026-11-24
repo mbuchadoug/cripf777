@@ -48,6 +48,32 @@ export const FIND_GROUPS = [
   { label: "📝 Get quotes from many sellers", action: "sup_request_sellers" }
 ];
 
+// ── Home groups = the SECTIONS from /zq-admin/categories (live) ─────────────
+// Each active section that has at least one active category becomes a numbered
+// line, in the admin's order, with its first category names as the hint. Two
+// shortcuts are always added at the end (schools, quotes from many sellers),
+// and "Send a parcel now (biker)" leads the transport section.
+async function _homeGroups() {
+  try {
+    const { getAllSections, getAllCategories, sortCategories } = await import("./categoryRegistry.js");
+    const [secs, cats] = await Promise.all([getAllSections(), getAllCategories()]);
+    const groups = [];
+    for (const sec of secs) {
+      if (sec.active === false || sec.id === "other") continue;
+      const inSec = sortCategories(cats.filter(c => c.section === sec.id && c.active !== false));
+      if (!inSec.length) continue;
+      const hint = inSec.slice(0, 4).map(c => c.label.replace(/^[^\p{L}\p{N}]+/u, "").toLowerCase()).join(", ");
+      groups.push({ label: sec.label, hint, section: sec.id });
+    }
+    if (groups.length) {
+      groups.push({ label: "🎓 Schools & tutors", action: "find_school" });
+      groups.push({ label: "📝 Get quotes from many sellers", action: "sup_request_sellers" });
+      return groups;
+    }
+  } catch (e) { console.warn("[FIND] sections", e.message); }
+  return FIND_GROUPS;   // fallback: fixed list
+}
+
 async function _session() { return (await import("../models/userSession.js")).default; }
 
 // Opening Find, Buy & Hire (or running a marketplace search) must switch OFF
@@ -93,10 +119,12 @@ export async function sendFindHome(from) {
   const sess = await UserSession.findOne({ phone: _phone(from) }, { tempData: 1 }).lean();
   const city = sess?.tempData?.lastSearchCity || null;
 
-  const lines = FIND_GROUPS.map((g, i) => `*${i + 1}.* ${g.label}${g.hint ? `\n      _${g.hint}_` : ""}`).join("\n");
+  const groups = await _homeGroups();
+  const lines = groups.map((g, i) => `*${i + 1}.* ${g.label}${g.hint ? `\n      _${g.hint}_` : ""}`).join("\n");
 
   await UserSession.updateOne({ phone: _phone(from) }, { $unset: OTHER_SEARCH_MARKERS });
-  await _arm(from, { level: "home" });
+  // Store the exact list shown, so "3" always means what the buyer saw
+  await _arm(from, { level: "home", groups: groups.map(g => ({ label: g.label, hint: g.hint || "", section: g.section || null, action: g.action || null, cats: g.cats || null, sub: g.sub || null })) });
   return sendText(from,
 `🔍 *Find, Buy & Hire*
 
@@ -128,20 +156,24 @@ export async function handleFindNumber({ from, text, biz, saveBiz, dispatch }) {
   if (n === 0) { await disarmFind(from); return false; }   // "0" stays the main-menu shortcut
 
   if (f.level === "home") {
-    const g = FIND_GROUPS[n - 1];
-    if (!g) { await sendText(from, `Please reply with a number from 1 to ${FIND_GROUPS.length}, or type what you need.`); return true; }
+    const shown = Array.isArray(f.groups) && f.groups.length ? f.groups : FIND_GROUPS;
+    const g = shown[n - 1];
+    if (!g) { await sendText(from, `Please reply with a number from 1 to ${shown.length}, or type what you need.`); return true; }
     if (g.action) { await disarmFind(from); await dispatch(g.action); return true; }
 
-    // Built-in + admin categories (admin can add categories to any group and
-    // rename/hide built-ins on /zq-admin/categories).
+    // Categories of this section (built-in + admin), admin-ordered
     const { getAllCategories } = await import("./categoryRegistry.js");
     const allCats = await getAllCategories();
-    const items = g.sub
-      ? g.sub
-      : [
-          ...g.cats.map(id => allCats.find(c => c.id === id)),
-          ...allCats.filter(c => c.group === n && !g.cats.includes(c.id))
-        ].filter(c => c && c.active !== false).map(c => ({ label: c.label, cat: c.id }));
+    let items;
+    if (g.sub) items = g.sub;
+    else if (g.section) {
+      const { sortCategories } = await import("./categoryRegistry.js");
+      items = sortCategories(allCats.filter(c => c.section === g.section && c.active !== false))
+        .map(c => ({ label: c.label, cat: c.id }));
+      if (g.section === "moving") items.unshift({ label: "🏍️ Send a parcel now (biker)", action: "biker_request_rider" });
+    } else {
+      items = (g.cats || []).map(id => allCats.find(c => c.id === id)).filter(c => c && c.active !== false).map(c => ({ label: c.label, cat: c.id }));
+    }
     if (items.length === 1 && items[0].cat) {
       await disarmFind(from);
       return runCategoryBrowse({ from, biz, saveBiz, category: items[0].cat, dispatch }).then(() => true);

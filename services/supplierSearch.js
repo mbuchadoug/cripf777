@@ -720,9 +720,11 @@ export async function runSupplierSearch({ city, category, product, profileType, 
     query.$and.push({ $or: productOr });
   }
 
+// Pull a wide pool (categories can be large); relevance ordering below picks
+// the best, so a seller who lists the exact item is never cut off by tier.
 let results = await SupplierProfile.find(query)
     .sort({ tierRank: -1, credibilityScore: -1, rating: -1 })
-    .limit(50)
+    .limit(product ? 200 : 50)
     .lean();
 
   // If city was specified but returned 0 results, try without city restriction
@@ -1393,10 +1395,29 @@ export async function runSupplierOfferSearch({ city, category, product, profileT
     }
   }
 
+  // ── Category-first ────────────────────────────────────────────────────────
+  // When the buyer names a trade/category ("electrician", "plumbers",
+  // "trades"), sellers CLASSIFIED in that category come first - ordered by how
+  // well their items/tags match - then sellers who only mention it in an item.
+  // For product searches ("cement", "10mm cable") the item match leads and the
+  // category breaks ties, so the shop that actually lists the item is first.
+  const _intCats = new Set((_intent && _intent.categories) || []);
+  const _supCats = new Map(suppliers.map(s => [String(s._id), (s.categories || [])]));
+  const _catHit = id => (_supCats.get(id) || []).some(c => _intCats.has(c)) ? 1 : 0;
+  const _catFirst = !!(_intent && _intent.named && _intent.kind !== "product" && _intCats.size);
+
   offers.sort((a, b) => {
     if ((a._nonLocal || 0) !== (b._nonLocal || 0)) return (a._nonLocal || 0) - (b._nonLocal || 0);
+    if (_catFirst) {
+      const c = _catHit(b.supplierId) - _catHit(a.supplierId);
+      if (c) return c;
+    }
     const bandDiff = _band(b.supplierId) - _band(a.supplierId);
     if (bandDiff) return bandDiff;
+    if (_intCats.size) {
+      const c2 = _catHit(b.supplierId) - _catHit(a.supplierId);
+      if (c2) return c2;
+    }
     const aHasPrice = a.pricePerUnit !== null ? 0 : 1;
     const bHasPrice = b.pricePerUnit !== null ? 0 : 1;
     if (aHasPrice !== bHasPrice) return aHasPrice - bHasPrice;
