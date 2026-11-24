@@ -32,3 +32,8 @@ Until approved, sellers get the alert as a normal WhatsApp message (24h window).
 2. "hi" -> Find, Buy & Hire -> reply 1 -> reply 1  (no "Which city?")
 3. "cement" (no city) -> results straight away (last city, else all Zimbabwe)
 4. Seller: More Options -> Accept EcoCash -> paste ID + key; buyer orders -> Pay Now
+
+## v3 - search audit (read-only)
+  node scripts/searchAudit.mjs                         # default queries, Harare
+  node scripts/searchAudit.mjs "electrician,plumber" bulawayo
+Writes search-audit-<date>.txt in the project folder. Changes nothing in the database.

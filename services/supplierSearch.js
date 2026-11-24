@@ -606,6 +606,14 @@ function _splitServiceBlobPublic(arr) {
   });
 }
 
+// City match that tolerates stray spaces / case ("harare ", " Harare") and
+// escapes regex characters. Sellers saved as "harare " used to be invisible
+// to a Harare search and were only shown as "other city" top-ups.
+function _cityRx(city) {
+  const c = String(city || "").trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`^\\s*${c}\\s*$`, "i");
+}
+
 export async function runSupplierSearch({ city, category, product, profileType, area, _intent = undefined }) {
   const _stack = new Error().stack.split('').slice(1,4).join(' | ');
   console.log(`[TRACE-RS] runSupplierSearch called: product="${product}" city="${city}" area="${area}" | CALLER: ${_stack}`);
@@ -618,7 +626,7 @@ export async function runSupplierSearch({ city, category, product, profileType, 
   };
 
   if (profileType) query.profileType = profileType;
-  if (city) query["location.city"] = new RegExp(`^${city}$`, "i");
+  if (city) query["location.city"] = _cityRx(city);
   if (category) query.categories = category;
 
   if (product) {
@@ -732,7 +740,7 @@ let results = await SupplierProfile.find(query)
       };
       let _pool = [];
       if (city) {
-        _pool = await SupplierProfile.find({ ..._fuzzyBase, "location.city": new RegExp(`^${city}$`, "i") })
+        _pool = await SupplierProfile.find({ ..._fuzzyBase, "location.city": _cityRx(city) })
           .sort({ tierRank: -1, credibilityScore: -1 }).limit(300).lean();
       }
       if (_pool.length === 0) {
