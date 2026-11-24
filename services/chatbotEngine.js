@@ -4272,6 +4272,131 @@ if (!isMetaAction && /^ZQ:S:[a-z0-9_-]{1,60}$/i.test(text.trim())) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// 🏫 SCHOOL ENQUIRY - TOP-LEVEL typed-reply guard (Ask a Question / Tour / Grade)
+// ───────────────────────────────────────────────────────────────────────────
+// After a parent taps "✉️ Ask a Question", "📅 Book a Tour" or "📋 Apply", the
+// NEXT typed message belongs to that school. It used to travel through the
+// biker / quote-desk / product-search grabbers first and could end up at the
+// "Which city?" prompt, so the enquiry never reached the school. This runs
+// before every free-text grabber, for biz AND non-biz users.
+//  • Only fires for sfaq_awaiting_* (set by the button tap, cleared on send).
+//  • Any other button tap clears a pending awaiting state, so a parent who
+//    walked away can't have a later, unrelated message sent to the school.
+//  • A stale awaiting state (older than 6h) is ignored and cleared.
+//  • ZQ:/APPLY: deep links and navigation words still pass through.
+try {
+  const _sgSess = await UserSession.findOne({ phone }, { tempData: 1 }).lean();
+  const _sgTd   = _sgSess?.tempData || {};
+  const _sgBizSt = String((biz && biz.sessionState) || "");
+  const _sgState = String(_sgTd.sfaqState || "").startsWith("sfaq_awaiting")
+    ? String(_sgTd.sfaqState)
+    : (_sgBizSt.startsWith("sfaq_awaiting") ? _sgBizSt : "");
+  if (_sgState) {
+    const _sgAt    = _sgTd.sfaqAt ? new Date(_sgTd.sfaqAt).getTime() : 0;
+    const _sgStale = _sgAt && (Date.now() - _sgAt > 6 * 60 * 60 * 1000);
+    const _sgNav   = /^(0|00|main menu|hi|hie|hey|hello|start|home|exit)$/i.test(text.trim());
+    const _sgLink  = /^(ZQ:|APPLY:SCHOOL:)/i.test(text.trim());
+    // A tap on any other button/list row (or an id-shaped payload such as
+    // "school_xyz" that isn't in the isMetaAction list) is not a question.
+    const _sgIdLike   = /^[a-z0-9]+(?:_[a-z0-9]+)+$/i.test(text.trim());
+    const _sgOtherTap = (isMetaAction || _sgIdLike) && !a.startsWith("sfaq_");
+    const _sgClear = async () => {
+      try {
+        await UserSession.updateOne({ phone }, { $set: { "tempData.sfaqState": "sfaq_menu" } });
+        if (biz && _sgBizSt.startsWith("sfaq_awaiting")) {
+          biz.sessionState = "sfaq_menu";
+          await saveBizSafe(biz);
+        }
+      } catch (_) {}
+    };
+    if (_sgStale || _sgNav || _sgOtherTap) {
+      await _sgClear();          // fall through to the normal handlers
+    } else if (!isMetaAction && !_sgLink && !hasImage && text.trim().length > 0) {
+      const _sgBiz = (biz && _sgBizSt.startsWith("sfaq_")) ? biz : null;
+      console.log("[SFAQ GUARD] typed reply →", _sgState, "phone:", phone);
+      const _sgHandled = await handleSchoolFAQState({
+        state: _sgState, from, text,
+        biz: _sgBiz, saveBiz: _sgBiz ? saveBizSafe.bind(null, _sgBiz) : null
+      });
+      if (_sgHandled) return;
+    }
+  }
+} catch (_sgErr) {
+  console.error("[SFAQ GUARD]", _sgErr.message);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🏫 SCHOOL ADMIN BRIDGE - makes every school-menu button work for every school
+// ───────────────────────────────────────────────────────────────────────────
+// Schools added from the admin panel (schoolAdmin.js) have a SchoolProfile but
+// NO Business record. The school menu's input steps (Update Fees, Email,
+// Website, Application Link, Brochure, Facilities, Activate $100/yr) keep
+// their state on biz.sessionState - so for those schools the state was never
+// saved and the typed reply fell into product search ("Which city?"), or the
+// tap answered "Session expired". Here we give such a school the same
+// lightweight owner record a self-registered school gets (reg_type_school
+// flow), then let the existing handlers run unchanged.
+// Also routes the school's typed answer to its admin handler before any
+// search grabber can see it.
+{
+  const _saIsAdminTap = isMetaAction && (
+    ["school_account", "school_my_profile", "school_my_fees", "school_my_facilities",
+     "school_more_options", "school_update_reg_link", "school_update_email",
+     "school_update_website", "school_upload_brochure", "school_pay_plan",
+     "school_toggle_admissions", "school_update_fees", "school_my_reviews",
+     "school_applications", "school_enquiries", "school_contacts",
+     "school_share_link", "school_marketplace"].includes(a) ||
+    a.startsWith("school_plan_") || a.startsWith("school_admin_") ||
+    a.startsWith("school_fac_") || a.startsWith("school_ext_")
+  );
+  if (_saIsAdminTap && (!biz || !_bizIsOwnedByUser)) {
+    try {
+      const _saSchool = await SchoolProfile.findOne({ phone }).lean();
+      if (_saSchool) {
+        let _saBiz = await Business.findOne({ ownerPhone: phone, name: "pending_supplier_" + phone });
+        if (!_saBiz) {
+          _saBiz = await Business.create({
+            name: "pending_supplier_" + phone,
+            currency: "USD",
+            package: "trial",
+            subscriptionStatus: "inactive",
+            isSupplier: false,
+            sessionState: "ready",
+            sessionData: { supplierReg: { profileType: "school" } },
+            ownerPhone: phone
+          });
+          console.log("[SCHOOL ADMIN BRIDGE] created owner record for", _saSchool.schoolName, _saBiz._id);
+        }
+        const _saRole = await UserRole.findOne({ phone, businessId: _saBiz._id }).lean();
+        if (!_saRole) await UserRole.create({ phone, role: "owner", pending: false, businessId: _saBiz._id });
+        await UserSession.findOneAndUpdate({ phone }, { $set: { activeBusinessId: _saBiz._id } }, { upsert: true });
+        biz = _saBiz;
+        _bizIsOwnedByUser = true;
+      }
+    } catch (_saErr) {
+      console.error("[SCHOOL ADMIN BRIDGE]", _saErr.message);
+    }
+  }
+
+  // Typed answer to a school-menu question (fees / link / email / website)
+  const _saTextStates = ["school_admin_update_fees", "school_admin_update_reg_link",
+                         "school_admin_update_email", "school_admin_update_website"];
+  if (!isMetaAction && !hasImage && biz && _bizIsOwnedByUser && text.trim() &&
+      _saTextStates.includes(biz.sessionState) &&
+      !/^(ZQ:|APPLY:SCHOOL:)/i.test(text.trim()) &&
+      !/^(0|00|menu|main menu|hi|hie|hey|hello|start|home)$/i.test(text.trim())) {
+    try {
+      const _saHandled = await handleSchoolAdminStates({
+        state: biz.sessionState, from, text, biz, saveBiz: saveBizSafe.bind(null, biz)
+      });
+      if (_saHandled) return;
+    } catch (_saTxtErr) {
+      console.error("[SCHOOL ADMIN BRIDGE text]", _saTxtErr.message);
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // 🏍️  BIKERS / RIDERS - TOP-LEVEL intercept
 // ───────────────────────────────────────────────────────────────────────────
 // Runs BEFORE every free-text grabber (seller pick, school / tutor / college
@@ -9058,6 +9183,15 @@ if (!isMetaAction) {
         const _saEarlySchool = _saEarlyId ? await SchoolProfile.findById(_saEarlyId).lean() : null;
         if (_saEarlySchool) {
           await emailApplicationToSchool({ school: _saEarlySchool, data: _saEarlyData, applicantPhone: from });
+          // Template alert to head office + chosen branch lines (reaches the
+          // school even outside the 24h window, unlike the text below).
+          try {
+            const { notifyBranchApplicationSubmitted } = await import("./schoolNotifications.js");
+            const _abS   = await UserSession.findOne({ phone }, { tempData: 1 }).lean();
+            const _abBid = String(_abS?.tempData?.sfaqSchoolId || "") === String(_saEarlySchool._id) ? (_abS?.tempData?.sfaqBranchId || "") : "";
+            const _abBr  = _abBid ? (_saEarlySchool.branches || []).find(b => b && String(b.id) === String(_abBid) && b.active !== false) || null : null;
+            notifyBranchApplicationSubmitted(_saEarlySchool, _abBr, _saEarlyData, _parentContact).catch(() => {});
+          } catch (_abErr) { console.warn("[SCHOOL APPLY BRANCH NOTIFY]", _abErr.message); }
           if (_saEarlySchool.applicationForm?.notifyPhone) {
             try {
               const { sendButtons: _eSb } = await import("./metaSender.js");
@@ -14582,6 +14716,15 @@ if (
       const _saSchool = _saId ? await SchoolProfile.findById(_saId).lean() : null;
       if (_saSchool) {
         await emailApplicationToSchool({ school: _saSchool, data: _saData, applicantPhone: from });
+          // Template alert to head office + chosen branch lines (reaches the
+          // school even outside the 24h window, unlike the text below).
+          try {
+            const { notifyBranchApplicationSubmitted } = await import("./schoolNotifications.js");
+            const _abS   = await UserSession.findOne({ phone }, { tempData: 1 }).lean();
+            const _abBid = String(_abS?.tempData?.sfaqSchoolId || "") === String(_saSchool._id) ? (_abS?.tempData?.sfaqBranchId || "") : "";
+            const _abBr  = _abBid ? (_saSchool.branches || []).find(b => b && String(b.id) === String(_abBid) && b.active !== false) || null : null;
+            notifyBranchApplicationSubmitted(_saSchool, _abBr, _saData, (from.startsWith("263") ? "0"+from.slice(3) : from)).catch(() => {});
+          } catch (_abErr) { console.warn("[SCHOOL APPLY BRANCH NOTIFY]", _abErr.message); }
         // WhatsApp notify school of completed WhatsApp application
         if (_saSchool.applicationForm?.notifyPhone) {
           try {

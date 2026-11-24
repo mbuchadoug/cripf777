@@ -1217,12 +1217,13 @@ if (!school.active) {
     `📚 ${curriculumText}\n\n` +
     `_Activate your listing below - just $100/year._`,
     [
-      { id: "school_pay_plan",    title: "💳 Activate Listing" },
-      { id: "school_my_profile",  title: "👁 View My Profile" },
-      { id: "sup_request_sellers", title: "📝 Request a Quote" },
-      { id: "find_supplier",      title: "🔍 Browse & Shop" },
-      { id: "find_school",        title: "🏫 Preview Schools" },
-      { id: "main_menu_back",     title: "⬅ Main Menu" }
+      { id: "school_pay_plan",     title: "💳 Activate Listing",  description: "$100/year - go live, get parent alerts" },
+      { id: "school_enquiries",    title: "📬 Parent Enquiries",  description: "See who is asking about your school" },
+      { id: "school_contacts",     title: "👀 Who Viewed Me",     description: "Parents who opened your profile" },
+      { id: "school_my_profile",   title: "👁 View My Profile",   description: "What parents see" },
+      { id: "school_more_options", title: "⚙️ Settings",          description: "Fees, admissions, link, email, website" },
+      { id: "school_marketplace",  title: "🛍️ Buy Supplies",      description: "Uniforms, stationery, books, services" },
+      { id: "main_menu_back",      title: "⬅ Main Menu" }
     ]
   );
 }
@@ -1234,18 +1235,22 @@ if (!school.active) {
   `📍 ${school.suburb || ""}, ${school.city}\n` +
   `📝 Admissions: ${admissionsLabel}\n` +
   `👀 ${school.monthlyViews || 0} views · 📬 ${school.inquiries || 0} enquiries this month\n` +
-  `🗓 Renews: ${renewDate}`,
+  `🗓 Renews: ${renewDate}\n\n` +
+  `_Type *menu* any time to come back here._`,
   [
-    { id: "school_my_profile",  title: "📋 Profile & Details" },
-    { id: "school_applications", title: "📝 Applications" },
-    { id: "school_enquiries",   title: "📬 Enquiries" },
-    { id: "school_contacts",    title: "👀 Who Viewed Me" },
-    { id: "school_my_fees",     title: "💵 Update Fees" },
-    { id: "school_my_facilities", title: "🏊 Facilities" },
-    { id: "school_share_link",  title: "📣 Share & Grow" },
-    { id: "school_more_options", title: "⚙️ Settings" },
-    { id: "school_marketplace", title: "🛍️ Buy Supplies" },
-    { id: "main_menu_back",     title: "⬅ Main Menu" }
+    // Daily work first: parents waiting for a reply, then applications.
+    { id: "school_enquiries",     title: "📬 Enquiries",         description: "Parent questions, tours & place requests" },
+    { id: "school_applications",  title: "📝 Applications",      description: "Parents who applied - call them back" },
+    { id: "school_contacts",      title: "👀 Who Viewed Me",     description: "Parents who opened your profile" },
+    { id: "school_toggle_admissions",
+      title: school.admissionsOpen ? "🔴 Close Admissions" : "🟢 Open Admissions",
+      description: school.admissionsOpen ? "Admissions are OPEN now" : "Admissions are CLOSED now" },
+    { id: "school_share_link",    title: "📣 Share & Grow",      description: "Your smart link, QR & sharing tips" },
+    { id: "school_my_fees",       title: "💵 Update Fees",       description: "Term fees parents see" },
+    { id: "school_my_profile",    title: "📋 Profile & Details", description: "What parents see about you" },
+    { id: "school_more_options",  title: "⚙️ Settings",          description: "Facilities, brochure, link, email, plan" },
+    { id: "school_marketplace",   title: "🛍️ Buy Supplies",      description: "Uniforms, stationery, books, services" },
+    { id: "main_menu_back",       title: "⬅ Main Menu" }
   ]
 );
 }
@@ -1272,15 +1277,19 @@ export async function sendSchoolMoreOptionsMenu(to, schoolDoc) {
  const docStatus = school.profilePdfUrl ? "✅ Brochure uploaded" : "📄 No brochure yet";
   const regStatus = school.registrationLink ? "✅ Form link set" : "📝 No form link yet";
 
-  return sendList(to, "⚙️ *School Settings*", [
-    { id: "school_toggle_admissions",  title: school.admissionsOpen ? "🔴 Close Admissions" : "🟢 Open Admissions" },
-    { id: "school_upload_brochure",    title: `📄 Upload School Brochure (${docStatus})` },
-    { id: "school_update_reg_link",    title: `🔗 Registration Form Link (${regStatus})` },
-    { id: "school_update_email",       title: "📧 Update Email" },
-    { id: "school_update_website",     title: "🌐 Update Website" },
+  // WhatsApp list rows: title ≤ 24 chars, description ≤ 72 - status goes in
+  // the description (the old long titles could make WhatsApp reject the list).
+  return sendList(to, "⚙️ *School Settings*\nTap what you want to change.", [
+    { id: "school_toggle_admissions",  title: school.admissionsOpen ? "🔴 Close Admissions" : "🟢 Open Admissions",
+      description: school.admissionsOpen ? "Admissions are OPEN now" : "Admissions are CLOSED now" },
+    { id: "school_my_facilities",      title: "🏊 Facilities",        description: `${(school.facilities || []).length} selected - parents filter by these` },
+    { id: "school_upload_brochure",    title: "📄 School Brochure",   description: docStatus },
+    { id: "school_update_reg_link",    title: "🔗 Application Link",  description: regStatus },
+    { id: "school_update_email",       title: "📧 Update Email",      description: school.email ? String(school.email).slice(0, 72) : "No email set" },
+    { id: "school_update_website",     title: "🌐 Update Website",    description: school.website ? String(school.website).slice(0, 72) : "No website set" },
     { id: "school_my_reviews",         title: "⭐ My Reviews" },
-    { id: "school_pay_plan",           title: "⬆️ Upgrade / Renew Plan" },
-    { id: "school_account",            title: "⬅ Back" }
+    { id: "school_pay_plan",           title: "⬆️ Renew Plan",        description: "$100/year" },
+    { id: "school_account",            title: "⬅ Back to School" }
   ]);
 }
 

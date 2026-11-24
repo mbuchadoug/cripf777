@@ -122,7 +122,7 @@ const SITE_PAGES = [
   {"path": "/", "title": "ZimQuote - Buy & Sell Near You on WhatsApp in Zimbabwe", "group": "Other"},
   {"path": "/blog", "title": "Auto Spares & Brake Services Blog - Zimbabwe", "group": "Other"},
   {"path": "/find-services", "title": "Find Services & Suppliers Across Zimbabwe on WhatsApp", "group": "Other"},
-  {"path": "/list-your-business", "title": "List Your Plumbing or Trade Business Free in Zimbabwe — Get Job Requests", "group": "Other"},
+  {"path": "/list-your-business", "title": "List Your Plumbing or Trade Business Free in Zimbabwe - Get Job Requests", "group": "Other"},
   {"path": "/send-groceries-to-zimbabwe", "title": "Send Groceries to Zimbabwe from Abroad - Delivered in Harare with Photo Proof", "group": "Other"},
   {"path": "/tools", "title": "Free Zimbabwe Tools & Calculators - Fuel, Duty, School Fees, Solar", "group": "Other"},
   {"path": "/request-a-quote", "title": "Request a quote for anything in Zimbabwe", "group": "Other"},
@@ -156,7 +156,7 @@ const FIXED_DEFAULT = {
   heading: "🚗 Trusted car & vehicle services on ZimQuote",
   sub: "Tap a business to chat on WhatsApp",
   listCardTitle: "🔧 Garage, spares or auto service?",
-  listCardText: "Get customers from these free tools — list your business and appear here like the others.",
+  listCardText: "Get customers from these free tools - list your business and appear here like the others.",
   items: [
     { slug: "auto-brakes", name: "Auto Brakes", badge: "⭐ Recommended", top: true, meta: "Brakes · Clutch · Machining · Workington, Harare" },
     { slug: "parts-connection-zimbabwe", name: "Parts Connection Zimbabwe", badge: "Featured", top: true, meta: "Tractor & vehicle spare parts · Workington, Harare" },
@@ -243,7 +243,7 @@ export function registerPageSellersAdminRoutes(router, { requireSupplierAdmin, l
       const pages = [...SITE_PAGES];
       docs.forEach(d => { if (!pageInfo(d.path)) pages.push({ path: d.path, title: d.title || d.path, group: "Added by you" }); });
       const groups = ["Blog", "Tools", "City & service pages", "Other", "Added by you"];
-      const builtIn = p => [p.fixed ? "Fixed seller box" : "", p.live ? "Live list (city picker)" : ""].filter(Boolean).join(" + ") || '<span class="mu">— (box is added when you pick sellers)</span>';
+      const builtIn = p => [p.fixed ? "Fixed seller box" : "", p.live ? "Live list (city picker)" : ""].filter(Boolean).join(" + ") || '<span class="mu">- (box is added when you pick sellers)</span>';
       const state = d => !d ? badge("Built-in", "gray")
         : d.status === "hidden" ? badge("Hidden", "red")
         : badge(`Your picks: ${(d.items || []).length}${d.pinLive ? " · on live list" : ""}`, "green");
@@ -339,7 +339,7 @@ ${groups.map(g => { const r = rows(g); return r ? `<div class="card2" style="pad
       const html = `${tabs("")}${flash(req)}
 <div class="card2"><h3>${e(info.title)}</h3>
 <div class="sm mu"><code>${e(path)}</code> · <a href="${SITE}${path === "/" ? "/" : path + "/"}" target="_blank" rel="noopener">View page ↗</a>
-${fresh ? ` · ${badge(info.fixed ? "Built-in sellers shown below — save to manage them here" : "Not managed yet", "gray")}` : doc.status === "hidden" ? ` · ${badge("Hidden on site", "red")}` : ` · ${badge("Managed here", "green")}`}</div></div>
+${fresh ? ` · ${badge(info.fixed ? "Built-in sellers shown below - save to manage them here" : "Not managed yet", "gray")}` : doc.status === "hidden" ? ` · ${badge("Hidden on site", "red")}` : ` · ${badge("Managed here", "green")}`}</div></div>
 
 <form method="post" action="/zq-admin/page-sellers/save" id="pf">
 <input type="hidden" name="path" value="${e(path)}"><input type="hidden" name="title" value="${e(info.title)}">
@@ -397,7 +397,7 @@ function badgeSel(v,i){var o=D.badges.map(function(b){return '<option value="'+h
 function draw(){
   list.innerHTML=items.length?items.map(function(it,i){
     var title=it.kind==="custom"?("🔗 "+h(it.name||"Card")):("🏪 "+h(it.label)+(it.slug?' <code>'+h(it.slug)+'</code>':' <span class="mu sm">(smart link made on save)</span>'));
-    var warn=it.kind==="supplier"&&(it.missing?' <span style="color:#b91c1c" class="sm">deleted — remove it</span>':(!it.active?' <span style="color:#b45309" class="sm">not active — hidden on site</span>':''));
+    var warn=it.kind==="supplier"&&(it.missing?' <span style="color:#b91c1c" class="sm">deleted - remove it</span>':(!it.active?' <span style="color:#b45309" class="sm">not active - hidden on site</span>':''));
     return '<div class="it'+(it.top?" top":"")+'"><div class="hd"><b>'+(i+1)+'. '+title+warn+(it.place?' <span class="mu sm">· '+h(it.place)+'</span>':'')+'</b>'+
       '<label class="chk sm" style="margin:0"><input type="checkbox" data-i="'+i+'" data-f="top"'+(it.top?" checked":"")+'> Gold</label>'+
       '<button type="button" class="mini" data-up="'+i+'">▲</button><button type="button" class="mini" data-dn="'+i+'">▼</button><button type="button" class="mini" data-rm="'+i+'">✕ Remove</button></div>'+
@@ -419,7 +419,7 @@ function preview(){
   pv.innerHTML='<b>'+h(head)+'</b><div class="mu sm" style="margin-bottom:8px">'+h(sub)+'</div><div class="g">'+items.map(function(it){
     var nm=it.name||(it.kind==="custom"?"Card":it.label),meta=it.meta||it.place||"";
     return '<div class="t'+(it.top?" top":"")+'">'+(it.badge?'<span class="bd">'+h(it.badge)+'</span>':'')+'<div><b>'+h(nm)+'</b></div><div class="mu sm">'+h(meta)+'</div><div class="c">Chat on WhatsApp</div></div>';}).join("")+'</div>'+
-    (E("showListCard").checked?'<div class="mu sm" style="margin-top:8px;border:1px dashed #0d6b5e;border-radius:8px;padding:8px"><b>'+h(E("listCardTitle").value||"(page's own card)")+'</b> — '+h(E("listCardText").value)+' <u>List my business free</u></div>':'');
+    (E("showListCard").checked?'<div class="mu sm" style="margin-top:8px;border:1px dashed #0d6b5e;border-radius:8px;padding:8px"><b>'+h(E("listCardTitle").value||"(page's own card)")+'</b> - '+h(E("listCardText").value)+' <u>List my business free</u></div>':'');
 }
 list.addEventListener("input",function(ev){var t=ev.target,i=t.getAttribute("data-i"),f=t.getAttribute("data-f");if(i==null)return;
   if(f==="top"){items[i].top=t.checked;draw();return;}
@@ -438,7 +438,7 @@ fq.addEventListener("input",function(){clearTimeout(tm);var q=fq.value.trim();if
     fr.onclick=function(ev){var k=ev.target.getAttribute("data-k");if(k==null)return;var s=r[k];
       if(items.some(function(it){return it.id===s.id;})){alert("Already on this page.");return;}
       items.push({kind:"supplier",id:s.id,label:s.name,slug:s.slug,place:s.place,active:s.active,name:"",meta:"",badge:"",top:false,cities:""});draw();};
-  }).catch(function(){fr.style.display="block";fr.innerHTML='<div class="mu">Search failed — are you still logged in?</div>';});},250);});
+  }).catch(function(){fr.style.display="block";fr.innerHTML='<div class="mu">Search failed - are you still logged in?</div>';});},250);});
 document.getElementById("cadd").addEventListener("click",function(){var n=document.getElementById("cn"),m=document.getElementById("cm"),l=document.getElementById("cl");
   if(!n.value.trim()||!l.value.trim()){alert("Give the card a name and a link.");return;}
   items.push({kind:"custom",name:n.value.trim(),meta:m.value.trim(),link:l.value.trim(),badge:"",top:false,cities:""});n.value=m.value=l.value="";draw();});
@@ -494,7 +494,7 @@ draw();
       };
       await PageSellers.findOneAndUpdate({ path }, { $set: update }, { upsert: true, new: true, setDefaultsOnInsert: true });
       clearPageSellersCache();
-      go(res, editUrl(path), "success", `Saved. ${items.length} seller(s) on this page — live on the site within a minute.${notes.length ? " Note: " + [...new Set(notes)].join("; ") + "." : ""}`);
+      go(res, editUrl(path), "success", `Saved. ${items.length} seller(s) on this page - live on the site within a minute.${notes.length ? " Note: " + [...new Set(notes)].join("; ") + "." : ""}`);
     } catch (err) {
       console.error("[page-sellers save]", err);
       go(res, editUrl(path), "error", err.message);

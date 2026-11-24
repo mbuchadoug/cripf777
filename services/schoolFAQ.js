@@ -15,7 +15,12 @@ import {
   notifySchoolVisitRequest,
   notifySchoolPlaceEnquiry,
   notifySchoolNewLead,
-  notifyAllSchoolEnquiry
+  notifyAllSchoolEnquiry,
+  notifyBranchProfileView,
+  notifyBranchEnquiry,
+  notifyBranchApplicationInterest,
+  notifyBranchVisitRequest,
+  notifyBranchPlaceEnquiry
 } from "./schoolNotifications.js";
 import { SCHOOL_FACILITIES, SCHOOL_EXTRAMURALACTIVITIES, SCHOOL_TYPES } from "./schoolPlans.js";
 
@@ -191,7 +196,7 @@ async function _sess(biz, saveBiz, state, data = {}, from = null) {
     try {
       const phone = String(from).replace(/\D+/g,"");
       const { default: UserSession } = await import("../models/userSession.js");
-      const setFields = { "tempData.sfaqState": state };
+      const setFields = { "tempData.sfaqState": state, "tempData.sfaqAt": new Date() };
       if (data.faqSchoolId)   setFields["tempData.sfaqSchoolId"]   = data.faqSchoolId;
       if (data.faqBranchId !== undefined) setFields["tempData.sfaqBranchId"] = data.faqBranchId;
       if (data.faqCategoryId) setFields["tempData.sfaqCategoryId"] = data.faqCategoryId;
@@ -204,6 +209,18 @@ async function _sess(biz, saveBiz, state, data = {}, from = null) {
   biz.sessionState = state;
   biz.sessionData  = { ...(biz.sessionData || {}), ...data };
   try { await saveBiz(biz); } catch (_) {}
+}
+
+// Puts the parent in the school's "📬 Enquiries" list (SchoolContact store,
+// source "enquiry"). The smart-link flow previously only wrote SchoolLead, so
+// the school menu's Enquiries list stayed empty even when parents asked.
+function _captureEnquiry(from, school, extra = {}) {
+  import("./schoolApplicationForm.js")
+    .then(m => m.captureSchoolContact({
+      schoolId: school._id, phone: String(from).replace(/\D+/g, ""),
+      source: "enquiry", extraData: extra
+    }))
+    .catch(() => {});
 }
 
 function _saveLead(from, school, action, source, extra = {}) {
@@ -230,6 +247,31 @@ function _findBranch(school, branchId) {
   if (!branchId) return null;
   return _activeBranches(school).find(b => String(b.id) === String(branchId)) || null;
 }
+// Branch + parent name the parent is currently on. UserSession.tempData is the
+// source of truth (always written by _sess); biz.sessionData is only a fallback.
+async function _ctx(from, biz, school) {
+  let branchId = "", parentName = "";
+  try {
+    const phone = String(from).replace(/\D+/g,"");
+    const { default: UserSession } = await import("../models/userSession.js");
+    const sess = await UserSession.findOne({ phone }, { tempData: 1 }).lean();
+    const td = sess?.tempData || {};
+    if (!td.sfaqSchoolId || String(td.sfaqSchoolId) === String(school._id)) {
+      branchId   = td.sfaqBranchId || "";
+      parentName = td.sfaqParentName || "";
+    }
+  } catch (_) {}
+  if (!branchId && biz?.sessionData && String(biz.sessionData.faqSchoolId || "") === String(school._id)) {
+    branchId = biz.sessionData.faqBranchId || "";
+  }
+  parentName = parentName || biz?.sessionData?.faqParentName || "";
+  return { branch: _findBranch(school, branchId), parentName };
+}
+function _dispPhone(p) {
+  const d = String(p || "").replace(/\D+/g, "");
+  return d.startsWith("263") ? "0" + d.slice(3) : (p || "");
+}
+
 async function _sendBranchPicker(from, school, parentName = "") {
   const sid = String(school._id);
   const branches = _activeBranches(school).slice(0, 8); // ≤10 rows incl. extras
@@ -274,6 +316,11 @@ export async function showSchoolFAQMenu(from, schoolId, biz, saveBiz, { source =
   const _branchSessId = _branch ? String(_branch.id) : "";
 
   await _sess(biz, saveBiz, "sfaq_menu", { faqSchoolId: String(schoolId), faqParentName: parentName, faqSource: source, faqBranchId: _branchSessId }, from);
+
+  // Branch opened → tell head office + that branch's lines, naming the branch
+  if (_branch) {
+    notifyBranchProfileView(school, _branch, _dispPhone(from)).catch(() => {});
+  }
 
   // Branch banner (only when a specific branch is selected)
   if (_branch) {
@@ -533,7 +580,9 @@ async function _handleAction(from, schoolId, act, biz, saveBiz) {
   const school = await SchoolProfile.findById(schoolId).lean();
   if (!school) return false;
   const sid   = String(school._id);
-  const phone = school.contactPhone || school.phone;
+  const { branch: _br } = await _ctx(from, biz, school);
+  const _name = _br ? `${school.schoolName} (${_br.name})` : school.schoolName;
+  const phone = (_br && _br.contactPhone) || school.contactPhone || school.phone;
 
   switch (act) {
 
@@ -541,23 +590,23 @@ async function _handleAction(from, schoolId, act, biz, saveBiz) {
     case "enquire":
       await _sess(biz, saveBiz, "sfaq_awaiting_message", { faqSchoolId: sid }, from);
       return sendText(from,
-        `✉️ *Message ${school.schoolName}*\n\nType your question - the school will reply on WhatsApp.\n\n_Type *cancel* to go back._`
+        `✉️ *Message ${_name}*\n\nType your question below and send it - it goes straight to the school${_br ? " branch" : ""}, and they will reply on WhatsApp.\n\n_Type *cancel* to go back._`
       );
 
     case "tour":
       await _sess(biz, saveBiz, "sfaq_awaiting_tour_date", { faqSchoolId: sid }, from);
       return sendText(from,
-        `📅 *Book a Tour - ${school.schoolName}*\n\nType your preferred date and time:\n\n_e.g. "Monday 9am", "Any weekday morning"_\n\n_Type *cancel* to go back._`
+        `📅 *Book a Tour - ${_name}*\n\nType your preferred date and time:\n\n_e.g. "Monday 9am", "Any weekday morning"_\n\n_Type *cancel* to go back._`
       );
 
     case "apply": {
-      notifySchoolApplicationInterest(school.phone, school.schoolName, from).catch(() => {});
+      notifyBranchApplicationInterest(school, _br, _dispPhone(from)).catch(() => {});
       _saveLead(from, school, "apply", "whatsapp_link");
 
       if (school.registrationLink) {
         return sendButtons(from, {
           text:
-            `📋 *Apply to ${school.schoolName}*\n\n` +
+            `📋 *Apply to ${_name}*\n\n` +
             `${school.admissionsOpen ? "🟢 Admissions OPEN." : "🔴 Admissions closed - you can still register interest."}\n\n` +
             `👉 *${school.registrationLink}*\n\n📞 ${phone}`,
           buttons: [
@@ -578,14 +627,14 @@ async function _handleAction(from, schoolId, act, biz, saveBiz) {
 
       await _sess(biz, saveBiz, "sfaq_awaiting_grade", { faqSchoolId: sid }, from);
       return sendText(from,
-        `📝 *Apply - ${school.schoolName}*\n\nWhich level or grade are you enquiring for?\n\n_e.g. "Grade 1", "Form 1", "ECD B"_\n\n_Type *cancel* to go back._`
+        `📝 *Apply - ${_name}*\n\nWhich level or grade are you enquiring for?\n\n_e.g. "Grade 1", "Form 1", "ECD B"_\n\n_Type *cancel* to go back._`
       );
     }
 
     case "interest":
       await _sess(biz, saveBiz, "sfaq_awaiting_grade", { faqSchoolId: sid }, from);
       return sendText(from,
-        `📝 *Register Interest - ${school.schoolName}*\n\nWe'll notify you when admissions open.\n\nWhich grade or level are you interested in?\n\n_e.g. "Grade 1", "Form 1", "ECD B"_\n_Type *cancel* to go back._`
+        `📝 *Register Interest - ${_name}*\n\nWe'll notify you when admissions open.\n\nWhich grade or level are you interested in?\n\n_e.g. "Grade 1", "Form 1", "ECD B"_\n_Type *cancel* to go back._`
       );
 
     case "docs": {
@@ -627,18 +676,25 @@ async function _handleAction(from, schoolId, act, biz, saveBiz) {
 export async function handleSchoolFAQState({ state, from, text, biz, saveBiz }) {
   if (!state?.startsWith("sfaq_")) return false;
 
-  let schoolId = biz?.sessionData?.faqSchoolId;
-  let branchId = biz?.sessionData?.faqBranchId || "";
-  if (!schoolId || !branchId) {
-    try {
-      const phone = String(from).replace(/\D+/g,"");
-      const { default: UserSession } = await import("../models/userSession.js");
-      const sess = await UserSession.findOne({ phone }).lean();
-      schoolId = schoolId || sess?.tempData?.sfaqSchoolId;
-      branchId = branchId || sess?.tempData?.sfaqBranchId || "";
-    } catch (_) {}
+  // UserSession.tempData is written on every sfaq step (see _sess), so it is
+  // the freshest record of which school/branch the parent is on. biz.sessionData
+  // can be stale (e.g. a seller who browsed another school earlier).
+  let schoolId = "", branchId = "", parentName = "";
+  try {
+    const phone = String(from).replace(/\D+/g,"");
+    const { default: UserSession } = await import("../models/userSession.js");
+    const sess = await UserSession.findOne({ phone }).lean();
+    schoolId   = sess?.tempData?.sfaqSchoolId || "";
+    branchId   = sess?.tempData?.sfaqBranchId || "";
+    parentName = sess?.tempData?.sfaqParentName || "";
+  } catch (_) {}
+  if (!schoolId) {
+    schoolId = biz?.sessionData?.faqSchoolId || "";
+    branchId = biz?.sessionData?.faqBranchId || "";
   }
+  parentName = parentName || biz?.sessionData?.faqParentName || "";
   if (!schoolId) return false;
+  const _parentLabel = parentName ? `${parentName} (${_dispPhone(from)})` : _dispPhone(from);
 
   const raw = (text || "").trim();
   if (["cancel","back","menu"].includes(raw.toLowerCase())) {
@@ -654,21 +710,10 @@ export async function handleSchoolFAQState({ state, from, text, biz, saveBiz }) 
       if (!school) return false;
       const sid = String(school._id);
       const _brMsg = _findBranch(school, branchId);
-      const _outMsg = _brMsg ? `[Branch: ${_brMsg.name}] ${raw}` : raw;
-      // School-wide fan-out (unchanged) + the branch's own numbers when a branch is chosen
-      notifyAllSchoolEnquiry(school, from, _outMsg).catch(() => {});
-      if (_brMsg) {
-        const _seen = new Set([
-          String(school.phone || "").replace(/\D+/g, ""),
-          ...((school.notificationContacts || []).map(p => String(p).replace(/\D+/g, "")))
-        ].filter(Boolean));
-        const _bn = [ _brMsg.contactPhone, ...(_brMsg.notificationContacts || []) ]
-          .map(p => String(p || "").replace(/\D+/g, "")).filter(p => p && !_seen.has(p));
-        for (const num of [...new Set(_bn)]) {
-          notifySchoolEnquiry(num, `${school.schoolName} (${_brMsg.name})`, from, _outMsg).catch(() => {});
-        }
-      }
+      // Head office + (when chosen) that branch's own lines, branch named in the alert
+      notifyBranchEnquiry(school, _brMsg, _parentLabel, raw.slice(0, 900)).catch(() => {});
       _saveLead(from, school, "enquiry", "whatsapp_link");
+      _captureEnquiry(from, school, parentName ? { parentName } : {});
       SchoolProfile.findByIdAndUpdate(schoolId, { $inc: { inquiries: 1 } }).catch(() => {});
       await _sess(biz, saveBiz, "sfaq_menu", {}, from);
       return sendButtons(from, {
@@ -686,11 +731,13 @@ export async function handleSchoolFAQState({ state, from, text, biz, saveBiz }) 
       const school = await SchoolProfile.findById(schoolId).lean();
       if (!school) return false;
       const sid = String(school._id);
-      notifySchoolVisitRequest(school.phone, school.schoolName, biz?.sessionData?.faqParentName || from, "WhatsApp Bot").catch(() => {});
+      const _brTour = _findBranch(school, branchId);
+      notifyBranchVisitRequest(school, _brTour, _parentLabel, "WhatsApp Bot", raw).catch(() => {});
       _saveLead(from, school, "visit", "whatsapp_link");
+      _captureEnquiry(from, school, parentName ? { parentName } : {});
       await _sess(biz, saveBiz, "sfaq_menu", {}, from);
       return sendButtons(from, {
-        text: `✅ *Tour request sent!*\n\n*${school.schoolName}*\nPreferred: _${raw}_\n\nThey will confirm and send directions.\n📞 ${school.contactPhone || school.phone}`,
+        text: `✅ *Tour request sent!*\n\n*${school.schoolName}${_brTour ? " - " + _brTour.name : ""}*\nPreferred: _${raw}_\n\nThey will confirm and send directions.\n📞 ${(_brTour && _brTour.contactPhone) || school.contactPhone || school.phone}`,
         buttons: [
           { id: `sfaq_act_apply_${sid}`,   title: _btn("📋 Apply Now") },
           { id: `sfaq_act_message_${sid}`, title: _btn("✉️ Ask a Question") },
@@ -703,12 +750,14 @@ export async function handleSchoolFAQState({ state, from, text, biz, saveBiz }) 
       const school = await SchoolProfile.findById(schoolId).lean();
       if (!school) return false;
       const sid = String(school._id);
-      notifySchoolPlaceEnquiry(school.phone, school.schoolName, biz?.sessionData?.faqParentName || from, raw, "WhatsApp Bot").catch(() => {});
+      const _brPlace = _findBranch(school, branchId);
+      notifyBranchPlaceEnquiry(school, _brPlace, _parentLabel, raw, "WhatsApp Bot").catch(() => {});
       _saveLead(from, school, "place", "whatsapp_link", { gradeInterest: raw, levelInterest: raw });
+      _captureEnquiry(from, school, { gradeInterest: raw, ...(parentName ? { parentName } : {}) });
       await _sess(biz, saveBiz, "sfaq_menu", {}, from);
       return sendButtons(from, {
         text: school.admissionsOpen
-          ? `📝 *Enquiry received*\n\n🟢 Your enquiry for *${raw}* has been sent to ${school.schoolName}.\n\nThey will contact you on WhatsApp.`
+          ? `📝 *Enquiry received*\n\n🟢 Your enquiry for *${raw}* has been sent to ${school.schoolName}${_brPlace ? " (" + _brPlace.name + ")" : ""}.\n\nThey will contact you on WhatsApp.`
           : `📝 *Interest registered*\n\n🔴 Admissions are currently closed. Your interest in *${raw}* at ${school.schoolName} has been recorded.\n\nWe will notify you when admissions open.`,
         buttons: [
           { id: `sfaq_act_tour_${sid}`,    title: _btn("📅 Book a Tour") },

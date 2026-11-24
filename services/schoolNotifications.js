@@ -53,7 +53,13 @@ async function _sendTemplate(to, templateName, variables = []) {
   const components = variables.length
     ? [{
         type: "body",
-        parameters: variables.map(v => ({ type: "text", text: String(v) }))
+        // Meta rejects template params containing newlines/tabs or 4+ spaces
+        // (error 132018) - a parent's multi-line question used to fail here and
+        // only reach the school if they happened to be inside the 24h window.
+        parameters: variables.map(v => ({
+          type: "text",
+          text: (String(v ?? "").replace(/[\r\n\t]+/g, " ").replace(/ {2,}/g, " ").trim() || "-").slice(0, 1000)
+        }))
       }]
     : [];
 
@@ -388,4 +394,73 @@ export async function notifyAllSchoolVisitRequest(school, parentName, source) {
 
 export async function notifyAllSchoolPlaceEnquiry(school, parentName, grade, source) {
   await _notifyAll(school, phone => notifySchoolPlaceEnquiry(phone, school.schoolName, parentName, grade, source));
+}
+// ─────────────────────────────────────────────────────────────────────────────
+// BRANCH-AWARE FAN-OUT (multi-campus schools)
+// When a parent is on a specific branch, the alert goes to:
+//   • the school's primary phone + notificationContacts (head office), and
+//   • that branch's contactPhone + notificationContacts,
+// with the branch name in the School field ("Firm Foundation - Borrowdale"),
+// so every receiving number knows which campus the parent wants.
+// branch = null behaves exactly like the notifyAll* wrappers (numbers are
+// normalised before de-duplication, so 077… and 26377… are not sent twice).
+// Uses only the already-approved templates - no new Meta approval needed.
+// ─────────────────────────────────────────────────────────────────────────────
+export function schoolBranchLabel(school, branch) {
+  return branch && branch.name ? `${school.schoolName} - ${branch.name}` : school.schoolName;
+}
+
+export function schoolBranchPhones(school, branch) {
+  const raw = [
+    school.phone,
+    ...(Array.isArray(school.notificationContacts) ? school.notificationContacts : []),
+    ...(branch ? [branch.contactPhone, ...(Array.isArray(branch.notificationContacts) ? branch.notificationContacts : [])] : [])
+  ];
+  return [...new Set(raw.map(p => _normalizeZimPhone(p)).filter(p => p && p.length >= 9))];
+}
+
+async function _notifyBranch(school, branch, fn) {
+  const label = schoolBranchLabel(school, branch);
+  await Promise.allSettled(schoolBranchPhones(school, branch).map(p => fn(p, label)));
+}
+
+// "Branch opened" alert. Throttled per parent+branch (30 min) so a parent
+// flicking back and forth doesn't flood the school's phones.
+const _branchViewSeen = new Map();
+export async function notifyBranchProfileView(school, branch, parentPhone) {
+  const key = `${school._id}|${branch?.id || "main"}|${parentPhone}`;
+  const now = Date.now();
+  if (now - (_branchViewSeen.get(key) || 0) < 30 * 60 * 1000) return;
+  _branchViewSeen.set(key, now);
+  if (_branchViewSeen.size > 5000) {
+    for (const [k, t] of _branchViewSeen) if (now - t > 30 * 60 * 1000) _branchViewSeen.delete(k);
+  }
+  await _notifyBranch(school, branch, (p, label) => notifySchoolProfileView(p, label, parentPhone));
+}
+
+export async function notifyBranchEnquiry(school, branch, parentPhone, message = "") {
+  await _notifyBranch(school, branch, (p, label) => notifySchoolEnquiry(p, label, parentPhone, message));
+}
+
+export async function notifyBranchApplicationInterest(school, branch, parentPhone) {
+  await _notifyBranch(school, branch, (p, label) => notifySchoolApplicationInterest(p, label, parentPhone));
+}
+
+export async function notifyBranchVisitRequest(school, branch, parentName, source, preferred = "") {
+  const src = preferred ? `${source} - preferred: ${String(preferred).slice(0, 80)}` : source;
+  await _notifyBranch(school, branch, (p, label) => notifySchoolVisitRequest(p, label, parentName, src));
+}
+
+export async function notifyBranchPlaceEnquiry(school, branch, parentName, grade, source) {
+  await _notifyBranch(school, branch, (p, label) => notifySchoolPlaceEnquiry(p, label, parentName, grade, source));
+}
+
+// A completed WhatsApp application. Uses the approved school_new_lead template,
+// so it reaches the school even outside WhatsApp's 24-hour window (the plain
+// "New WhatsApp Application" text only arrives inside that window).
+export async function notifyBranchApplicationSubmitted(school, branch, data = {}, parentPhone = "") {
+  const who    = [data.parentName, data.parentPhone || parentPhone].filter(Boolean).join(" ");
+  const action = `Submitted an application - ${data.studentName || "student"}, ${data.grade || "grade not given"}`;
+  await _notifyBranch(school, branch, (p, label) =>
+    notifySchoolNewLead(p, label, who || String(parentPhone || "Parent"), action.slice(0, 120), "WhatsApp application form"));
 }
