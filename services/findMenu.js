@@ -132,11 +132,16 @@ export async function handleFindNumber({ from, text, biz, saveBiz, dispatch }) {
     if (!g) { await sendText(from, `Please reply with a number from 1 to ${FIND_GROUPS.length}, or type what you need.`); return true; }
     if (g.action) { await disarmFind(from); await dispatch(g.action); return true; }
 
-    const { SUPPLIER_CATEGORIES } = await import("./supplierPlans.js");
+    // Built-in + admin categories (admin can add categories to any group and
+    // rename/hide built-ins on /zq-admin/categories).
+    const { getAllCategories } = await import("./categoryRegistry.js");
+    const allCats = await getAllCategories();
     const items = g.sub
       ? g.sub
-      : g.cats.map(id => SUPPLIER_CATEGORIES.find(c => c.id === id))
-          .filter(Boolean).map(c => ({ label: c.label, cat: c.id }));
+      : [
+          ...g.cats.map(id => allCats.find(c => c.id === id)),
+          ...allCats.filter(c => c.group === n && !g.cats.includes(c.id))
+        ].filter(c => c && c.active !== false).map(c => ({ label: c.label, cat: c.id }));
     if (items.length === 1 && items[0].cat) {
       await disarmFind(from);
       return runCategoryBrowse({ from, biz, saveBiz, category: items[0].cat, dispatch }).then(() => true);
@@ -210,9 +215,9 @@ export async function runAutoCitySearch({ from, biz, saveBiz, product, city = nu
 export async function runCategoryBrowse({ from, biz, saveBiz, category, city = null, dispatch }) {
   const UserSession = await _session();
   const phone = _phone(from);
-  const { SUPPLIER_CATEGORIES } = await import("./supplierPlans.js");
-  const def = SUPPLIER_CATEGORIES.find(c => c.id === category);
-  const type = def?.types?.[0] || "product";
+  const { getAllCategories } = await import("./categoryRegistry.js");
+  const def = (await getAllCategories()).find(c => c.id === category);
+  const type = def?.type === "service" ? "service" : def?.type === "both" ? "any" : "product";   // "any" = products and services
 
   let useCity = await _pickCity(from, city);
   if (useCity) {

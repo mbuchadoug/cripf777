@@ -76,16 +76,37 @@ const RULES = [
   { re: /\b(medicine|pharmacy|chemist|tablets for|pills)\b/, kind: "product", type: "product", cats: ["health"], canonical: null }
 ];
 
+import { getCategoriesSync, getAllCategories } from "./categoryRegistry.js";
+
+const _escRx = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+// Admin keywords (Categories & Tags page) become rules too: if the buyer's text
+// contains a keyword of category X, X is part of the intent. This is how a new
+// category like "borehole_drilling" with keywords "borehole, drilling" starts
+// working in search without a code change.
+function _adminHits(q) {
+  const hits = [];
+  for (const c of getCategoriesSync()) {
+    if (c.active === false || !(c.keywords || []).length) continue;
+    const kw = c.keywords.map(k => String(k || "").toLowerCase().trim()).filter(k => k.length >= 3);
+    if (kw.some(k => new RegExp(`(^|\\s)${_escRx(k)}(s|es)?(\\s|$)`).test(q.trim()))) {
+      hits.push({ kind: c.type === "product" ? "product" : "service",
+                  type: c.type === "both" ? null : c.type, cats: [c.id], canonical: null });
+    }
+  }
+  return hits;
+}
+
 export function ruleIntent(text = "") {
   const q = " " + String(text || "").toLowerCase().replace(/[^a-z0-9\s-]/g, " ").replace(/\s+/g, " ").trim() + " ";
   if (!q.trim()) return null;
-  const hits = RULES.filter(r => r.re.test(q));
+  const hits = [...RULES.filter(r => r.re.test(q)), ..._adminHits(q)];
   if (!hits.length) return null;
   const first = hits[0];
-  const types = new Set(hits.map(h => h.type));
+  const types = new Set(hits.map(h => h.type).filter(Boolean));
   return {
     kind: first.kind,
-    profileType: types.size === 1 ? first.type : null,   // mixed → don't push either way
+    profileType: types.size === 1 ? [...types][0] : null,   // mixed → don't push either way
     categories: [...new Set(hits.flatMap(h => h.cats))],
     canonical: first.canonical || null,
     source: "rules"
@@ -103,6 +124,11 @@ const CATEGORY_IDS = [
   "plumbing_supplies", "car_supplies", "electronics", "appliances", "furniture", "clothing",
   "cosmetics", "health", "stationery", "agriculture", "industrial_equipment", "other_products"
 ];
+
+function _catIds() {
+  const ids = getCategoriesSync().filter(c => c.active !== false).map(c => c.id);
+  return ids.length ? ids : CATEGORY_IDS;
+}
 
 const _aiCache = new Map();          // query → { at, value }
 const AI_TTL_MS = 24 * 60 * 60 * 1000;
@@ -144,7 +170,7 @@ export async function aiInterpret(text = "") {
     '"alternatives":[<up to 3 other short search terms with the same meaning>]}\n' +
     "type=service when the buyer wants to hire a person or business to do work; " +
     "product when they want to buy goods. Never invent a business name.\n" +
-    "Category ids: " + CATEGORY_IDS.join(", ");
+    "Category ids: " + _catIds().join(", ");
 
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 3500);
@@ -175,7 +201,7 @@ export async function aiInterpret(text = "") {
     const value = {
       query: String(p.query || "").toLowerCase().trim().slice(0, 60),
       type: p.type === "service" || p.type === "product" ? p.type : null,
-      categories: (Array.isArray(p.categories) ? p.categories : []).filter(c => CATEGORY_IDS.includes(c)).slice(0, 3),
+      categories: (Array.isArray(p.categories) ? p.categories : []).filter(c => _catIds().includes(c)).slice(0, 3),
       city: p.city && p.city !== "null" ? String(p.city).slice(0, 40) : null,
       area: p.area && p.area !== "null" ? String(p.area).slice(0, 40) : null,
       alternatives: (Array.isArray(p.alternatives) ? p.alternatives : [])
@@ -198,6 +224,7 @@ export async function aiInterpret(text = "") {
  * read AND that the synonym map doesn't know (`knownToSynonyms`).
  */
 export async function getSearchIntent(text = "", { knownToSynonyms = false } = {}) {
+  try { await getAllCategories(); } catch (_) {}   // admin keywords loaded/cached
   const r = ruleIntent(text);
   if (r) return r;
   if (knownToSynonyms || !aiEnabled()) return null;
@@ -228,4 +255,53 @@ export function intentBonus(supplier, intent) {
            : (_p === "product" || !_p) ? "product" : null;   // bikers etc: neutral
   if (intent.profileType && pt) b += pt === intent.profileType ? 10 : -15;
   return b;
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ADMIN: suggest categories + search tags for a seller (Categories & Tags page)
+// Returns { categories[], tags[], profileType, reason } or null. Admin approves.
+// ─────────────────────────────────────────────────────────────────────────────
+export async function aiClassifySeller(seller = {}) {
+  if (!aiEnabled() || !_underDailyCap()) return null;
+  _aiCount++;
+  const cats = (await getAllCategories()).filter(c => c.active !== false);
+  const items = [
+    ...(seller.listedProducts || []), ...(seller.products || []),
+    ...((seller.rates || []).map(r => r?.service || ""))
+  ].flatMap(x => String(x || "").split(/[\r\n,]+/)).map(x => x.trim()).filter(x => x && x !== "pending_upload").slice(0, 60);
+  const prompt =
+    `Business: ${seller.businessName}\nCurrent type: ${seller.profileType}\nCity: ${seller.location?.city || ""}\n` +
+    `Current categories: ${(seller.categories || []).join(", ") || "none"}\n` +
+    `What they list: ${items.join("; ") || "nothing listed"}`;
+  const system =
+    "You classify sellers on ZimQuote, a Zimbabwe WhatsApp marketplace, so buyers can find them. " +
+    "Reply with ONLY JSON: " +
+    '{"categories":[1-4 ids from the list, best first],"tags":[5-12 short lowercase words/phrases buyers would type to find this business, incl. job titles like electrician/plumber and common Zimbabwe terms],' +
+    '"profileType":"product"|"service","reason":"<one short sentence>"}\n' +
+    "Only use ids from this list:\n" + cats.map(c => `${c.id} = ${c.label}`).join("\n");
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 12000);
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST", signal: ctrl.signal,
+      headers: { "content-type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
+      body: JSON.stringify({ model: process.env.ZQ_AI_MODEL || "claude-haiku-5-5", max_tokens: 400, system,
+                             messages: [{ role: "user", content: prompt }] })
+    });
+    if (!res.ok) { console.warn("[AI CLASSIFY] HTTP", res.status); return null; }
+    const data = await res.json();
+    const raw = (data?.content || []).map(c => c?.text || "").join("");
+    const p = JSON.parse(raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1));
+    const ids = new Set(cats.map(c => c.id));
+    return {
+      categories: (p.categories || []).filter(c => ids.has(c)).slice(0, 4),
+      tags: (p.tags || []).map(t => String(t || "").toLowerCase().trim().slice(0, 40)).filter(Boolean).slice(0, 12),
+      profileType: p.profileType === "service" || p.profileType === "product" ? p.profileType : null,
+      reason: String(p.reason || "").slice(0, 200)
+    };
+  } catch (e) {
+    console.warn("[AI CLASSIFY]", e.message);
+    return null;
+  } finally { clearTimeout(timer); }
 }

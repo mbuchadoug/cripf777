@@ -1,39 +1,25 @@
-# ZimQuote - Find, Buy & Hire + smarter search + Pay Now
+# ZimQuote v4 - Categories, Classify Sellers, Search Tester
 
-Copy into /var/www/cripf777:
-  services/chatbotEngine.js, metaMenus.js, supplierSearch.js, sellerChat.js, buyerRequests.js
-  services/searchBrain.js, findMenu.js, sellerPay.js        (NEW)
-  models/supplierProfile.js                                   (adds `payments` block)
-Then: pm2 restart all
+Copy into /var/www/cripf777 (same folders as in this zip), then:
+  pm2 restart cripfcnt --update-env
 
-## .env (all optional - everything works without them)
-ANTHROPIC_API_KEY=sk-ant-...     # turns on Claude search understanding + zero-result rescue
-ZQ_AI_MODEL=claude-haiku-5-5     # small, fast, cheap model
-ZQ_AI_DAILY_CAP=3000             # max AI calls per day
-ZQ_AI_SEARCH=off                 # kill switch
-ZQ_SECRET=<long random string>   # encrypts sellers' Paynow keys in the database
+NEW
+  routes/categoryAdmin.js       /zq-admin/categories, /zq-admin/categorize, /zq-admin/search-tester
+  models/searchCategory.js      your categories + extra keywords for built-in ones
+  services/categoryRegistry.js  merges built-in + your categories (60 s cache)
+CHANGED
+  routes/supplierAdmin.js       3 lines: import, register, sidebar links
+  models/supplierProfile.js     + searchTags, classifiedAt, classifiedBy
+  services/supplierSearch.js    uses tags + category keywords; tolerant city match
+  services/searchBrain.js       admin keywords in query understanding; Claude "Suggest"
+  services/findMenu.js          your categories appear in Find, Buy & Hire groups
+  scripts/searchAudit.mjs       knows your categories + tags
+UNCHANGED since v3 (included so the zip is complete)
+  chatbotEngine.js, metaMenus.js, sellerChat.js, buyerRequests.js, sellerPay.js
 
-## Paynow
-Needs the `paynow` npm package (already used for subscriptions). If missing: npm i paynow
-Sellers connect their OWN Paynow integration: My Store -> More Options -> Accept EcoCash.
-
-## Optional Meta template (UTILITY) - seller payment alert outside 24h
-Name: seller_payment_received
-  Payment received on ZimQuote.
-  Business: {{1}}
-  Amount: {{2}}
-  From: {{3}}
-  Reference: {{4}}
-  This is an automated payment alert from ZimQuote.
-Until approved, sellers get the alert as a normal WhatsApp message (24h window).
-
-## Quick tests
-1. "find electrician harare"  -> electricians first, cable shops after
-2. "hi" -> Find, Buy & Hire -> reply 1 -> reply 1  (no "Which city?")
-3. "cement" (no city) -> results straight away (last city, else all Zimbabwe)
-4. Seller: More Options -> Accept EcoCash -> paste ID + key; buyer orders -> Pay Now
-
-## v3 - search audit (read-only)
-  node scripts/searchAudit.mjs                         # default queries, Harare
-  node scripts/searchAudit.mjs "electrician,plumber" bulawayo
-Writes search-audit-<date>.txt in the project folder. Changes nothing in the database.
+Suggested first hour:
+  1. /zq-admin/categorize → "Fix city/suburb spelling"
+  2. /zq-admin/categories → map every "unknown category id" (top red box)
+  3. /zq-admin/categorize?status=live → Classify / ✨ Suggest for each live seller
+  4. /zq-admin/search-tester → electrician / plumber / cement in Harare
+  5. node scripts/searchAudit.mjs → "fixable" should drop to 0

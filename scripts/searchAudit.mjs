@@ -39,14 +39,15 @@ await mongoose.connect(uri);
 const { default: SupplierProfile } = await import("../models/supplierProfile.js");
 const S  = await import("../services/supplierSearch.js");
 const SB = await import("../services/searchBrain.js");
-const { SUPPLIER_CATEGORIES } = await import("../services/supplierPlans.js");
-const CAT_IDS = new Set(SUPPLIER_CATEGORIES.map(c => c.id));
+// Built-in + admin categories (Categories page) count as known ids
+const { getAllCategories } = await import("../services/categoryRegistry.js");
+const CAT_IDS = new Set((await getAllCategories()).map(c => c.id));
 
 const items = s => [
   ...(s.listedProducts || []), ...(s.products || []),
   ...((s.rates || []).map(r => r?.service || ""))
 ].flatMap(x => String(x || "").split(/[\r\n,]+/)).map(x => x.trim()).filter(x => x && x !== "pending_upload");
-const blob = s => [s.businessName, ...(s.categories || []), ...items(s)].join(" | ").toLowerCase();
+const blob = s => [s.businessName, ...(s.categories || []), ...(s.searchTags || []), ...items(s)].join(" | ").toLowerCase();
 const short = (s, n = 70) => { s = String(s || ""); return s.length > n ? s.slice(0, n - 1) + "…" : s; };
 const isSearchable = s =>
   s.active === true && s.suspended !== true &&

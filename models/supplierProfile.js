@@ -30,7 +30,14 @@ const SupplierProfileSchema = new mongoose.Schema({
     index:   true
   },
 
-  categories:     [{ type: String }],
+  categories:     [{ type: String }],   // one or more category ids (built-in or admin-created)
+
+  // Admin-curated search words: what buyers type to find this seller
+  // ("electrician, wiring, db board"). Set on /zq-admin/categorize. A tag hit
+  // ranks as a strong match even if the seller's item names don't say it.
+  searchTags:     { type: [String], default: [], index: true },
+  classifiedAt:   { type: Date },
+  classifiedBy:   { type: String, default: "" },
   products:       [{ type: String }],
   listedProducts: [{ type: String }],
 

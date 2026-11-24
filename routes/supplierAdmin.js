@@ -58,6 +58,7 @@ import { assignSlugToSupplier } from "../services/supplierSmartLink.js";
 import { registerBikerAdminRoutes } from "./bikerAdmin.js";
 import { registerMailAdminRoutes } from "./mailInbox.js";   // ZimQuote Mail
 import { registerPageSellersAdminRoutes } from "./pageSellersAdmin.js";   // Website page sellers
+import { registerCategoryAdminRoutes } from "./categoryAdmin.js";         // Categories, classify sellers, search tester
 import { registerQuoteDeskAdminRoutes } from "./quoteDeskAdmin.js";
 import {
   TUTOR_SUBJECTS, TUTOR_LEVELS, TUTOR_MODES, SCHOOL_CITIES, SCHOOL_ANNUAL_PRICE
@@ -4584,6 +4585,9 @@ const isPresets     = t === "Presets" || t.startsWith("Preset:");
     { href: "/zq-admin/tutor-groups",    label: "🧑‍🏫 Tutor Groups",        active: isTutorGroups },
     { href: "/zq-admin/suppliers/assign-slugs", label: "🏷️ Assign Slugs",      active: isAssignSlugs },
     { href: "/zq-admin/page-sellers",    label: "🧩 Website Page Sellers", active: String(t || "").startsWith("Page Sellers") },
+    { href: "/zq-admin/categorize",      label: "🏷️ Classify Sellers",     active: t === "Categorize Sellers" },
+    { href: "/zq-admin/categories",      label: "🗂️ Categories",           active: t === "Categories" },
+    { href: "/zq-admin/search-tester",   label: "🔎 Search Tester",        active: t === "Search Tester" },
     // ── Schools ───────────────────────────────────────────────────────────────
     { divider: "SCHOOLS" },
     { href: "/zq-admin/schools",         label: "🏫 Schools",             active: isSchools && t !== "Register School" },
@@ -17338,6 +17342,7 @@ registerBikerAdminRoutes(router, { requireSupplierAdmin, layout, esc, badge, sta
 registerMailAdminRoutes(router, { requireSupplierAdmin, layout, esc, badge, stat });
 // ── Website page sellers (routes/pageSellersAdmin.js) ────────────────────────
 registerPageSellersAdminRoutes(router, { requireSupplierAdmin, layout, esc, badge });
+registerCategoryAdminRoutes(router, { requireSupplierAdmin, layout, esc, badge });
 // ── Quote desk admin (routes/quoteDeskAdmin.js) ──────────────────────────────
 registerQuoteDeskAdminRoutes(router, { requireSupplierAdmin, layout, esc, badge, stat });
 

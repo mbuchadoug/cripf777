@@ -535,8 +535,30 @@ function _inferCategoriesFromSearch(product, expandedTerms) {
 //   15  - match via businessName
 //    5  - match only via category tag (broad - lowest confidence)
 // ─────────────────────────────────────────────────────────────────────────────
+// ── Admin search tags (Categories & Tags page) ──────────────────────────────
+// Words the admin attached to a seller ("electrician, wiring, db board").
+// A tag hit is a deliberate, curated match, so it scores as a strong match.
+//   exact tag 70 · tag contains query / query contains tag 60 ·
+//   stem match 50 · direct synonym of the query is a tag 45
+export function tagScore(supplier, searchTerm) {
+  const tags = (supplier?.searchTags || []).map(t => normalizeProductName(t)).filter(Boolean);
+  const q = normalizeProductName(searchTerm || "");
+  if (!tags.length || !q) return 0;
+  if (tags.includes(q)) return 70;
+  if (tags.some(t => (t.length >= 4 && q.includes(t)) || (q.length >= 4 && t.includes(q)))) return 60;
+  const qw = (stripGenericSearchWords(q) || q).split(" ").filter(w => w.length > 3);
+  if (qw.some(w => tags.some(t => t.split(" ").some(tw => _stemsMatch(w, tw))))) return 50;
+  const syn = expandSearchTerms(q).map(normalizeProductName);
+  if (syn.some(x => tags.includes(x))) return 45;
+  return 0;
+}
+
 export function scoreSupplierMatch(supplier, searchTerm) {
   if (!supplier || !searchTerm) return 0;
+
+  // Admin tags first - a curated tag beats loose wording in item names.
+  const _tg = tagScore(supplier, searchTerm);
+  if (_tg >= 60) return 50;
 
   const term    = normalizeProductName(searchTerm);
   const terms   = expandSearchTerms(term);           // term + synonyms
@@ -625,7 +647,7 @@ export async function runSupplierSearch({ city, category, product, profileType, 
     ]
   };
 
-  if (profileType) query.profileType = profileType;
+  if (profileType && profileType !== "any") query.profileType = profileType;   // "any" = mixed categories
   if (city) query["location.city"] = _cityRx(city);
   if (category) query.categories = category;
 
@@ -656,6 +678,10 @@ export async function runSupplierSearch({ city, category, product, profileType, 
     }
 
     const productOr = [
+      // Admin search tags (curated): query, its stems and direct synonyms
+      { searchTags: { $regex: _safeRx(product), $options: "i" } },
+      ...[..._stemRx].map(rx => ({ searchTags: { $regex: rx, $options: "i" } })),
+      ...searchTerms.map(term => ({ searchTags: { $regex: _safeRx(term), $options: "i" } })),
       { listedProducts:  { $regex: _safeRx(product), $options: "i" } },
       { products:        { $regex: _safeRx(product), $options: "i" } },
       { "rates.service": { $regex: _safeRx(product), $options: "i" } },
@@ -672,6 +698,8 @@ export async function runSupplierSearch({ city, category, product, profileType, 
 
       // Category-based match: "geyser installation" → categories: "plumbing"
       ..._inferredCats.map(cat => ({ categories: cat })),
+      // Intent categories (rules + admin keywords, e.g. "magetsi" → electrical)
+      ...(((_intent !== undefined ? _intent : ruleIntent(product))?.categories) || []).map(cat => ({ categories: cat })),
 
       ...searchTerms.flatMap(term => [
         { listedProducts:  { $regex: _safeRx(term), $options: "i" } },
@@ -790,7 +818,7 @@ results = results.filter((supplier) => {
     const productParts = _splitServiceBlob(supplier.products);
     const hasListedProducts = listedParts.some(p => normalizeProductName(p));
     const hasProducts = productParts.some(p => normalizeProductName(p));
-    const passes = hasRates || hasListedProducts || hasProducts;
+    const passes = hasRates || hasListedProducts || hasProducts || (supplier.searchTags || []).length > 0;
     if (!passes) console.log(`[TRACE-FILTER] REMOVED service supplier: ${supplier.businessName} rates=${hasRates} listed=${hasListedProducts} products=${hasProducts}`);
     return passes;
   }
@@ -803,7 +831,7 @@ const hasProducts = (supplier.products || []).some(
 
 // Keep this aligned with offer-building fallback:
 // if listedProducts exists use it, otherwise allow products[].
-const passes = hasListedProducts || hasProducts;
+const passes = hasListedProducts || hasProducts || (supplier.searchTags || []).length > 0;
   if (!passes) console.log(`[TRACE-FILTER] REMOVED product supplier: ${supplier.businessName} listed=${hasListedProducts} products=${hasProducts}`);
   return passes;
 });
@@ -1250,6 +1278,43 @@ export async function runSupplierOfferSearch({ city, category, product, profileT
     }
   } catch (_dtErr) { console.warn("[DOMAIN TOPIN]", _dtErr.message); }
 
+  // ── Tag top-in: sellers the admin tagged for this search always surface ────
+  // (with their best item as the hint), and rank as a strong match.
+  const _tagBy = new Map();
+  if (product) {
+    const _haveOffer2 = new Set(offers.map(o => o.supplierId));
+    for (const s of suppliers) {
+      const tg = tagScore(s, product);
+      if (!tg) continue;
+      _tagBy.set(String(s._id), tg);
+      if (_haveOffer2.has(String(s._id))) continue;
+      const _rep = _firstRepresentativeItem(s) || (s.searchTags || [])[0] || "";
+      if (!_rep) continue;
+      offers.push({
+        supplierId: String(s._id),
+        supplierName: s.businessName || "Supplier",
+        supplierPhone: s.phone || "",
+        supplierLocation: `${s.location?.area || ""}, ${s.location?.city || ""}`.replace(/^,\s*|,\s*$/g, ""),
+        supplierArea: s.location?.area || "",
+        supplierCity: s.location?.city || "",
+        supplierTier: s.tier || "",
+        supplierRating: typeof s.rating === "number" ? s.rating : 0,
+        profileType: s.profileType || "service",
+        deliveryText: s.profileType === "service"
+          ? (s.travelAvailable ? "🚗 Mobile service" : "📍 Visit provider")
+          : (s.delivery?.available ? "🚚 Delivery available" : "🏠 Collection only"),
+        product: _rep,
+        pricePerUnit: null,
+        unit: s.profileType === "service" ? "job" : "each",
+        matchSource: "tags",
+        matchScore: tg,
+        sortTierRank: typeof s.tierRank === "number" ? s.tierRank : 0,
+        sortCredibility: typeof s.credibilityScore === "number" ? s.credibilityScore : 0,
+        sortPosition: 98
+      });
+    }
+  }
+
   // ── Nearby top-up: too few local sellers → add sellers from other cities ──
   // "find plumber harare" with only 1-3 Harare sellers now also shows e.g.
   // "noddah plumbers" from another city, ranked BELOW every local seller,
@@ -1294,6 +1359,9 @@ export async function runSupplierOfferSearch({ city, category, product, profileT
   // Intent adjustment: an electrician outranks a cable shop for "electrician",
   // and the reverse for "cable". Only applied to sellers that already matched
   // (relevance > 0), so it re-orders results - it never invents a match.
+  for (const [id, tg] of _tagBy) {
+    if ((_relBySupplier.get(id) || 0) < tg) _relBySupplier.set(id, tg);
+  }
   if (_intent) {
     const _supById = new Map(suppliers.map(s => [String(s._id), s]));
     for (const id of new Set(offers.map(o => o.supplierId))) {
