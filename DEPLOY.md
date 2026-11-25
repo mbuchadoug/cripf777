@@ -1,20 +1,33 @@
-# ZimQuote v5 - Sections → Categories, category-first search, fast reclassify
+# ZimQuote: interest groups for targeted broadcasts
 
-Copy all folders into /var/www/cripf777, then:  pm2 restart cripfcnt --update-env
-(v5 contains everything from v4; no database migration needed - old custom
-categories keep working and land in the "Other" section until you move them.)
+Built on the exact supplierAdmin.js / chatbotEngine.js you uploaded (your current server files).
+The current Broadcast Hub works as before; this adds a 4th audience option and an Audiences page.
 
-Changed since v4:
-  services/categoryRegistry.js  sections + default placement/keywords for all built-in categories
-  services/searchBrain.js       category & section keywords → buyer intent ("named" = category-first)
-  services/supplierSearch.js    category-first ranking, wider candidate pool (200)
-  services/findMenu.js          Find, Buy & Hire menu = your sections & categories, live
-  routes/categoryAdmin.js       new Categories page, inline classify, bulk ALL-matching, auto-assign
-  models/searchCategory.js      kind (section/category), section, order
+## Files (/var/www/cripf777)
+NEW      services/audienceSegments.js   groups people by interest, Claude classification, opt-outs
+NEW      routes/audienceAdmin.js        /zq-admin/audiences + the Broadcast Hub panel
+REPLACE  routes/supplierAdmin.js        +🎯 Interest groups in Broadcast Hub Step 1, 🎯 Audiences in the sidebar,
+                                        opted-out numbers dropped from every broadcast mode
+REPLACE  services/chatbotEngine.js      replies to UNSUBSCRIBE / SUBSCRIBE
 
-First 30 minutes:
-  1. /zq-admin/categories  - rename built-ins to buyer words (e.g. "⚡ Electrical Services" → "⚡ Electricians"),
-                             add keywords where you see "no keywords", add your own sections/categories.
-  2. /zq-admin/categorize  - "Auto-assign by words": electric → Electricians, plumb → Plumbers, weld → Welders…
-  3. Filter "No category" → add categories inline (or ✨ for ticked sellers).
-  4. /zq-admin/search-tester - electrician / plumbers / trades / cement.
+    pm2 restart cripfcnt --update-env
+
+No new packages. Groups build automatically 3 minutes after start and every 6 hours
+(or press 🔄 Rebuild on /zq-admin/audiences).
+
+.env (optional)
+    ANTHROPIC_API_KEY=...         already set for search - enables "🤖 Classify with Claude"
+    ZQ_AI_MODEL=claude-haiku-5-5  same model setting as the search
+    ZQ_AUDIENCE_AUTOBUILD=off     only if you want manual rebuilds
+
+## Use it
+1. /zq-admin/audiences → 🔄 Rebuild now (first time) → check the group sizes.
+2. Press 🤖 Classify with Claude so the searches the rules couldn't place get sorted
+   (300 most common per run). Fix any by hand in "Searches nobody could place yet".
+3. Press 📣 Broadcast on a group (or Broadcast Hub → Step 1 → 🎯 Interest groups),
+   tick groups, choose "last 90 days", "2+ times", city, buyers only → live count.
+4. Pick the template (Step 2) and send - either "Send" or the 🚀 Batch Sender (batch size,
+   auto/manual batches, pause/resume/abort, skip people who already got this template).
+
+Tip: end marketing templates with "Reply UNSUBSCRIBE to stop these messages." It protects your
+WhatsApp number's quality rating - people who unsubscribe are never messaged again.

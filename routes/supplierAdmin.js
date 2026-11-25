@@ -59,7 +59,8 @@ import { registerBikerAdminRoutes } from "./bikerAdmin.js";
 import { registerMailAdminRoutes } from "./mailInbox.js";   // ZimQuote Mail
 import { registerPageSellersAdminRoutes } from "./pageSellersAdmin.js";   // Website page sellers
 import { registerCategoryAdminRoutes } from "./categoryAdmin.js";
-import { registerZqShopAdminRoutes } from "./zqShopAdmin.js";             // Payment prompts, WhatsApp grocery orders, hampers         // Categories, classify sellers, search tester
+import { registerZqShopAdminRoutes } from "./zqShopAdmin.js";
+import { registerAudienceAdminRoutes } from "./audienceAdmin.js";          // Interest groups for targeted broadcasts             // Payment prompts, WhatsApp grocery orders, hampers         // Categories, classify sellers, search tester
 import { registerQuoteDeskAdminRoutes } from "./quoteDeskAdmin.js";
 import {
   TUTOR_SUBJECTS, TUTOR_LEVELS, TUTOR_MODES, SCHOOL_CITIES, SCHOOL_ANNUAL_PRICE
@@ -4614,6 +4615,7 @@ const isPresets     = t === "Presets" || t.startsWith("Preset:");
 { href: "/zq-admin/expiry",          label: "⏰ Subscriptions",       active: isExpiry },
     { href: "/zq-admin/broadcast-offer", label: "📣 Broadcast Offer",  active: isBroadcast },
     { href: "/zq-admin/broadcast",       label: "📡 Broadcast Hub",     active: isBroadcastHub },
+    { href: "/zq-admin/audiences",       label: "🎯 Audiences",         active: t === "Audiences" },
     { href: "/zq-admin/manual-request",  label: "🙋 Manual Request",    active: t === "Manual Request" },
     { href: "/zq-admin/profile-activity",label: "👁 Profile Activity",   active: t === "Profile Activity" },
     { href: "/zq-admin/school-activity", label: "🏫 School Activity",     active: t === "School Activity" },
@@ -10371,6 +10373,10 @@ router.get("/broadcast", requireSupplierAdmin, async (req, res) => {
                 style="padding:6px 14px;border-radius:6px;border:2px solid var(--border);background:white;color:var(--text);font-size:12px;font-weight:600;cursor:pointer">
                 ✏️ Enter phones manually
               </button>
+              <button type="button" id="modeSegment" onclick="setAudienceMode('segment')"
+                style="padding:6px 14px;border-radius:6px;border:2px solid var(--border);background:white;color:var(--text);font-size:12px;font-weight:600;cursor:pointer">
+                🎯 Interest groups
+              </button>
               <button type="button" id="modeSelect" onclick="setAudienceMode('select')"
                 style="padding:6px 14px;border-radius:6px;border:2px solid var(--border);background:white;color:var(--text);font-size:12px;font-weight:600;cursor:pointer">
                 ☑️ Pick contacts from list
@@ -10473,6 +10479,10 @@ router.get("/broadcast", requireSupplierAdmin, async (req, res) => {
               <!-- hidden field that carries selected phones to POST -->
               <textarea name="selectedPhones" id="selectedPhones" style="display:none"></textarea>
             </div>
+
+            <!-- Interest groups mode (built by routes/audienceAdmin.js) -->
+            <div id="segmentPanel" style="display:none"></div>
+            <script src="/zq-admin/audiences/broadcast-panel.js" defer></script>
 
           </fieldset>
 
@@ -10902,8 +10912,9 @@ router.get("/broadcast", requireSupplierAdmin, async (req, res) => {
       }
       function setAudienceMode(mode) {
         document.getElementById("audienceMode").value = mode;
-        ["filter","manual","select"].forEach(m => {
+        ["filter","manual","select","segment"].forEach(m => {
           const panel = document.getElementById(m + "Panel");
+          if (!panel) return;
           const btn   = document.getElementById("mode" + m.charAt(0).toUpperCase() + m.slice(1));
           if (m === mode) {
             panel.style.display = "";
@@ -11011,6 +11022,7 @@ router.get("/broadcast", requireSupplierAdmin, async (req, res) => {
         p.set('keyword', _bcQV('[name=keyword]'));
         p.set('manualPhones', _bcQV('[name=manualPhones]'));
         p.set('selectedPhones', _bcGet('selectedPhones'));
+        if (window.zqSegParams) window.zqSegParams(p);
         p.set('templateName', _bcGet('tplSelect'));
         p.set('var1', _bcVar1());
         p.set('var2', _bcQV('[name=var2]'));
@@ -11588,6 +11600,16 @@ router.post("/broadcast", requireSupplierAdmin, async (req, res) => {
       phones = [...new Set(phones)];
       audienceLabel = `selected (${phones.length} picked)`;
 
+    } else if (audienceMode === "segment") {
+      // Interest groups (services/audienceSegments.js)
+      const { resolveSegmentPhones } = await import("../services/audienceSegments.js");
+      if (!String(req.body.segments || "").trim()) throw new Error("Tick at least one interest group in Step 1.");
+      const _r = await resolveSegmentPhones({
+        segments: req.body.segments, days: req.body.segDays, minHits: req.body.segMin, city: req.body.segCity,
+        excludeSellers: String(req.body.segExcludeSellers ?? "1") !== "0", match: req.body.segMatch
+      });
+      phones = _r.phones; audienceLabel = _r.label;
+
     } else {
       // filter mode - same DB query as before
       phones = await _buildPhoneList({
@@ -11599,6 +11621,14 @@ router.post("/broadcast", requireSupplierAdmin, async (req, res) => {
       const cutoffDays = parseInt(inactiveDays, 10) || 0;
       audienceLabel = `${pool} / ${cutoffDays}d inactive${city ? " / "+city : ""}${keyword ? ' / "'+keyword+'"' : ""}`;
     }
+
+    // Never message people who replied UNSUBSCRIBE
+    try {
+      const { dropOptOuts } = await import("../services/audienceSegments.js");
+      const _o = await dropOptOuts(phones);
+      if (_o.removed) audienceLabel += ` (−${_o.removed} unsubscribed)`;
+      phones = _o.phones;
+    } catch (_) {}
 
     if (action === "preview") {
       return res.redirect(`/zq-admin/broadcast?success=${encodeURIComponent(
@@ -11689,12 +11719,27 @@ async function _resolveAudiencePhones(body) {
   } else if (audienceMode === "select") {
     phones = String(selectedPhones || "").split(/[\n,;\s]+/).filter(Boolean).map(normPhone).filter(Boolean);
     audienceLabel = `selected (${phones.length} picked)`;
+  } else if (audienceMode === "segment") {
+    const { resolveSegmentPhones } = await import("../services/audienceSegments.js");
+    if (!String(body.segments || "").trim()) throw new Error("Tick at least one interest group in Step 1.");
+    const r = await resolveSegmentPhones({
+      segments: body.segments, days: body.segDays, minHits: body.segMin, city: body.segCity,
+      excludeSellers: String(body.segExcludeSellers ?? "1") !== "0", match: body.segMatch
+    });
+    phones = r.phones; audienceLabel = r.label;
   } else {
     const cutoffDays = parseInt(inactiveDays, 10) || 0;
     phones = await _buildPhoneList({ pool, cutoffDays, city, keyword });
     audienceLabel = `${pool} / ${cutoffDays}d inactive${city ? " / " + city : ""}${keyword ? ' / "' + keyword + '"' : ""}`;
   }
   phones = [...new Set(phones)];
+  // Never message people who replied UNSUBSCRIBE (any audience mode)
+  try {
+    const { dropOptOuts } = await import("../services/audienceSegments.js");
+    const r = await dropOptOuts(phones);
+    if (r.removed) audienceLabel += ` (−${r.removed} unsubscribed)`;
+    phones = r.phones;
+  } catch (_) {}
   return { phones, audienceLabel };
 }
 
@@ -17347,6 +17392,7 @@ registerMailAdminRoutes(router, { requireSupplierAdmin, layout, esc, badge, stat
 registerPageSellersAdminRoutes(router, { requireSupplierAdmin, layout, esc, badge });
 registerCategoryAdminRoutes(router, { requireSupplierAdmin, layout, esc, badge });
 registerZqShopAdminRoutes(router, { requireSupplierAdmin, layout, esc });
+registerAudienceAdminRoutes(router, { requireSupplierAdmin, layout, esc });
 // ── Quote desk admin (routes/quoteDeskAdmin.js) ──────────────────────────────
 registerQuoteDeskAdminRoutes(router, { requireSupplierAdmin, layout, esc, badge, stat });
 

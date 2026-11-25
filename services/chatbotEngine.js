@@ -4375,6 +4375,21 @@ try {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// 🔕 UNSUBSCRIBE / SUBSCRIBE from broadcasts (services/audienceSegments.js)
+// ───────────────────────────────────────────────────────────────────────────
+// Only the exact words (unsubscribe, stop promos, opt out / subscribe, opt in).
+// Opted-out numbers are removed from every Broadcast Hub audience.
+if (!isMetaAction && !hasImage && text.trim().length <= 30) {
+  try {
+    const { handleOptOutText } = await import("./audienceSegments.js");
+    const _optReply = await handleOptOutText(phone, text);
+    if (_optReply) { await sendText(from, _optReply); return; }
+  } catch (_optErr) {
+    console.error("[OPT OUT]", _optErr.message);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // 📲 ZIMQUOTE PAYMENT REQUESTS (EcoCash/OneMoney to ZimQuote) - taps + typing
 // ───────────────────────────────────────────────────────────────────────────
 // zqp_* taps (Pay / Other number / Check / Not now), an open "type the
