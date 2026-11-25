@@ -132,7 +132,7 @@ export async function sendMainMenu(to) {
   const SupplierProfile = (await import("../models/supplierProfile.js")).default;
   const SchoolProfile  = (await import("../models/schoolProfile.js")).default;
 
-  const MENU_MSG = "👋 *Welcome to ZimQuote!*\nZimbabwe's marketplace for products & services.";
+  const MENU_MSG = "👋 *Welcome to ZimQuote!*\nZimbabwe's marketplace for products & services.\n🛒 Groceries delivered? Type *groceries*";
 
   // ── Step 1: Resolve business for this phone ──────────────────────────────
   // Priority: real (non-pending) biz from UserRole > session > pending_supplier_ biz
@@ -425,6 +425,7 @@ export async function sendMarketplaceMenu(to, biz, { isOwner = false } = {}) {
     { id: "sup_request_sellers", title: "📝 Request a Quote" },
     { id: "biker_request_rider", title: "🏍️ Request a Biker" },
     { id: "find_supplier",       title: "🔍 Find, Buy & Hire" },
+    { id: "grc_home",            title: "🛒 Groceries", description: "Hampers, cart, delivery or collect - pay with EcoCash" },
     { id: "my_orders",           title: "📋 My Orders" },
     { id: "find_school",         title: "🎓 Schools & Tutors" },
     ...(isOwner ? [{ id: "my_supplier_account", title: "🏪 My Store" }] : []),

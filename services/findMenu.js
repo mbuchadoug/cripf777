@@ -161,6 +161,13 @@ export async function handleFindNumber({ from, text, biz, saveBiz, dispatch }) {
     if (!g) { await sendText(from, `Please reply with a number from 1 to ${shown.length}, or type what you need.`); return true; }
     if (g.action) { await disarmFind(from); await dispatch(g.action); return true; }
 
+    // A section → its categories WITH seller counts (empty ones hidden), or
+    // straight to a numbered seller list when that is all there is.
+    if (g.section) {
+      await showSection({ from, sectionId: g.section, label: g.label, biz, saveBiz, dispatch, groupIndex: n - 1 });
+      return true;
+    }
+
     // Categories of this section (built-in + admin), admin-ordered
     const { getAllCategories } = await import("./categoryRegistry.js");
     const allCats = await getAllCategories();
@@ -193,6 +200,10 @@ ${items.map((it, i) => `*${i + 1}.* ${it.label}`).join("\n")}
     if (!it) { await sendText(from, `Please reply with a number from 1 to ${(f.items || []).length}.`); return true; }
     await disarmFind(from);
     if (it.action) { await dispatch(it.action); return true; }
+    if (it.all && f.section) {
+      await sendSellersFor({ from, biz, saveBiz, catIds: f.catIds || [], title: f.sectionLabel || "Sellers" });
+      return true;
+    }
     await runCategoryBrowse({ from, biz, saveBiz, category: it.cat, dispatch });
     return true;
   }
@@ -245,6 +256,18 @@ export async function runAutoCitySearch({ from, biz, saveBiz, product, city = nu
  * cities when the remembered city has nobody in that category.
  */
 export async function runCategoryBrowse({ from, biz, saveBiz, category, city = null, dispatch }) {
+  // New path: numbered seller list built from the seller index (category,
+  // admin tags and - for unclassified sellers - their items). Falls back to
+  // the old engine handler only if the index cannot be built.
+  try {
+    const { getAllCategories } = await import("./categoryRegistry.js");
+    const def = (await getAllCategories()).find(c => c.id === category);
+    if (def) return await sendSellersFor({ from, biz, saveBiz, catIds: [category], title: def.label, city });
+  } catch (e) { console.warn("[FIND] category sellers", e.message); }
+  return _legacyCategoryBrowse({ from, biz, saveBiz, category, city, dispatch });
+}
+
+async function _legacyCategoryBrowse({ from, biz, saveBiz, category, city = null, dispatch }) {
   const UserSession = await _session();
   const phone = _phone(from);
   const { getAllCategories } = await import("./categoryRegistry.js");
@@ -275,4 +298,197 @@ export async function runCategoryBrowse({ from, biz, saveBiz, category, city = n
     if (saveBiz) await saveBiz(biz);
   }
   return dispatch(_cityAction(useCity));
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// SELLERS BY SECTION / CATEGORY - numbered list, never a dead end
+// ─────────────────────────────────────────────────────────────────────────────
+// Old behaviour: picking "Cars & Spares" ran a strict query
+// (categories == car_supplies AND profileType == product) and often answered
+// "No matching suppliers found". Now a seller belongs to a category when:
+//   3  it is classified in it (categories[] - set on /zq-admin/categorize)
+//   2  an admin search tag matches the category's buyer keywords
+//   1  it is NOT classified in another section and its name / items / services
+//      contain a category keyword (catches sellers nobody classified yet)
+// Sellers in the buyer's city come first, then everyone else - never filtered
+// out. The list is the same numbered message as search results, so the buyer
+// types a number and the seller's store opens (seller is notified).
+// ═════════════════════════════════════════════════════════════════════════════
+const IDX_TTL = 2 * 60 * 1000;
+let _pool = null, _poolAt = 0, _poolLoading = null;
+const _rxEsc = s => String(s || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const _bare = l => String(l || "").replace(/^[^\p{L}\p{N}]+/u, "").trim();
+
+async function _sellerPool() {
+  if (_pool && Date.now() - _poolAt < IDX_TTL) return _pool;
+  if (_poolLoading) return _poolLoading;
+  _poolLoading = (async () => {
+    try {
+      const SP = (await import("../models/supplierProfile.js")).default;
+      _pool = await SP.find({
+        active: true,
+        profileType: { $nin: ["biker"] },
+        $and: [
+          { $or: [{ suspended: false }, { suspended: { $exists: false } }] },
+          { $or: [{ subscriptionStatus: "active" }, { subscriptionStatus: "trial" }] }
+        ]
+      }, {
+        businessName: 1, location: 1, rating: 1, reviewCount: 1, tier: 1, tierRank: 1, verified: 1,
+        credibilityScore: 1, profileType: 1, travelAvailable: 1, "delivery.available": 1,
+        prices: 1, rates: 1, products: 1, listedProducts: 1, categories: 1, searchTags: 1
+      }).lean();
+      _poolAt = Date.now();
+    } finally { _poolLoading = null; }
+    return _pool;
+  })();
+  return _poolLoading;
+}
+export function invalidateSellerPool() { _pool = null; _poolAt = 0; }
+
+function _catRegexes(cat) {
+  const words = [...(cat.keywords || []), _bare(cat.label)]
+    .map(k => String(k || "").trim().toLowerCase()).filter(k => k.length >= 3);
+  return [...new Set(words)].map(k => new RegExp(`\\b${_rxEsc(k)}`, "i"));
+}
+
+function _scoreFor(s, cat, rxs, secOf) {
+  const cats = Array.isArray(s.categories) ? s.categories : [];
+  if (cats.includes(cat.id)) return 3;
+  const tags = (Array.isArray(s.searchTags) ? s.searchTags : []).join(" | ");
+  if (tags && rxs.some(r => r.test(tags))) return 2;
+  // Weak text match only for sellers not classified into ANOTHER section
+  // (stops "plumbing spares" showing under Cars & Spares).
+  if (cats.some(c => { const sec = secOf(c); return sec && sec !== "other" && sec !== cat.section; })) return 0;
+  const text = [s.businessName, ...(s.products || []), ...(s.listedProducts || []),
+    ...((s.rates || []).map(r => r?.service))].filter(x => x && x !== "pending_upload").join(" | ");
+  return text && rxs.some(r => r.test(text)) ? 1 : 0;
+}
+
+/**
+ * Ranked sellers for one or more category ids.
+ * @returns {Promise<Array>} supplier docs (lean) with _catScore
+ */
+export async function sellersForCategories(catIds = [], city = null) {
+  const { getAllCategories } = await import("./categoryRegistry.js");
+  const all = await getAllCategories();
+  const byId = new Map(all.map(c => [c.id, c]));
+  const secOf = id => byId.get(id)?.section || null;
+  const defs = catIds.map(id => byId.get(id)).filter(Boolean);
+  if (!defs.length) return [];
+  const rx = defs.map(d => [d, _catRegexes(d)]);
+  const pool = await _sellerPool();
+  const cityKey = city ? String(city).trim().toLowerCase() : "";
+  const out = [];
+  for (const s of pool) {
+    let best = 0;
+    for (const [d, r] of rx) { const sc = _scoreFor(s, d, r, secOf); if (sc > best) best = sc; if (best === 3) break; }
+    if (best > 0) out.push({ ...s, _catScore: best, _local: cityKey && String(s.location?.city || "").trim().toLowerCase() === cityKey ? 1 : 0 });
+  }
+  out.sort((a, b) =>
+    (b._local - a._local) || (b._catScore - a._catScore) ||
+    ((b.tierRank || 0) - (a.tierRank || 0)) || ((b.credibilityScore || 0) - (a.credibilityScore || 0)) ||
+    ((b.rating || 0) - (a.rating || 0)));
+  return out;
+}
+
+async function _rememberedCity(from) {
+  try {
+    const UserSession = await _session();
+    const sess = await UserSession.findOne({ phone: _phone(from) }, { tempData: 1 }).lean();
+    return sess?.tempData?.lastSearchCity || null;
+  } catch (_) { return null; }
+}
+
+async function _noSellers(from, title) {
+  const { sendButtons } = await import("./metaSender.js");
+  return sendButtons(from, {
+    text: `😕 No sellers are listed under *${_bare(title)}* yet.\n\nTell us what you need and we'll find sellers and send you their prices - free.`,
+    buttons: [
+      { id: "sup_request_sellers", title: "📝 Request a Quote" },
+      { id: "find_supplier",       title: "🔍 Find, Buy & Hire" }
+    ]
+  });
+}
+
+/** Send the numbered seller list for these categories (city sellers first). */
+export async function sendSellersFor({ from, biz, saveBiz, catIds, title, city = null }) {
+  const useCity = city || await _rememberedCity(from);
+  const list = await sellersForCategories(catIds, useCity);
+  await disarmFind(from);
+  try {
+    const UserSession = await _session();
+    await UserSession.updateOne({ phone: _phone(from) }, { $unset: OTHER_SEARCH_MARKERS });
+  } catch (_) {}
+  if (biz) {
+    let changed = resetBizBrowseState(biz);
+    if (biz.sessionState === "supplier_search_product") { biz.sessionState = "ready"; changed = true; }
+    if (changed && saveBiz) { try { await saveBiz(biz); } catch (_) {} }
+  }
+  if (!list.length) return _noSellers(from, title);
+
+  // Hint term = the category's main keyword, so each line shows a matching item/price
+  let hint = "";
+  try {
+    const { getAllCategories } = await import("./categoryRegistry.js");
+    const d = (await getAllCategories()).find(c => c.id === catIds[0]);
+    hint = catIds.length === 1 ? ((d?.keywords || [])[0] || _bare(d?.label)) : "";
+  } catch (_) {}
+
+  const hasLocal = useCity && list.some(s => s._local);
+  const { sendNumberedSellerResults } = await import("./sellerSearchList.js");
+  console.log(`[FIND] sellers for ${catIds.join(",")} → ${list.length} (${useCity || "all"} first)`);
+  return sendNumberedSellerResults({
+    from, phone: _phone(from),
+    suppliers: list,
+    searchTerm: hint,
+    titleLabel: _bare(title),
+    locationLabel: hasLocal ? `${useCity} first` : "All Zimbabwe",
+    keepOrder: true
+  });
+}
+
+/**
+ * Section picked on the Find home screen.
+ *  • no sellers at all          → friendly "Request a Quote" fallback
+ *  • one category / few sellers → straight to the numbered seller list
+ *  • otherwise                  → numbered categories WITH seller counts
+ *                                 (empty categories hidden) + "All …" first
+ */
+export async function showSection({ from, sectionId, label, biz, saveBiz, dispatch, groupIndex = 0 }) {
+  const { getAllCategories, sortCategories } = await import("./categoryRegistry.js");
+  const cats = sortCategories((await getAllCategories()).filter(c => c.section === sectionId && c.active !== false));
+  const city = await _rememberedCity(from);
+
+  const counts = [];
+  const seen = new Set();
+  for (const c of cats) {
+    const l = await sellersForCategories([c.id], city);
+    l.forEach(s => seen.add(String(s._id)));
+    if (l.length) counts.push({ cat: c, n: l.length });
+  }
+  const total = seen.size;
+  const catIds = counts.map(x => x.cat.id);
+
+  const extras = [];
+  if (sectionId === "food") extras.push({ label: "🛒 Order groceries - delivered or collect", action: "grc_home" });
+  if (sectionId === "moving") extras.push({ label: "🏍️ Send a parcel now (biker)", action: "biker_request_rider" });
+
+  if (!total && !extras.length) { await disarmFind(from); return _noSellers(from, label); }
+  if (!extras.length && (counts.length <= 1 || total <= 6)) {
+    return sendSellersFor({ from, biz, saveBiz, catIds, title: label, city });
+  }
+
+  const items = [
+    ...extras,
+    ...(counts.length > 1 ? [{ label: `🔎 All ${_bare(label)} (${total})`, all: true }] : []),
+    ...counts.map(x => ({ label: `${x.cat.label} (${x.n})`, cat: x.cat.id }))
+  ];
+  await _arm(from, { level: "group", group: groupIndex, section: sectionId, sectionLabel: label, catIds, items });
+  const ex = counts[0] ? _bare(counts[0].cat.label).toLowerCase() : "what you need";
+  return sendText(from,
+`${label}
+
+${items.map((it, i) => `*${i + 1}.* ${it.label}`).join("\n")}
+
+👉 *Reply with a number* to see the sellers, or type exactly what you need (e.g. _${ex}_).`);
 }

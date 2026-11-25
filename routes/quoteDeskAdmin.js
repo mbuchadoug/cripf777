@@ -16,7 +16,8 @@ import SupplierProfile from "../models/supplierProfile.js";
 import {
   suggestSellers, sendToSellers, buildAndSendQuote, messageCustomer, messageSeller,
   forwardSellerReply, shareContacts, setStatus, adminCreateRequest, parseQuoteLines,
-  quoteRequestLink, qRef, displayPhone, normPhone, resendQuote,
+  quoteRequestLink, quotePlainLink, quoteWebLink, getQuoteShortLink, createQuoteShortLink, QUOTE_SHORT_MESSAGE,
+  qRef, displayPhone, normPhone, resendQuote,
   sendInvoice, recordPayment, recordCost, booksSummary, syncBooks
 } from "../services/quoteDesk.js";
 
@@ -84,17 +85,41 @@ export function registerQuoteDeskAdminRoutes(router, { requireSupplierAdmin, lay
           <td><small>${ago(r.lastActivityAt)}</small></td></tr>`;
       }).join("");
       const link = quoteRequestLink();
+      const webLink = quoteWebLink();
+      const plain = quotePlainLink();
+      const official = await getQuoteShortLink();     // null if not created yet / API unavailable
       res.send(layout("Quote Desk", `
 ${nav("inbox")}${flash(req)}
 <div class="stats-grid">
   ${stat(nNew, "🆕 New - need action", "red")}${stat(nOpen, "Open requests", "blue")}${stat(nToday, "Requests today", "teal")}
   ${stat(wonMonth.length, "Won this month", "green")}${stat(money(dealSum), "Deal value (month)", "green")}${stat(money(comSum), "Your commission (month)", "purple")}
 </div>
-<div class="panel"><div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
-  <img src="${qr(link, 110)}" width="110" height="110" alt="QR">
-  <div style="flex:1;min-width:240px"><strong>📲 Share "Request a Quote"</strong><br>
-  <small class="muted">Opens WhatsApp with "Request a quote" typed - they press Send and describe what they need.</small><br>
-  <input value="${esc(link)}" readonly style="width:100%;margin-top:6px;font-size:13px" onclick="this.select()"></div></div></div>
+<div class="panel">
+  <h3>📣 Market "Request a Quote" - your links</h3>
+  <p class="muted" style="font-size:12px;margin:2px 0 10px">Short, clean links with no odd characters. Use the website link where people need to trust you first (Facebook, posters, flyers), and a WhatsApp link where they're already on WhatsApp (Status, groups, SMS). Every link lands in this Quote Desk.</p>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:14px">
+    ${[
+      ["🌐 Website (branded, builds trust)", webLink, "Opens a short ZimQuote page with a guided form and a WhatsApp button."],
+      ["✅ Official WhatsApp short link", official?.link || "", official ? `Opens WhatsApp with “${esc(official.message)}” typed.` : "Not created yet - one click below. Looks like wa.me/message/ABC123 and is issued by WhatsApp itself."],
+      ["💬 Plain WhatsApp link", plain, "Works everywhere, opens WhatsApp with “Quote” typed."]
+    ].map(([t, l, d]) => `<div style="border:1px solid #e2e8f0;border-radius:10px;padding:12px;display:flex;gap:12px">
+      ${l ? `<a href="${qr(l, 300)}" target="_blank" title="Open large QR to download/print"><img src="${qr(l, 96)}" width="96" height="96" alt="QR"></a>` : ""}
+      <div style="flex:1;min-width:0"><strong>${t}</strong><br><small class="muted">${d}</small>
+        ${l ? `<div style="display:flex;gap:6px;margin-top:8px"><input value="${esc(l)}" readonly style="flex:1;min-width:0;font-size:13px" onclick="this.select()">
+          <button type="button" class="btn btn-sm btn-gray" onclick="navigator.clipboard.writeText('${esc(l)}');this.textContent='Copied ✓'">Copy</button></div>`
+        : `<form method="POST" action="/zq-admin/quote-desk/shortlink" style="margin-top:8px"><button class="btn btn-sm btn-green">✨ Create official short link</button></form>`}
+      </div></div>`).join("")}
+  </div>
+  <details style="margin-top:12px"><summary><strong>📝 Ready-to-post captions</strong> (copy &amp; paste)</summary>
+    ${[
+      `Need a price? 📝 Get FREE quotes from trusted sellers in Zimbabwe - building materials, plumbers, electricians, solar, car parts and more. One message, prices come back on WhatsApp.\n👉 ${webLink}`,
+      `Stop calling 10 shops for prices 📞❌\nSend one request on WhatsApp and ZimQuote gets you quotes from sellers near you. Free.\n👉 ${official?.link || plain}`,
+      `Building? Get cement, bricks, sand & steel quoted FREE 🧱 Tell us what you need and where - quotes come to your WhatsApp.\n👉 ${webLink}`
+    ].map(c => `<div style="display:flex;gap:8px;align-items:flex-start;margin-top:8px"><textarea readonly rows="3" style="flex:1;font-size:13px">${esc(c.replace(/\\n/g, "\n"))}</textarea>
+      <button type="button" class="btn btn-sm btn-gray" onclick="navigator.clipboard.writeText(this.previousElementSibling.value);this.textContent='Copied ✓'">Copy</button></div>`).join("")}
+  </details>
+  <p class="muted" style="font-size:12px;margin-top:8px">Link used in bot messages: <code>${esc(link)}</code>${process.env.ZQ_QUOTE_LINK ? "" : " - set <code>ZQ_QUOTE_LINK</code> in .env to the official short link to use it everywhere."}</p>
+</div>
 <div class="panel">
   <div class="panel-head"><div style="display:flex;gap:6px;flex-wrap:wrap">${tabs}</div>
     <form class="filter-form" method="GET"><input type="hidden" name="tab" value="${esc(tab)}"><input name="q" value="${esc(q)}" placeholder="Ref, phone, words, area"><button>Search</button></form></div>
@@ -104,6 +129,16 @@ ${nav("inbox")}${flash(req)}
   </table></div>
 </div>`));
     } catch (e) { res.send(layout("Quote Desk", `<div class="alert red">${esc(e.message)}</div>`)); }
+  });
+
+  // Official WhatsApp short link (wa.me/message/…) for marketing
+  router.post("/quote-desk/shortlink", requireSupplierAdmin, async (req, res) => {
+    try {
+      const r = await createQuoteShortLink();
+      go(res, "/zq-admin/quote-desk", "success", `Official short link ready: ${r.link} - add ZQ_QUOTE_LINK=${r.link} to .env to use it in all bot messages.`);
+    } catch (e) {
+      go(res, "/zq-admin/quote-desk", "error", "WhatsApp didn't create the link: " + (e?.response?.data?.error?.message || e.message));
+    }
   });
 
   // ═══════════════════════════════════════════════════════════════════════════

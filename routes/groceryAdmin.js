@@ -64,7 +64,12 @@ router.post("/grocery/orders/:ref/quote", async (req, res) => {
   order.pushTimeline("quoted", `Custom items priced. Total $${order.amounts.total}`);
   await order.save();
   res.json({ order });
-  // NOTE: after this, send the customer a WhatsApp payment link (your Meta sender).
+  // Fully priced → WhatsApp the customer the total + EcoCash payment prompt.
+  if (!stillCustom) {
+    import("../services/groceryBot.js")
+      .then(m => m.sendGroceryPaymentRequest(order, { by: "grocery-admin" }))
+      .catch(e => console.warn("[grocery admin] pay request", e.message));
+  }
 });
 
 /* ── Update fulfilment status / rider / proof of delivery ────────────────── */
@@ -80,6 +85,12 @@ router.post("/grocery/orders/:ref/status", async (req, res) => {
   order.pushTimeline(status || "update", note || "");
   await order.save();
   res.json({ order });
+  // Tell the customer on WhatsApp (shopping / on the way / delivered / cancelled)
+  if (status) {
+    import("../services/groceryBot.js")
+      .then(m => m.notifyGroceryStatus(order, status, { rider: rider || "", note: note || "" }))
+      .catch(() => {});
+  }
 });
 
 /* ── Reconciliation summary (paid vs pending, revenue, margins by day) ───── */

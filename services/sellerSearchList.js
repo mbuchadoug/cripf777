@@ -287,6 +287,7 @@ function _renderBatch(pick, startIdx) {
  * @param {string} [p.searchTerm]    what the buyer searched
  * @param {string} [p.locationLabel] "Mbare, Harare" / "All Cities" / ""
  * @param {string} [p.titleLabel]    optional header override (category browse)
+ * @param {boolean} [p.keepOrder]    keep the given supplier order (already ranked)
  */
 export async function sendNumberedSellerResults({
   from,
@@ -295,13 +296,16 @@ export async function sendNumberedSellerResults({
   offers = null,
   searchTerm = "",
   locationLabel = "",
-  titleLabel = ""
+  titleLabel = "",
+  keepOrder = false        // true = suppliers are already ranked (category browse)
 }) {
   let entries = [];
   if (Array.isArray(offers) && offers.length) {
     entries = _entriesFromOffers(offers);
   } else if (Array.isArray(suppliers) && suppliers.length) {
-    entries = _rankSupplierEntries(suppliers, searchTerm);
+    entries = keepOrder
+      ? suppliers.map(s => { const e = _entryFromSupplier(s, searchTerm); return { id: e.id, name: e.name, info: e.info }; })
+      : _rankSupplierEntries(suppliers, searchTerm);
   }
 
   if (!entries.length) {

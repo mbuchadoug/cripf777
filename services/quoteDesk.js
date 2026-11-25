@@ -247,6 +247,12 @@ async function getReq(id) {
 // ═════════════════════════════════════════════════════════════════════════════
 const ESCAPE_RE  = /^(0|00|menu|main menu|back|exit|home|stop|hi|hie|hey|hello|cancel)$/i;
 const START_RE   = /^(request (a )?quote|request quotes?|get (a )?quote|i need a quote|need a quote|quotation please|request a quotation|quote request|request sellers)[.!]*$/i;
+// Short marketing links open WhatsApp with a tiny message ("Quote", or the
+// official short link's "Hi ZimQuote, I'd like a quote"). Accept the natural
+// ways people say it, incl. the common "qoute" spelling.
+const QUICK_RE   = /^(?:(?:hi|hie|hello|hey|good\s+(?:morning|afternoon|evening|day))[\s,!.]*)?(?:zim\s?q(?:uo|ou)te[\s,!.]*)?(?:(?:i(?:['’]?d|\s+would)?\s+(?:like|want|need)|can\s+i\s+(?:get|have)|please\s+(?:send|give)(?:\s+me)?|send\s+me|get\s+me)\s+)?(?:a\s+|some\s+)?(?:free\s+)?(?:quote|qoute|quotation|qoutation)s?(?:\s+(?:please|pls|request))?[\s.!]*$/i;
+// "I need a quote for 20 bags cement in Avondale" → one-step request.
+const QUOTE_FOR_RE = /^(?:(?:hi|hie|hello|hey)[\s,!.]*)?(?:zim\s?q(?:uo|ou)te[\s,!.]*)?(?:(?:i(?:['’]?d|\s+would)?\s+(?:like|want|need)|can\s+i\s+(?:get|have)|please\s+(?:send|give)(?:\s+me)?)\s+)?(?:a\s+)?(?:free\s+)?(?:quote|qoute|quotation|qoutation)s?\s+(?:for|on)\s+([\s\S]{4,})$/i;
 const MYQ_RE     = /^(my quotes?|my requests?|my quotations?)$/i;
 const DESK_RE    = /^(desk|quote desk|quotes desk|qdesk|requests desk)$/i;
 // Website tools (zimqoute.co.zw) open WhatsApp with a ready request:
@@ -306,7 +312,9 @@ export async function handleQuoteDesk({ from, text = "", action = "", biz = null
         const r = await QuoteRequest.findOne({ ref: txt.toUpperCase() }).lean().catch(() => null);
         if (r) return adminOpen(ctx, String(r._id));
       }
-      if (START_RE.test(txt)) return startRequest(ctx);
+      if (START_RE.test(txt) || QUICK_RE.test(txt)) return startRequest(ctx);
+      const _qf = txt.match(QUOTE_FOR_RE);
+      if (_qf) return onWebRequest(ctx, _qf[1]);
       if (MYQ_RE.test(txt)) return myQuotes(ctx);
       return false;
     } catch (err) {
@@ -1536,8 +1544,54 @@ async function adminCostTyped(ctx, reqId, txt) {
   return true;
 }
 
+// ── Shareable links ─────────────────────────────────────────────────────────
+//   quoteRequestLink()  - the link we market. Order of preference:
+//     1. ZQ_QUOTE_LINK in .env (e.g. the official https://wa.me/message/ABC123)
+//     2. https://wa.me/<bot>?text=Quote   (short, no %20 or odd characters)
+//   quoteWebLink()      - our own branded page, https://zimqoute.co.zw/quote
 export function quoteRequestLink() {
-  return `https://wa.me/${BOT()}?text=${encodeURIComponent("Request a quote")}`;
+  return process.env.ZQ_QUOTE_LINK || `https://wa.me/${BOT()}?text=Quote`;
+}
+export function quotePlainLink() {
+  return `https://wa.me/${BOT()}?text=Quote`;
+}
+export function quoteWebLink() {
+  return `${String(process.env.ZQ_SITE_URL || "https://zimqoute.co.zw").replace(/\/$/, "")}/quote`;
 }
 
-export default { handleQuoteDesk, sendInvoice, recordPayment, recordCost, booksSummary, resendQuote, startRequest, suggestSellers, sendToSellers, buildAndSendQuote, messageCustomer, messageSeller, forwardSellerReply, shareContacts, setStatus, adminCreateRequest, parseQuoteLines, quoteRequestLink };
+// ── Official WhatsApp short link (Meta "message QR codes") ──────────────────
+// https://wa.me/message/XXXXXXX - short, official, no visible phone or text.
+// Opening it starts a chat with QUOTE_SHORT_MESSAGE typed in; QUICK_RE above
+// understands it. Uses the Cloud API endpoint /<phone-number-id>/message_qrdls.
+export const QUOTE_SHORT_MESSAGE = "Hi ZimQuote, I'd like a quote";
+export async function listShortLinks() {
+  const r = await axios.get(`https://graph.facebook.com/${GRAPH}/${PNID()}/message_qrdls`,
+    { headers: { Authorization: `Bearer ${TOKEN()}` }, timeout: 15000 });
+  return (r.data?.data || []).map(d => ({ code: d.code, message: d.prefilled_message, link: d.deep_link_url }));
+}
+let _slCache = { at: 0, val: null };
+export async function getQuoteShortLink({ fresh = false } = {}) {
+  if (!fresh && Date.now() - _slCache.at < 10 * 60 * 1000) return _slCache.val;   // admin page loads stay fast
+  try {
+    const all = await listShortLinks();
+    const val = all.find(d => String(d.message || "").trim().toLowerCase() === QUOTE_SHORT_MESSAGE.toLowerCase()) || null;
+    _slCache = { at: Date.now(), val };
+    return val;
+  } catch (e) {
+    console.warn("[QDESK SHORTLINK] list:", e?.response?.data?.error?.message || e.message);
+    _slCache = { at: Date.now(), val: null };
+    return null;
+  }
+}
+export async function createQuoteShortLink() {
+  const existing = await getQuoteShortLink({ fresh: true });
+  if (existing) return existing;
+  const r = await axios.post(`https://graph.facebook.com/${GRAPH}/${PNID()}/message_qrdls`,
+    { prefilled_message: QUOTE_SHORT_MESSAGE, generate_qr_image: "PNG" },
+    { headers: { Authorization: `Bearer ${TOKEN()}`, "Content-Type": "application/json" }, timeout: 15000 });
+  const val = { code: r.data?.code, message: r.data?.prefilled_message, link: r.data?.deep_link_url, qr: r.data?.qr_image_url };
+  _slCache = { at: Date.now(), val };
+  return val;
+}
+
+export default { handleQuoteDesk, sendInvoice, recordPayment, recordCost, booksSummary, resendQuote, startRequest, suggestSellers, sendToSellers, buildAndSendQuote, messageCustomer, messageSeller, forwardSellerReply, shareContacts, setStatus, adminCreateRequest, parseQuoteLines, quoteRequestLink, quotePlainLink, quoteWebLink, getQuoteShortLink, createQuoteShortLink };

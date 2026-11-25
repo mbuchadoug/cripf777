@@ -3869,6 +3869,8 @@ a.startsWith("sup_load_preset_") ||
       a.startsWith("sfaq_") ||
       a.startsWith("zqf_") ||
       a.startsWith("zqpay_") ||
+      a.startsWith("zqp_") ||      // ZimQuote payment requests (services/zqPayments.js)
+      a.startsWith("grc_") ||      // WhatsApp grocery shop (services/groceryBot.js)
       a.startsWith("sc_") ||
       // ── Group smart link list-reply taps ─────────────────────────────────
       // zqg_sel_<id>        = buyer tapped a seller row in a group list
@@ -4370,6 +4372,45 @@ try {
   }
 } catch (_pyErr) {
   console.error("[SELLER PAY]", _pyErr.message);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 📲 ZIMQUOTE PAYMENT REQUESTS (EcoCash/OneMoney to ZimQuote) - taps + typing
+// ───────────────────────────────────────────────────────────────────────────
+// zqp_* taps (Pay / Other number / Check / Not now), an open "type the
+// number" step, the word PAY (only when this phone has an unpaid request) and
+// the admin "pay|push 077… 120 Company registration" command. Anything else
+// returns false and carries on untouched. (services/zqPayments.js)
+try {
+  const { handlePayAction, handlePayText } = await import("./zqPayments.js");
+  if (a.startsWith("zqp_")) {
+    if (await handlePayAction({ from, action: a })) return;
+  } else if (!isMetaAction && !hasImage && text.trim()) {
+    if (await handlePayText({ from, text })) return;
+  }
+} catch (_zpErr) {
+  console.error("[ZQ PAYMENTS]", _zpErr.message);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🛒 GROCERIES - shop, hampers, cart, calculator, checkout (services/groceryBot.js)
+// ───────────────────────────────────────────────────────────────────────────
+// Owns grc_* taps, the words "groceries" / "hampers" / ZQ:GROCERY, and typed
+// text or a list photo ONLY while the grocery shop is open (2 h, cleared by
+// any other button, "menu", "hi" or a "find …" search). The cart is kept.
+try {
+  const { handleGroceryMessage } = await import("./groceryBot.js");
+  const _grcHandled = await handleGroceryMessage({
+    from,
+    text:     isMetaAction ? "" : text,
+    action:   isMetaAction ? a : "",
+    isTap:    isMetaAction,
+    imageUrl: hasImage ? imageUrl : null,
+    dispatch: (act) => handleIncomingMessage({ from, action: act })
+  });
+  if (_grcHandled) return;
+} catch (_grcErr) {
+  console.error("[GROCERIES]", _grcErr.message);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

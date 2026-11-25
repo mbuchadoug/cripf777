@@ -217,7 +217,8 @@ export async function markPaid(order, method) {
   order.fulfilment.status = "paid";
   order.pushTimeline("paid", `Paid via ${method}`);
   await order.save();
-  // TODO (optional): send WhatsApp confirmation to customer + recipient via your Meta sender.
+  // WhatsApp confirmation to the customer (non-blocking; never breaks payment)
+  import("../services/groceryBot.js").then(m => m.onWebOrderPaid(order)).catch(() => {});
   console.log(`[grocery] PAID ${order.reference} $${order.amounts.total} via ${method}`);
 }
 

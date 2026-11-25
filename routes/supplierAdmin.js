@@ -58,7 +58,8 @@ import { assignSlugToSupplier } from "../services/supplierSmartLink.js";
 import { registerBikerAdminRoutes } from "./bikerAdmin.js";
 import { registerMailAdminRoutes } from "./mailInbox.js";   // ZimQuote Mail
 import { registerPageSellersAdminRoutes } from "./pageSellersAdmin.js";   // Website page sellers
-import { registerCategoryAdminRoutes } from "./categoryAdmin.js";         // Categories, classify sellers, search tester
+import { registerCategoryAdminRoutes } from "./categoryAdmin.js";
+import { registerZqShopAdminRoutes } from "./zqShopAdmin.js";             // Payment prompts, WhatsApp grocery orders, hampers         // Categories, classify sellers, search tester
 import { registerQuoteDeskAdminRoutes } from "./quoteDeskAdmin.js";
 import {
   TUTOR_SUBJECTS, TUTOR_LEVELS, TUTOR_MODES, SCHOOL_CITIES, SCHOOL_ANNUAL_PRICE
@@ -4606,6 +4607,8 @@ const isPresets     = t === "Presets" || t.startsWith("Preset:");
     { divider: "PLATFORM" },
     { href: "/zq-admin/orders",          label: "📦 Orders",              active: isOrders },
     { href: "/zq-admin/payments",        label: "💳 Payments",            active: isPayments },
+    { href: "/zq-admin/pay-requests",    label: "📲 Payment Requests",    active: t === "Payment Requests" },
+    { href: "/zq-admin/grocery-orders",  label: "🛒 Grocery Orders",      active: t === "Grocery Orders" || t.startsWith("Grocery:") || t === "Grocery Packages" },
    { href: "/zq-admin/contacts",        label: "👥 Contacts",            active: isContacts },
 { href: "/zq-admin/search-logs",     label: "🔎 Search Logs",         active: isSearchLogs },
 { href: "/zq-admin/expiry",          label: "⏰ Subscriptions",       active: isExpiry },
@@ -17343,6 +17346,7 @@ registerMailAdminRoutes(router, { requireSupplierAdmin, layout, esc, badge, stat
 // ── Website page sellers (routes/pageSellersAdmin.js) ────────────────────────
 registerPageSellersAdminRoutes(router, { requireSupplierAdmin, layout, esc, badge });
 registerCategoryAdminRoutes(router, { requireSupplierAdmin, layout, esc, badge });
+registerZqShopAdminRoutes(router, { requireSupplierAdmin, layout, esc });
 // ── Quote desk admin (routes/quoteDeskAdmin.js) ──────────────────────────────
 registerQuoteDeskAdminRoutes(router, { requireSupplierAdmin, layout, esc, badge, stat });
 
