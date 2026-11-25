@@ -16,12 +16,59 @@
 //   CRIPFCNT_APP_SECRET=        App settings → Basic → App secret (CRIPFCnt app)
 //   CRIPFCNT_SITE_URL=https://cripfcnt.com
 //   (+ the sender vars in services/cripfcntWhatsApp.js)
+//
+// TEMPORARY - Fresh Kombucha Zimbabwe shares this number until it has its own
+// line. Messages from registered Fresh Kombucha staff (or starting with "FK",
+// e.g. a scanned pallet QR) are relayed to niyonsoft.org, which replies
+// directly. Everyone else gets the normal CRIPFCnt menu.
+//   FK_RELAY_URL=https://niyonsoft.org/fk/wa/relay
+//   FK_RELAY_SECRET=   same long random string as on niyonsoft.org
+// To switch off (new line live): delete FK_RELAY_URL and restart.
 // ─────────────────────────────────────────────────────────────────────────────
 import express from "express";
 import crypto from "crypto";
 import { sendText, sendList, sendButtons, markRead } from "../services/cripfcntWhatsApp.js";
 
 const router = express.Router();
+
+// ── Fresh Kombucha relay (temporary shared number) ───────────────────────────
+const fkNo = new Map();   // phone → time we learnt they are NOT FK staff
+const fkYes = new Map();  // phone → time we learnt they ARE FK staff
+const FK_TTL = 10 * 60 * 1000;
+const fresh = (m, k) => { const t = m.get(k); return t && Date.now() - t < FK_TTL; };
+function fkForced(msg) {
+  const t = msg.type === "text" ? (msg.text?.body || "") : msg.type === "button" ? (msg.button?.text || "") : "";
+  const id = msg.interactive?.button_reply?.id || msg.interactive?.list_reply?.id || "";
+  if (id && CRIPFCNT_IDS.has(id.toLowerCase())) return false;     // our own menu buttons stay here
+  return /^\s*(fk|kombucha)\b/i.test(t) || /\b[PR]-[2-9A-Z]{5}\b/i.test(t);
+}
+// Returns true when niyonsoft.org took the message.
+async function relayToFK(msg, name) {
+  const url = process.env.FK_RELAY_URL, secret = process.env.FK_RELAY_SECRET;
+  if (!url || !secret) return false;
+  const id = (msg.interactive?.button_reply?.id || msg.interactive?.list_reply?.id || "").toLowerCase();
+  if (id && CRIPFCNT_IDS.has(id)) return false;
+  const forced = fkForced(msg);
+  if (!forced && fresh(fkNo, msg.from)) return false;
+  const body = JSON.stringify({ message: msg, contactName: name });
+  const sig = "sha256=" + crypto.createHmac("sha256", secret).update(body).digest("hex");
+  const ctl = new AbortController(); const timer = setTimeout(() => ctl.abort(), 4000);
+  try {
+    const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json", "X-FK-Signature": sig }, body, signal: ctl.signal });
+    const j = await r.json().catch(() => ({}));
+    if (j.handled) { fkYes.set(msg.from, Date.now()); fkNo.delete(msg.from); return true; }
+    if (r.ok) fkNo.set(msg.from, Date.now());
+    return false;
+  } catch (e) {
+    console.warn("[CRIPFCnt WA] FK relay failed:", e.message);
+    if (forced || fresh(fkYes, msg.from)) {          // a Fresh Kombucha user - don't show them the CRIPFCnt menu
+      await sendText(msg.from, "⚠️ The Fresh Kombucha system is not reachable right now. Please try again in a few minutes.").catch(() => {});
+      return true;
+    }
+    return false;
+  } finally { clearTimeout(timer); }
+}
+const CRIPFCNT_IDS = new Set(["m_join", "m_login", "m_learn", "m_teach", "m_pro", "m_plans", "m_app", "m_human"]);
 const SITE = () => (process.env.CRIPFCNT_SITE_URL || "https://cripfcnt.com").replace(/\/$/, "");
 
 // ── 1) Verification handshake ────────────────────────────────────────────────
@@ -84,6 +131,7 @@ router.post("/webhook", express.raw({ type: "*/*", limit: "2mb" }), async (req, 
           if (!msg.id || alreadySeen(msg.id)) { console.log("[CRIPFCnt WA] duplicate ignored", msg.id); continue; }
           const name = value.contacts?.find((c) => c.wa_id === msg.from)?.profile?.name || "";
           console.log(`[CRIPFCnt WA] in from=${msg.from} type=${msg.type} action="${actionOf(msg)}"`);
+          if (await relayToFK(msg, name)) { console.log(`[CRIPFCnt WA] relayed to Fresh Kombucha: ${msg.from}`); continue; }
           handleMessage(msg, name)
             .then(() => console.log(`[CRIPFCnt WA] replied to ${msg.from}`))
             .catch((e) => console.error("[CRIPFCnt WA handle]", e.response?.data?.error ? JSON.stringify(e.response.data.error) : e.stack || e.message));
