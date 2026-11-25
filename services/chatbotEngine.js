@@ -1,6 +1,7 @@
 //chatbotEngine
 
 import { ACTIONS } from "./actions.js";
+import { navStore } from "./navContext.js";
 import { startInvoiceFlow } from "./invoiceFlow.js";
 import { startReceiptFlow } from "./receiptFlow.js";
 import { continueTwilioFlow } from "./twilioStateBridge.js";
@@ -3588,7 +3589,16 @@ async function _zqAutoCity(from, biz, product) {
   });
 }
 
-export async function handleIncomingMessage({ from, action, hasImage = false, imageUrl = null, imageCaption = "", rawText = "" }) {
+// ── Per-message context (services/navContext.js) ───────────────────────────
+// The outermost call for a WhatsApp message runs in its own context; calls the
+// engine makes to itself (dispatch) are "nested" - navigation only records what
+// the USER did, and a "back" replay never re-sends profile-view alerts.
+export async function handleIncomingMessage(args = {}) {
+  if (navStore.getStore()) return _handleIncomingMessageCore({ ...args, __navNested: true });
+  return navStore.run({ replay: false }, () => _handleIncomingMessageCore({ ...args, __navNested: false }));
+}
+
+async function _handleIncomingMessageCore({ from, action, hasImage = false, imageUrl = null, imageCaption = "", rawText = "", __navNested = false }) {
 
   const phone = from.replace(/\D+/g, "");
 
@@ -3871,6 +3881,7 @@ a.startsWith("sup_load_preset_") ||
       a.startsWith("zqpay_") ||
       a.startsWith("zqp_") ||      // ZimQuote payment requests (services/zqPayments.js)
       a.startsWith("grc_") ||      // WhatsApp grocery shop (services/groceryBot.js)
+      a.startsWith("nav_") ||      // ⬅ Back / ❓ Help buttons (services/navigation.js)
       a.startsWith("sc_") ||
       // ── Group smart link list-reply taps ─────────────────────────────────
       // zqg_sel_<id>        = buyer tapped a seller row in a group list
@@ -4192,6 +4203,31 @@ if (biz) {
   if (!biz) console.log("[OWNERSHIP] phone", phone, "has NO biz");
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// 🧭 NAVIGATION - back · help · shortcuts (services/navigation.js)
+// ───────────────────────────────────────────────────────────────────────────
+// "back" (or the ⬅ Back button) re-opens the previous screen, "help" shows one
+// simple guide, "find" / "schools" / "my orders" jump in when no flow is open.
+// Everything else is only NOTED (which screen the user is on) and carries on
+// untouched. Flows that already handle "back" (registration, payments,
+// business-tool steps, school enquiry steps…) keep it. "menu"/"0"/"cancel"
+// stay with the HARD-RESET below.
+try {
+  const { handleNavigation } = await import("./navigation.js");
+  const _navHandled = await handleNavigation({
+    from, phone, text, a,
+    isTap:    isMetaAction,
+    hasImage,
+    nested:   __navNested,
+    biz:      (biz && _bizIsOwnedByUser) ? biz : null,
+    saveBiz:  biz ? saveBizSafe : null,
+    dispatch: (act) => handleIncomingMessage({ from, action: act })
+  });
+  if (_navHandled) return;
+} catch (_navErr) {
+  console.error("[NAV]", _navErr.message);
+}
+
 // ── ZQ TEXT DEEP LINK HANDLER (TOP LEVEL - runs for ALL users, any session state) ─
 // ZQ:GROUP:<slug> and ZQ:S:<slug> arrive as plain TEXT messages (not interactive).
 // They MUST be handled at depth-1 top level - before ALL state machines, the
@@ -4322,7 +4358,8 @@ try {
   if (_sgState) {
     const _sgAt    = _sgTd.sfaqAt ? new Date(_sgTd.sfaqAt).getTime() : 0;
     const _sgStale = _sgAt && (Date.now() - _sgAt > 6 * 60 * 60 * 1000);
-    const _sgNav   = /^(0|00|main menu|hi|hie|hey|hello|start|home|exit)$/i.test(text.trim());
+    // "menu" always means the main menu (back / cancel still return to the school)
+    const _sgNav   = /^(0|00|000|menu|main menu|hi|hie|hey|hello|start|home|exit)$/i.test(text.trim());
     const _sgLink  = /^(ZQ:|APPLY:SCHOOL:)/i.test(text.trim());
     // A tap on any other button/list row (or an id-shaped payload such as
     // "school_xyz" that isn't in the isMetaAction list) is not a question.
@@ -5245,6 +5282,11 @@ try {
           { upsert: true }
         );
         console.log("[FIRST-TIME USER] menu shown to", phone, "| first msg:", text.slice(0, 80));
+        // Short "how it works" guide first: buttons, numbers, menu / back / help
+        try {
+          const { WELCOME_GUIDE } = await import("./navigation.js");
+          await sendText(from, WELCOME_GUIDE);
+        } catch (_wgErr) { console.warn("[WELCOME GUIDE]", _wgErr.message); }
         return sendMainMenu(from);
       }
     }
@@ -7380,15 +7422,8 @@ if (al === "my requests" || al === "buyer_my_requests") {
   if (_isFirstEverMessage && !biz && !isMetaAction &&
       text.length > 1 &&
       !/^(zq:|apply:|zqg_|zqsg_|view_and_quote)/i.test(text)) {
-    await sendText(from,
-      `👋 *Welcome to ZimQuote!*\n\n` +
-      `Zimbabwe's WhatsApp marketplace. Here's what I can help with:\n` +
-      `• 🔍 Find products & services - electricians, plumbers, suppliers…\n` +
-      `• 🏫 Find a school\n` +
-      `• ⚡ Request quotes from sellers\n` +
-      `• 🏪 List your own business\n\n` +
-      `Pick an option below to get started 👇`
-    );
+    const { WELCOME_GUIDE: _wg } = await import("./navigation.js");
+    await sendText(from, _wg);
     return sendMainMenu(from);
   }
 

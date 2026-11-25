@@ -308,6 +308,17 @@ export async function showSchoolFAQMenu(from, schoolId, biz, saveBiz, { source =
   // If the school has branches and the parent hasn't chosen one yet, show the
   // branch picker and stop. (branchId="__main__" means they chose Head Office.)
   const _branches = _activeBranches(school);
+  // "back" support (services/navigation.js): note which school / branch view is
+  // on screen, however it was opened (search number, group link, smart link…).
+  try {
+    const { pushScreen } = await import("./navigation.js");
+    const _sidNav = String(schoolId);
+    await pushScreen(from,
+      (_branches.length && !branchId) ? `sfaq_brmenu_${_sidNav}`
+      : branchId === "__main__"       ? `sfaq_brmain_${_sidNav}`
+      : (branchId && _findBranch(school, branchId)) ? `sfaq_br_${_sidNav}_${branchId}`
+      : `sfaq_back_${_sidNav}`);
+  } catch (_) {}
   if (_branches.length && !branchId) {
     await _sess(biz, saveBiz, "sfaq_branch_pick", { faqSchoolId: String(schoolId), faqParentName: parentName, faqSource: source, faqBranchId: "" }, from);
     return _sendBranchPicker(from, school, parentName);
@@ -488,9 +499,10 @@ export async function showSchoolFAQMenu(from, schoolId, biz, saveBiz, { source =
   const actionText = school.admissionsOpen
     ? `${school.schoolName} is *accepting applications* for ${school.applicationForm?.intakeYear || "the next intake"}.\n\nTap *Apply Now* to start your application, book a tour to visit us, or send us a message.`
     : `*${school.schoolName}* admissions are currently closed.\n\nTap *Register Interest* to be notified when we open, book a tour, or ask us a question.`;
+  const actionHint = `\n\n_Type *back* to go back, *menu* for the main menu, or *help*._`;
 
   await sendButtons(from, {
-    text: actionText,
+    text: actionText + actionHint,
     buttons: [
       applyBtn,
       { id: `sfaq_act_tour_${sid}`,    title: _btn("📅 Book a Tour") },
@@ -699,7 +711,8 @@ export async function handleSchoolFAQState({ state, from, text, biz, saveBiz }) 
   const raw = (text || "").trim();
   if (["cancel","back","menu"].includes(raw.toLowerCase())) {
     await _sess(biz, saveBiz, "sfaq_menu", {}, from);
-    return showSchoolFAQMenu(from, schoolId, biz, saveBiz);
+    // Return to the branch the parent was on (multi-campus), not the branch picker
+    return showSchoolFAQMenu(from, schoolId, biz, saveBiz, { branchId: (branchId && _findBranch(await SchoolProfile.findById(schoolId).lean() || {}, branchId)) ? branchId : null });
   }
 
   switch (state) {

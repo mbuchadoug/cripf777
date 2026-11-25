@@ -10,6 +10,7 @@
 
 import axios from "axios";
 import { sendText } from "./metaSender.js";
+import { isNavReplay } from "./navContext.js";
 
 const GRAPH_API_VERSION = "v24.0";
 const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.META_PHONE_NUMBER_ID || process.env.PHONE_NUMBER_ID;
@@ -112,6 +113,8 @@ async function _notifyAll(school, notifyFn) {
 //   This is an automated activity alert from ZimQuote.
 // ─────────────────────────────────────────────────────────────────────────────
 export async function notifySchoolProfileView(schoolPhone, schoolName, parentPhone) {
+  // A parent pressing "back" re-opens the card - not a new view, no alert.
+  if (isNavReplay()) return;
   const ts           = _timestamp();
   const normalizedTo = _normalizeZimPhone(schoolPhone);
   try {

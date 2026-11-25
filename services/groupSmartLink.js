@@ -43,6 +43,10 @@
 import mongoose from "mongoose";
 import { sendList, sendText, sendButtons } from "./metaSender.js";
 import { showSellerMenu }                   from "./sellerChat.js";
+import { isNavReplay }                      from "./navContext.js";
+
+// Shown under every numbered group list (services/navigation.js)
+const NAV_LINE = "↩️ *back* · 🏠 *menu* · ❓ *help*";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 const BOT_NUMBER  = (process.env.WHATSAPP_BOT_NUMBER || "263771143904").replace(/\D/g, "");
@@ -132,6 +136,7 @@ export async function openGroupEntryByNumber({ from, index, type, ids, biz, save
       return true;
     }
     if (type === "tutor") {
+      try { const { pushScreen } = await import("./navigation.js"); await pushScreen(from, `zqtg_tut_${id}`); } catch (_) {}
       const { showTutorProfile } = await import("./tutorSearch.js");
       await showTutorProfile(from, id, biz, _sb, { source: "tutor_group" });
       return true;
@@ -381,7 +386,9 @@ ${tagline}
 
 ${lines}
 
-👉 *Reply with a number* (1-${orderedSellers.length}) to open that business.`
+👉 *Reply with a number* (1-${orderedSellers.length}) to open that business.
+
+${NAV_LINE}`
     );
     await sendButtons(from, { text: "Or:", buttons: _ctaBtns });
     return true;
@@ -507,6 +514,7 @@ export async function handleGroupAdminCommand({ from, text }) {
 
 async function _notifyAdminGroupOpened(group, visitorPhone) {
   try {
+    if (isNavReplay()) return;   // "back" re-opened this screen - not a new visit
     const { notifyAdminGroupLinkOpened } = await import("./buyerRequestNotifications.js");
     await notifyAdminGroupLinkOpened({
       groupName:    group.name,
@@ -779,7 +787,9 @@ ${tagline}
 
 ${lines}
 
-👉 *Reply with a number* (1-${orderedSchools.length}) to open that school.`
+👉 *Reply with a number* (1-${orderedSchools.length}) to open that school.
+
+${NAV_LINE}`
     );
     await sendButtons(from, { text: "Or:", buttons: _ctaBtns });
     return true;
@@ -895,6 +905,7 @@ export async function handleSchoolGroupRegFlow({ from, slug, biz, saveBiz }) {
  */
 async function _notifyAdminSchoolGroupOpened(group, visitorPhone) {
   try {
+    if (isNavReplay()) return;   // "back" re-opened this screen - not a new visit
     const adminPhone = String(
       process.env.ZQ_ADMIN_PHONE || process.env.ADMIN_WHATSAPP_PHONE || ""
     ).replace(/\D/g, "");
@@ -925,6 +936,7 @@ async function _notifyAdminSchoolGroupOpened(group, visitorPhone) {
  */
 async function _notifyAdminSchoolTapped(school, visitorPhone) {
   try {
+    if (isNavReplay()) return;   // "back" re-opened this screen - not a new visit
     const adminPhone = String(
       process.env.ZQ_ADMIN_PHONE || process.env.ADMIN_WHATSAPP_PHONE || ""
     ).replace(/\D/g, "");
@@ -1156,6 +1168,7 @@ export async function handleTutorGroupSmartLink({ from, slug, biz, saveBiz, offs
     const ctaLabel = (group.ctaText || "🧑‍🏫 List as a Tutor").slice(0, 24);
     const _ctaBtns = [{ id: `zqtg_search_${group.slug}`, title: "🔍 Search by subject" }];
     if (!visitorIsTutor) _ctaBtns.push({ id: `zqtg_register_${group.slug}`, title: ctaLabel });
+    _ctaBtns.push({ id: "main_menu_back", title: "🏠 Main Menu" });   // ≤3 buttons
 
     const tutorIds = (group.tutors || [])
       .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
@@ -1209,7 +1222,9 @@ ${tagline}
 
 ${lines}
 
-👉 *Reply with a number* (1-${orderedTutors.length}) to open that tutor.`
+👉 *Reply with a number* (1-${orderedTutors.length}) to open that tutor.
+
+${NAV_LINE}`
     );
     await sendButtons(from, { text: "Or:", buttons: _ctaBtns });
     return true;
@@ -1338,6 +1353,7 @@ export async function handleTutorGroupRegFlow({ from, slug, biz, saveBiz }) {
  */
 async function _notifyAdminTutorGroupOpened(group, visitorPhone) {
   try {
+    if (isNavReplay()) return;   // "back" re-opened this screen - not a new visit
     const adminPhone = String(
       process.env.ZQ_ADMIN_PHONE || process.env.ADMIN_WHATSAPP_PHONE || ""
     ).replace(/\D/g, "");
@@ -1367,6 +1383,7 @@ async function _notifyAdminTutorGroupOpened(group, visitorPhone) {
  */
 async function _notifyAdminTutorTapped(tutor, visitorPhone) {
   try {
+    if (isNavReplay()) return;   // "back" re-opened this screen - not a new visit
     const adminPhone = String(
       process.env.ZQ_ADMIN_PHONE || process.env.ADMIN_WHATSAPP_PHONE || ""
     ).replace(/\D/g, "");

@@ -100,6 +100,12 @@ export function resetBizBrowseState(biz) {
 }
 const _phone = (from) => String(from || "").replace(/\D+/g, "");
 
+// "back" support (services/navigation.js): note which Find level is on screen
+async function _navPush(from, id) {
+  try { const { pushScreen } = await import("./navigation.js"); await pushScreen(from, id); } catch (_) {}
+}
+const NAV_LINE = "↩️ *back* · 🏠 *menu* · ❓ *help*";
+
 async function _arm(from, data) {
   const UserSession = await _session();
   await UserSession.findOneAndUpdate(
@@ -128,6 +134,7 @@ export async function sendFindHome(from) {
   await UserSession.updateOne({ phone: _phone(from) }, { $unset: OTHER_SEARCH_MARKERS });
   // Store the exact list shown, so "3" always means what the buyer saw
   await _arm(from, { level: "home", groups: groups.map(g => ({ label: g.label, hint: g.hint || "", section: g.section || null, action: g.action || null, cats: g.cats || null, sub: g.sub || null })) });
+  await _navPush(from, "find_supplier");
   return sendText(from,
 `🔍 *Find, Buy & Hire*
 
@@ -138,7 +145,9 @@ _electrician borrowdale_ · _cement 20 bags_ · _mealie meal avondale_ · _Prime
 
 Or *reply with a number* to browse:
 
-${lines}`);
+${lines}
+
+🏠 *0* or *menu* = main menu · ❓ *help*`);
 }
 
 // ── Numbered replies ─────────────────────────────────────────────────────────
@@ -167,6 +176,7 @@ export async function handleFindNumber({ from, text, biz, saveBiz, dispatch }) {
     // A section → its categories WITH seller counts (empty ones hidden), or
     // straight to a numbered seller list when that is all there is.
     if (g.section) {
+      await _navPush(from, `zqf_sec_${g.section}`);
       await showSection({ from, sectionId: g.section, label: g.label, biz, saveBiz, dispatch, groupIndex: n - 1 });
       return true;
     }
@@ -186,6 +196,7 @@ export async function handleFindNumber({ from, text, biz, saveBiz, dispatch }) {
     }
     if (items.length === 1 && items[0].cat) {
       await disarmFind(from);
+      await _navPush(from, `zqf_cat_${items[0].cat}`);
       return runCategoryBrowse({ from, biz, saveBiz, category: items[0].cat, dispatch }).then(() => true);
     }
     await _arm(from, { level: "group", group: n - 1, items });
@@ -194,7 +205,9 @@ export async function handleFindNumber({ from, text, biz, saveBiz, dispatch }) {
 
 ${items.map((it, i) => `*${i + 1}.* ${it.label}`).join("\n")}
 
-👉 *Reply with a number*, or type exactly what you need (e.g. _${(g.hint || "what you need").split(",")[0].trim()}_).`);
+👉 *Reply with a number*, or type exactly what you need (e.g. _${(g.hint || "what you need").split(",")[0].trim()}_).
+
+${NAV_LINE}`);
     return true;
   }
 
@@ -207,6 +220,7 @@ ${items.map((it, i) => `*${i + 1}.* ${it.label}`).join("\n")}
       await sendSellersFor({ from, biz, saveBiz, catIds: f.catIds || [], title: f.sectionLabel || "Sellers" });
       return true;
     }
+    if (it.cat) await _navPush(from, `zqf_cat_${it.cat}`);
     await runCategoryBrowse({ from, biz, saveBiz, category: it.cat, dispatch });
     return true;
   }
@@ -493,5 +507,7 @@ export async function showSection({ from, sectionId, label, biz, saveBiz, dispat
 
 ${items.map((it, i) => `*${i + 1}.* ${it.label}`).join("\n")}
 
-👉 *Reply with a number* to see the sellers, or type exactly what you need (e.g. _${ex}_).`);
+👉 *Reply with a number* to see the sellers, or type exactly what you need (e.g. _${ex}_).
+
+${NAV_LINE}`);
 }

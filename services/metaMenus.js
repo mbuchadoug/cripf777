@@ -132,7 +132,10 @@ export async function sendMainMenu(to) {
   const SupplierProfile = (await import("../models/supplierProfile.js")).default;
   const SchoolProfile  = (await import("../models/schoolProfile.js")).default;
 
-  const MENU_MSG = "👋 *Welcome to ZimQuote!*\nZimbabwe's marketplace for products & services.\n🛒 Groceries delivered? Type *groceries*";
+  const MENU_MSG = "👋 *Welcome to ZimQuote!*\nZimbabwe's marketplace for products & services.\n🛒 Groceries delivered? Type *groceries*\n\n💡 Type *menu* anytime to come back here, *back* to go back, *help* for help.";
+
+  // Main menu = the root: forget the "back" trail (services/navigation.js)
+  try { const { resetNav } = await import("./navigation.js"); await resetNav(to); } catch (_) {}
 
   // ── Step 1: Resolve business for this phone ──────────────────────────────
   // Priority: real (non-pending) biz from UserRole > session > pending_supplier_ biz

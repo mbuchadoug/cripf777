@@ -286,6 +286,10 @@ export async function showSellerMenu(from, supplierId, biz, saveBiz, { source = 
   const seller = await SupplierProfile.findById(supplierId).lean();
   if (!seller) return sendText(from, "❌ Seller profile not found. Please try again.");
 
+  // "back" support: this store is now the current screen, however it was opened
+  // (search number, group link, smart link…). sc_back_<id> re-opens it.
+  try { const { pushScreen } = await import("./navigation.js"); await pushScreen(from, `sc_back_${supplierId}`); } catch (_) {}
+
   // ── FIX: Clear stale BuyerRequest seller-side state when a BUYER opens this
   // smart link. If the visitor is a SELLER who owns this profile, their BuyerRequest
   // state (awaiting_offer / awaiting_offer_intro) is NOT the buyer-facing sc_ flow,
@@ -615,6 +619,12 @@ export async function showSellerMenu(from, supplierId, biz, saveBiz, { source = 
   const backToResultsBtn = _fromSearch
     ? [{ id: `sc_search_back_${supplierId}`, title: "⬅ Back to results" }]
     : [];
+  // Always a way out: ⬅ Back (previous screen) unless "Back to results" is there,
+  // plus 🏠 Main Menu. Max 9 rows - inside WhatsApp's 10-row list limit.
+  backToResultsBtn.push(
+    ...(_fromSearch ? [] : [{ id: "nav_back", title: "⬅ Back" }]),
+    { id: "main_menu_back", title: "🏠 Main Menu" }
+  );
 
   if (isHospitality) {
     return sendList(from, "What would you like to do?", [

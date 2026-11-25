@@ -88,6 +88,7 @@
 
 import axios from "axios";
 import { sendText } from "./metaSender.js";
+import { isNavReplay } from "./navContext.js";
 
 const GRAPH_API_VERSION = "v24.0";
 const PHONE_NUMBER_ID   =
@@ -579,6 +580,8 @@ export async function notifyAllTutorProfileView(tutor, source, visitorPhone = nu
 }
 
 export async function notifySupplierLinkOpened(supplierPhone, businessName, source, visitorPhone = null) {
+  // A buyer pressing "back" re-opens the store - not a new visit, no alert.
+  if (isNavReplay()) return;
   const ts           = _timestamp();
   const normalizedTo = _normalizeZimPhone(supplierPhone);
   const isVip        = !!visitorPhone;

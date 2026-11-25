@@ -756,7 +756,9 @@ _find boarding school bulawayo_
 _find cambridge girls harare_
 _find budget primary kuwadzana_
 _find school with pool highlands_
-_find schools admissions open_`,
+_find schools admissions open_
+
+↩️ *back* · 🏠 *menu* · ❓ *help*`,
     searchCityRows
   );
 }
@@ -1629,6 +1631,7 @@ _Or type a new search, e.g. "primary borrowdale" or a school name._`
     text: "Or:",
     buttons: [
       { id: "school_search_refine", title: "🔄 New Search" },
+      { id: "nav_back",             title: "⬅ Back" },
       { id: "main_menu_back",       title: "🏠 Main Menu" }
     ]
   });

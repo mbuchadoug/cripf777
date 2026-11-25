@@ -260,6 +260,7 @@ function _renderBatch(pick, startIdx) {
   ];
   if (remaining > 0) footerLines.push(`➕ Type *more* to see ${Math.min(remaining, BATCH_SIZE)} more sellers`);
   footerLines.push(`🔎 New search? Just type it, e.g. *find cement mbare*`);
+  footerLines.push(`↩️ *back* · 🏠 *menu* · ❓ *help*`);
 
   // Assemble and trim if a batch of long names would overflow WhatsApp's limit
   let parts = [header, ...body, footerLines.join("\n")];
@@ -311,7 +312,11 @@ export async function sendNumberedSellerResults({
   if (!entries.length) {
     return sendButtons(from, {
       text: `😕 No sellers found${searchTerm ? ` for *${searchTerm}*` : ""}${locationLabel ? ` in *${locationLabel}*` : ""}.`,
-      buttons: [{ id: "find_supplier", title: "🔍 Search Again" }]
+      buttons: [
+        { id: "find_supplier",  title: "🔍 Search Again" },
+        { id: "nav_back",       title: "⬅ Back" },
+        { id: "main_menu_back", title: "🏠 Main Menu" }
+      ]
     });
   }
 
