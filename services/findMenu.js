@@ -25,6 +25,7 @@ const ARM_MS = 20 * 60 * 1000;   // numbered menu stays answerable for 20 min
 export const FIND_GROUPS = [
   { label: "🔧 Home repairs & trades",     hint: "electrician, plumber, builder, welder",
     cats: ["electrical", "plumbing", "construction", "painting", "welding", "carpentry", "tiling_flooring", "air_conditioning", "glazing_aluminium"] },
+  { label: "🎓 Schools & tutors",           action: "find_school" },
   { label: "🛒 Groceries & food",           hint: "mealie meal, cooking oil, meat, catering",
     cats: ["groceries", "food_cooked", "agriculture"] },
   { label: "🧱 Building & hardware",        hint: "cement, bricks, roofing, pipes, tools",
@@ -44,7 +45,6 @@ export const FIND_GROUPS = [
       { label: "🏍️ Send a parcel now (biker)", action: "biker_request_rider" },
       { label: "🚚 Trucks, moving & car hire",  cat: "transport" }
     ] },
-  { label: "🎓 Schools & tutors",           action: "find_school" },
   { label: "📝 Get quotes from many sellers", action: "sup_request_sellers" }
 ];
 
@@ -66,7 +66,10 @@ async function _homeGroups() {
       groups.push({ label: sec.label, hint, section: sec.id });
     }
     if (groups.length) {
-      groups.push({ label: "🎓 Schools & tutors", action: "find_school" });
+      // Schools & tutors is one of the most searched - keep it near the top.
+      // ZQ_FIND_SCHOOLS_POS (1-based, default 2) moves it.
+      const pos = Math.max(1, parseInt(process.env.ZQ_FIND_SCHOOLS_POS || "2", 10) || 2);
+      groups.splice(Math.min(pos - 1, groups.length), 0, { label: "🎓 Schools & tutors", hint: "schools, colleges, tutors, lessons", action: "find_school" });
       groups.push({ label: "📝 Get quotes from many sellers", action: "sup_request_sellers" });
       return groups;
     }
