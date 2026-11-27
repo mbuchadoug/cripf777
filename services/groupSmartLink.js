@@ -66,7 +66,8 @@ async function _armGroupList(from, type, ids, biz = null, saveBiz = null) {
     await UserSession.findOneAndUpdate(
       { phone: String(from).replace(/\D+/g, "") },
       {
-        $set:   { "tempData.grpListType": type, "tempData.grpListIds": ids.map(String) },
+        $set:   { "tempData.grpListType": type, "tempData.grpListIds": ids.map(String),
+                  ...(ids.length ? { "tempData.numList": { k: "group", at: Date.now() } } : {}) },
         // Clear any stale BROWSE state so the next numeric reply opens a group entry
         // instead of being swallowed by a leftover branch-picker / search state.
         $unset: {

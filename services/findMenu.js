@@ -110,7 +110,7 @@ async function _arm(from, data) {
   const UserSession = await _session();
   await UserSession.findOneAndUpdate(
     { phone: _phone(from) },
-    { $set: { "tempData.zqFind": { ...data, at: new Date() } } },
+    { $set: { "tempData.zqFind": { ...data, at: new Date() }, "tempData.numList": { k: "find", at: Date.now() } } },
     { upsert: true }
   );
 }
@@ -163,6 +163,8 @@ export async function handleFindNumber({ from, text, biz, saveBiz, dispatch }) {
   const sess = await UserSession.findOne({ phone: _phone(from) }, { tempData: 1 }).lean();
   const f = sess?.tempData?.zqFind;
   if (!f || !f.at || Date.now() - new Date(f.at).getTime() > ARM_MS) return false;
+  // A newer numbered list (seller results, schools, group…) owns this number
+  try { const { newerListThan } = await import("./numList.js"); if (newerListThan(sess?.tempData, "find")) return false; } catch (_) {}
 
   const n = parseInt(t, 10);
   if (n === 0) { await disarmFind(from); return false; }   // "0" stays the main-menu shortcut

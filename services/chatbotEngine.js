@@ -5410,7 +5410,9 @@ try {
       // keeps priority. (Arming a group also resets a stale sfaq_/school_search.)
       const _bizSt = String((biz && biz.sessionState) || "");
       const _bizBusy = !!_bizSt && _bizSt !== "ready" && !_bizSt.startsWith("sfaq_");
-      if (Array.isArray(_ids) && _ids.length && _gtype && !_busy && !_bizBusy) {
+      // A newer numbered list (seller results, schools, tutors…) owns this number
+      const { newerListThan: _nlt } = await import("./numList.js");
+      if (Array.isArray(_ids) && _ids.length && _gtype && !_busy && !_bizBusy && !_nlt(_td, "group")) {
         const { openGroupEntryByNumber } = await import("./groupSmartLink.js");
         const handled = await openGroupEntryByNumber({
           from, index: parseInt(text.trim(), 10) - 1, type: _gtype, ids: _ids,
@@ -5560,10 +5562,21 @@ try {
                     !_ic?.tempData?.buyerRequestState && !_ic?.tempData?.orderState;
         } catch (_) {}
       }
+      // Numbers: only when the college list is the latest numbered list
+      if (_inInst && /^\d{1,3}$/.test(text.trim())) {
+        try {
+          const { newerListThanFor } = await import("./numList.js");
+          if (await newerListThanFor(from, "inst")) _inInst = false;
+        } catch (_) {}
+      }
       if (_inInst) {
         const handled = await handleInstitutionFreeTextSearch({
           from, text, biz, saveBiz: biz ? saveBizSafe : async () => {}
         });
+        // A typed college search sends a numbered college list → it is now the latest
+        if (handled !== false && !/^\d{1,3}$/.test(text.trim())) {
+          try { const { markNumList } = await import("./numList.js"); await markNumList(from, "inst"); } catch (_) {}
+        }
         if (handled !== false) return handled;
       }
     }

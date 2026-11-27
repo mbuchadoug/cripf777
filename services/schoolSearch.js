@@ -412,6 +412,9 @@ export async function handleSchoolFreeTextSearch({ from, text, biz, saveBiz }) {
       const { default: UserSession } = await import("../models/userSession.js");
       const sess = await UserSession.findOne({ phone: from.replace(/\D+/g, "") }).lean();
       resultIds = sess?.tempData?.schoolResultIds || [];
+      // A newer numbered list (sellers, group link, tutors…) owns this number
+      const { newerListThan } = await import("./numList.js");
+      if (newerListThan(sess?.tempData, "school")) return false;
     } catch (_) {}
     if (Array.isArray(resultIds) && resultIds.length) {
       const idx = parseInt(raw, 10) - 1;
@@ -1607,7 +1610,8 @@ _Filters tried: ${filterSummary}_
     const { default: UserSession } = await import("../models/userSession.js");
     await UserSession.findOneAndUpdate(
       { phone: from.replace(/\D+/g, "") },
-      { $set: { "tempData.schoolResultIds": resultIds, "tempData.schoolSearchActive": true } },
+      { $set: { "tempData.schoolResultIds": resultIds, "tempData.schoolSearchActive": true,
+                "tempData.numList": { k: "school", at: Date.now() } } },
       { upsert: true }
     );
   } catch (_) {}

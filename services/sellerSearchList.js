@@ -351,7 +351,7 @@ export async function sendNumberedSellerResults({
     await UserSession.findOneAndUpdate(
       { phone },
       {
-        $set: { "tempData.sellerPick": pick },
+        $set: { "tempData.sellerPick": pick, "tempData.numList": { k: "seller", at: Date.now() } },
         // A fresh search supersedes stale BUYER-side flow state (the old
         // Request Sellers hijack left buyerRequestState in sessions forever).
         // Seller-side and school/sfaq keys are deliberately NOT touched.
@@ -434,6 +434,13 @@ export async function tryHandleSellerPickText({ from, phone, text, biz, saveBiz 
       try { pick = JSON.parse(pick); } catch (_) { return false; }
     }
     if (!Array.isArray(pick.entries) || !pick.entries.length) return false;
+
+    // Guard 1b: a NEWER numbered list (schools, group link, tutors, Find menu…)
+    // was sent after these seller results → that list owns the number.
+    {
+      const { newerListThan } = await import("./numList.js");
+      if (newerListThan(sess?.tempData, "seller")) return false;
+    }
 
     // Guard 2: freshness - a week-old "3" should not open a forgotten list
     if (!pick.ts || Date.now() - pick.ts > FRESH_WINDOW_MS) return false;

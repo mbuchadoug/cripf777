@@ -146,6 +146,10 @@ export async function handleTutorFreeTextSearch({ from, text, biz, saveBiz }) {
   const search = await _load(from, biz);
 
   // Reply with a number → open that tutor from the last result list.
+  if (/^\d{1,3}$/.test(raw)) {
+    // A newer numbered list (sellers, schools, group link…) owns this number
+    try { const { newerListThanFor } = await import("./numList.js"); if (await newerListThanFor(from, "tutor")) return false; } catch (_) {}
+  }
   if (/^\d{1,3}$/.test(raw) && Array.isArray(search.resultIds) && search.resultIds.length) {
     const idx = parseInt(raw, 10) - 1;
     if (idx >= 0 && idx < search.resultIds.length) {
@@ -297,6 +301,7 @@ We don't have a tutor for that on ZimQuote yet.
   // Save the ordered ids so a typed number opens the right tutor.
   search.resultIds = tutors.map(t => String(t._id));
   await _persist(from, biz, saveBiz, search);
+  try { const { markNumList } = await import("./numList.js"); await markNumList(from, "tutor"); } catch (_) {}
 
   const lines = tutors.map((t, i) => {
     const badge = t.tierRank >= 3 ? " 🔥" : (t.verified ? " ✅" : "");
