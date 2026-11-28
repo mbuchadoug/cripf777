@@ -710,23 +710,163 @@ export async function showPayMethods(from, ref) {
 👉 *Reply with a number.*  ·  *orders* to pay later`);
 }
 
+// ── EcoCash / OneMoney straight through Paynow ────────────────────────────────
+// Same calls as the website checkout (routes/groceryOrders.js /pay/ecocash):
+// order.payment.{method,status,reference,pollUrl} are set the same way, so the
+// existing Paynow result callback (/pay/ecocash/result) also marks it paid.
+// No dependency on zqPayments.js.
+const _validMobile = (t) => {
+  const d = String(t || "").replace(/[\s().-]/g, "").replace(/^\+?263/, "0");
+  return /^07[178]\d{7}$/.test(d) ? d : null;
+};
+const _netOf = (n) => (n.startsWith("071") ? "onemoney" : "ecocash");
+const _netName = (n) => (n.startsWith("071") ? "OneMoney" : "EcoCash");
+async function _paynowClient() { return (await import("./paynow.js")).default; }
+
 async function _payEcocash(from, ref) {
   const GroceryOrder = await _GroceryOrder();
   const o = await GroceryOrder.findOne({ reference: String(ref).toUpperCase() }).lean();
   if (!o) return _myOrders(from);
   if (o.payment?.status === "paid") return showOrder(from, o.reference, "✅ This order is already paid.");
-  const { ZqPayment, createPaymentRequest, startPay } = await import("./zqPayments.js");
-  let p = await ZqPayment.findOne({ orderRef: o.reference, status: { $nin: ["cancelled", "paid"] } }).sort({ createdAt: -1 }).lean();
-  if (p && Math.abs(Number(p.amount) - Number(o.amounts?.total)) > 0.009) {
-    await ZqPayment.updateOne({ _id: p._id, status: { $in: ["requested", "failed"] } }, { $set: { status: "cancelled" } });
-    p = null;
+  if (o.hasCustomItems) return showOrder(from, o.reference, "⏳ We're still pricing some items - we'll send the total here.");
+  const mine = _validMobile(_local(from));
+  await _setMode(from, { m: "pay_num", ref: o.reference });
+  await _markNum(from);
+  return sendText(from,
+`📱 *Pay ${money(o.amounts.total)} - order ${o.reference}*
+
+${mine ? `*1.* Use this number (${mine})\n\n` : ""}Or *type the number* to pay from:
+• EcoCash: 077 / 078
+• OneMoney: 071
+
+You'll get a PIN prompt on that phone. _Type *cancel* to stop._`);
+}
+
+async function _chargeEco(from, ref, number) {
+  const GroceryOrder = await _GroceryOrder();
+  const order = await GroceryOrder.findOne({ reference: String(ref).toUpperCase() });
+  if (!order) return _myOrders(from);
+  if (order.payment?.status === "paid") return showOrder(from, order.reference, "✅ This order is already paid.");
+  const pn = await _paynowClient();
+  const payRef = `${order.reference}-${Date.now().toString(36).toUpperCase()}`;
+  const looksValid = (e) => typeof e === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim());
+  const email = looksValid(order.customer?.email) ? order.customer.email.trim()
+    : (process.env.ZQ_PAYNOW_EMAIL || `orders+${number}@zimqoute.co.zw`);
+  let resp = null;
+  try {
+    const pr = pn.createPayment(payRef, email);
+    pr.add(`ZimQuote groceries ${order.reference}`, Number(order.amounts.total));
+    resp = await pn.sendMobile(pr, number, _netOf(number));
+  } catch (e) {
+    console.error("[GROCERY ECOCASH] sendMobile", e.message);
   }
-  if (!p) p = await createPaymentRequest({
-    phone: from, amount: o.amounts.total, purpose: "grocery", orderRef: o.reference,
-    description: `Groceries ${o.reference}`, name: o.recipient?.name || o.customer?.name || "", requestedBy: "grocery checkout"
+  if (!resp || !resp.success) {
+    const why = resp?.error || "the payment service didn't respond";
+    console.warn(`[GROCERY ECOCASH] ${order.reference} ${number}: ${why}`);
+    await _setMode(from, { m: "pay_num", ref: order.reference });
+    return sendText(from,
+`❌ We couldn't send the ${_netName(number)} prompt to ${number}.
+_${why}_
+
+Type another number to try again${process.env.STRIPE_SECRET_KEY ? ", or reply *card* to pay by Visa/Mastercard" : ""}.
+Need help? *${SUPPORT_PHONE}*`);
+  }
+  order.payment = { ...(order.payment?.toObject ? order.payment.toObject() : (order.payment || {})),
+    method: "ecocash", status: "pending", reference: payRef, pollUrl: resp.pollUrl };
+  if (typeof order.pushTimeline === "function") order.pushTimeline("payment_initiated", `${_netName(number)} prompt sent to ${number} (WhatsApp)`);
+  await order.save();
+  await _setMode(from, { m: "pay_wait", ref: order.reference });
+  _pollEco(from, order.reference);
+  return sendButtons(from, {
+    text:
+`📲 *Check your phone (${number})*
+
+Enter your ${_netName(number)} PIN to pay *${money(order.amounts.total)}* for order *${order.reference}*.
+We'll confirm here automatically as soon as it goes through.`,
+    buttons: [
+      { id: `grc_check_${order.reference}`, title: "🔄 Check payment" },
+      { id: `grc_payeco_${order.reference}`, title: "🔁 Try again" },
+      { id: `grc_order_${order.reference}`, title: "📦 Track order" }
+    ]
   });
-  await _setMode(from, null);
-  return startPay(from, p.reference);
+}
+
+/** Ask Paynow for the latest status. Returns "paid" | "pending" | "failed" | "cancelled" | "none". */
+async function _checkEco(ref) {
+  const GroceryOrder = await _GroceryOrder();
+  const o = await GroceryOrder.findOne({ reference: String(ref).toUpperCase() }).lean();
+  if (!o) return "none";
+  if (o.payment?.status === "paid") return "paid";
+  if (!o.payment?.pollUrl) return "none";
+  let s = "pending";
+  try {
+    const pn = await _paynowClient();
+    const r = await pn.pollTransaction(o.payment.pollUrl);
+    s = String(r?.status || "").toLowerCase();
+  } catch (e) { console.warn("[GROCERY ECOCASH] poll", e.message); return "pending"; }
+  if (s === "paid" || s === "awaiting delivery" || s === "delivered") {
+    await markGroceryPaid(o.reference, { method: "ecocash", reference: o.payment.reference || "" });
+    _alertAdminsPaid(o).catch(() => {});
+    return "paid";
+  }
+  if (s === "failed" || s === "cancelled") {
+    await GroceryOrder.updateOne({ _id: o._id, "payment.status": { $ne: "paid" } }, { $set: { "payment.status": s } }).catch(() => {});
+    return s;
+  }
+  return "pending";
+}
+
+const _ecoPolling = new Set();
+function _pollEco(from, ref) {
+  if (_ecoPolling.has(ref)) return;
+  _ecoPolling.add(ref);
+  let n = 0;
+  const iv = setInterval(async () => {
+    n++;
+    let r = "pending";
+    try { r = await _checkEco(ref); } catch (_) {}
+    if (r === "pending" && n < 18) return;            // every 10 s for 3 minutes
+    clearInterval(iv); _ecoPolling.delete(ref);
+    if (r === "failed" || r === "cancelled") {
+      try {
+        await sendButtons(from, {
+          text: `❌ The payment for *${ref}* was ${r}. No money was taken.\n\nTry again or pay another way.`,
+          buttons: [{ id: `grc_payeco_${ref}`, title: "🔁 Try again" }, { id: `grc_paymeth_${ref}`, title: "💳 Other ways to pay" }]
+        });
+      } catch (_) {}
+    } else if (r === "pending") {
+      try {
+        await sendButtons(from, {
+          text: `⏳ We haven't seen the payment for *${ref}* yet. If you entered your PIN, tap *Check payment* in a minute.`,
+          buttons: [{ id: `grc_check_${ref}`, title: "🔄 Check payment" }, { id: `grc_payeco_${ref}`, title: "🔁 Try again" }]
+        });
+      } catch (_) {}
+    }
+  }, 10000);
+  if (iv.unref) iv.unref();
+}
+
+async function _alertAdminsPaid(o) {
+  const phones = await _adminList();
+  for (const p of [...new Set(phones)]) {
+    sendText(p, `💰 *Grocery order paid* ${money(o.amounts?.total)} by EcoCash/OneMoney\nOrder ${o.reference} · ${_local(o.customer?.phone)}`).catch(() => {});
+  }
+}
+
+async function _checkEcoAndReply(from, ref) {
+  const r = await _checkEco(ref);
+  if (r === "paid") return true;                    // markGroceryPaid already messaged them
+  if (r === "none") return _payEcocash(from, ref);
+  if (r === "failed" || r === "cancelled") {
+    return sendButtons(from, {
+      text: `❌ The payment for *${ref}* was ${r}. No money was taken.`,
+      buttons: [{ id: `grc_payeco_${ref}`, title: "🔁 Try again" }, { id: `grc_paymeth_${ref}`, title: "💳 Other ways to pay" }]
+    });
+  }
+  return sendButtons(from, {
+    text: `⏳ Not showing as paid yet for *${ref}*. If you entered your PIN, wait a minute and check again.`,
+    buttons: [{ id: `grc_check_${ref}`, title: "🔄 Check again" }, { id: `grc_payeco_${ref}`, title: "🔁 Try again" }]
+  });
 }
 
 /** Stripe Checkout link for a grocery order (webhook: metadata.type = grocery_order). */
@@ -782,8 +922,12 @@ We'll confirm here on WhatsApp as soon as the payment goes through.`,
   });
 }
 
+async function _adminList() {
+  try { const { adminPhones } = await import("./zqPayments.js"); return adminPhones(); }
+  catch (_) { return [...new Set([process.env.ZQ_ADMIN_PHONE, process.env.ADMIN_WHATSAPP_PHONE].filter(Boolean).map(_intl))]; }
+}
 async function _alertAdmins(order, pr) {
-  const { adminPhones } = await import("./zqPayments.js");
+  const adminPhones = _adminList;
   const site = String(process.env.SITE_URL || "https://cripfcnt.com").replace(/\/$/, "");
   const lines = order.items.slice(0, 15).map(i => `• ${i.name} ×${i.qty}${i.custom ? " ❓" : ""}`).join("\n");
   const txt =
@@ -795,7 +939,7 @@ ${order.delivery.address}
 ${lines}${order.items.length > 15 ? `\n…+${order.items.length - 15} more` : ""}
 
 ${site}/zq-admin/grocery-orders/${order.reference}`;
-  for (const p of adminPhones()) { try { await sendText(p, txt); } catch (_) {} }
+  for (const p of await adminPhones()) { try { await sendText(p, txt); } catch (_) {} }
 }
 
 // ── Paid hook (from zqPayments) ──────────────────────────────────────────────
@@ -1050,7 +1194,28 @@ const ORDERS_RE = /^(?:my grocery orders?|grocery orders?|grocery payments?|trac
  *  action   = button id (lower-case) when isTap, else ""
  *  dispatch = (action) => re-enter the engine (for "search sellers")
  */
-export async function handleGroceryMessage({ from, text = "", action = "", isTap = false, imageUrl = null, dispatch = null }) {
+export async function handleGroceryMessage(args = {}) {
+  try {
+    return await _handleGroceryMessage(args);
+  } catch (e) {
+    // Never let a grocery reply fall through into a marketplace search
+    // ("1" → "1 - Harare, 1 seller found"). Log it and answer inside the shop.
+    console.error("[GROCERIES] handler error:", e && e.stack || e);
+    const a = String(args.action || "").toLowerCase();
+    let inShop = a.startsWith("grc_");
+    if (!inShop) { try { inShop = !!(await _load(args.from)).mode; } catch (_) {} }
+    if (!inShop) return false;
+    try {
+      await sendButtons(args.from, {
+        text: `⚠️ Sorry, something went wrong on our side. Your cart and orders are safe.\n\nPlease try again, or call/WhatsApp *${SUPPORT_PHONE}*.`,
+        buttons: [{ id: "grc_orders", title: "📦 My orders" }, { id: "grc_cart", title: "🧺 My cart" }, { id: "grc_home", title: "🛒 Groceries" }]
+      });
+    } catch (_) {}
+    return true;
+  }
+}
+
+async function _handleGroceryMessage({ from, text = "", action = "", isTap = false, imageUrl = null, dispatch = null }) {
   const a = String(action || "").toLowerCase();
   if (a.startsWith("grc_")) { await _handleAction(from, a, dispatch); return true; }
 
@@ -1090,7 +1255,7 @@ export async function handleGroceryMessage({ from, text = "", action = "", isTap
   const lt = t.toLowerCase();
   // Shop-wide words
   if (/^(cart|my cart|basket|view cart|show cart|trolley)$/.test(lt)) { await showCart(from); return true; }
-  if (/^(checkout|check out|pay|order now|place order|done)$/.test(lt) && !String(mode.m).startsWith("co_")) { await startCheckout(from); return true; }
+  if (/^(checkout|check out|pay|order now|place order|done)$/.test(lt) && !/^(co_|pay_)/.test(String(mode.m))) { await startCheckout(from); return true; }
   if (/^(hampers?|packages?|baskets?)$/.test(lt)) { await showPackages(from); return true; }
   if (/^(aisles?|shop|price ?list|prices)$/.test(lt)) { await showAisles(from); return true; }
   if (/^(calc|calculator|budget)$/.test(lt)) { await _handleAction(from, "grc_calc"); return true; }
@@ -1195,6 +1360,23 @@ export async function handleGroceryMessage({ from, text = "", action = "", isTap
       }
       await sendText(from, "👉 Reply with the number of your area, or type *cart* to go back.");
       return true;
+    }
+    case "pay_num": {
+      if (lt === "1") {
+        const mine = _validMobile(_local(from));
+        if (mine) { await _chargeEco(from, mode.ref, mine); return true; }
+      }
+      if (/^(card|visa|mastercard)$/.test(lt) && process.env.STRIPE_SECRET_KEY) { await _payCardLink(from, mode.ref); return true; }
+      if (/^(cancel|stop|back)$/.test(lt)) { await showOrder(from, mode.ref, "👍 Payment stopped - pay any time from *My orders*."); return true; }
+      const num = _validMobile(t);
+      if (num) { await _chargeEco(from, mode.ref, num); return true; }
+      await sendText(from, "Please type an *EcoCash* (077/078) or *OneMoney* (071) number, e.g. *0772123456* - or *cancel*.");
+      return true;
+    }
+    case "pay_wait": {
+      if (/^(check|paid|done|i paid|status|ok|okay)$/.test(lt)) { await _checkEcoAndReply(from, mode.ref); return true; }
+      if (lt === "1" || /^(again|try again|retry)$/.test(lt)) { await _payEcocash(from, mode.ref); return true; }
+      break;
     }
     case "pay_method": {
       if (lt === "1") { await _payEcocash(from, mode.ref); return true; }
@@ -1333,6 +1515,7 @@ We price what we stock instantly. Anything we don't stock, our team prices and r
   if (a.startsWith("grc_order_")) return showOrder(from, a.slice(10));
   if (a.startsWith("grc_paymeth_")) return showPayMethods(from, a.slice(12));
   if (a.startsWith("grc_payeco_")) return _payEcocash(from, a.slice(11));
+  if (a.startsWith("grc_check_")) return _checkEcoAndReply(from, a.slice(10));
   if (a.startsWith("grc_paycard_")) return _payCardLink(from, a.slice(12));
   if (a.startsWith("grc_reorder_")) return _reorder(from, a.slice(12));
   if (a.startsWith("grc_payorder_")) return _payOrder(from, a.slice(13));
