@@ -107,10 +107,9 @@ router.post("/pay/ecocash", async (req, res) => {
     // whole request if it's missing OR malformed. Use the customer's email only
     // when it's well-formed; otherwise fall back to a valid address we own
     // (Paynow only checks format/domain - no mail is sent there).
-    const looksValid = (e) => typeof e === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim());
-    const payerEmail = looksValid(order.customer.email)
-      ? order.customer.email.trim()
-      : `orders+${normalized}@zimqoute.co.zw`;
+    // Paynow rejected made-up addresses ("Invalid email"). Use the merchant's
+    // Paynow account email - the same one supplier registration uses.
+    const payerEmail = process.env.PAYNOW_MERCHANT_EMAIL || process.env.ZQ_PAYNOW_EMAIL || "bmusasa99@gmail.com";
     const pr = paynow.createPayment(payRef, payerEmail);
     pr.add(`ZimQuote groceries ${order.reference}`, order.amounts.total);
 

@@ -29,7 +29,8 @@
 //   ZQ_ADMIN_PHONE / ADMIN_WHATSAPP_PHONE   admin alerts + WhatsApp "pay" command
 //   ZQ_ADMIN_PHONES=2637...,2637...          (optional) more admin numbers
 //   PAYNOW_INTEGRATION_ID / PAYNOW_INTEGRATION_KEY   only if services/paynow.js is missing
-//   ZQ_PAYNOW_EMAIL=payments@zimqoute.co.zw          (optional) payer email Paynow requires
+//   PAYNOW_MERCHANT_EMAIL=you@example.com             (optional) your Paynow account email -
+//                                                     sent as the payer email (Paynow rejects made-up ones)
 //
 // Meta templates (optional, UTILITY) - reach customers outside the 24 h window:
 //   zq_payment_request   body: "Payment request from ZimQuote.\nFor: {{1}}\nAmount: {{2}}\nReference: {{3}}\nTap the button below to pay with EcoCash or OneMoney on your phone. This is an automated message from ZimQuote."
@@ -280,7 +281,8 @@ export async function chargePayment(reference, number, { silentStart = false } =
   const paynowRef = `${doc.reference}-${attempt}`;
   let resp;
   try {
-    const email = process.env.ZQ_PAYNOW_EMAIL || `payments+${local}@zimqoute.co.zw`;
+    // Paynow rejects made-up emails - use the merchant's Paynow account email
+    const email = process.env.PAYNOW_MERCHANT_EMAIL || process.env.ZQ_PAYNOW_EMAIL || "bmusasa99@gmail.com";
     const payment = client.createPayment(paynowRef, email);
     payment.add(`ZimQuote ${_forLine(doc)}`.slice(0, 60), Number(doc.amount));
     resp = await client.sendMobile(payment, local, method);

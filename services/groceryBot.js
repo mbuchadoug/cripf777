@@ -749,19 +749,20 @@ async function _chargeEco(from, ref, number) {
   if (order.payment?.status === "paid") return showOrder(from, order.reference, "✅ This order is already paid.");
   const pn = await _paynowClient();
   const payRef = `${order.reference}-${Date.now().toString(36).toUpperCase()}`;
-  const looksValid = (e) => typeof e === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim());
-  const email = looksValid(order.customer?.email) ? order.customer.email.trim()
-    : (process.env.ZQ_PAYNOW_EMAIL || `orders+${number}@zimqoute.co.zw`);
-  let resp = null;
+  // Paynow rejects made-up payer emails ("Invalid email") - use the merchant's
+  // Paynow account email, exactly like supplier registration does.
+  const email = process.env.PAYNOW_MERCHANT_EMAIL || process.env.ZQ_PAYNOW_EMAIL || "bmusasa99@gmail.com";
+  let resp = null, thrown = "";
   try {
     const pr = pn.createPayment(payRef, email);
     pr.add(`ZimQuote groceries ${order.reference}`, Number(order.amounts.total));
     resp = await pn.sendMobile(pr, number, _netOf(number));
   } catch (e) {
-    console.error("[GROCERY ECOCASH] sendMobile", e.message);
+    thrown = e && e.message || String(e);
+    console.error("[GROCERY ECOCASH] sendMobile", thrown);
   }
   if (!resp || !resp.success) {
-    const why = resp?.error || "the payment service didn't respond";
+    const why = resp?.error || thrown || "the payment service didn't respond";
     console.warn(`[GROCERY ECOCASH] ${order.reference} ${number}: ${why}`);
     await _setMode(from, { m: "pay_num", ref: order.reference });
     return sendText(from,
