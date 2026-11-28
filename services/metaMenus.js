@@ -254,6 +254,7 @@ export async function sendMainMenu(to) {
     return sendList(to, MENU_MSG, [
       { id: "sup_request_sellers", title: "📝 Request a Quote" },
       { id: "find_supplier",       title: "🔍 Find, Buy & Hire" },
+      { id: "grc_home",            title: "🛒 Buy Groceries" },
       { id: "biker_request_rider", title: "🏍️ Request a Biker" },
       { id: "my_orders",           title: "📋 My Orders" },
       { id: "find_school",         title: "🎓 Schools & Tutors" },
@@ -268,6 +269,7 @@ export async function sendMainMenu(to) {
       ...(hasStaffRole && isRealBiz ? [{ id: "biz_tools_menu", title: "📊 Business Tools" }] : []),
       { id: "sup_request_sellers", title: "📝 Request a Quote" },
       { id: "find_supplier",       title: "🔍 Find, Buy & Hire" },
+      { id: "grc_home",            title: "🛒 Buy Groceries" },
       { id: "biker_request_rider", title: "🏍️ Request a Biker" },
       { id: "my_orders",           title: "📋 My Orders" },
       { id: "find_school",         title: "🎓 Schools & Tutors" },
@@ -289,6 +291,7 @@ export async function sendMainMenu(to) {
   return sendList(to, MENU_MSG, [
     { id: "register_supplier",   title: "🏪 List My Business" },
     { id: "find_supplier",       title: "🔍 Find, Buy & Hire" },
+    { id: "grc_home",            title: "🛒 Buy Groceries" },
     { id: "sup_request_sellers", title: "📝 Request a Quote" },
     { id: "biker_request_rider", title: "🏍️ Request a Biker" },
     { id: "my_orders",           title: "📋 My Orders" },
@@ -428,7 +431,7 @@ export async function sendMarketplaceMenu(to, biz, { isOwner = false } = {}) {
     { id: "sup_request_sellers", title: "📝 Request a Quote" },
     { id: "find_supplier",       title: "🔍 Find, Buy & Hire" },
     { id: "biker_request_rider", title: "🏍️ Request a Biker" },
-    { id: "grc_home",            title: "🛒 Groceries", description: "Hampers, cart, delivery or collect - pay with EcoCash" },
+    { id: "grc_home",            title: "🛒 Groceries", description: "Hampers & cart · Harare delivery · EcoCash or card" },
     { id: "my_orders",           title: "📋 My Orders" },
     { id: "find_school",         title: "🎓 Schools & Tutors" },
     ...(isOwner ? [{ id: "my_supplier_account", title: "🏪 My Store" }] : []),

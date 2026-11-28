@@ -7,7 +7,9 @@
 //   ✍️ Type / photo your list  "2 sugar, cooking oil, 3 bread, avocados" - priced
 //                              at once; anything we don't stock is priced by us
 //   🧮 Grocery calculator      people + week/month (+ optional budget) → basket
-//   🧺 Cart → checkout         deliver (CBD/mid/outer) or collect → EcoCash prompt
+//   🧺 Cart → checkout         Harare delivery (zone fee) or collect → EcoCash/OneMoney
+//                              prompt or Visa/Mastercard link (Stripe) · min $40
+//   📦 My orders               numbered list → tracker, pay, reorder ("track GRO-…")
 //
 // Typing anything with letters while the shop is open ADDS it to the cart
 // (English + common Shona: upfu, mafuta, shuga, mupunga, huku, mazai…).
@@ -19,7 +21,7 @@
 // services/zqPayments.js (ZimQuote's Paynow, EcoCash/OneMoney PIN prompt).
 //
 // Entry: "groceries" / "hampers" / ZQ:GROCERY, the Groceries & Food section
-// in Find, Buy & Hire, and Marketplace → 🛒 Groceries. Main menu unchanged.
+// in Find, Buy & Hire, Marketplace → 🛒 Groceries, and 🛒 Buy Groceries on the main menu.
 //
 // Actions (grc_*, whitelisted in chatbotEngine.js):
 //   grc_home grc_pkgs grc_pkg_<key> grc_padd_<key> grc_aisles grc_list grc_cart
@@ -42,6 +44,25 @@ const MIN_COLLECT = GC.MIN_COLLECT ?? 5;
 const SERVICE_MIN = GC.SERVICE_MIN ?? 3;
 const SERVICE_PCT = GC.SERVICE_PCT ?? 0.05;
 const COLLECT_POINT = process.env.ZQ_GROCERY_COLLECT || "Harare CBD - 5th Street & Central Avenue, next to the ZINARA building (No. 49)";
+// Who customers call/WhatsApp to arrange collection or ask about an order
+const SUPPORT_PHONE = process.env.ZQ_GROCERY_SUPPORT || process.env.ZQ_SUPPORT_PHONE || "0789 901 058";
+// Card payments (Stripe Checkout) - same page the website shop returns to
+const CARD_RETURN = process.env.ZQ_GROCERY_SITE || "https://zimqoute.co.zw/grocery-delivery-harare/";
+// Delivery zones shown as a numbered list (key, label)
+const ZONE_ORDER = [
+  ["cbd",   "CBD, Avenues & nearby (up to 5km)"],
+  ["mid",   "Mid suburbs - Borrowdale, Waterfalls, Mbare, Highfield…"],
+  ["outer", "Outer - Chitungwiza, Norton edge, Ruwa (12-25km)"]
+];
+
+// Tell the number router this shop's numbered menu is the latest one on screen
+// (services/numList.js - optional; never breaks the shop if missing).
+async function _markNum(from) {
+  try { const { markNumList } = await import("./numList.js"); await markNumList(from, "grocery"); } catch (_) {}
+}
+async function _newerList(from) {
+  try { const { newerListThanFor } = await import("./numList.js"); return await newerListThanFor(from, "grocery"); } catch (_) { return false; }
+}
 const MODE_MS = 2 * 60 * 60 * 1000;
 
 const _digits = (p) => String(p || "").replace(/\D+/g, "");
@@ -355,25 +376,49 @@ async function _cartLine(cart) {
 export async function showHome(from) {
   const { cart } = await _load(from);
   await _setMode(from, { m: "home" });
+  await _markNum(from);
   return sendText(from,
 `🛒 *ZimQuote Groceries*
-Delivered in Harare (from $4) or collect in town (free). Pay with EcoCash.
+Delivered to your door in *Harare*. Pay with *EcoCash* or *card*.
+Minimum order *${money(MIN_GOODS)}* · delivery from *${money(Math.min(...ZONE_ORDER.map(([z]) => ZONES[z]?.fee ?? 99)))}*
 ${await _cartLine(cart)}
 
 *1.* 🎁 Hampers & packages
 *2.* 🛒 Shop by aisle (price list)
-*3.* ✍️ Send your list (type or photo)
+*3.* ✍️ Send us your list (type or photo)
 *4.* 🧮 Grocery calculator
 *5.* 🧺 View cart & checkout
-*6.* 📦 My grocery orders
+*6.* 📦 My orders, payments & tracking
+*7.* 🚚 Delivery areas & fees
 
-💡 Or just type what you want, e.g. *2 sugar, cooking oil, 10kg mealie meal*`);
+👉 *Reply with a number*, or just type what you want, e.g. *2 sugar, cooking oil, 10kg mealie meal*
+🏠 *menu* = main menu`);
+}
+
+/** Delivery areas, fees, minimum and collection. */
+export async function showDeliveryInfo(from) {
+  await _setMode(from, { m: "home" });
+  const fees = ZONE_ORDER.filter(([z]) => ZONES[z]).map(([z, l]) => `• ${l}: *${money(ZONES[z].fee)}*`).join("\n");
+  return sendButtons(from, {
+    text:
+`🚚 *Delivery & collection*
+
+We deliver in *Harare only*:
+${fees}
+
+🧾 Minimum order: *${money(MIN_GOODS)}* of groceries (plus a small service fee of 5%, min ${money(SERVICE_MIN)}).
+🏪 Prefer to collect? Choose *Collect* at checkout and we'll contact you to arrange - or call/WhatsApp *${SUPPORT_PHONE}*.
+💳 Pay with EcoCash, OneMoney or Visa/Mastercard.
+⏰ Orders paid by 2pm are usually delivered the same day.`,
+    buttons: [{ id: "grc_pkgs", title: "🎁 Hampers" }, { id: "grc_aisles", title: "🛒 Shop by aisle" }, { id: "grc_cart", title: "🧺 My cart" }]
+  });
 }
 
 export async function showPackages(from) {
   const pkgs = await getPackages();
   if (!pkgs.length) { await sendText(from, "No hampers available right now - type your list instead, e.g. *2 sugar, rice*."); return _setMode(from, { m: "home" }); }
   await _setMode(from, { m: "pkgs", keys: pkgs.map(p => p.key) });
+  await _markNum(from);
   const lines = pkgs.map((p, i) => `*${i + 1}.* ${p.name} - *${money(p.price)}*${p.save > 0 ? ` _(save ${money(p.save)})_` : ""}\n      _${p.blurb || ""}_`).join("\n");
   return sendText(from,
 `🎁 *Hampers & packages*
@@ -381,7 +426,8 @@ Ready-made baskets - cheaper than buying item by item.
 
 ${lines}
 
-👉 *Reply with a number* to see what's inside.`);
+👉 *Reply with a number* to see what's inside.
+_Minimum order ${money(MIN_GOODS)} - add items to a smaller pack to reach it._`);
 }
 
 export async function showPackage(from, key) {
@@ -407,6 +453,7 @@ ${inside}
 export async function showAisles(from) {
   const list = _aislesWithItems();
   await _setMode(from, { m: "aisles", ids: list.map(a => a.id) });
+  await _markNum(from);
   return sendText(from,
 `🛒 *Shop by aisle*
 
@@ -420,6 +467,7 @@ export async function showAisle(from, aid) {
   const skus = aisleItems(aid);
   if (!a || !skus.length) return showAisles(from);
   await _setMode(from, { m: "aisle", a: aid, skus });
+  await _markNum(from);
   const lines = skus.map((s, i) => `*${i + 1}.* ${_itemName(s)} - ${money(CATALOGUE[s][2])}`).join("\n");
   return sendText(from,
 `${a.label}
@@ -444,7 +492,7 @@ export async function showCart(from, note = "") {
     ? `*${i + 1}.* ${it.img ? "📷 " : ""}${it.name} × ${it.qty} - _we'll price it_`
     : `*${i + 1}.* ${it.name}${it.unit && it.unit !== "hamper" ? " " + it.unit : ""} × ${it.qty} - ${money(it.lineTotal)}`).join("\n");
   const minNote = pr.goods < MIN_GOODS && !pr.hasCustom
-    ? `\n_Delivery needs ${money(MIN_GOODS)} of goods (add ${money(MIN_GOODS - pr.goods)}) - collection needs ${money(MIN_COLLECT)}._` : "";
+    ? `\n_Minimum order is ${money(MIN_GOODS)} - add ${money(MIN_GOODS - pr.goods)} more to check out._` : "";
   return _textThenButtons(from,
 `${note ? note + "\n\n" : ""}🧺 *Your cart*
 
@@ -506,16 +554,27 @@ export async function startCheckout(from) {
   const { cart } = await _load(from);
   if (!cart.length) return showCart(from);
   const pr = await priceCart(cart);
-  await _setMode(from, { m: "co_zone" });
-  const rows = [{ id: "grc_zone_collect", title: "🏪 Collect (free)", description: `Pick up in town · min ${money(MIN_COLLECT)} of goods` }];
-  for (const z of ["cbd", "mid", "outer"]) {
-    if (!ZONES[z]) continue;
-    const t = { cbd: "🚚 CBD & Avenues", mid: "🚚 Mid suburbs", outer: "🚚 Outer areas" }[z];
-    rows.push({ id: `grc_zone_${z}`, title: `${t} · $${ZONES[z].fee}`.slice(0, 24), description: String(ZONES[z].label || "").slice(0, 72) });
+  if (pr.short > 0) {
+    return sendButtons(from, {
+      text: `⚠️ The minimum order is *${money(MIN_GOODS)}* of groceries - your cart is *${money(pr.goods)}*.\n\nAdd *${money(pr.short)}* more to check out.`,
+      buttons: [{ id: "grc_pkgs", title: "🎁 Add a hamper" }, { id: "grc_aisles", title: "🛒 Add items" }, { id: "grc_cart", title: "🧺 View cart" }]
+    });
   }
-  return sendList(from,
-    `🚚 *Delivery or collection?*\n\nGoods so far: *${money(pr.goods)}*${pr.hasCustom ? " + items we'll price" : ""}\nDelivery needs ${money(MIN_GOODS)} of goods · collection ${money(MIN_COLLECT)}.\n\nCollection point: ${COLLECT_POINT}`,
-    rows);
+  const zones = ZONE_ORDER.filter(([z]) => ZONES[z]).map(([z]) => z).concat(ZONES.collect ? ["collect"] : []);
+  await _setMode(from, { m: "co_zone", zones });
+  await _markNum(from);
+  const lines = zones.map((z, i) => z === "collect"
+    ? `*${i + 1}.* 🏪 Collect in Harare CBD - *free*\n      _we'll contact you to arrange (or call ${SUPPORT_PHONE})_`
+    : `*${i + 1}.* 🚚 ${ZONE_ORDER.find(x => x[0] === z)[1]} - *${money(ZONES[z].fee)}*`).join("\n");
+  return sendText(from,
+`🚚 *Delivery or collection?*
+Groceries: *${money(pr.goods)}*${pr.hasCustom ? " + items we'll price" : ""}
+
+We deliver in *Harare only*. The delivery fee is added to your total:
+
+${lines}
+
+👉 *Reply with a number.*  ·  *cart* to go back`);
 }
 
 async function _pickZone(from, zone) {
@@ -523,13 +582,13 @@ async function _pickZone(from, zone) {
   if (zone === "collect") {
     await _setMode(from, { m: "co_name", zone });
     return sendButtons(from, {
-      text: `🏪 *Collection*\n${COLLECT_POINT}\n\nWho will collect? *Type their name and number*, or tap *Me*.`,
+      text: `🏪 *Collection* - Harare CBD\n${COLLECT_POINT}\n\nWe'll WhatsApp you when it's packed to agree a time (or call *${SUPPORT_PHONE}*).\n\nWho will collect? *Type their name and number*, or tap *Me*.`,
       buttons: [{ id: "grc_cme", title: "👤 Me" }, { id: "grc_cart", title: "🧺 Back to cart" }]
     });
   }
   await _setMode(from, { m: "co_addr", zone });
   return sendText(from,
-`📍 *Delivery address* (${ZONES[zone].label})
+`📍 *Delivery address in Harare* (${ZONES[zone].label} - ${money(ZONES[zone].fee)})
 
 Send it in *one message*: name, house number & street, suburb and a landmark.
 e.g. _Tendai Moyo, 12 Fife Ave, Avenues, opposite Spar_
@@ -556,10 +615,8 @@ async function _summary(from, co) {
     : `📍 Deliver to: ${co.address}`;
   if (pr.short > 0) {
     return sendButtons(from, {
-      text: `⚠️ ${co.zone === "collect" ? "Collection" : "Delivery"} needs at least *${money(pr.minGoods)}* of goods - your cart is *${money(pr.goods)}*.\n\nAdd *${money(pr.short)}* more${co.zone === "collect" ? "" : ", or collect in town instead (min " + money(MIN_COLLECT) + ")"}.`,
-      buttons: co.zone === "collect"
-        ? [{ id: "grc_pkgs", title: "🎁 Add a hamper" }, { id: "grc_aisles", title: "🛒 Add items" }, { id: "grc_cart", title: "🧺 View cart" }]
-        : [{ id: "grc_zone_collect", title: "🏪 Collect instead" }, { id: "grc_aisles", title: "🛒 Add items" }, { id: "grc_pkgs", title: "🎁 Add a hamper" }]
+      text: `⚠️ The minimum order is *${money(pr.minGoods)}* of groceries - your cart is *${money(pr.goods)}*.\n\nAdd *${money(pr.short)}* more to check out.`,
+      buttons: [{ id: "grc_pkgs", title: "🎁 Add a hamper" }, { id: "grc_aisles", title: "🛒 Add items" }, { id: "grc_cart", title: "🧺 View cart" }]
     });
   }
   const zl = co.zone === "collect" ? "Collection" : `Delivery (${String(ZONES[co.zone]?.label || "").split("(")[0].trim()})`;
@@ -579,7 +636,9 @@ ${zl}: ${money(pr.deliveryFee)}
 *Total: ${money(pr.total)}*${pr.hasCustom ? " + priced items" : ""}
 
 ${where}
-${pr.hasCustom ? "\n📝 We'll price the marked items and send you the final total to pay with EcoCash." : "\n💳 Next: pay with EcoCash or OneMoney (PIN prompt on your phone)."}`,
+${pr.hasCustom ? "\n📝 We'll price the marked items and send you the final total to pay." : "\n💳 Next: pay with EcoCash, OneMoney or card."}
+
+Reply *1* to confirm · *2* to edit cart · *3* to cancel`,
     _btns,
     `*Total: ${money(pr.total)}*${pr.hasCustom ? " + priced items" : ""} - confirm your order?`);
 }
@@ -622,19 +681,105 @@ async function _confirm(from, co) {
       text:
 `✅ *Order ${reference} received!*
 
-We're pricing the items we don't stock. You'll get the final total here, with an EcoCash prompt to pay - usually within 30 minutes (8am-6pm).
+We're pricing the items we don't stock. You'll get the final total here and can pay with EcoCash or card - usually within 30 minutes (8am-6pm).
+Track it any time: type *track ${reference}*.
 
 Type *groceries* any time to shop again.`,
       buttons: [{ id: "grc_orders", title: "📦 My orders" }, { id: "main_menu_back", title: "🏠 Main Menu" }]
     });
   }
-  const { createPaymentRequest, startPay } = await import("./zqPayments.js");
-  const pay = await createPaymentRequest({
-    phone: from, amount: order.amounts.total, purpose: "grocery", orderRef: order.reference,
-    description: `Groceries ${order.reference}`, name: recipient.name || "", requestedBy: "grocery checkout"
-  });
   await sendText(from, `✅ *Order ${reference} saved* - ${money(order.amounts.total)}.\nWe start packing as soon as it's paid.`);
-  return startPay(from, pay.reference);
+  return showPayMethods(from, reference);
+}
+
+// ── Payment: EcoCash / OneMoney (Paynow PIN prompt) or card (Stripe) ─────────
+export async function showPayMethods(from, ref) {
+  const GroceryOrder = await _GroceryOrder();
+  const o = await GroceryOrder.findOne({ reference: String(ref).toUpperCase() }).lean();
+  if (!o) return _myOrders(from);
+  if (o.payment?.status === "paid") return showOrder(from, o.reference, "✅ This order is already paid.");
+  if (o.hasCustomItems) return showOrder(from, o.reference, "⏳ We're still pricing some items - we'll send the total here.");
+  const card = !!process.env.STRIPE_SECRET_KEY;
+  await _setMode(from, { m: "pay_method", ref: o.reference, card });
+  await _markNum(from);
+  return sendText(from,
+`💳 *Pay for ${o.reference}* - *${money(o.amounts?.total)}*
+
+*1.* 📱 EcoCash or OneMoney (PIN prompt on your phone)${card ? "\n*2.* 💳 Visa / Mastercard (secure card link)" : ""}
+
+👉 *Reply with a number.*  ·  *orders* to pay later`);
+}
+
+async function _payEcocash(from, ref) {
+  const GroceryOrder = await _GroceryOrder();
+  const o = await GroceryOrder.findOne({ reference: String(ref).toUpperCase() }).lean();
+  if (!o) return _myOrders(from);
+  if (o.payment?.status === "paid") return showOrder(from, o.reference, "✅ This order is already paid.");
+  const { ZqPayment, createPaymentRequest, startPay } = await import("./zqPayments.js");
+  let p = await ZqPayment.findOne({ orderRef: o.reference, status: { $nin: ["cancelled", "paid"] } }).sort({ createdAt: -1 }).lean();
+  if (p && Math.abs(Number(p.amount) - Number(o.amounts?.total)) > 0.009) {
+    await ZqPayment.updateOne({ _id: p._id, status: { $in: ["requested", "failed"] } }, { $set: { status: "cancelled" } });
+    p = null;
+  }
+  if (!p) p = await createPaymentRequest({
+    phone: from, amount: o.amounts.total, purpose: "grocery", orderRef: o.reference,
+    description: `Groceries ${o.reference}`, name: o.recipient?.name || o.customer?.name || "", requestedBy: "grocery checkout"
+  });
+  await _setMode(from, null);
+  return startPay(from, p.reference);
+}
+
+/** Stripe Checkout link for a grocery order (webhook: metadata.type = grocery_order). */
+async function _cardLink(order) {
+  if (!process.env.STRIPE_SECRET_KEY) return null;
+  const { default: Stripe } = await import("stripe");
+  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+  const back = CARD_RETURN + (CARD_RETURN.includes("?") ? "&" : "?");
+  const session = await stripe.checkout.sessions.create({
+    mode: "payment",
+    line_items: [{
+      quantity: 1,
+      price_data: {
+        currency: "usd",
+        product_data: { name: `ZimQuote groceries ${order.reference}` },
+        unit_amount: Math.round(Number(order.amounts.total) * 100)
+      }
+    }],
+    metadata: { type: "grocery_order", reference: order.reference },
+    success_url: `${back}paid=1&ref=${order.reference}`,
+    cancel_url: `${back}cancelled=1&ref=${order.reference}`
+  });
+  const GroceryOrder = await _GroceryOrder();
+  await GroceryOrder.updateOne(
+    { _id: order._id, "payment.status": { $ne: "paid" } },
+    { $set: { "payment.gatewayId": session.id },
+      $push: { "fulfilment.timeline": { at: new Date(), event: "payment_initiated", note: "Card link sent on WhatsApp" } } }
+  ).catch(() => {});
+  return session.url;
+}
+
+async function _payCardLink(from, ref) {
+  const GroceryOrder = await _GroceryOrder();
+  const o = await GroceryOrder.findOne({ reference: String(ref).toUpperCase() }).lean();
+  if (!o) return _myOrders(from);
+  if (o.payment?.status === "paid") return showOrder(from, o.reference, "✅ This order is already paid.");
+  let url = null;
+  try { url = await _cardLink(o); } catch (e) { console.error("[GROCERY CARD]", e.message); }
+  if (!url) {
+    await sendText(from, "❌ Card payment isn't available right now. Please pay with EcoCash or OneMoney.");
+    return showPayMethods(from, o.reference);
+  }
+  await _setMode(from, { m: "home" });            // keep the shop open: "orders", "track…" still work
+  return sendButtons(from, {
+    text:
+`💳 *Pay ${money(o.amounts.total)} by card* - order *${o.reference}*
+
+Tap the secure link below (Visa / Mastercard):
+${url}
+
+We'll confirm here on WhatsApp as soon as the payment goes through.`,
+    buttons: [{ id: `grc_order_${o.reference}`, title: "📦 Track order" }, { id: `grc_payeco_${o.reference}`, title: "📱 Use EcoCash" }]
+  });
 }
 
 async function _alertAdmins(order, pr) {
@@ -678,6 +823,15 @@ export async function markGroceryPaid(orderRef, { method = "ecocash", reference 
 
 /** Website-paid orders: WhatsApp the customer too (called from routes/groceryOrders.js). */
 export async function onWebOrderPaid(order) {
+  // Paid by card/website → close any EcoCash request still open for this order
+  try {
+    const { ZqPayment, adminPhones } = await import("./zqPayments.js");
+    await ZqPayment.updateMany({ orderRef: order.reference, status: { $in: ["requested", "failed"] } },
+      { $set: { status: "cancelled", note: `Paid by ${order.payment?.method || "card"}` } });
+    for (const p of adminPhones()) {
+      sendText(p, `💰 *Grocery order paid* ${money(order.amounts?.total)} by ${order.payment?.method || "card"}\nOrder ${order.reference} · ${_local(order.customer?.phone)}`).catch(() => {});
+    }
+  } catch (_) {}
   try {
     const to = _intl(order?.customer?.phone);
     if (!/^263\d{9}$/.test(to)) return;
@@ -705,6 +859,15 @@ Delivery: ${money(order.amounts.deliveryFee)}
 *Total: ${money(order.amounts.total)}*`);
   } catch (_) {}
   const r = await sendPaymentRequest(doc);
+  // Card option too (only lands inside the 24h WhatsApp window - EcoCash request above always goes)
+  if (process.env.STRIPE_SECRET_KEY) {
+    try {
+      await sendButtons(_intl(order.customer.phone), {
+        text: `Prefer to pay by *Visa / Mastercard*? Tap below for a secure card link.\nTrack your order any time: *track ${order.reference}*`,
+        buttons: [{ id: `grc_paycard_${order.reference}`, title: "💳 Pay by card" }, { id: `grc_order_${order.reference}`, title: "📦 Track order" }]
+      });
+    } catch (_) {}
+  }
   return { doc, ...r };
 }
 
@@ -728,21 +891,77 @@ export async function notifyGroceryStatus(order, status, { rider = "", note = ""
 }
 
 // ── My orders ────────────────────────────────────────────────────────────────
+const ORDER_STATUS = {
+  quote_pending: "⏳ Being priced", awaiting_payment: "💳 Waiting for payment", received: "💳 Waiting for payment",
+  paid: "✅ Paid - packing", shopping: "🛒 Shopping", out_for_delivery: "🏍️ On the way / ready to collect",
+  delivered: "✅ Delivered", cancelled: "❌ Cancelled"
+};
+const _payLabel = (o) => o.payment?.status === "paid" ? `✅ Paid${o.payment?.method ? " (" + (o.payment.method === "stripe" ? "card" : o.payment.method) + ")" : ""}`
+  : o.hasCustomItems ? "⏳ Not priced yet" : o.payment?.status === "pending" ? "⏳ Payment started" : "❌ Not paid";
+
 async function _myOrders(from) {
   const GroceryOrder = await _GroceryOrder();
   const p = _intl(from), l = _local(from);
-  const list = await GroceryOrder.find({ "customer.phone": { $in: [p, l, "+" + p] } }).sort({ createdAt: -1 }).limit(5).lean();
-  if (!list.length) {
-    return sendButtons(from, { text: "📦 You have no grocery orders yet.", buttons: [{ id: "grc_pkgs", title: "🎁 Hampers" }, { id: "grc_home", title: "🛒 Groceries" }] });
+  const list = await GroceryOrder.find({ "customer.phone": { $in: [p, l, "+" + p] } }).sort({ createdAt: -1 }).limit(10).lean();
+  if (list.length) {
+    await _setMode(from, { m: "orders", refs: list.map(o => o.reference) });
+    await _markNum(from);
+    const lines = list.map((o, i) =>
+      `*${i + 1}.* ${o.reference} · ${new Date(o.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })} · *${money(o.amounts?.total)}*\n      ${ORDER_STATUS[o.fulfilment?.status] || o.fulfilment?.status || ""} · ${_payLabel(o)}`).join("\n");
+    return sendText(from,
+`📦 *My grocery orders & payments*
+
+${lines}
+
+👉 *Reply with a number* to track an order, pay for it or order it again.
+🛒 *groceries* to shop`);
   }
-  const st = { quote_pending: "⏳ being priced", awaiting_payment: "💳 waiting for payment", received: "💳 waiting for payment", paid: "✅ paid - packing", shopping: "🛒 shopping", out_for_delivery: "🏍️ on the way / ready", delivered: "✅ delivered", cancelled: "❌ cancelled" };
-  const lines = list.map(o => `*${o.reference}* · ${new Date(o.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })} · ${money(o.amounts?.total)}\n${st[o.fulfilment?.status] || o.fulfilment?.status || ""}${o.payment?.status === "paid" ? "" : ""}`).join("\n\n");
-  const unpaid = list.find(o => o.payment?.status !== "paid" && !o.hasCustomItems && !["cancelled", "delivered"].includes(o.fulfilment?.status));
-  const buttons = [];
-  if (unpaid) buttons.push({ id: `grc_payorder_${unpaid.reference}`, title: "💳 Pay now" });
-  buttons.push({ id: `grc_reorder_${list[0].reference}`, title: "🔁 Order again" });
-  buttons.push({ id: "grc_home", title: "🛒 Groceries" });
-  return _textThenButtons(from, `📦 *Your grocery orders*\n\n${lines}`, buttons, "📦 Your recent grocery orders are above.");
+  return _myOrdersEmpty(from);
+}
+
+/** One order: items, totals, payment, delivery and a progress tracker. */
+export async function showOrder(from, ref, note = "") {
+  const GroceryOrder = await _GroceryOrder();
+  const o = await GroceryOrder.findOne({ reference: String(ref).toUpperCase() }).lean();
+  if (!o) { await sendText(from, `❌ Order *${String(ref).toUpperCase()}* not found.`); return _myOrders(from); }
+  const mine = [_intl(from), _local(from), "+" + _intl(from)].includes(String(o.customer?.phone || "")) || _intl(o.customer?.phone) === _intl(from);
+  if (!mine) { await sendText(from, "❌ That order isn't on this WhatsApp number."); return _myOrders(from); }
+  const st = o.fulfilment?.status || "received";
+  const collect = o.delivery?.zone === "collect";
+  const steps = [
+    ["Order placed", true],
+    ["Paid", o.payment?.status === "paid"],
+    ["Shopping & packing", ["shopping", "out_for_delivery", "delivered"].includes(st)],
+    [collect ? "Ready to collect" : "On the way", ["out_for_delivery", "delivered"].includes(st)],
+    [collect ? "Collected" : "Delivered", st === "delivered"]
+  ];
+  const track = st === "cancelled" ? "❌ Cancelled" : steps.map(([s, done]) => `${done ? "✅" : "⬜"} ${s}`).join("\n");
+  const items = (o.items || []).slice(0, 25).map(i => `• ${i.name} × ${i.qty}${i.custom ? " - _being priced_" : ` - ${money(i.lineTotal)}`}`).join("\n");
+  const canPay = o.payment?.status !== "paid" && !o.hasCustomItems && !["cancelled", "delivered"].includes(st);
+  const opts = [];
+  if (canPay) opts.push(["pay", "💳 Pay now (EcoCash or card)"]);
+  opts.push(["reorder", "🔁 Order the same again"]);
+  opts.push(["orders", "📦 Back to my orders"]);
+  await _setMode(from, { m: "order", ref: o.reference, opts: opts.map(x => x[0]) });
+  await _markNum(from);
+  return sendText(from,
+`${note ? note + "\n\n" : ""}📦 *Order ${o.reference}* · ${new Date(o.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+
+${track}
+
+${items}${(o.items || []).length > 25 ? `\n…+${o.items.length - 25} more` : ""}
+
+Groceries: ${money(o.amounts?.goods)} · Service: ${money(o.amounts?.serviceFee)} · ${collect ? "Collection" : "Delivery"}: ${money(o.amounts?.deliveryFee)}
+*Total: ${money(o.amounts?.total)}* · ${_payLabel(o)}
+${collect ? `🏪 Collect: ${COLLECT_POINT}` : `📍 ${String(o.delivery?.address || "").slice(0, 120)}`}${o.fulfilment?.rider ? `\n🏍️ Rider: ${o.fulfilment.rider}` : ""}
+
+${opts.map((x, i) => `*${i + 1}.* ${x[1]}`).join("\n")}
+
+👉 *Reply with a number.*  ·  Questions? *${SUPPORT_PHONE}*`);
+}
+
+async function _myOrdersEmpty(from) {
+  return sendButtons(from, { text: "📦 You have no grocery orders yet.", buttons: [{ id: "grc_pkgs", title: "🎁 Hampers" }, { id: "grc_home", title: "🛒 Groceries" }] });
 }
 
 async function _reorder(from, ref) {
@@ -760,13 +979,7 @@ async function _reorder(from, ref) {
 }
 
 async function _payOrder(from, ref) {
-  const GroceryOrder = await _GroceryOrder();
-  const o = await GroceryOrder.findOne({ reference: ref.toUpperCase() }).lean();
-  if (!o) return _myOrders(from);
-  const { ZqPayment, createPaymentRequest, startPay } = await import("./zqPayments.js");
-  let p = await ZqPayment.findOne({ orderRef: o.reference, status: { $ne: "cancelled" } }).sort({ createdAt: -1 }).lean();
-  if (!p) p = await createPaymentRequest({ phone: from, amount: o.amounts.total, purpose: "grocery", orderRef: o.reference, description: `Groceries ${o.reference}` });
-  return startPay(from, p.reference);
+  return showPayMethods(from, ref);
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -830,6 +1043,7 @@ _+ service fee; delivery from $4 or free collection._${budget && total > budget 
 // MAIN ENTRY - called by chatbotEngine.js before the free-text grabbers
 // ═════════════════════════════════════════════════════════════════════════════
 const ENTRY_RE = /^(?:zq:grocer(?:y|ies)|groceries|grocery|grocery shop|grocery store|buy groceries|order groceries|groceries delivery|grocery delivery|hampers?|grocery hampers?|christmas hampers?|my grocery cart|grocery cart|grocery list|zvekudya|grosari)[.!]?$/i;
+const ORDERS_RE = /^(?:my grocery orders?|grocery orders?|grocery payments?|track my groceries|track grocery order)[.!]?$/i;
 
 /**
  * @returns {Promise<boolean>} true when the message was handled here.
@@ -845,6 +1059,10 @@ export async function handleGroceryMessage({ from, text = "", action = "", isTap
     if (t || a) await _disarmIfArmed(from);
     return false;
   }
+  // "track GRO-ABC123" works anywhere (from the order confirmation)
+  const _trk = t.match(/^(?:track|order|status)\s+(gro-[a-z0-9-]{4,40})$/i) || t.match(/^(gro-[a-z0-9]{4,12})$/i);
+  if (_trk) { await showOrder(from, _trk[1]); return true; }
+  if (ORDERS_RE.test(t)) { await _myOrders(from); return true; }
   if (t && (ENTRY_RE.test(t) || /^(?:hi+e?[,! ]+)?(?:i\s+(?:want|would like|need)\s+to\s+)?(?:order|buy)\s+(?:some\s+)?(?:groceries|grocery)\b[\w\s,.!]{0,60}$/i.test(t))) {
     if (/hamper/i.test(t)) await showPackages(from); else await showHome(from);
     return true;
@@ -852,6 +1070,9 @@ export async function handleGroceryMessage({ from, text = "", action = "", isTap
 
   const { mode } = await _load(from);
   if (!mode) return false;
+
+  // A newer numbered list (seller search, schools…) owns a typed number → leave the shop
+  if (/^\d{1,3}$/.test(t) && await _newerList(from)) { await _setMode(from, null); return false; }
 
   if (imageUrl) {                                 // photo of a shopping list
     const { cart } = await _load(from);
@@ -873,7 +1094,8 @@ export async function handleGroceryMessage({ from, text = "", action = "", isTap
   if (/^(hampers?|packages?|baskets?)$/.test(lt)) { await showPackages(from); return true; }
   if (/^(aisles?|shop|price ?list|prices)$/.test(lt)) { await showAisles(from); return true; }
   if (/^(calc|calculator|budget)$/.test(lt)) { await _handleAction(from, "grc_calc"); return true; }
-  if (/^(orders|my orders|my grocery orders)$/.test(lt)) { await _myOrders(from); return true; }
+  if (/^(orders|my orders|my grocery orders|payments|my payments|track|track order|track my order)$/.test(lt)) { await _myOrders(from); return true; }
+  if (/^(delivery|delivery fees|fees|areas|collection|collect)$/.test(lt) && !String(mode.m).startsWith("co_")) { await showDeliveryInfo(from); return true; }
   if (/^(clear|clear cart|empty cart|empty)$/.test(lt)) { await _saveCart(from, []); await showCart(from, "🗑️ Cart cleared."); return true; }
   if (/^(cancel)$/.test(lt) && String(mode.m).startsWith("co_")) { await showCart(from, "👍 Checkout stopped - your cart is saved."); return true; }
 
@@ -901,8 +1123,8 @@ export async function handleGroceryMessage({ from, text = "", action = "", isTap
   // Mode-specific replies
   switch (mode.m) {
     case "home": {
-      if (/^[1-6]$/.test(lt)) {
-        const map = { 1: "grc_pkgs", 2: "grc_aisles", 3: "grc_list", 4: "grc_calc", 5: "grc_cart", 6: "grc_orders" };
+      if (/^[1-7]$/.test(lt)) {
+        const map = { 1: "grc_pkgs", 2: "grc_aisles", 3: "grc_list", 4: "grc_calc", 5: "grc_cart", 6: "grc_orders", 7: "grc_info" };
         await _handleAction(from, map[lt], dispatch); return true;
       }
       break;
@@ -965,6 +1187,42 @@ export async function handleGroceryMessage({ from, text = "", action = "", isTap
       await sendText(from, "Type your budget in US dollars, e.g. *80*.");
       return true;
     }
+    case "co_zone": {
+      if (/^\d{1,2}$/.test(lt)) {
+        const z = (mode.zones || [])[+lt - 1];
+        if (!z) { await sendText(from, `Please reply with a number from 1 to ${(mode.zones || []).length}.`); return true; }
+        await _pickZone(from, z); return true;
+      }
+      await sendText(from, "👉 Reply with the number of your area, or type *cart* to go back.");
+      return true;
+    }
+    case "pay_method": {
+      if (lt === "1") { await _payEcocash(from, mode.ref); return true; }
+      if (lt === "2" && mode.card) { await _payCardLink(from, mode.ref); return true; }
+      if (/^(ecocash|onemoney|eco cash|mobile)$/.test(lt)) { await _payEcocash(from, mode.ref); return true; }
+      if (/^(card|visa|mastercard|bank card)$/.test(lt) && mode.card) { await _payCardLink(from, mode.ref); return true; }
+      await sendText(from, `👉 Reply *1* for EcoCash/OneMoney${mode.card ? " or *2* for card" : ""}.`);
+      return true;
+    }
+    case "orders": {
+      if (/^\d{1,2}$/.test(lt)) {
+        const ref = (mode.refs || [])[+lt - 1];
+        if (!ref) { await sendText(from, `Please reply with a number from 1 to ${(mode.refs || []).length}.`); return true; }
+        await showOrder(from, ref); return true;
+      }
+      break;
+    }
+    case "order": {
+      if (/^\d$/.test(lt)) {
+        const op = (mode.opts || [])[+lt - 1];
+        if (op === "pay") { await showPayMethods(from, mode.ref); return true; }
+        if (op === "reorder") { await _reorder(from, mode.ref); return true; }
+        if (op === "orders") { await _myOrders(from); return true; }
+        await sendText(from, `Please reply with a number from 1 to ${(mode.opts || []).length}.`);
+        return true;
+      }
+      break;
+    }
     case "co_addr": {
       if (t.length < 8 || !/[a-z]/i.test(t)) { await sendText(from, "Please send the full address: name, house number & street, suburb and a landmark."); return true; }
       await _summary(from, { zone: mode.zone, address: t.slice(0, 200) });
@@ -976,6 +1234,8 @@ export async function handleGroceryMessage({ from, text = "", action = "", isTap
     }
     case "co_confirm": {
       if (/^(yes|y|ok|confirm|1|pay|pay now)$/.test(lt)) { await _confirm(from, mode); return true; }
+      if (lt === "2") { await showCart(from); return true; }
+      if (lt === "3") { await showCart(from, "👍 Checkout stopped - your cart is saved."); return true; }
       break;
     }
     case "ask": {
@@ -1031,7 +1291,7 @@ _2 cooking oil_
 _3 bread, eggs, avocados_
 
 📷 Or send a *photo* of your handwritten list.
-We price what we stock instantly and find prices for anything else.`);
+We price what we stock instantly. Anything we don't stock, our team prices and replies here (8am-6pm), then you pay with EcoCash or card.`);
   }
   if (a === "grc_cart") return showCart(from);
   if (a === "grc_clear") { await _saveCart(from, []); return showCart(from, "🗑️ Cart cleared."); }
@@ -1069,6 +1329,11 @@ We price what we stock instantly and find prices for anything else.`);
     return showCart(from, `✅ Added ${added.length} items from the calculator. Remove anything you don't need with *remove 3*.`);
   }
   if (a === "grc_orders") return _myOrders(from);
+  if (a === "grc_info") return showDeliveryInfo(from);
+  if (a.startsWith("grc_order_")) return showOrder(from, a.slice(10));
+  if (a.startsWith("grc_paymeth_")) return showPayMethods(from, a.slice(12));
+  if (a.startsWith("grc_payeco_")) return _payEcocash(from, a.slice(11));
+  if (a.startsWith("grc_paycard_")) return _payCardLink(from, a.slice(12));
   if (a.startsWith("grc_reorder_")) return _reorder(from, a.slice(12));
   if (a.startsWith("grc_payorder_")) return _payOrder(from, a.slice(13));
   if (a === "grc_addraw") {

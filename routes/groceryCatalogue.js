@@ -169,8 +169,10 @@ export const ZONES = {
   collect: { label: "Collection / pickup (no delivery fee)", fee: 0 }
 };
 
-export const MIN_GOODS = 30;      // delivery minimum (rider economics)
-export const MIN_COLLECT = 5;     // collection/pickup minimum (no rider cost)
+// Minimum order: $40 of goods (set 2026-11-28) - for delivery AND collection.
+// Deliveries are Harare only; delivery fee by zone (ZONES above) is added on top.
+export const MIN_GOODS = 40;      // delivery minimum (rider economics)
+export const MIN_COLLECT = 40;    // collection minimum (arranged with the customer)
 export const SERVICE_MIN = 3;
 export const SERVICE_PCT = 0.05;
 
