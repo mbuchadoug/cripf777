@@ -132,7 +132,7 @@ export async function sendMainMenu(to) {
   const SupplierProfile = (await import("../models/supplierProfile.js")).default;
   const SchoolProfile  = (await import("../models/schoolProfile.js")).default;
 
-  const MENU_MSG = "👋 *Welcome to ZimQuote!*\nZimbabwe's marketplace for products & services.\n🛒 Groceries delivered? Type *groceries*\n\n💡 Type *menu* anytime to come back here, *back* to go back, *help* for help.";
+  const MENU_MSG = "👋 *Welcome to ZimQuote!*\nZimbabwe's marketplace for products & services.\n\n💡 Type *menu* anytime to come back here, *back* to go back, *help* for help.";
 
   // Main menu = the root: forget the "back" trail (services/navigation.js)
   try { const { resetNav } = await import("./navigation.js"); await resetNav(to); } catch (_) {}
@@ -253,8 +253,8 @@ export async function sendMainMenu(to) {
     // Trial supplier (no invoicing tools yet) → keep marketplace-first menu.
     return sendList(to, MENU_MSG, [
       { id: "sup_request_sellers", title: "📝 Request a Quote" },
-      { id: "biker_request_rider", title: "🏍️ Request a Biker" },
       { id: "find_supplier",       title: "🔍 Find, Buy & Hire" },
+      { id: "biker_request_rider", title: "🏍️ Request a Biker" },
       { id: "my_orders",           title: "📋 My Orders" },
       { id: "find_school",         title: "🎓 Schools & Tutors" },
       { id: "my_supplier_account", title: "🏪 My Store" },
@@ -267,8 +267,8 @@ export async function sendMainMenu(to) {
     return sendList(to, MENU_MSG + "\n\n⚠️ Your listing is currently inactive - activate it to appear in search and receive customer enquiries.", [
       ...(hasStaffRole && isRealBiz ? [{ id: "biz_tools_menu", title: "📊 Business Tools" }] : []),
       { id: "sup_request_sellers", title: "📝 Request a Quote" },
-      { id: "biker_request_rider", title: "🏍️ Request a Biker" },
       { id: "find_supplier",       title: "🔍 Find, Buy & Hire" },
+      { id: "biker_request_rider", title: "🏍️ Request a Biker" },
       { id: "my_orders",           title: "📋 My Orders" },
       { id: "find_school",         title: "🎓 Schools & Tutors" },
       { id: "my_supplier_account", title: "🏪 My Store" },
@@ -288,9 +288,9 @@ export async function sendMainMenu(to) {
   // ── Case 5: Brand new user - no biz, no supplier, no role ─────────────────
   return sendList(to, MENU_MSG, [
     { id: "register_supplier",   title: "🏪 List My Business" },
-    { id: "biker_request_rider", title: "🏍️ Request a Biker" },
-    { id: "sup_request_sellers", title: "📝 Request a Quote" },
     { id: "find_supplier",       title: "🔍 Find, Buy & Hire" },
+    { id: "sup_request_sellers", title: "📝 Request a Quote" },
+    { id: "biker_request_rider", title: "🏍️ Request a Biker" },
     { id: "my_orders",           title: "📋 My Orders" },
     { id: "find_school",         title: "🎓 Schools & Tutors" },
     { id: "mail_menu",           title: "📧 Business Email" }
@@ -426,8 +426,8 @@ export async function sendBusinessHomeMenu(to, biz, { isOwner = false } = {}) {
 export async function sendMarketplaceMenu(to, biz, { isOwner = false } = {}) {
   const items = [
     { id: "sup_request_sellers", title: "📝 Request a Quote" },
-    { id: "biker_request_rider", title: "🏍️ Request a Biker" },
     { id: "find_supplier",       title: "🔍 Find, Buy & Hire" },
+    { id: "biker_request_rider", title: "🏍️ Request a Biker" },
     { id: "grc_home",            title: "🛒 Groceries", description: "Hampers, cart, delivery or collect - pay with EcoCash" },
     { id: "my_orders",           title: "📋 My Orders" },
     { id: "find_school",         title: "🎓 Schools & Tutors" },
